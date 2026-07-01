@@ -1,27 +1,33 @@
 import {
   type ColumnDef,
-  type ColumnFiltersState,
   type PaginationState,
   type RowSelectionState,
   type SortingState,
   type VisibilityState,
   flexRender,
   getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table"
 import {
   ArrowUpDownIcon,
   ChevronDownIcon,
   MoreHorizontalIcon,
+  PlusIcon,
 } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useId, useState, type FormEvent } from "react"
+import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -30,7 +36,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import {
   Pagination,
   PaginationContent,
@@ -54,6 +66,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Spinner } from "@/components/ui/spinner"
+import {
+  type AdminUsersSort,
+  type AdminUsersSortOrder,
+  AdminUserRequestError,
+  createAdminUser,
+  listAdminUsers,
+  resetAdminUserPassword,
+  type AdminUser,
+  updateAdminUserStatus,
+} from "@/lib/admin-users"
 import { cn } from "@/lib/utils"
 
 type Member = {
@@ -62,6 +85,13 @@ type Member = {
   joinedAt: string
   name: string
   status: "disabled" | "enabled"
+}
+
+type ResetPasswordDialogState = {
+  isPending: boolean
+  member: Member | null
+  newPassword: string
+  open: boolean
 }
 
 const pageSizeOptions = [50, 100, 200, 500] as const
@@ -83,165 +113,206 @@ const columnLabels: Record<string, string> = {
   status: "状态",
 }
 
-const columns: ColumnDef<Member>[] = [
-  {
-    id: "select",
-    enableHiding: false,
-    enableSorting: false,
-    header: ({ table }) => (
-      <Checkbox
-        aria-label="选择当前页全部成员"
-        checked={table.getIsAllPageRowsSelected()}
-        indeterminate={
-          table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()
-        }
-        onCheckedChange={(checked) => table.toggleAllPageRowsSelected(checked)}
-      />
-    ),
-    cell: ({ row }) => (
-      <Checkbox
-        aria-label={`选择 ${row.original.name}`}
-        checked={row.getIsSelected()}
-        onCheckedChange={(checked) => row.toggleSelected(checked)}
-      />
-    ),
-  },
-  {
-    accessorKey: "email",
-    header: ({ column }) => (
-      <Button
-        className="-ml-2"
-        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        size="sm"
-        variant="ghost"
-      >
-        邮箱
-        <ArrowUpDownIcon data-icon="inline-end" />
-      </Button>
-    ),
-    cell: ({ row }) => row.getValue("email"),
-  },
-  {
-    accessorKey: "name",
-    header: "名称",
-    cell: ({ row }) => row.getValue("name"),
-  },
-  {
-    accessorKey: "joinedAt",
-    header: ({ column }) => (
-      <Button
-        className="-ml-2"
-        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        size="sm"
-        variant="ghost"
-      >
-        加入时间
-        <ArrowUpDownIcon data-icon="inline-end" />
-      </Button>
-    ),
-    cell: ({ row }) => row.getValue("joinedAt"),
-  },
-  {
-    accessorKey: "status",
-    header: ({ column }) => (
-      <Button
-        className="-ml-2"
-        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        size="sm"
-        variant="ghost"
-      >
-        状态
-        <ArrowUpDownIcon data-icon="inline-end" />
-      </Button>
-    ),
-    cell: ({ row }) => {
-      const status = row.original.status
-
-      return (
-        <Badge
-          className={cn(
-            status === "enabled" &&
-              "border-transparent bg-sky-500/14 text-sky-700 dark:bg-sky-400/14 dark:text-sky-300"
-          )}
-          variant="secondary"
-        >
-          {status === "enabled" ? "启用" : "禁用"}
-        </Badge>
-      )
-    },
-  },
-  {
-    id: "actions",
-    enableHiding: false,
-    enableSorting: false,
-    header: () => <div className="text-right">操作</div>,
-    cell: ({ row }) => (
-      <div className="text-right">
-        <MemberActions member={row.original} />
-      </div>
-    ),
-  },
-]
-
-const mockNames = [
-  "陈若宁",
-  "林子墨",
-  "周安琪",
-  "李明轩",
-  "赵思远",
-  "王雨桐",
-  "刘景行",
-  "孙嘉怡",
-  "吴承泽",
-  "郑书瑶",
-  "何彦霖",
-  "唐诗涵",
-  "宋一鸣",
-  "许知夏",
-  "高睿诚",
-  "程予安",
-]
-
-const mockMembers: Member[] = Array.from({ length: 1388 }, (_, index) => {
-  const memberNumber = index + 1
-  const month = String((index % 12) + 1).padStart(2, "0")
-  const day = String((index % 27) + 1).padStart(2, "0")
-
+function getResetPasswordClosedDialogState(): ResetPasswordDialogState {
   return {
-    email: `member${String(memberNumber).padStart(3, "0")}@mygod.example`,
-    id: `member-${memberNumber}`,
-    joinedAt: `2025-${month}-${day}`,
-    name: mockNames[index % mockNames.length],
-    status: index % 5 === 0 ? "disabled" : "enabled",
+    isPending: false,
+    member: null,
+    newPassword: "",
+    open: false,
   }
-})
+}
+
+export function getResetPasswordPendingDialogState(
+  member: Member
+): ResetPasswordDialogState {
+  return {
+    isPending: true,
+    member,
+    newPassword: "",
+    open: true,
+  }
+}
+
+function getResetPasswordSuccessDialogState(
+  member: Member,
+  newPassword: string
+): ResetPasswordDialogState {
+  return {
+    isPending: false,
+    member,
+    newPassword,
+    open: true,
+  }
+}
+
+function getColumns({
+  onResetPassword,
+  onStatusChange,
+  updatingMemberId,
+}: {
+  onResetPassword: (member: Member) => void
+  onStatusChange: (member: Member, status: Member["status"]) => void
+  updatingMemberId: string | null
+}): ColumnDef<Member>[] {
+  return [
+    {
+      id: "select",
+      enableHiding: false,
+      enableSorting: false,
+      header: ({ table }) => (
+        <Checkbox
+          aria-label="选择当前页全部成员"
+          checked={table.getIsAllPageRowsSelected()}
+          indeterminate={
+            table.getIsSomePageRowsSelected() &&
+            !table.getIsAllPageRowsSelected()
+          }
+          onCheckedChange={(checked) =>
+            table.toggleAllPageRowsSelected(checked)
+          }
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          aria-label={`选择 ${row.original.name}`}
+          checked={row.getIsSelected()}
+          onCheckedChange={(checked) => row.toggleSelected(checked)}
+        />
+      ),
+    },
+    {
+      accessorKey: "email",
+      header: ({ column }) => (
+        <Button
+          className="-ml-2"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          size="sm"
+          variant="ghost"
+        >
+          邮箱
+          <ArrowUpDownIcon data-icon="inline-end" />
+        </Button>
+      ),
+      cell: ({ row }) => row.getValue("email"),
+    },
+    {
+      accessorKey: "name",
+      header: "名称",
+      cell: ({ row }) => row.getValue("name"),
+    },
+    {
+      accessorKey: "joinedAt",
+      header: ({ column }) => (
+        <Button
+          className="-ml-2"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          size="sm"
+          variant="ghost"
+        >
+          加入时间
+          <ArrowUpDownIcon data-icon="inline-end" />
+        </Button>
+      ),
+      cell: ({ row }) => row.getValue("joinedAt"),
+    },
+    {
+      accessorKey: "status",
+      header: ({ column }) => (
+        <Button
+          className="-ml-2"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          size="sm"
+          variant="ghost"
+        >
+          状态
+          <ArrowUpDownIcon data-icon="inline-end" />
+        </Button>
+      ),
+      cell: ({ row }) => {
+        const status = row.original.status
+
+        return (
+          <Badge
+            className={cn(
+              status === "enabled" &&
+                "border-transparent bg-sky-500/14 text-sky-700 dark:bg-sky-400/14 dark:text-sky-300"
+            )}
+            variant="secondary"
+          >
+            {status === "enabled" ? "启用" : "禁用"}
+          </Badge>
+        )
+      },
+    },
+    {
+      id: "actions",
+      enableHiding: false,
+      enableSorting: false,
+      header: () => <div className="text-right">操作</div>,
+      cell: ({ row }) => (
+        <div className="text-right">
+          <MemberActions
+            isUpdating={updatingMemberId === row.original.id}
+            member={row.original}
+            onResetPassword={onResetPassword}
+            onStatusChange={onStatusChange}
+          />
+        </div>
+      ),
+    },
+  ]
+}
 
 export default function MembersPage() {
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const addMemberEmailId = useId()
+  const addMemberNameId = useId()
+  const addMemberPasswordId = useId()
+  const resetPasswordEmailId = useId()
+  const resetPasswordValueId = useId()
+  const [addMemberEmail, setAddMemberEmail] = useState("")
+  const [addMemberInitialPassword, setAddMemberInitialPassword] = useState<
+    string | null
+  >(null)
+  const [addMemberName, setAddMemberName] = useState("")
+  const [addMemberOpen, setAddMemberOpen] = useState(false)
+  const [isAddingMember, setIsAddingMember] = useState(false)
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [isLoadingMembers, setIsLoadingMembers] = useState(true)
+  const [keyword, setKeyword] = useState("")
+  const [memberTotal, setMemberTotal] = useState(0)
+  const [members, setMembers] = useState<Member[]>([])
+  const [membersReloadKey, setMembersReloadKey] = useState(0)
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
     pageSize: 50,
   })
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
+  const [resetPasswordDialog, setResetPasswordDialog] =
+    useState<ResetPasswordDialogState>(getResetPasswordClosedDialogState)
   const [sorting, setSorting] = useState<SortingState>([])
+  const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null)
+  const columns = getColumns({
+    onResetPassword: handleResetMemberPassword,
+    onStatusChange: handleMemberStatusChange,
+    updatingMemberId,
+  })
+  const serverPageCount = Math.max(
+    1,
+    Math.ceil(memberTotal / pagination.pageSize)
+  )
 
-  // TanStack Table returns table methods that React Compiler should not memoize.
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     columns,
-    data: mockMembers,
+    data: members,
     getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    onColumnFiltersChange: setColumnFilters,
+    manualPagination: true,
+    manualSorting: true,
     onColumnVisibilityChange: setColumnVisibility,
     onPaginationChange: setPagination,
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
+    pageCount: serverPageCount,
     state: {
-      columnFilters,
       columnVisibility,
       pagination,
       rowSelection,
@@ -250,7 +321,62 @@ export default function MembersPage() {
   })
   const page = pagination.pageIndex + 1
   const pageCount = table.getPageCount()
+  const isAddMemberComplete = addMemberInitialPassword !== null
   const visiblePaginationItems = getVisiblePaginationItems(page, pageCount)
+
+  useEffect(() => {
+    let ignore = false
+    const sortingParams = getAdminUsersSorting(sorting)
+
+    async function loadMembers() {
+      setIsLoadingMembers(true)
+
+      try {
+        const result = await listAdminUsers({
+          keyword,
+          page: pagination.pageIndex + 1,
+          pageSize: pagination.pageSize,
+          ...sortingParams,
+        })
+
+        if (ignore) {
+          return
+        }
+
+        setMemberTotal(result.total)
+        setMembers(result.users.map(toMember))
+        setRowSelection({})
+      } catch (error) {
+        if (ignore) {
+          return
+        }
+
+        setMemberTotal(0)
+        setMembers([])
+        toast.error(
+          error instanceof AdminUserRequestError
+            ? error.message
+            : "加载成员失败"
+        )
+      } finally {
+        if (!ignore) {
+          setIsLoadingMembers(false)
+        }
+      }
+    }
+
+    void loadMembers()
+
+    return () => {
+      ignore = true
+    }
+  }, [
+    keyword,
+    membersReloadKey,
+    pagination.pageIndex,
+    pagination.pageSize,
+    sorting,
+  ])
 
   function setPageSize(value: string | null) {
     if (!isPageSize(value)) {
@@ -263,49 +389,289 @@ export default function MembersPage() {
     })
   }
 
+  function resetAddMemberForm() {
+    setAddMemberEmail("")
+    setAddMemberInitialPassword(null)
+    setAddMemberName("")
+  }
+
+  function handleAddMemberOpenChange(open: boolean) {
+    if (open) {
+      resetAddMemberForm()
+    }
+
+    setAddMemberOpen(open)
+  }
+
+  function handleResetPasswordOpenChange(open: boolean) {
+    if (open) {
+      setResetPasswordDialog((currentDialog) => ({
+        ...currentDialog,
+        open: true,
+      }))
+      return
+    }
+
+    if (resetPasswordDialog.isPending) {
+      return
+    }
+
+    setResetPasswordDialog(getResetPasswordClosedDialogState())
+  }
+
+  async function handleAddMemberSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    setIsAddingMember(true)
+
+    try {
+      const created = await createAdminUser({
+        email: addMemberEmail,
+        name: addMemberName,
+      })
+
+      setAddMemberInitialPassword(created.initialPassword)
+      setPagination((currentPagination) => ({
+        ...currentPagination,
+        pageIndex: 0,
+      }))
+      setMembersReloadKey((currentKey) => currentKey + 1)
+    } catch (error) {
+      toast.error(
+        error instanceof AdminUserRequestError ? error.message : "添加成员失败"
+      )
+    } finally {
+      setIsAddingMember(false)
+    }
+  }
+
+  async function handleMemberStatusChange(
+    member: Member,
+    status: Member["status"]
+  ) {
+    setUpdatingMemberId(member.id)
+
+    try {
+      const updatedUser = await updateAdminUserStatus(
+        member.id,
+        toAdminUserStatus(status)
+      )
+      const updatedMember = toMember(updatedUser)
+
+      setMembers((currentMembers) =>
+        currentMembers.map((currentMember) =>
+          currentMember.id === updatedMember.id ? updatedMember : currentMember
+        )
+      )
+      toast.success(status === "enabled" ? "成员已启用" : "成员已禁用")
+    } catch (error) {
+      toast.error(
+        error instanceof AdminUserRequestError
+          ? error.message
+          : "更新成员状态失败"
+      )
+    } finally {
+      setUpdatingMemberId(null)
+    }
+  }
+
+  async function handleResetMemberPassword(member: Member) {
+    setResetPasswordDialog(getResetPasswordPendingDialogState(member))
+    setUpdatingMemberId(member.id)
+
+    try {
+      const result = await resetAdminUserPassword(member.id)
+      const updatedMember = toMember(result.user)
+
+      setMembers((currentMembers) =>
+        currentMembers.map((currentMember) =>
+          currentMember.id === updatedMember.id ? updatedMember : currentMember
+        )
+      )
+      setResetPasswordDialog(
+        getResetPasswordSuccessDialogState(updatedMember, result.newPassword)
+      )
+    } catch (error) {
+      toast.error(
+        error instanceof AdminUserRequestError ? error.message : "重置密码失败"
+      )
+      setResetPasswordDialog(getResetPasswordClosedDialogState())
+    } finally {
+      setUpdatingMemberId(null)
+    }
+  }
+
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-4 p-4 pt-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Input
           className="sm:max-w-sm"
           onChange={(event) => {
-            table.getColumn("email")?.setFilterValue(event.target.value)
-            table.setPageIndex(0)
+            setKeyword(event.target.value)
+            setPagination((currentPagination) => ({
+              ...currentPagination,
+              pageIndex: 0,
+            }))
           }}
           placeholder="搜索用户"
-          value={(table.getColumn("email")?.getFilterValue() as string) ?? ""}
+          value={keyword}
         />
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                className="w-fit self-end sm:self-auto"
-                variant="outline"
-              />
-            }
+        <div className="flex items-center justify-end gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="outline" />}>
+              选择列
+              <ChevronDownIcon data-icon="inline-end" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuGroup>
+                {table
+                  .getAllColumns()
+                  .filter((column) => column.getCanHide())
+                  .map((column) => (
+                    <DropdownMenuCheckboxItem
+                      checked={column.getIsVisible()}
+                      key={column.id}
+                      onCheckedChange={(checked) =>
+                        column.toggleVisibility(checked)
+                      }
+                    >
+                      {getColumnLabel(column.id)}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <Dialog onOpenChange={handleAddMemberOpenChange} open={addMemberOpen}>
+            <DialogTrigger render={<Button />}>
+              <PlusIcon data-icon="inline-start" />
+              添加成员
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>添加成员</DialogTitle>
+              </DialogHeader>
+              <form
+                className="flex flex-col gap-6"
+                onSubmit={handleAddMemberSubmit}
+              >
+                <FieldGroup className="gap-4">
+                  <Field>
+                    <FieldLabel htmlFor={addMemberEmailId}>邮箱</FieldLabel>
+                    <Input
+                      autoComplete="email"
+                      disabled={isAddingMember}
+                      id={addMemberEmailId}
+                      onChange={(event) =>
+                        setAddMemberEmail(event.target.value)
+                      }
+                      readOnly={isAddMemberComplete}
+                      required
+                      type="email"
+                      value={addMemberEmail}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor={addMemberNameId}>名称</FieldLabel>
+                    <Input
+                      autoComplete="name"
+                      disabled={isAddingMember}
+                      id={addMemberNameId}
+                      onChange={(event) => setAddMemberName(event.target.value)}
+                      readOnly={isAddMemberComplete}
+                      required
+                      value={addMemberName}
+                    />
+                  </Field>
+                  {isAddMemberComplete && (
+                    <Field>
+                      <FieldLabel htmlFor={addMemberPasswordId}>
+                        初始化密码
+                      </FieldLabel>
+                      <Input
+                        id={addMemberPasswordId}
+                        readOnly
+                        value={addMemberInitialPassword}
+                      />
+                    </Field>
+                  )}
+                </FieldGroup>
+                <DialogFooter>
+                  {isAddMemberComplete ? (
+                    <Button
+                      onClick={() => handleAddMemberOpenChange(false)}
+                      type="button"
+                    >
+                      关闭
+                    </Button>
+                  ) : (
+                    <Button disabled={isAddingMember} type="submit">
+                      {isAddingMember && <Spinner data-icon="inline-start" />}
+                      提交
+                    </Button>
+                  )}
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog
+            onOpenChange={handleResetPasswordOpenChange}
+            open={resetPasswordDialog.open}
           >
-            选择列
-            <ChevronDownIcon data-icon="inline-end" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-40">
-            <DropdownMenuGroup>
-              {table
-                .getAllColumns()
-                .filter((column) => column.getCanHide())
-                .map((column) => (
-                  <DropdownMenuCheckboxItem
-                    checked={column.getIsVisible()}
-                    key={column.id}
-                    onCheckedChange={(checked) =>
-                      column.toggleVisibility(checked)
-                    }
+            <DialogContent showCloseButton={!resetPasswordDialog.isPending}>
+              <DialogHeader>
+                <DialogTitle>重置密码</DialogTitle>
+              </DialogHeader>
+              <div className="flex flex-col gap-6">
+                <FieldGroup className="gap-4">
+                  <Field>
+                    <FieldLabel htmlFor={resetPasswordEmailId}>邮箱</FieldLabel>
+                    <Input
+                      id={resetPasswordEmailId}
+                      readOnly
+                      value={resetPasswordDialog.member?.email ?? ""}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor={resetPasswordValueId}>
+                      新密码
+                    </FieldLabel>
+                    <InputGroup>
+                      <InputGroupInput
+                        id={resetPasswordValueId}
+                        placeholder={
+                          resetPasswordDialog.isPending
+                            ? "正在重置密码"
+                            : undefined
+                        }
+                        readOnly
+                        value={resetPasswordDialog.newPassword}
+                      />
+                      {resetPasswordDialog.isPending && (
+                        <InputGroupAddon align="inline-end">
+                          <Spinner />
+                        </InputGroupAddon>
+                      )}
+                    </InputGroup>
+                  </Field>
+                </FieldGroup>
+                <DialogFooter>
+                  <Button
+                    disabled={resetPasswordDialog.isPending}
+                    onClick={() => handleResetPasswordOpenChange(false)}
+                    type="button"
                   >
-                    {getColumnLabel(column.id)}
-                  </DropdownMenuCheckboxItem>
-                ))}
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
+                    {resetPasswordDialog.isPending && (
+                      <Spinner data-icon="inline-start" />
+                    )}
+                    {resetPasswordDialog.isPending ? "重置中" : "关闭"}
+                  </Button>
+                </DialogFooter>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-lg border bg-background">
@@ -367,7 +733,7 @@ export default function MembersPage() {
                   className="h-24 text-center"
                   colSpan={table.getAllColumns().length}
                 >
-                  没有结果
+                  {isLoadingMembers ? "加载中" : "没有结果"}
                 </TableCell>
               </TableRow>
             )}
@@ -420,7 +786,17 @@ export default function MembersPage() {
   )
 }
 
-function MemberActions({ member }: { member: Member }) {
+function MemberActions({
+  isUpdating,
+  member,
+  onResetPassword,
+  onStatusChange,
+}: {
+  isUpdating: boolean
+  member: Member
+  onResetPassword: (member: Member) => void
+  onStatusChange: (member: Member, status: Member["status"]) => void
+}) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -437,9 +813,24 @@ function MemberActions({ member }: { member: Member }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuGroup>
-          <DropdownMenuItem>启用</DropdownMenuItem>
-          <DropdownMenuItem>禁用</DropdownMenuItem>
-          <DropdownMenuItem>重置密码</DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={isUpdating || member.status === "enabled"}
+            onClick={() => onStatusChange(member, "enabled")}
+          >
+            启用
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={isUpdating || member.status === "disabled"}
+            onClick={() => onStatusChange(member, "disabled")}
+          >
+            禁用
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={isUpdating}
+            onClick={() => onResetPassword(member)}
+          >
+            重置密码
+          </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -448,6 +839,68 @@ function MemberActions({ member }: { member: Member }) {
 
 function getColumnLabel(columnId: string) {
   return columnLabels[columnId] ?? columnId
+}
+
+function getAdminUsersSorting(sorting: SortingState): {
+  order?: AdminUsersSortOrder
+  sort?: AdminUsersSort
+} {
+  const sortingRule = sorting[0]
+
+  if (!sortingRule) {
+    return {}
+  }
+
+  const sort = toAdminUsersSort(sortingRule.id)
+
+  if (!sort) {
+    return {}
+  }
+
+  return {
+    order: sortingRule.desc ? "desc" : "asc",
+    sort,
+  }
+}
+
+function toAdminUsersSort(columnId: string): AdminUsersSort | null {
+  if (columnId === "email") {
+    return "email"
+  }
+
+  if (columnId === "joinedAt") {
+    return "created_at"
+  }
+
+  if (columnId === "status") {
+    return "status"
+  }
+
+  return null
+}
+
+function toAdminUserStatus(status: Member["status"]): AdminUser["status"] {
+  return status === "enabled" ? "active" : "disabled"
+}
+
+function toMember(user: AdminUser): Member {
+  return {
+    email: user.email,
+    id: user.id,
+    joinedAt: formatJoinedAt(user.createdAt),
+    name: user.name,
+    status: user.status === "disabled" ? "disabled" : "enabled",
+  }
+}
+
+function formatJoinedAt(value: string) {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toISOString().slice(0, 10)
 }
 
 function getVisiblePaginationItems(
