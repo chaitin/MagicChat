@@ -78,6 +78,10 @@ type userLoginResponse struct {
 	User userResponse `json:"user"`
 }
 
+type currentUserResponse struct {
+	User userResponse `json:"user"`
+}
+
 // adminLogin godoc
 //
 // @Summary 管理员登录
@@ -422,6 +426,27 @@ func (s *Server) userLogin(c echo.Context) error {
 
 	setSessionCookie(c, userSessionCookieName, token, session.ExpiresAt)
 	return success(c, http.StatusOK, userLoginResponse{
+		User: newUserResponse(user),
+	})
+}
+
+// getCurrentUser godoc
+//
+// @Summary 获取当前用户
+// @Description 普通用户获取当前登录用户信息。
+// @Tags 客户端认证
+// @Produce json
+// @Success 200 {object} successEnvelope{data=currentUserResponse}
+// @Failure 401 {object} errorEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/client/me [get]
+func (s *Server) getCurrentUser(c echo.Context) error {
+	user, ok := currentUser(c)
+	if !ok {
+		return failure(c, http.StatusInternalServerError, "internal_error", "服务端错误")
+	}
+
+	return success(c, http.StatusOK, currentUserResponse{
 		User: newUserResponse(user),
 	})
 }

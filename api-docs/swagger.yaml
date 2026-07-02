@@ -96,6 +96,11 @@ definitions:
       user:
         $ref: '#/definitions/httpserver.userResponse'
     type: object
+  httpserver.currentUserResponse:
+    properties:
+      user:
+        $ref: '#/definitions/httpserver.userResponse'
+    type: object
   httpserver.errorBody:
     properties:
       code:
@@ -704,4 +709,30 @@ paths:
       summary: 获取客户端公开信息
       tags:
       - 客户端信息
+  /api/client/me:
+    get:
+      description: 普通用户获取当前登录用户信息。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpserver.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/httpserver.currentUserResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+      summary: 获取当前用户
+      tags:
+      - 客户端认证
 swagger: "2.0"

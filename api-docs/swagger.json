@@ -740,6 +740,50 @@
                     }
                 }
             }
+        },
+        "/api/client/me": {
+            "get": {
+                "description": "普通用户获取当前登录用户信息。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端认证"
+                ],
+                "summary": "获取当前用户",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/httpserver.successEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/httpserver.currentUserResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpserver.errorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/httpserver.errorEnvelope"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -876,6 +920,14 @@
                     "type": "string",
                     "example": "aB3dE5gH7jK9mN2p"
                 },
+                "user": {
+                    "$ref": "#/definitions/httpserver.userResponse"
+                }
+            }
+        },
+        "httpserver.currentUserResponse": {
+            "type": "object",
+            "properties": {
                 "user": {
                     "$ref": "#/definitions/httpserver.userResponse"
                 }

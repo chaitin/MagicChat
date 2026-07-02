@@ -309,6 +309,7 @@ func TestGeneratedSwaggerSpecIsServed(t *testing.T) {
 		"/api/admin/users/{id}/reset-password",
 		"/api/admin/settings/info",
 		"/api/client/auth/login",
+		"/api/client/me",
 		"/api/client/contacts/users",
 		"/api/client/conversations/groups",
 		"/api/client/info",
@@ -478,6 +479,70 @@ func TestAdminAndUserSessionsUseSeparateCookies(t *testing.T) {
 		t.Fatalf("admin list status after user login = %d, want 200", adminListResp.StatusCode)
 	}
 	requireSuccess(t, adminListBody)
+}
+
+func TestGetCurrentUserRequiresUserSession(t *testing.T) {
+	server, _ := newTestRouter(t)
+	defer server.Close()
+
+	resp, body := getJSON(t, server, "/api/client/me")
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", resp.StatusCode)
+	}
+	requireError(t, body, "unauthorized")
+}
+
+func TestGetCurrentUserReturnsSessionUser(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+
+	phone := "+8613912345678"
+	user := insertTestUser(t, db, "alice@example.com", "Alice Zhang", store.UserStatusActive, time.Now().UTC())
+	user.Avatar = "/assets/avatars/builtin/17.webp"
+	user.Nickname = "Al"
+	user.Phone = &phone
+	if err := db.Model(&store.User{}).Where("id = ?", user.ID).Updates(map[string]any{
+		"avatar":   user.Avatar,
+		"nickname": user.Nickname,
+		"phone":    phone,
+	}).Error; err != nil {
+		t.Fatalf("update user profile: %v", err)
+	}
+
+	userCookie := loginAsUser(t, server, user.Email)
+
+	resp, body := getJSON(t, server, "/api/client/me", userCookie)
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body = %#v", resp.StatusCode, body)
+	}
+	data := requireSuccess(t, body)
+	currentUser := data["user"].(map[string]any)
+	if currentUser["id"] != user.ID {
+		t.Fatalf("user.id = %v, want %s", currentUser["id"], user.ID)
+	}
+	if currentUser["email"] != user.Email {
+		t.Fatalf("user.email = %v, want %s", currentUser["email"], user.Email)
+	}
+	if currentUser["name"] != user.Name {
+		t.Fatalf("user.name = %v, want %s", currentUser["name"], user.Name)
+	}
+	if currentUser["nickname"] != user.Nickname {
+		t.Fatalf("user.nickname = %v, want %s", currentUser["nickname"], user.Nickname)
+	}
+	if currentUser["phone"] != phone {
+		t.Fatalf("user.phone = %v, want %s", currentUser["phone"], phone)
+	}
+	if currentUser["avatar"] != user.Avatar {
+		t.Fatalf("user.avatar = %v, want %s", currentUser["avatar"], user.Avatar)
+	}
+	if currentUser["status"] != store.UserStatusActive {
+		t.Fatalf("user.status = %v, want active", currentUser["status"])
+	}
+	if createdAt, ok := currentUser["created_at"].(string); !ok || createdAt == "" {
+		t.Fatalf("user.created_at = %#v, want non-empty string", currentUser["created_at"])
+	}
 }
 
 func TestCreateGroupConversationRequiresUserSession(t *testing.T) {

@@ -46,6 +46,7 @@ func NewRouter(db *gorm.DB, cfg config.Config) *echo.Echo {
 	router.GET("/api/client/info", server.clientInfo)
 
 	client := router.Group("/api/client", server.requireUserSession)
+	client.GET("/me", server.getCurrentUser)
 	client.GET("/contacts/users", server.listContactUsers)
 	client.POST("/conversations/groups", server.createGroupConversation)
 
