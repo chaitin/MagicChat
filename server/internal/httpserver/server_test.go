@@ -53,6 +53,12 @@ func putJSON(t *testing.T, server *httptest.Server, path string, body map[string
 	return requestJSON(t, server, http.MethodPut, path, body, cookies...)
 }
 
+func patchJSON(t *testing.T, server *httptest.Server, path string, body map[string]any, cookies ...*http.Cookie) (*http.Response, map[string]any) {
+	t.Helper()
+
+	return requestJSON(t, server, http.MethodPatch, path, body, cookies...)
+}
+
 func requestJSON(t *testing.T, server *httptest.Server, method string, path string, body map[string]any, cookies ...*http.Cookie) (*http.Response, map[string]any) {
 	t.Helper()
 
@@ -252,17 +258,24 @@ func requireUserSessionCookie(t *testing.T, resp *http.Response) *http.Cookie {
 func requireCookieNamed(t *testing.T, resp *http.Response, name string) *http.Cookie {
 	t.Helper()
 
+	cookie := findCookieNamed(t, resp, name)
+	if cookie.Value == "" {
+		t.Fatalf("%s cookie value is empty", name)
+	}
+	if !cookie.HttpOnly {
+		t.Fatalf("%s cookie HttpOnly = false, want true", name)
+	}
+	if cookie.Secure {
+		t.Fatalf("%s cookie Secure = true, want false", name)
+	}
+	return cookie
+}
+
+func findCookieNamed(t *testing.T, resp *http.Response, name string) *http.Cookie {
+	t.Helper()
+
 	for _, cookie := range resp.Cookies() {
 		if cookie.Name == name {
-			if cookie.Value == "" {
-				t.Fatalf("%s cookie value is empty", name)
-			}
-			if !cookie.HttpOnly {
-				t.Fatalf("%s cookie HttpOnly = false, want true", name)
-			}
-			if cookie.Secure {
-				t.Fatalf("%s cookie Secure = true, want false", name)
-			}
 			return cookie
 		}
 	}
@@ -309,6 +322,7 @@ func TestGeneratedSwaggerSpecIsServed(t *testing.T) {
 		"/api/admin/users/{id}/reset-password",
 		"/api/admin/settings/info",
 		"/api/client/auth/login",
+		"/api/client/auth/logout",
 		"/api/client/me",
 		"/api/client/contacts/users",
 		"/api/client/conversations/groups",
@@ -543,6 +557,123 @@ func TestGetCurrentUserReturnsSessionUser(t *testing.T) {
 	if createdAt, ok := currentUser["created_at"].(string); !ok || createdAt == "" {
 		t.Fatalf("user.created_at = %#v, want non-empty string", currentUser["created_at"])
 	}
+}
+
+func TestUpdateCurrentUserRequiresUserSession(t *testing.T) {
+	server, _ := newTestRouter(t)
+	defer server.Close()
+
+	resp, body := patchJSON(t, server, "/api/client/me", map[string]any{
+		"avatar": "/assets/avatars/builtin/03.webp",
+	})
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", resp.StatusCode)
+	}
+	requireError(t, body, "unauthorized")
+}
+
+func TestUpdateCurrentUserCanUpdateAvatarOnly(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+
+	user := insertTestUser(t, db, "alice@example.com", "Alice Zhang", store.UserStatusActive, time.Now().UTC())
+	user.Nickname = "Al"
+	if err := db.Model(&store.User{}).Where("id = ?", user.ID).Update("nickname", user.Nickname).Error; err != nil {
+		t.Fatalf("set nickname: %v", err)
+	}
+	userCookie := loginAsUser(t, server, user.Email)
+
+	resp, body := patchJSON(t, server, "/api/client/me", map[string]any{
+		"avatar": "/assets/avatars/builtin/03.webp",
+	}, userCookie)
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body = %#v", resp.StatusCode, body)
+	}
+	data := requireSuccess(t, body)
+	currentUser := data["user"].(map[string]any)
+	if currentUser["avatar"] != "/assets/avatars/builtin/03.webp" {
+		t.Fatalf("user.avatar = %v, want updated avatar", currentUser["avatar"])
+	}
+	if currentUser["nickname"] != "Al" {
+		t.Fatalf("user.nickname = %v, want unchanged nickname", currentUser["nickname"])
+	}
+
+	var stored store.User
+	if err := db.First(&stored, "id = ?", user.ID).Error; err != nil {
+		t.Fatalf("load stored user: %v", err)
+	}
+	if stored.Avatar != "/assets/avatars/builtin/03.webp" {
+		t.Fatalf("stored avatar = %q, want updated avatar", stored.Avatar)
+	}
+	if stored.Nickname != "Al" {
+		t.Fatalf("stored nickname = %q, want unchanged nickname", stored.Nickname)
+	}
+}
+
+func TestUpdateCurrentUserCanUpdateNicknameOnly(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+
+	user := insertTestUser(t, db, "alice@example.com", "Alice Zhang", store.UserStatusActive, time.Now().UTC())
+	user.Avatar = "/assets/avatars/builtin/17.webp"
+	if err := db.Model(&store.User{}).Where("id = ?", user.ID).Update("avatar", user.Avatar).Error; err != nil {
+		t.Fatalf("set avatar: %v", err)
+	}
+	userCookie := loginAsUser(t, server, user.Email)
+
+	resp, body := patchJSON(t, server, "/api/client/me", map[string]any{
+		"nickname": "Alice A",
+	}, userCookie)
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body = %#v", resp.StatusCode, body)
+	}
+	data := requireSuccess(t, body)
+	currentUser := data["user"].(map[string]any)
+	if currentUser["nickname"] != "Alice A" {
+		t.Fatalf("user.nickname = %v, want updated nickname", currentUser["nickname"])
+	}
+	if currentUser["avatar"] != "/assets/avatars/builtin/17.webp" {
+		t.Fatalf("user.avatar = %v, want unchanged avatar", currentUser["avatar"])
+	}
+}
+
+func TestClientLogoutClearsUserSession(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+
+	user := insertTestUser(t, db, "alice@example.com", "Alice", store.UserStatusActive, time.Now().UTC())
+	userCookie := loginAsUser(t, server, user.Email)
+
+	resp, body := postJSON(t, server, "/api/client/auth/logout", map[string]any{}, userCookie)
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("logout status = %d, want 200, body = %#v", resp.StatusCode, body)
+	}
+	requireSuccess(t, body)
+	expiredCookie := findCookieNamed(t, resp, "user_session")
+	if expiredCookie.Value != "" {
+		t.Fatalf("logout cookie value = %q, want empty", expiredCookie.Value)
+	}
+	if expiredCookie.MaxAge >= 0 {
+		t.Fatalf("logout cookie MaxAge = %d, want negative", expiredCookie.MaxAge)
+	}
+
+	var userSessionCount int64
+	if err := db.Model(&store.UserSession{}).Where("user_id = ?", user.ID).Count(&userSessionCount).Error; err != nil {
+		t.Fatalf("count user sessions: %v", err)
+	}
+	if userSessionCount != 0 {
+		t.Fatalf("user session count after logout = %d, want 0", userSessionCount)
+	}
+
+	meResp, meBody := getJSON(t, server, "/api/client/me", userCookie)
+	if meResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("me status after logout = %d, want 401", meResp.StatusCode)
+	}
+	requireError(t, meBody, "unauthorized")
 }
 
 func TestCreateGroupConversationRequiresUserSession(t *testing.T) {

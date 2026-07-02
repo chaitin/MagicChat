@@ -209,6 +209,15 @@ definitions:
         example: true
         type: boolean
     type: object
+  httpserver.updateCurrentUserRequest:
+    properties:
+      avatar:
+        example: /assets/avatars/builtin/07.webp
+        type: string
+      nickname:
+        example: 小张
+        type: string
+    type: object
   httpserver.updateInfoSettingsRequest:
     properties:
       app_name:
@@ -617,6 +626,23 @@ paths:
       summary: 普通用户登录
       tags:
       - 客户端认证
+  /api/client/auth/logout:
+    post:
+      description: 删除当前普通用户会话并清除客户端登录 Cookie。重复调用也会返回成功。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpserver.successEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+      summary: 普通用户退出登录
+      tags:
+      - 客户端认证
   /api/client/contacts/users:
     get:
       description: 普通用户获取通讯录。返回所有启用用户，包含当前用户；keyword 会搜索名称、昵称、邮箱和手机号。
@@ -733,6 +759,44 @@ paths:
           schema:
             $ref: '#/definitions/httpserver.errorEnvelope'
       summary: 获取当前用户
+      tags:
+      - 客户端认证
+    patch:
+      consumes:
+      - application/json
+      description: 普通用户修改自己的昵称和头像。avatar 与 nickname 均可单独传入；nickname 可传空字符串用于清空。
+      parameters:
+      - description: 用户资料
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/httpserver.updateCurrentUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpserver.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/httpserver.currentUserResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+      summary: 修改当前用户资料
       tags:
       - 客户端认证
 swagger: "2.0"

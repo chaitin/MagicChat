@@ -32,6 +32,11 @@ type createUserRequest struct {
 	Phone string `json:"phone" example:"13812345678"`
 }
 
+type updateCurrentUserRequest struct {
+	Avatar   *string `json:"avatar" example:"/assets/avatars/builtin/07.webp"`
+	Nickname *string `json:"nickname" example:"小张"`
+}
+
 type userResponse struct {
 	ID        string    `json:"id" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
 	Avatar    string    `json:"avatar" example:"/assets/avatars/builtin/07.webp"`
@@ -430,6 +435,27 @@ func (s *Server) userLogin(c echo.Context) error {
 	})
 }
 
+// userLogout godoc
+//
+// @Summary 普通用户退出登录
+// @Description 删除当前普通用户会话并清除客户端登录 Cookie。重复调用也会返回成功。
+// @Tags 客户端认证
+// @Produce json
+// @Success 200 {object} successEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/client/auth/logout [post]
+func (s *Server) userLogout(c echo.Context) error {
+	cookie, err := c.Cookie(userSessionCookieName)
+	if err == nil && cookie.Value != "" {
+		if err := s.db.Where("token_hash = ?", auth.HashSessionToken(cookie.Value)).Delete(&store.UserSession{}).Error; err != nil {
+			return failure(c, http.StatusInternalServerError, "internal_error", "服务端错误")
+		}
+	}
+
+	clearSessionCookie(c, userSessionCookieName)
+	return success(c, http.StatusOK, map[string]any{})
+}
+
 // getCurrentUser godoc
 //
 // @Summary 获取当前用户
@@ -448,6 +474,59 @@ func (s *Server) getCurrentUser(c echo.Context) error {
 
 	return success(c, http.StatusOK, currentUserResponse{
 		User: newUserResponse(user),
+	})
+}
+
+// updateCurrentUser godoc
+//
+// @Summary 修改当前用户资料
+// @Description 普通用户修改自己的昵称和头像。avatar 与 nickname 均可单独传入；nickname 可传空字符串用于清空。
+// @Tags 客户端认证
+// @Accept json
+// @Produce json
+// @Param body body updateCurrentUserRequest true "用户资料"
+// @Success 200 {object} successEnvelope{data=currentUserResponse}
+// @Failure 400 {object} errorEnvelope
+// @Failure 401 {object} errorEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/client/me [patch]
+func (s *Server) updateCurrentUser(c echo.Context) error {
+	user, ok := currentUser(c)
+	if !ok {
+		return failure(c, http.StatusInternalServerError, "internal_error", "服务端错误")
+	}
+
+	var req updateCurrentUserRequest
+	if err := c.Bind(&req); err != nil {
+		return failure(c, http.StatusBadRequest, "invalid_request", "请求格式错误")
+	}
+
+	updates := map[string]any{}
+	if req.Avatar != nil {
+		avatar, err := normalizeBuiltinAvatar(*req.Avatar)
+		if err != nil {
+			return failure(c, http.StatusBadRequest, "invalid_request", "头像格式错误")
+		}
+		updates["avatar"] = avatar
+	}
+	if req.Nickname != nil {
+		updates["nickname"] = strings.TrimSpace(*req.Nickname)
+	}
+	if len(updates) == 0 {
+		return failure(c, http.StatusBadRequest, "invalid_request", "至少需要修改一个字段")
+	}
+
+	if err := s.db.Model(&store.User{}).Where("id = ?", user.ID).Updates(updates).Error; err != nil {
+		return failure(c, http.StatusInternalServerError, "internal_error", "服务端错误")
+	}
+
+	var updatedUser store.User
+	if err := s.db.First(&updatedUser, "id = ?", user.ID).Error; err != nil {
+		return failure(c, http.StatusInternalServerError, "internal_error", "服务端错误")
+	}
+
+	return success(c, http.StatusOK, currentUserResponse{
+		User: newUserResponse(updatedUser),
 	})
 }
 
@@ -498,6 +577,29 @@ func normalizePhone(raw string) (*string, error) {
 
 	normalized = "+86" + normalized
 	return &normalized, nil
+}
+
+func normalizeBuiltinAvatar(raw string) (string, error) {
+	avatar := strings.TrimSpace(raw)
+	const prefix = "/assets/avatars/builtin/"
+	const suffix = ".webp"
+	if !strings.HasPrefix(avatar, prefix) || !strings.HasSuffix(avatar, suffix) {
+		return "", errors.New("invalid avatar")
+	}
+
+	id := strings.TrimSuffix(strings.TrimPrefix(avatar, prefix), suffix)
+	if len(id) != 2 {
+		return "", errors.New("invalid avatar")
+	}
+	index, err := strconv.Atoi(id)
+	if err != nil || index < 1 || index > 64 {
+		return "", errors.New("invalid avatar")
+	}
+	if fmt.Sprintf("%02d", index) != id {
+		return "", errors.New("invalid avatar")
+	}
+
+	return avatar, nil
 }
 
 func parseUserListSort(rawSort string, rawOrder string) (string, string, bool, string, error) {

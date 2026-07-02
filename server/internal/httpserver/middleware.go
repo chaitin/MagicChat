@@ -84,3 +84,15 @@ func setSessionCookie(c echo.Context, name string, token string, expiresAt time.
 		SameSite: http.SameSiteLaxMode,
 	})
 }
+
+func clearSessionCookie(c echo.Context, name string) {
+	c.SetCookie(&http.Cookie{
+		Name:     name,
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(0, 0).UTC(),
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
