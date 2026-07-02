@@ -30,8 +30,10 @@ func TestAutoMigrateCreatesAuthTables(t *testing.T) {
 
 	user := User{
 		ID:           uuid.NewString(),
+		Avatar:       DefaultUserAvatar,
 		Email:        "wenlei@example.com",
 		Name:         "Wenlei Zhu",
+		Nickname:     "",
 		PasswordHash: "hash",
 		Status:       UserStatusActive,
 	}
@@ -66,8 +68,10 @@ func TestUserEmailIsUnique(t *testing.T) {
 
 	first := User{
 		ID:           uuid.NewString(),
+		Avatar:       DefaultUserAvatar,
 		Email:        "wenlei@example.com",
 		Name:         "Wenlei Zhu",
+		Nickname:     "",
 		PasswordHash: "hash",
 		Status:       UserStatusActive,
 	}
@@ -77,8 +81,10 @@ func TestUserEmailIsUnique(t *testing.T) {
 
 	second := User{
 		ID:           uuid.NewString(),
+		Avatar:       DefaultUserAvatar,
 		Email:        "wenlei@example.com",
 		Name:         "Another User",
+		Nickname:     "",
 		PasswordHash: "hash",
 		Status:       UserStatusActive,
 	}

@@ -11,8 +11,11 @@ definitions:
         example: admin
         type: string
     type: object
-  httpserver.conversationMemberResponse:
+  httpserver.contactUserResponse:
     properties:
+      avatar:
+        example: /assets/avatars/builtin/07.webp
+        type: string
       email:
         example: user@example.com
         type: string
@@ -21,6 +24,36 @@ definitions:
         type: string
       name:
         example: 张三
+        type: string
+      nickname:
+        example: 小张
+        type: string
+      phone:
+        example: "+8613812345678"
+        type: string
+      type:
+        example: user
+        type: string
+    type: object
+  httpserver.conversationMemberResponse:
+    properties:
+      avatar:
+        example: /assets/avatars/builtin/07.webp
+        type: string
+      email:
+        example: user@example.com
+        type: string
+      id:
+        example: 7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4
+        type: string
+      name:
+        example: 张三
+        type: string
+      nickname:
+        example: 小张
+        type: string
+      phone:
+        example: "+8613812345678"
         type: string
       role:
         example: member
@@ -50,6 +83,9 @@ definitions:
         type: string
       name:
         example: 张三
+        type: string
+      phone:
+        example: "13812345678"
         type: string
     type: object
   httpserver.createUserResponse:
@@ -114,6 +150,13 @@ definitions:
       organization_name:
         example: 长亭科技
         type: string
+    type: object
+  httpserver.listContactUsersResponse:
+    properties:
+      contacts:
+        items:
+          $ref: '#/definitions/httpserver.contactUserResponse'
+        type: array
     type: object
   httpserver.listUsersResponse:
     properties:
@@ -182,6 +225,9 @@ definitions:
     type: object
   httpserver.userResponse:
     properties:
+      avatar:
+        example: /assets/avatars/builtin/07.webp
+        type: string
       created_at:
         format: date-time
         type: string
@@ -193,6 +239,12 @@ definitions:
         type: string
       name:
         example: 张三
+        type: string
+      nickname:
+        example: 小张
+        type: string
+      phone:
+        example: "+8613812345678"
         type: string
       status:
         example: active
@@ -309,10 +361,10 @@ paths:
       - 管理员设置
   /api/admin/users:
     get:
-      description: 管理员列出普通用户。keyword 会同时搜索邮箱和名称；sort 仅支持 email、created_at、status；order
+      description: 管理员列出普通用户。keyword 会同时搜索邮箱、名称、昵称和手机号；sort 仅支持 email、created_at、status；order
         仅支持 asc、desc。
       parameters:
-      - description: 搜索关键字，匹配邮箱或名称
+      - description: 搜索关键字，匹配邮箱、名称、昵称或手机号
         in: query
         name: keyword
         type: string
@@ -362,7 +414,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 管理员创建普通用户。邮箱会规范化为小写并全局唯一，初始密码只在本次响应中返回。
+      description: 管理员创建普通用户。邮箱会规范化为小写并全局唯一，手机号可选且非空时全局唯一，初始密码只在本次响应中返回。
       parameters:
       - description: 用户信息
         in: body
@@ -560,6 +612,37 @@ paths:
       summary: 普通用户登录
       tags:
       - 客户端认证
+  /api/client/contacts/users:
+    get:
+      description: 普通用户获取通讯录。返回所有启用用户，包含当前用户；keyword 会搜索名称、昵称、邮箱和手机号。
+      parameters:
+      - description: 搜索关键字，匹配名称、昵称、邮箱或手机号
+        in: query
+        name: keyword
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpserver.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/httpserver.listContactUsersResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+      summary: 列出通讯录用户
+      tags:
+      - 客户端通讯录
   /api/client/conversations/groups:
     post:
       consumes:

@@ -46,6 +46,7 @@ func NewRouter(db *gorm.DB, cfg config.Config) *echo.Echo {
 	router.GET("/api/client/info", server.clientInfo)
 
 	client := router.Group("/api/client", server.requireUserSession)
+	client.GET("/contacts/users", server.listContactUsers)
 	client.POST("/conversations/groups", server.createGroupConversation)
 
 	admin := router.Group("/api/admin", server.requireAdminSession)
@@ -61,14 +62,22 @@ func NewRouter(db *gorm.DB, cfg config.Config) *echo.Echo {
 }
 
 func findAPIDocsDir() (string, bool) {
+	return findDirContaining("api-docs", "swagger.json")
+}
+
+func findDirContaining(relativeDir string, requiredFile string) (string, bool) {
 	dir, err := os.Getwd()
 	if err != nil {
 		return "", false
 	}
 
 	for {
-		candidate := filepath.Join(dir, "api-docs")
-		if _, err := os.Stat(filepath.Join(candidate, "swagger.json")); err == nil {
+		candidate := filepath.Join(dir, relativeDir)
+		statPath := candidate
+		if requiredFile != "" {
+			statPath = filepath.Join(candidate, requiredFile)
+		}
+		if _, err := os.Stat(statPath); err == nil {
 			return candidate, true
 		}
 

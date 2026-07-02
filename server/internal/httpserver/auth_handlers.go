@@ -1,8 +1,11 @@
 package httpserver
 
 import (
+	crand "crypto/rand"
 	"crypto/subtle"
 	"errors"
+	"fmt"
+	"math/big"
 	"net/http"
 	"net/mail"
 	"strconv"
@@ -26,12 +29,16 @@ type loginRequest struct {
 type createUserRequest struct {
 	Email string `json:"email" example:"user@example.com"`
 	Name  string `json:"name" example:"张三"`
+	Phone string `json:"phone" example:"13812345678"`
 }
 
 type userResponse struct {
 	ID        string    `json:"id" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
+	Avatar    string    `json:"avatar" example:"/assets/avatars/builtin/07.webp"`
 	Email     string    `json:"email" example:"user@example.com"`
 	Name      string    `json:"name" example:"张三"`
+	Nickname  string    `json:"nickname" example:"小张"`
+	Phone     string    `json:"phone" example:"+8613812345678"`
 	Status    string    `json:"status" example:"active"`
 	CreatedAt time.Time `json:"created_at" format:"date-time"`
 }
@@ -124,10 +131,10 @@ func (s *Server) adminLogin(c echo.Context) error {
 // listUsers godoc
 //
 // @Summary 列出普通用户
-// @Description 管理员列出普通用户。keyword 会同时搜索邮箱和名称；sort 仅支持 email、created_at、status；order 仅支持 asc、desc。
+// @Description 管理员列出普通用户。keyword 会同时搜索邮箱、名称、昵称和手机号；sort 仅支持 email、created_at、status；order 仅支持 asc、desc。
 // @Tags 管理员用户
 // @Produce json
-// @Param keyword query string false "搜索关键字，匹配邮箱或名称"
+// @Param keyword query string false "搜索关键字，匹配邮箱、名称、昵称或手机号"
 // @Param page query int false "页码，从 1 开始"
 // @Param page_size query int false "每页数量，最大 1000"
 // @Param sort query string false "排序字段：email、created_at、status"
@@ -151,7 +158,7 @@ func (s *Server) listUsers(c echo.Context) error {
 	keyword := strings.ToLower(strings.TrimSpace(c.QueryParam("keyword")))
 	if keyword != "" {
 		like := "%" + keyword + "%"
-		query = query.Where("LOWER(email) LIKE ? OR LOWER(name) LIKE ?", like, like)
+		query = query.Where("LOWER(email) LIKE ? OR LOWER(name) LIKE ? OR LOWER(nickname) LIKE ? OR phone LIKE ?", like, like, like, like)
 	}
 
 	var total int64
@@ -185,7 +192,7 @@ func (s *Server) listUsers(c echo.Context) error {
 // createUser godoc
 //
 // @Summary 创建普通用户
-// @Description 管理员创建普通用户。邮箱会规范化为小写并全局唯一，初始密码只在本次响应中返回。
+// @Description 管理员创建普通用户。邮箱会规范化为小写并全局唯一，手机号可选且非空时全局唯一，初始密码只在本次响应中返回。
 // @Tags 管理员用户
 // @Accept json
 // @Produce json
@@ -210,6 +217,10 @@ func (s *Server) createUser(c echo.Context) error {
 	if name == "" {
 		return failure(c, http.StatusBadRequest, "invalid_request", "名称不能为空")
 	}
+	phone, err := normalizePhone(req.Phone)
+	if err != nil {
+		return failure(c, http.StatusBadRequest, "invalid_request", "手机号格式错误")
+	}
 
 	var existingCount int64
 	if err := s.db.Model(&store.User{}).Where("email = ?", email).Count(&existingCount).Error; err != nil {
@@ -217,6 +228,14 @@ func (s *Server) createUser(c echo.Context) error {
 	}
 	if existingCount > 0 {
 		return failure(c, http.StatusConflict, "conflict", "邮箱已存在")
+	}
+	if phone != nil {
+		if err := s.db.Model(&store.User{}).Where("phone = ?", *phone).Count(&existingCount).Error; err != nil {
+			return failure(c, http.StatusInternalServerError, "internal_error", "服务端错误")
+		}
+		if existingCount > 0 {
+			return failure(c, http.StatusConflict, "conflict", "手机号已存在")
+		}
 	}
 
 	initialPassword, err := auth.GenerateInitialPassword(16)
@@ -230,14 +249,17 @@ func (s *Server) createUser(c echo.Context) error {
 
 	user := store.User{
 		ID:           uuid.NewString(),
+		Avatar:       randomBuiltinAvatar(),
 		Email:        email,
 		Name:         name,
+		Nickname:     "",
+		Phone:        phone,
 		PasswordHash: passwordHash,
 		Status:       store.UserStatusActive,
 	}
 	if err := s.db.Create(&user).Error; err != nil {
 		if isUniqueConstraintError(err) {
-			return failure(c, http.StatusConflict, "conflict", "邮箱已存在")
+			return failure(c, http.StatusConflict, "conflict", "邮箱或手机号已存在")
 		}
 		return failure(c, http.StatusInternalServerError, "internal_error", "服务端错误")
 	}
@@ -414,6 +436,45 @@ func normalizeEmail(raw string) (string, error) {
 	return email, nil
 }
 
+func normalizePhone(raw string) (*string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, nil
+	}
+
+	var builder strings.Builder
+	for index, char := range trimmed {
+		switch {
+		case char >= '0' && char <= '9':
+			builder.WriteRune(char)
+		case char == '+' && index == 0:
+			builder.WriteRune(char)
+		case char == ' ' || char == '\t' || char == '\n' || char == '\r' || char == '-' || char == '(' || char == ')':
+			continue
+		default:
+			return nil, errors.New("invalid phone")
+		}
+	}
+
+	normalized := builder.String()
+	if normalized == "" || normalized == "+" {
+		return nil, errors.New("invalid phone")
+	}
+	if strings.HasPrefix(normalized, "+") {
+		digits := strings.TrimPrefix(normalized, "+")
+		if len(digits) < 6 || len(digits) > 15 {
+			return nil, errors.New("invalid phone")
+		}
+		return &normalized, nil
+	}
+	if len(normalized) != 11 {
+		return nil, errors.New("invalid phone")
+	}
+
+	normalized = "+86" + normalized
+	return &normalized, nil
+}
+
 func parseUserListSort(rawSort string, rawOrder string) (string, string, bool, string, error) {
 	sortField := strings.ToLower(strings.TrimSpace(rawSort))
 	if sortField == "" {
@@ -477,13 +538,34 @@ func parsePositiveIntQuery(raw string, defaultValue int, label string) (int, err
 }
 
 func newUserResponse(user store.User) userResponse {
+	phone := ""
+	if user.Phone != nil {
+		phone = *user.Phone
+	}
+	avatar := user.Avatar
+	if avatar == "" {
+		avatar = store.DefaultUserAvatar
+	}
+
 	return userResponse{
 		ID:        user.ID,
+		Avatar:    avatar,
 		Email:     user.Email,
 		Name:      user.Name,
+		Nickname:  user.Nickname,
+		Phone:     phone,
 		Status:    user.Status,
 		CreatedAt: user.CreatedAt,
 	}
+}
+
+func randomBuiltinAvatar() string {
+	index, err := crand.Int(crand.Reader, big.NewInt(64))
+	if err != nil {
+		return store.DefaultUserAvatar
+	}
+
+	return fmt.Sprintf("/assets/avatars/builtin/%02d.webp", index.Int64()+1)
 }
 
 func (s *Server) updateUserStatus(c echo.Context, status string) error {

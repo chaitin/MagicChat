@@ -21,10 +21,13 @@ type createGroupConversationRequest struct {
 }
 
 type conversationMemberResponse struct {
-	Email string `json:"email" example:"user@example.com"`
-	ID    string `json:"id" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
-	Name  string `json:"name" example:"张三"`
-	Role  string `json:"role" example:"member"`
+	Avatar   string `json:"avatar" example:"/assets/avatars/builtin/07.webp"`
+	Email    string `json:"email" example:"user@example.com"`
+	ID       string `json:"id" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
+	Name     string `json:"name" example:"张三"`
+	Nickname string `json:"nickname" example:"小张"`
+	Phone    string `json:"phone" example:"+8613812345678"`
+	Role     string `json:"role" example:"member"`
 }
 
 type groupConversationResponse struct {
@@ -210,11 +213,22 @@ func newGroupConversationResponse(
 ) groupConversationResponse {
 	responses := make([]conversationMemberResponse, 0, len(members))
 	for _, member := range members {
+		phone := ""
+		if member.user.Phone != nil {
+			phone = *member.user.Phone
+		}
+		avatar := member.user.Avatar
+		if avatar == "" {
+			avatar = store.DefaultUserAvatar
+		}
 		responses = append(responses, conversationMemberResponse{
-			Email: member.user.Email,
-			ID:    member.user.ID,
-			Name:  member.user.Name,
-			Role:  member.role,
+			Avatar:   avatar,
+			Email:    member.user.Email,
+			ID:       member.user.ID,
+			Name:     member.user.Name,
+			Nickname: member.user.Nickname,
+			Phone:    phone,
+			Role:     member.role,
 		})
 	}
 

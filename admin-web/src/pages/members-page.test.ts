@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  formatMemberPhone,
   getMemberActionConfirmation,
   getResetPasswordPendingDialogState,
 } from "@/pages/members-page"
@@ -8,10 +9,13 @@ import {
 describe("members page reset password dialog state", () => {
   it("opens the reset password dialog in a pending state before the API returns", () => {
     const member = {
+      avatar: "/assets/avatars/builtin/01.webp",
       email: "alice@example.com",
       id: "user-1",
       joinedAt: "2026-07-01",
       name: "Alice",
+      nickname: "",
+      phone: "",
       status: "enabled" as const,
     }
 
@@ -21,6 +25,17 @@ describe("members page reset password dialog state", () => {
       newPassword: "",
       open: true,
     })
+  })
+})
+
+describe("members page phone formatting", () => {
+  it("omits +86 when displaying mainland China phone numbers", () => {
+    expect(formatMemberPhone("+8613812345678")).toBe("13812345678")
+    expect(formatMemberPhone("+862112345678")).toBe("2112345678")
+  })
+
+  it("keeps non +86 phone numbers unchanged", () => {
+    expect(formatMemberPhone("+14155552671")).toBe("+14155552671")
   })
 })
 

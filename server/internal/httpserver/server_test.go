@@ -170,8 +170,10 @@ func insertTestUser(t *testing.T, db *gorm.DB, email string, name string, status
 	}
 	user := store.User{
 		ID:           uuid.NewString(),
+		Avatar:       store.DefaultUserAvatar,
 		Email:        email,
 		Name:         name,
+		Nickname:     "",
 		PasswordHash: passwordHash,
 		Status:       status,
 		CreatedAt:    createdAt,
@@ -193,6 +195,17 @@ func requireUsers(t *testing.T, data map[string]any) []any {
 	}
 
 	return users
+}
+
+func requireContacts(t *testing.T, data map[string]any) []any {
+	t.Helper()
+
+	contacts, ok := data["contacts"].([]any)
+	if !ok {
+		t.Fatalf("contacts = %#v, want array", data["contacts"])
+	}
+
+	return contacts
 }
 
 func requireSuccess(t *testing.T, response map[string]any) map[string]any {
@@ -296,6 +309,7 @@ func TestGeneratedSwaggerSpecIsServed(t *testing.T) {
 		"/api/admin/users/{id}/reset-password",
 		"/api/admin/settings/info",
 		"/api/client/auth/login",
+		"/api/client/contacts/users",
 		"/api/client/conversations/groups",
 		"/api/client/info",
 	} {
@@ -671,6 +685,19 @@ func TestAdminCreatesUserAndUserCanLogin(t *testing.T) {
 	if user["name"] != "Wenlei Zhu" {
 		t.Fatalf("user.name = %v, want Wenlei Zhu", user["name"])
 	}
+	if user["nickname"] != "" {
+		t.Fatalf("user.nickname = %v, want empty string", user["nickname"])
+	}
+	if user["phone"] != nil && user["phone"] != "" {
+		t.Fatalf("user.phone = %v, want empty string or null", user["phone"])
+	}
+	avatar, ok := user["avatar"].(string)
+	if !ok {
+		t.Fatalf("user.avatar = %#v, want string", user["avatar"])
+	}
+	if !strings.HasPrefix(avatar, "/assets/avatars/builtin/") || !strings.HasSuffix(avatar, ".webp") {
+		t.Fatalf("user.avatar = %q, want builtin webp path", avatar)
+	}
 	if user["status"] != store.UserStatusActive {
 		t.Fatalf("user.status = %v, want active", user["status"])
 	}
@@ -717,6 +744,60 @@ func TestAdminCreatesUserAndUserCanLogin(t *testing.T) {
 	}
 }
 
+func TestAdminCreatesUserWithNormalizedOptionalPhone(t *testing.T) {
+	server, _ := newTestRouter(t)
+	defer server.Close()
+
+	adminCookie := loginAsAdmin(t, server)
+
+	resp, body := postJSON(t, server, "/api/admin/users", map[string]any{
+		"email": "alice@example.com",
+		"name":  "Alice Zhang",
+		"phone": "+86 138-1234-5678",
+	}, adminCookie)
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201, body = %#v", resp.StatusCode, body)
+	}
+	user := requireSuccess(t, body)["user"].(map[string]any)
+	if user["phone"] != "+8613812345678" {
+		t.Fatalf("user.phone = %v, want normalized phone", user["phone"])
+	}
+	if user["nickname"] != "" {
+		t.Fatalf("user.nickname = %v, want empty string", user["nickname"])
+	}
+	if avatar := user["avatar"].(string); !strings.HasPrefix(avatar, "/assets/avatars/builtin/") {
+		t.Fatalf("user.avatar = %q, want builtin path", avatar)
+	}
+}
+
+func TestDuplicateUserPhoneReturnsConflict(t *testing.T) {
+	server, _ := newTestRouter(t)
+	defer server.Close()
+
+	adminCookie := loginAsAdmin(t, server)
+
+	firstResp, firstBody := postJSON(t, server, "/api/admin/users", map[string]any{
+		"email": "alice@example.com",
+		"name":  "Alice",
+		"phone": "13812345678",
+	}, adminCookie)
+	if firstResp.StatusCode != http.StatusCreated {
+		t.Fatalf("first status = %d, want 201", firstResp.StatusCode)
+	}
+	requireSuccess(t, firstBody)
+
+	duplicateResp, duplicateBody := postJSON(t, server, "/api/admin/users", map[string]any{
+		"email": "bob@example.com",
+		"name":  "Bob",
+		"phone": "+8613812345678",
+	}, adminCookie)
+	if duplicateResp.StatusCode != http.StatusConflict {
+		t.Fatalf("duplicate status = %d, want 409", duplicateResp.StatusCode)
+	}
+	requireError(t, duplicateBody, "conflict")
+}
+
 func TestDuplicateUserEmailReturnsConflict(t *testing.T) {
 	server, _ := newTestRouter(t)
 	defer server.Close()
@@ -757,7 +838,10 @@ func TestListUsersSupportsKeywordSearchAndSorting(t *testing.T) {
 	jan3 := time.Date(2026, 1, 3, 10, 0, 0, 0, time.UTC)
 	insertTestUser(t, db, "alice@example.com", "Alice Zhang", store.UserStatusActive, jan2)
 	insertTestUser(t, db, "bob@example.net", "Bob Li", store.UserStatusDisabled, jan1)
-	insertTestUser(t, db, "carol@company.io", "Carol Wang", store.UserStatusActive, jan3)
+	carol := insertTestUser(t, db, "carol@company.io", "Carol Wang", store.UserStatusActive, jan3)
+	if err := db.Model(&store.User{}).Where("id = ?", carol.ID).Update("phone", "+8613900000003").Error; err != nil {
+		t.Fatalf("set carol phone: %v", err)
+	}
 
 	emailResp, emailBody := getJSON(t, server, "/api/admin/users?sort=email&order=asc", adminCookie)
 	if emailResp.StatusCode != http.StatusOK {
@@ -797,6 +881,116 @@ func TestListUsersSupportsKeywordSearchAndSorting(t *testing.T) {
 	}
 	if got := nameUsers[0].(map[string]any)["name"]; got != "Carol Wang" {
 		t.Fatalf("name search result = %v, want Carol Wang", got)
+	}
+
+	phoneResp, phoneBody := getJSON(t, server, "/api/admin/users?keyword="+url.QueryEscape("13900000003"), adminCookie)
+	if phoneResp.StatusCode != http.StatusOK {
+		t.Fatalf("phone search status = %d, want 200", phoneResp.StatusCode)
+	}
+	phoneUsers := requireUsers(t, requireSuccess(t, phoneBody))
+	if len(phoneUsers) != 1 {
+		t.Fatalf("phone search user count = %d, want 1", len(phoneUsers))
+	}
+	if got := phoneUsers[0].(map[string]any)["email"]; got != "carol@company.io" {
+		t.Fatalf("phone search result = %v, want carol@company.io", got)
+	}
+}
+
+func TestListContactsReturnsActiveUsersIncludingSelf(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+
+	now := time.Now().UTC()
+	alice := insertTestUser(t, db, "alice@example.com", "Alice Zhang", store.UserStatusActive, now)
+	bob := insertTestUser(t, db, "bob@example.com", "Bob Li", store.UserStatusActive, now)
+	disabled := insertTestUser(t, db, "disabled@example.com", "Disabled User", store.UserStatusDisabled, now)
+	userCookie := loginAsUser(t, server, alice.Email)
+
+	resp, body := getJSON(t, server, "/api/client/contacts/users", userCookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body = %#v", resp.StatusCode, body)
+	}
+
+	contacts := requireContacts(t, requireSuccess(t, body))
+	ids := map[string]bool{}
+	for _, rawContact := range contacts {
+		contact := rawContact.(map[string]any)
+		ids[contact["id"].(string)] = true
+		if contact["type"] != "user" {
+			t.Fatalf("contact.type = %v, want user", contact["type"])
+		}
+		if _, ok := contact["nickname"].(string); !ok {
+			t.Fatalf("contact.nickname = %#v, want string", contact["nickname"])
+		}
+		if _, ok := contact["avatar"].(string); !ok {
+			t.Fatalf("contact.avatar = %#v, want string", contact["avatar"])
+		}
+	}
+	if !ids[alice.ID] {
+		t.Fatal("contacts did not include current user")
+	}
+	if !ids[bob.ID] {
+		t.Fatal("contacts did not include active user")
+	}
+	if ids[disabled.ID] {
+		t.Fatal("contacts included disabled user")
+	}
+}
+
+func TestListContactsSearchesNameEmailNicknameAndPhone(t *testing.T) {
+	server, _ := newTestRouter(t)
+	defer server.Close()
+
+	adminCookie := loginAsAdmin(t, server)
+	aliceResp, aliceBody := postJSON(t, server, "/api/admin/users", map[string]any{
+		"email": "alice@example.com",
+		"name":  "Alice Zhang",
+		"phone": "13900000001",
+	}, adminCookie)
+	if aliceResp.StatusCode != http.StatusCreated {
+		t.Fatalf("alice status = %d, want 201", aliceResp.StatusCode)
+	}
+	aliceData := requireSuccess(t, aliceBody)
+	alice := aliceData["user"].(map[string]any)
+	alicePassword := aliceData["initial_password"].(string)
+
+	bobResp, bobBody := postJSON(t, server, "/api/admin/users", map[string]any{
+		"email": "bob@example.com",
+		"name":  "Bob Li",
+		"phone": "13900000002",
+	}, adminCookie)
+	if bobResp.StatusCode != http.StatusCreated {
+		t.Fatalf("bob status = %d, want 201", bobResp.StatusCode)
+	}
+	requireSuccess(t, bobBody)
+
+	loginResp, loginBody := postJSON(t, server, "/api/client/auth/login", map[string]any{
+		"email":    "alice@example.com",
+		"password": alicePassword,
+	})
+	if loginResp.StatusCode != http.StatusOK {
+		t.Fatalf("login status = %d, want 200", loginResp.StatusCode)
+	}
+	requireSuccess(t, loginBody)
+	userCookie := requireUserSessionCookie(t, loginResp)
+
+	resp, body := getJSON(t, server, "/api/client/contacts/users?keyword="+url.QueryEscape("13900000002"), userCookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body = %#v", resp.StatusCode, body)
+	}
+	contacts := requireContacts(t, requireSuccess(t, body))
+	if len(contacts) != 1 {
+		t.Fatalf("contact count = %d, want 1", len(contacts))
+	}
+	contact := contacts[0].(map[string]any)
+	if contact["email"] != "bob@example.com" {
+		t.Fatalf("contact.email = %v, want bob@example.com", contact["email"])
+	}
+	if contact["phone"] != "+8613900000002" {
+		t.Fatalf("contact.phone = %v, want normalized phone", contact["phone"])
+	}
+	if contact["id"] == alice["id"] {
+		t.Fatal("phone keyword matched the current user unexpectedly")
 	}
 }
 

@@ -180,7 +180,7 @@
         },
         "/api/admin/users": {
             "get": {
-                "description": "管理员列出普通用户。keyword 会同时搜索邮箱和名称；sort 仅支持 email、created_at、status；order 仅支持 asc、desc。",
+                "description": "管理员列出普通用户。keyword 会同时搜索邮箱、名称、昵称和手机号；sort 仅支持 email、created_at、status；order 仅支持 asc、desc。",
                 "produces": [
                     "application/json"
                 ],
@@ -191,7 +191,7 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "搜索关键字，匹配邮箱或名称",
+                        "description": "搜索关键字，匹配邮箱、名称、昵称或手机号",
                         "name": "keyword",
                         "in": "query"
                     },
@@ -260,7 +260,7 @@
                 }
             },
             "post": {
-                "description": "管理员创建普通用户。邮箱会规范化为小写并全局唯一，初始密码只在本次响应中返回。",
+                "description": "管理员创建普通用户。邮箱会规范化为小写并全局唯一，手机号可选且非空时全局唯一，初始密码只在本次响应中返回。",
                 "consumes": [
                     "application/json"
                 ],
@@ -587,6 +587,58 @@
                 }
             }
         },
+        "/api/client/contacts/users": {
+            "get": {
+                "description": "普通用户获取通讯录。返回所有启用用户，包含当前用户；keyword 会搜索名称、昵称、邮箱和手机号。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端通讯录"
+                ],
+                "summary": "列出通讯录用户",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "搜索关键字，匹配名称、昵称、邮箱或手机号",
+                        "name": "keyword",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/httpserver.successEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/httpserver.listContactUsersResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpserver.errorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/httpserver.errorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
         "/api/client/conversations/groups": {
             "post": {
                 "description": "普通用户创建群聊。当前登录用户会自动成为群主，member_ids 只需要传其他成员。",
@@ -708,9 +760,13 @@
                 }
             }
         },
-        "httpserver.conversationMemberResponse": {
+        "httpserver.contactUserResponse": {
             "type": "object",
             "properties": {
+                "avatar": {
+                    "type": "string",
+                    "example": "/assets/avatars/builtin/07.webp"
+                },
                 "email": {
                     "type": "string",
                     "example": "user@example.com"
@@ -722,6 +778,47 @@
                 "name": {
                     "type": "string",
                     "example": "张三"
+                },
+                "nickname": {
+                    "type": "string",
+                    "example": "小张"
+                },
+                "phone": {
+                    "type": "string",
+                    "example": "+8613812345678"
+                },
+                "type": {
+                    "type": "string",
+                    "example": "user"
+                }
+            }
+        },
+        "httpserver.conversationMemberResponse": {
+            "type": "object",
+            "properties": {
+                "avatar": {
+                    "type": "string",
+                    "example": "/assets/avatars/builtin/07.webp"
+                },
+                "email": {
+                    "type": "string",
+                    "example": "user@example.com"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "张三"
+                },
+                "nickname": {
+                    "type": "string",
+                    "example": "小张"
+                },
+                "phone": {
+                    "type": "string",
+                    "example": "+8613812345678"
                 },
                 "role": {
                     "type": "string",
@@ -765,6 +862,10 @@
                 "name": {
                     "type": "string",
                     "example": "张三"
+                },
+                "phone": {
+                    "type": "string",
+                    "example": "13812345678"
                 }
             }
         },
@@ -856,6 +957,17 @@
                 "organization_name": {
                     "type": "string",
                     "example": "长亭科技"
+                }
+            }
+        },
+        "httpserver.listContactUsersResponse": {
+            "type": "object",
+            "properties": {
+                "contacts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/httpserver.contactUserResponse"
+                    }
                 }
             }
         },
@@ -957,6 +1069,10 @@
         "httpserver.userResponse": {
             "type": "object",
             "properties": {
+                "avatar": {
+                    "type": "string",
+                    "example": "/assets/avatars/builtin/07.webp"
+                },
                 "created_at": {
                     "type": "string",
                     "format": "date-time"
@@ -972,6 +1088,14 @@
                 "name": {
                     "type": "string",
                     "example": "张三"
+                },
+                "nickname": {
+                    "type": "string",
+                    "example": "小张"
+                },
+                "phone": {
+                    "type": "string",
+                    "example": "+8613812345678"
                 },
                 "status": {
                     "type": "string",

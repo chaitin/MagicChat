@@ -41,8 +41,11 @@ describe("admin users", () => {
             users: [
               {
                 id: "user-1",
+                avatar: "/assets/avatars/builtin/01.webp",
                 email: "alice@example.com",
                 name: "Alice",
+                nickname: "",
+                phone: "+8613812345678",
                 status: "disabled",
                 created_at: "2026-07-01T12:34:56Z",
               },
@@ -83,9 +86,12 @@ describe("admin users", () => {
       users: [
         {
           createdAt: "2026-07-01T12:34:56Z",
+          avatar: "/assets/avatars/builtin/01.webp",
           email: "alice@example.com",
           id: "user-1",
           name: "Alice",
+          nickname: "",
+          phone: "+8613812345678",
           status: "disabled",
         },
       ],
@@ -107,8 +113,11 @@ describe("admin users", () => {
           data: {
             user: {
               id: "user-1",
+              avatar: "/assets/avatars/builtin/02.webp",
               email: "new@example.com",
               name: "New User",
+              nickname: "",
+              phone: "+8613912345678",
               status: "active",
               created_at: "2026-07-01T12:34:56Z",
             },
@@ -128,6 +137,7 @@ describe("admin users", () => {
       {
         email: " new@example.com ",
         name: " New User ",
+        phone: " 13912345678 ",
       },
       fetcher
     )
@@ -136,9 +146,12 @@ describe("admin users", () => {
       initialPassword: "initial-secret",
       user: {
         createdAt: "2026-07-01T12:34:56Z",
+        avatar: "/assets/avatars/builtin/02.webp",
         email: "new@example.com",
         id: "user-1",
         name: "New User",
+        nickname: "",
+        phone: "+8613912345678",
         status: "active",
       },
     })
@@ -146,6 +159,7 @@ describe("admin users", () => {
       body: JSON.stringify({
         email: "new@example.com",
         name: "New User",
+        phone: "13912345678",
       }),
       credentials: "include",
       headers: {
@@ -238,8 +252,11 @@ describe("admin users", () => {
           data: {
             user: {
               id: "user-1",
+              avatar: "/assets/avatars/builtin/01.webp",
               email: "alice@example.com",
               name: "Alice",
+              nickname: "",
+              phone: "",
               status: "active",
               created_at: "2026-07-01T12:34:56Z",
             },
@@ -258,9 +275,12 @@ describe("admin users", () => {
 
     expect(user).toEqual({
       createdAt: "2026-07-01T12:34:56Z",
+      avatar: "/assets/avatars/builtin/01.webp",
       email: "alice@example.com",
       id: "user-1",
       name: "Alice",
+      nickname: "",
+      phone: "",
       status: "active",
     })
     expect(fetcher).toHaveBeenCalledWith("/api/admin/users/user-1/enable", {
@@ -277,8 +297,11 @@ describe("admin users", () => {
           data: {
             user: {
               id: "user-1",
+              avatar: "/assets/avatars/builtin/01.webp",
               email: "alice@example.com",
               name: "Alice",
+              nickname: "",
+              phone: "",
               status: "disabled",
               created_at: "2026-07-01T12:34:56Z",
             },
@@ -309,8 +332,11 @@ describe("admin users", () => {
           data: {
             user: {
               id: "user-1",
+              avatar: "/assets/avatars/builtin/01.webp",
               email: "alice@example.com",
               name: "Alice",
+              nickname: "",
+              phone: "",
               status: "active",
               created_at: "2026-07-01T12:34:56Z",
             },
@@ -332,9 +358,12 @@ describe("admin users", () => {
       newPassword: "new-secret",
       user: {
         createdAt: "2026-07-01T12:34:56Z",
+        avatar: "/assets/avatars/builtin/01.webp",
         email: "alice@example.com",
         id: "user-1",
         name: "Alice",
+        nickname: "",
+        phone: "",
         status: "active",
       },
     })

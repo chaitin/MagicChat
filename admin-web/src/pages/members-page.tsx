@@ -90,10 +90,13 @@ import {
 import { cn } from "@/lib/utils"
 
 type Member = {
+  avatar: string
   email: string
   id: string
   joinedAt: string
   name: string
+  nickname: string
+  phone: string
   status: "disabled" | "enabled"
 }
 
@@ -133,6 +136,7 @@ const columnLabels: Record<string, string> = {
   email: "邮箱",
   joinedAt: "加入时间",
   name: "名称",
+  phone: "手机号",
   status: "状态",
 }
 
@@ -249,6 +253,11 @@ function getColumns({
       cell: ({ row }) => row.getValue("name"),
     },
     {
+      accessorKey: "phone",
+      header: "手机号",
+      cell: ({ row }) => formatMemberPhone(row.original.phone),
+    },
+    {
       accessorKey: "joinedAt",
       header: ({ column }) => (
         <Button
@@ -315,6 +324,7 @@ export default function MembersPage() {
   const addMemberEmailId = useId()
   const addMemberNameId = useId()
   const addMemberPasswordId = useId()
+  const addMemberPhoneId = useId()
   const resetPasswordEmailId = useId()
   const resetPasswordValueId = useId()
   const [addMemberEmail, setAddMemberEmail] = useState("")
@@ -323,6 +333,7 @@ export default function MembersPage() {
   >(null)
   const [addMemberName, setAddMemberName] = useState("")
   const [addMemberOpen, setAddMemberOpen] = useState(false)
+  const [addMemberPhone, setAddMemberPhone] = useState("")
   const [isAddingMember, setIsAddingMember] = useState(false)
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [isLoadingMembers, setIsLoadingMembers] = useState(true)
@@ -446,6 +457,7 @@ export default function MembersPage() {
     setAddMemberEmail("")
     setAddMemberInitialPassword(null)
     setAddMemberName("")
+    setAddMemberPhone("")
   }
 
   function handleAddMemberOpenChange(open: boolean) {
@@ -487,6 +499,7 @@ export default function MembersPage() {
       const created = await createAdminUser({
         email: addMemberEmail,
         name: addMemberName,
+        phone: addMemberPhone,
       })
 
       setAddMemberInitialPassword(created.initialPassword)
@@ -679,6 +692,19 @@ export default function MembersPage() {
                       readOnly={isAddMemberComplete}
                       required
                       value={addMemberName}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor={addMemberPhoneId}>手机号</FieldLabel>
+                    <Input
+                      autoComplete="tel"
+                      disabled={isAddingMember}
+                      id={addMemberPhoneId}
+                      onChange={(event) =>
+                        setAddMemberPhone(event.target.value)
+                      }
+                      readOnly={isAddMemberComplete}
+                      value={addMemberPhone}
                     />
                   </Field>
                   {isAddMemberComplete && (
@@ -1005,12 +1031,23 @@ function toAdminUserStatus(status: Member["status"]): AdminUser["status"] {
 
 function toMember(user: AdminUser): Member {
   return {
+    avatar: user.avatar,
     email: user.email,
     id: user.id,
     joinedAt: formatJoinedAt(user.createdAt),
     name: user.name,
+    nickname: user.nickname,
+    phone: user.phone,
     status: user.status === "disabled" ? "disabled" : "enabled",
   }
+}
+
+export function formatMemberPhone(phone: string) {
+  if (phone.startsWith("+86")) {
+    return phone.slice(3)
+  }
+
+  return phone
 }
 
 function formatJoinedAt(value: string) {

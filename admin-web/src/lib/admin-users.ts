@@ -19,10 +19,13 @@ type AdminUsersErrorEnvelope = {
 }
 
 type AdminUserResponse = {
+  avatar?: string
   created_at?: string
   email?: string
   id?: string
   name?: string
+  nickname?: string
+  phone?: string
   status?: string
 }
 
@@ -50,10 +53,13 @@ type UpdateAdminUserStatusResponse = {
 }
 
 export type AdminUser = {
+  avatar: string
   createdAt: string
   email: string
   id: string
   name: string
+  nickname: string
+  phone: string
   status: "active" | "disabled"
 }
 
@@ -63,6 +69,7 @@ export type AdminUsersSortOrder = "asc" | "desc"
 export type CreateAdminUserInput = {
   email: string
   name: string
+  phone?: string
 }
 
 export type ListAdminUsersInput = {
@@ -152,6 +159,7 @@ export async function createAdminUser(
     body: JSON.stringify({
       email: input.email.trim(),
       name: input.name.trim(),
+      phone: input.phone?.trim() ?? "",
     }),
     credentials: "include",
     headers: {
@@ -278,10 +286,13 @@ function normalizeAdminUser(user: AdminUserResponse): AdminUser {
   }
 
   return {
+    avatar: user.avatar ?? "",
     createdAt: user.created_at,
     email: user.email,
     id: user.id,
     name: user.name,
+    nickname: user.nickname ?? "",
+    phone: user.phone ?? "",
     status: user.status === "disabled" ? "disabled" : "active",
   }
 }

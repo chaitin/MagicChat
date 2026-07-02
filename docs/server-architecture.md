@@ -228,6 +228,9 @@ admin:
 - `id`
 - `email`
 - `name`
+- `nickname`
+- `phone`
+- `avatar`
 - `password_hash`
 - `status`
 - `created_at`
@@ -236,7 +239,30 @@ admin:
 约束：
 
 - `email` 唯一，大小写不敏感。实现上可以保存规范化后的小写邮箱，或在 Postgres 中使用 `lower(email)` 唯一索引。
+- `nickname` 可以为空字符串，创建用户时默认不设置。
+- `phone` 可为空；非空时保存规范化后的完整号码，并通过唯一索引保证唯一。无区号输入按 `+86` 处理，有 `+` 前缀时按完整国际号码处理。
+- `avatar` 必填。历史空数据迁移为 `/assets/avatars/builtin/01.webp`；创建用户时服务端随机分配 `/assets/avatars/builtin/01.webp` 到 `/assets/avatars/builtin/64.webp`。
 - `status` 可取 `active`、`disabled`。
+
+内置头像文件由需要展示头像的前端 `public` 目录托管，并保持相同的相对路径：
+
+```text
+admin-web/public/assets/avatars/builtin/01.webp
+...
+admin-web/public/assets/avatars/builtin/64.webp
+
+client-web/public/assets/avatars/builtin/01.webp
+...
+client-web/public/assets/avatars/builtin/64.webp
+```
+
+API 返回的内置头像路径形如：
+
+```text
+/assets/avatars/builtin/07.webp
+```
+
+如果后续支持自定义头像，`avatar` 可以保存 `http://`、`https://` 图片地址或服务端相对路径。
 
 ### admin_sessions
 
@@ -336,6 +362,7 @@ server/migrations/
 00003_create_user_sessions.sql
 00004_create_app_settings.sql
 00005_create_conversations.sql
+00006_add_user_profile_fields.sql
 ```
 
 服务端启动时不自动执行 destructive migration。开发环境可以通过命令执行：

@@ -26,12 +26,16 @@ const (
 	AppSettingsID           = 1
 	DefaultAppName          = "MyGod"
 	DefaultOrganizationName = "长亭科技"
+	DefaultUserAvatar       = "/assets/avatars/builtin/01.webp"
 )
 
 type User struct {
 	ID           string    `gorm:"type:uuid;primaryKey"`
 	Email        string    `gorm:"size:320;not null;uniqueIndex"`
 	Name         string    `gorm:"size:120;not null"`
+	Nickname     string    `gorm:"size:120;not null;default:''"`
+	Phone        *string   `gorm:"size:32;uniqueIndex"`
+	Avatar       string    `gorm:"size:512;not null;default:/assets/avatars/builtin/01.webp"`
 	PasswordHash string    `gorm:"not null"`
 	Status       string    `gorm:"size:32;not null;index"`
 	CreatedAt    time.Time `gorm:"not null"`
