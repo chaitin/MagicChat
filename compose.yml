@@ -1,4 +1,4 @@
-name: dianbao
+name: mygod
 
 services:
   postgres:
@@ -28,8 +28,6 @@ services:
     volumes:
       - ./data/server/config:/app/config:ro
       - ./data/server/log:/app/log
-    expose:
-      - "20080"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:20080/healthz >/dev/null || exit 1"]
       interval: 10s
