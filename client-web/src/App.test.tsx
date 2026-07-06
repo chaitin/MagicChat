@@ -987,7 +987,7 @@ describe("App", () => {
     expect(
       within(history).getByText("帮我总结今天的消息")
     ).toBeInTheDocument()
-    expect(within(history).getByAltText("我")).toHaveAttribute(
+    expect(within(history).getByAltText("Al | Alice")).toHaveAttribute(
       "src",
       "/assets/avatars/builtin/17.webp"
     )
