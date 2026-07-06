@@ -1,4 +1,16 @@
-import { MoreHorizontalIcon, PlusIcon, SaveIcon, XIcon } from "lucide-react"
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  EyeIcon,
+  MoreHorizontalIcon,
+  PencilIcon,
+  PlusIcon,
+  PowerIcon,
+  PowerOffIcon,
+  SaveIcon,
+  Trash2Icon,
+  XIcon,
+} from "lucide-react"
 import { useEffect, useId, useState, type FormEvent } from "react"
 import { toast } from "sonner"
 
@@ -443,7 +455,12 @@ function ThirdPartyProviderAddMenu({
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button disabled={disabled} size="sm" type="button" variant="outline" />
+          <Button
+            disabled={disabled}
+            size="sm"
+            type="button"
+            variant="outline"
+          />
         }
       >
         <PlusIcon data-icon="inline-start" />
@@ -507,36 +524,42 @@ function ThirdPartyProviderActions({
       <DropdownMenuContent align="end">
         <DropdownMenuGroup>
           <DropdownMenuItem onClick={() => onViewCallback(provider)}>
-            查看回调地址
+            <EyeIcon data-icon="inline-start" />
+            查看回调
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={isUpdating}
             onClick={() => onEdit(provider)}
           >
+            <PencilIcon data-icon="inline-start" />
             编辑
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={isUpdating || provider.enabled}
             onClick={() => onStatusChange(provider, true)}
           >
+            <PowerIcon data-icon="inline-start" />
             启用
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={isUpdating || !provider.enabled}
             onClick={() => onStatusChange(provider, false)}
           >
+            <PowerOffIcon data-icon="inline-start" />
             禁用
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={isUpdating || isFirst}
             onClick={() => onMove(provider, "up")}
           >
+            <ArrowUpIcon data-icon="inline-start" />
             上移
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={isUpdating || isLast}
             onClick={() => onMove(provider, "down")}
           >
+            <ArrowDownIcon data-icon="inline-start" />
             下移
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -544,6 +567,7 @@ function ThirdPartyProviderActions({
             onClick={() => onDelete(provider)}
             variant="destructive"
           >
+            <Trash2Icon data-icon="inline-start" />
             删除
           </DropdownMenuItem>
         </DropdownMenuGroup>
@@ -567,14 +591,8 @@ function ThirdPartyCallbackURLDialog({
         <DialogHeader>
           <DialogTitle>第三方登录回调地址</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1">
-            <div className="text-sm font-medium">{provider?.name}</div>
-            <div className="text-xs text-muted-foreground">{provider?.key}</div>
-          </div>
-          <div className="break-all rounded-md border bg-muted/40 px-3 py-2 font-mono text-sm">
-            {callbackURL}
-          </div>
+        <div className="rounded-md border bg-muted/40 px-3 py-2 font-mono text-sm break-all">
+          {callbackURL}
         </div>
         <DialogFooter>
           <Button onClick={() => onOpenChange(false)} type="button">
@@ -764,7 +782,9 @@ function ThirdPartyProviderDialog({
             {isOIDC && (
               <>
                 <Field>
-                  <FieldLabel htmlFor={authorizeUrlId}>Authorize URL</FieldLabel>
+                  <FieldLabel htmlFor={authorizeUrlId}>
+                    Authorize URL
+                  </FieldLabel>
                   <Input
                     disabled={isSaving}
                     id={authorizeUrlId}
@@ -948,11 +968,8 @@ export function getThirdPartyProviderTextClassName(enabled: boolean) {
   return enabled ? "min-w-0" : "min-w-0 text-muted-foreground"
 }
 
-export function getThirdPartyCallbackURL(
-  providerKey: string,
-  location = window.location
-) {
-  return `${location.origin}/api/client/auth/third-party/${encodeURIComponent(
+export function getThirdPartyCallbackURL(providerKey: string) {
+  return `<MyGod访问地址>/api/client/auth/third-party/${encodeURIComponent(
     providerKey
   )}/callback`
 }

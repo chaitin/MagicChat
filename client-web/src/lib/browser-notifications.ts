@@ -51,7 +51,6 @@ export function showBrowserMessageNotification({
   try {
     notification = new Notification(title, {
       body,
-      renotify: true,
       tag,
     })
   } catch {
