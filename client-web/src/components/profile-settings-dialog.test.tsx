@@ -28,6 +28,13 @@ class LoadedImage {
   removeEventListener() {}
 }
 
+class BrowserNotificationPermissionDefault {
+  static permission: NotificationPermission = "default"
+  static requestPermission = vi.fn(
+    async () => "granted" as NotificationPermission
+  )
+}
+
 function createDeferred<T = void>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((promiseResolve) => {
@@ -117,9 +124,7 @@ describe("ProfileSettingsDialog", () => {
     await userEventSetup.click(submitNicknameButton)
 
     expect(onNicknameSave).toHaveBeenCalledWith("Alice A")
-    expect(
-      within(dialog).getByRole("button", { name: "提交" })
-    ).toBeDisabled()
+    expect(within(dialog).getByRole("button", { name: "提交" })).toBeDisabled()
     expect(within(dialog).queryByText("提交中...")).not.toBeInTheDocument()
     expect(
       within(dialog)
@@ -281,7 +286,9 @@ describe("ProfileSettingsDialog", () => {
 
     expect(onAvatarSave).toHaveBeenCalledWith("/assets/avatars/builtin/03.webp")
     expect(avatarSaveButton).toBeDisabled()
-    expect(within(avatarDialog).queryByText("保存中...")).not.toBeInTheDocument()
+    expect(
+      within(avatarDialog).queryByText("保存中...")
+    ).not.toBeInTheDocument()
     expect(avatarSaveButton.querySelector(".animate-spin")).toBeInTheDocument()
     avatarSave.resolve()
 
@@ -293,5 +300,28 @@ describe("ProfileSettingsDialog", () => {
     expect(
       within(dialog).getByRole("img", { name: "Alice A" })
     ).toHaveAttribute("src", "/assets/avatars/builtin/03.webp")
+  })
+
+  it("requests browser notification permission from settings", async () => {
+    vi.stubGlobal("Image", LoadedImage)
+    vi.stubGlobal("Notification", BrowserNotificationPermissionDefault)
+    const userEventSetup = userEvent.setup()
+
+    render(<ProfileSettingsDialog open onOpenChange={vi.fn()} user={user} />)
+
+    const dialog = screen.getByRole("dialog", { name: "设置" })
+    const notificationButton = within(dialog).getByRole("button", {
+      name: "开启桌面通知",
+    })
+
+    expect(notificationButton).toHaveAttribute("data-variant", "outline")
+    await userEventSetup.click(notificationButton)
+
+    expect(
+      BrowserNotificationPermissionDefault.requestPermission
+    ).toHaveBeenCalledTimes(1)
+    await waitFor(() =>
+      expect(within(dialog).getByText("桌面通知已开启")).toBeInTheDocument()
+    )
   })
 })

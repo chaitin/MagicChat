@@ -4,6 +4,7 @@ import { Navigate, Route, Routes } from "react-router"
 import { AppLayout } from "@/components/app-layout"
 import { ClientConversationRealtimeSync } from "@/components/client-conversation-realtime-sync"
 import { ClientDataProvider } from "@/components/client-data-provider"
+import { ClientMessageNotificationSync } from "@/components/client-message-notification-sync"
 import { ClientRealtimeProvider } from "@/components/client-realtime-provider"
 import { AppInfoProvider } from "@/components/app-info-provider"
 import { useAppInfo } from "@/lib/app-info-context"
@@ -31,6 +32,7 @@ export function App() {
             <ClientDataProvider>
               <ClientRealtimeProvider>
                 <ClientConversationRealtimeSync />
+                <ClientMessageNotificationSync />
                 <AppLayout />
               </ClientRealtimeProvider>
             </ClientDataProvider>

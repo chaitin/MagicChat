@@ -672,6 +672,37 @@ class LoadedImage {
   removeEventListener() {}
 }
 
+class BrowserNotificationPermissionDefault {
+  static permission: NotificationPermission = "default"
+  static requestPermission = vi.fn(
+    async () => "granted" as NotificationPermission
+  )
+}
+
+class BrowserNotificationPermissionGranted {
+  static instances: Array<{
+    body?: string
+    onclick: (() => void) | null
+    tag?: string
+    title: string
+  }> = []
+  static permission: NotificationPermission = "granted"
+  static requestPermission = vi.fn(
+    async () => "granted" as NotificationPermission
+  )
+
+  onclick: (() => void) | null = null
+
+  constructor(title: string, options: NotificationOptions = {}) {
+    BrowserNotificationPermissionGranted.instances.push({
+      body: options.body,
+      onclick: this.onclick,
+      tag: options.tag,
+      title,
+    })
+  }
+}
+
 class AppWebSocketMock {
   static CLOSED = 3
   static CLOSING = 2
@@ -754,6 +785,7 @@ async function openLatestAppWebSocket(
 describe("App", () => {
   beforeEach(() => {
     AppWebSocketMock.instances = []
+    BrowserNotificationPermissionGranted.instances = []
     vi.stubGlobal("fetch", createClientFetchMock())
     vi.stubGlobal("WebSocket", AppWebSocketMock)
   })
@@ -2276,6 +2308,74 @@ describe("App", () => {
     expect(
       screen.getByRole("button", { name: /这是一条实时推送消息/ })
     ).toBeInTheDocument()
+  }, 10_000)
+
+  it("未开启浏览器通知时收到非当前会话消息会提示去设置开启", async () => {
+    vi.stubGlobal("Notification", BrowserNotificationPermissionDefault)
+
+    renderApp("/chat?conversation_id=conversation-bob")
+
+    const socket = await openLatestAppWebSocket()
+    await screen.findByTestId("conversation-panel-history")
+    socket.receive({
+      v: 1,
+      kind: "event",
+      event: "message.created",
+      payload: {
+        message: createConversationMessage({
+          clientMessageId: "client-message-4",
+          content: "团队里有新消息",
+          conversationId: "conversation-team",
+          createdAt: "2026-07-03T08:02:00Z",
+          id: "message-4",
+          senderId: "user-2",
+          seq: 4,
+        }),
+      },
+    })
+
+    expect(
+      await screen.findByText("收到新消息，可在设置中开启桌面通知")
+    ).toBeInTheDocument()
+    expect(
+      BrowserNotificationPermissionDefault.requestPermission
+    ).not.toHaveBeenCalled()
+  }, 10_000)
+
+  it("已开启浏览器通知时收到非当前会话消息会弹桌面通知", async () => {
+    vi.stubGlobal("Notification", BrowserNotificationPermissionGranted)
+
+    renderApp("/chat?conversation_id=conversation-bob")
+
+    const socket = await openLatestAppWebSocket()
+    await screen.findByTestId("conversation-panel-history")
+    socket.receive({
+      v: 1,
+      kind: "event",
+      event: "message.created",
+      payload: {
+        message: createConversationMessage({
+          clientMessageId: "client-message-4",
+          content: "团队里有新消息",
+          conversationId: "conversation-team",
+          createdAt: "2026-07-03T08:02:00Z",
+          id: "message-4",
+          senderId: "user-2",
+          seq: 4,
+        }),
+      },
+    })
+
+    await waitFor(() =>
+      expect(BrowserNotificationPermissionGranted.instances).toEqual([
+        {
+          body: "Bob Li: 团队里有新消息",
+          onclick: null,
+          tag: "message-4",
+          title: "收到新消息",
+        },
+      ])
+    )
   }, 10_000)
 
   it("实时连接恢复后按当前会话最新 seq 补拉漏掉的消息", async () => {

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react"
-import { Camera, Loader2Icon, X } from "lucide-react"
+import { Bell, Camera, Loader2Icon, X } from "lucide-react"
 
 import { AvatarPickerDialog } from "@/components/avatar-picker-dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -13,6 +13,11 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  getBrowserNotificationPermission,
+  requestBrowserNotificationPermission,
+  type BrowserNotificationPermission,
+} from "@/lib/browser-notifications"
 import type { ClientUser } from "@/lib/client-data-api"
 
 type ProfileSettingsDialogProps = {
@@ -56,6 +61,11 @@ function ProfileSettingsDialogContent({
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false)
   const [nickname, setNickname] = useState(user.nickname)
   const [nicknameSaving, setNicknameSaving] = useState(false)
+  const [notificationPermission, setNotificationPermission] =
+    useState<BrowserNotificationPermission>(() =>
+      getBrowserNotificationPermission()
+    )
+  const [notificationRequesting, setNotificationRequesting] = useState(false)
   const [savedNickname, setSavedNickname] = useState(user.nickname)
   const displayName = getDisplayName({
     name: user.name,
@@ -83,6 +93,19 @@ function ProfileSettingsDialogContent({
       setSavedNickname(trimmedNickname)
     } finally {
       setNicknameSaving(false)
+    }
+  }
+
+  async function handleNotificationPermissionRequest() {
+    if (notificationRequesting || notificationPermission !== "default") {
+      return
+    }
+
+    setNotificationRequesting(true)
+    try {
+      setNotificationPermission(await requestBrowserNotificationPermission())
+    } finally {
+      setNotificationRequesting(false)
     }
   }
 
@@ -189,6 +212,30 @@ function ProfileSettingsDialogContent({
           />
         </FieldGroup>
 
+        <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/20 px-3 py-2">
+          <div className="min-w-0">
+            <div className="text-sm font-medium">桌面通知</div>
+            <div className="text-xs text-muted-foreground">
+              {getNotificationPermissionText(notificationPermission)}
+            </div>
+          </div>
+          {notificationPermission === "default" && (
+            <Button
+              disabled={notificationRequesting}
+              onClick={() => void handleNotificationPermissionRequest()}
+              type="button"
+              variant="outline"
+            >
+              {notificationRequesting ? (
+                <Loader2Icon aria-hidden="true" className="animate-spin" />
+              ) : (
+                <Bell aria-hidden="true" />
+              )}
+              开启桌面通知
+            </Button>
+          )}
+        </div>
+
         <div className="flex justify-end">
           <DialogClose asChild>
             <Button type="button">关闭</Button>
@@ -247,4 +294,19 @@ function getDisplayName(user: { name: string; nickname: string }) {
 
 function getAvatarInitial(name: string) {
   return Array.from(name.trim())[0]?.toUpperCase() ?? "?"
+}
+
+function getNotificationPermissionText(
+  permission: BrowserNotificationPermission
+) {
+  switch (permission) {
+    case "granted":
+      return "桌面通知已开启"
+    case "denied":
+      return "通知权限已被浏览器阻止"
+    case "unsupported":
+      return "当前浏览器不支持桌面通知"
+    default:
+      return "尚未开启"
+  }
 }
