@@ -3,6 +3,7 @@ import { createContext, useContext } from "react"
 import {
   type ClientConversation,
   type ClientDataRequestError,
+  type MarkConversationReadOptions,
   type ClientMessage,
   type ClientMessagePage,
   type ClientUser,
@@ -39,9 +40,17 @@ export type ClientDataContextValue = {
     conversationId: string
   ) => ClientConversationMessageState
   loadBeforeConversationMessages: (conversationId: string) => void
+  markConversationRead: (
+    conversationId: string,
+    options?: MarkConversationReadOptions
+  ) => Promise<void>
+  handleIncomingConversationMessage: (
+    message: ClientMessage,
+    options?: { activeConversationId?: string; visible?: boolean }
+  ) => void
   mergeIncomingConversationMessage: (
     message: ClientMessage,
-    options?: { markLoaded?: boolean }
+    options?: { markLoaded?: boolean; updateList?: boolean }
   ) => void
   openDirectConversation: (userId: string) => Promise<ClientConversation>
   refreshConversations: () => Promise<void>

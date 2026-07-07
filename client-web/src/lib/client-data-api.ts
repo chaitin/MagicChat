@@ -61,10 +61,12 @@ type ConversationResponse = {
   last_message_id?: string | null
   last_message_seq?: number
   last_message_summary?: string
+  last_read_seq?: number
   member_count?: number
   members?: ConversationMemberResponse[]
   name?: string
   type?: string
+  unread_count?: number
 }
 
 type ConversationMemberResponse = {
@@ -127,6 +129,12 @@ type CreateMessageResponse = {
   message?: MessageResponse
 }
 
+type MarkConversationReadResponse = {
+  conversation_id?: string
+  last_read_seq?: number
+  unread_count?: number
+}
+
 type MessageCreatedEventPayloadResponse = {
   message?: MessageResponse
 }
@@ -163,10 +171,12 @@ export type ClientConversation = {
   lastMessageId: string | null
   lastMessageSeq: number
   lastMessageSummary: string
+  lastReadSeq: number
   memberCount: number
   members?: ClientConversationMember[]
   name: string
   type: "direct" | "group" | "app"
+  unreadCount: number
 }
 
 export type ClientConversationMember = {
@@ -222,6 +232,16 @@ export type ListConversationMessagesOptions = {
 export type SendConversationTextMessageInput = {
   clientMessageId: string
   content: string
+}
+
+export type MarkConversationReadOptions = {
+  upToSeq?: number
+}
+
+export type MarkConversationReadResult = {
+  conversationId: string
+  lastReadSeq: number
+  unreadCount: number
 }
 
 export type CreateGroupConversationInput = {
@@ -490,6 +510,44 @@ export async function sendConversationTextMessage(
   return normalizeMessage(message)
 }
 
+export async function markConversationRead(
+  conversationId: string,
+  options: MarkConversationReadOptions = {},
+  fetcher: ClientDataFetch = fetch
+): Promise<MarkConversationReadResult> {
+  const body =
+    options.upToSeq === undefined
+      ? {}
+      : {
+          up_to_seq: options.upToSeq,
+        }
+  const response = await fetcher(
+    `/api/client/conversations/${encodeURIComponent(conversationId)}/read`,
+    {
+      body: JSON.stringify(body),
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    }
+  )
+  const payload = await readJson<
+    | ClientDataErrorEnvelope
+    | ClientDataSuccessEnvelope<MarkConversationReadResponse>
+  >(response)
+
+  if (!response.ok || payload?.success === false) {
+    throw createRequestError(payload, response, "标记会话已读失败")
+  }
+
+  return normalizeMarkConversationReadResult(
+    (payload as
+      | ClientDataSuccessEnvelope<MarkConversationReadResponse>
+      | undefined)?.data
+  )
+}
+
 export function normalizeMessageCreatedEventPayload(
   payload: unknown
 ): ClientMessage {
@@ -555,9 +613,11 @@ function normalizeConversation(
     lastMessageId: conversation.last_message_id ?? null,
     lastMessageSeq: conversation.last_message_seq ?? 0,
     lastMessageSummary: conversation.last_message_summary ?? "",
+    lastReadSeq: conversation.last_read_seq ?? 0,
     memberCount: conversation.member_count ?? 0,
     name: conversation.name,
     type: normalizeConversationType(conversation.type),
+    unreadCount: conversation.unread_count ?? 0,
   }
 
   if (conversation.members) {
@@ -567,6 +627,24 @@ function normalizeConversation(
   }
 
   return normalizedConversation
+}
+
+function normalizeMarkConversationReadResult(
+  result: MarkConversationReadResponse | undefined
+): MarkConversationReadResult {
+  if (
+    !result?.conversation_id ||
+    typeof result.last_read_seq !== "number" ||
+    typeof result.unread_count !== "number"
+  ) {
+    throw new ClientDataRequestError("标记会话已读响应格式不正确")
+  }
+
+  return {
+    conversationId: result.conversation_id,
+    lastReadSeq: result.last_read_seq,
+    unreadCount: result.unread_count,
+  }
 }
 
 function normalizeConversationMember(

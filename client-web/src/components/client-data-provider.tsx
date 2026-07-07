@@ -10,12 +10,14 @@ import {
   listClientContacts,
   listClientConversations,
   listConversationMessages,
+  markConversationRead as markConversationReadRequest,
   sendConversationTextMessage,
   type ClientConversation,
   type ClientMessage,
   type ClientMessagePage,
   type ClientUser,
   type ContactUser,
+  type MarkConversationReadOptions,
 } from "@/lib/client-data-api"
 import {
   ClientDataContext,
@@ -158,8 +160,12 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     []
   )
 
-  const updateConversationLastMessage = useCallback(
-    (message: ClientMessage) => {
+  const applyConversationMessageToList = useCallback(
+    (message: ClientMessage, options: { countUnread?: boolean } = {}) => {
+      const conversationExists = conversationsRef.current.some(
+        (conversation) => conversation.id === message.conversationId
+      )
+
       setConversations((currentConversations) => {
         const conversation = currentConversations.find(
           (currentConversation) =>
@@ -174,12 +180,19 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
           return currentConversations
         }
 
+        const shouldIncrementUnread =
+          Boolean(options.countUnread) &&
+          message.seq > conversation.lastMessageSeq &&
+          message.seq > conversation.lastReadSeq
         const updatedConversation: ClientConversation = {
           ...conversation,
           lastMessageAt: message.createdAt,
           lastMessageId: message.id,
           lastMessageSeq: message.seq,
           lastMessageSummary: getMessageSummary(message),
+          unreadCount: shouldIncrementUnread
+            ? conversation.unreadCount + 1
+            : conversation.unreadCount,
         }
 
         return [
@@ -190,26 +203,33 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
           ),
         ]
       })
-    },
-    []
-  )
 
-  const rememberConversationMessage = useCallback(
-    (message: ClientMessage) => {
-      const conversationExists = conversationsRef.current.some(
-        (conversation) => conversation.id === message.conversationId
-      )
-
-      updateConversationLastMessage(message)
       if (!conversationExists) {
         void refreshConversations().catch(() => undefined)
       }
     },
-    [refreshConversations, updateConversationLastMessage]
+    [refreshConversations]
+  )
+
+  const updateConversationLastMessage = useCallback(
+    (message: ClientMessage) => {
+      applyConversationMessageToList(message)
+    },
+    [applyConversationMessageToList]
+  )
+
+  const rememberConversationMessage = useCallback(
+    (message: ClientMessage) => {
+      applyConversationMessageToList(message)
+    },
+    [applyConversationMessageToList]
   )
 
   const mergeIncomingConversationMessage = useCallback(
-    (message: ClientMessage, options: { markLoaded?: boolean } = {}) => {
+    (
+      message: ClientMessage,
+      options: { markLoaded?: boolean; updateList?: boolean } = {}
+    ) => {
       updateConversationMessageState(message.conversationId, (state) => {
         const messages = mergeConversationMessages(state.messages, [message])
 
@@ -221,9 +241,59 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
           page: updatePageWithMessage(state.page, messages),
         }
       })
-      rememberConversationMessage(message)
+      if (options.updateList !== false) {
+        rememberConversationMessage(message)
+      }
     },
     [rememberConversationMessage, updateConversationMessageState]
+  )
+
+  const handleIncomingConversationMessage = useCallback(
+    (
+      message: ClientMessage,
+      options: { activeConversationId?: string; visible?: boolean } = {}
+    ) => {
+      const fromCurrentUser =
+        message.sender.type === "user" && message.sender.id === me?.id
+      const visibleInActiveConversation =
+        Boolean(options.visible) &&
+        options.activeConversationId === message.conversationId
+
+      mergeIncomingConversationMessage(message, { updateList: false })
+      applyConversationMessageToList(message, {
+        countUnread: !fromCurrentUser && !visibleInActiveConversation,
+      })
+    },
+    [applyConversationMessageToList, me?.id, mergeIncomingConversationMessage]
+  )
+
+  const markConversationRead = useCallback(
+    async (
+      conversationId: string,
+      options: MarkConversationReadOptions = {}
+    ) => {
+      if (!conversationId) {
+        return
+      }
+
+      try {
+        const result = await markConversationReadRequest(conversationId, options)
+        setConversations((currentConversations) =>
+          currentConversations.map((conversation) =>
+            conversation.id === result.conversationId
+              ? {
+                  ...conversation,
+                  lastReadSeq: result.lastReadSeq,
+                  unreadCount: result.unreadCount,
+                }
+              : conversation
+          )
+        )
+      } catch (error) {
+        throw handleError(error, "标记会话已读失败")
+      }
+    },
+    [handleError]
   )
 
   const ensureConversationMessages = useCallback(
@@ -603,6 +673,8 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     getConversation,
     getConversationMessageState,
     loadBeforeConversationMessages,
+    markConversationRead,
+    handleIncomingConversationMessage,
     me,
     meError,
     meLoading,

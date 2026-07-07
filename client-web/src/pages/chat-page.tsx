@@ -18,6 +18,7 @@ import {
   type ConversationPanelMessage,
 } from "@/components/conversation-panel"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -72,6 +73,7 @@ export function ChatPage() {
     getConversation,
     getConversationMessageState,
     loadBeforeConversationMessages,
+    markConversationRead,
     me,
     sendConversationText,
   } = useClientData()
@@ -91,6 +93,11 @@ export function ChatPage() {
   const activeMessageState = activeConversationId
     ? getConversationMessageState(activeConversationId)
     : undefined
+  const activeConversationHasUnreadProgress = Boolean(
+    activeConversation &&
+      (activeConversation.unreadCount > 0 ||
+        activeConversation.lastReadSeq < activeConversation.lastMessageSeq)
+  )
   const historyLoading = Boolean(
     activeConversation &&
     activeMessageState &&
@@ -125,6 +132,38 @@ export function ChatPage() {
 
     ensureConversationMessages(activeConversationId)
   }, [activeConversationId, ensureConversationMessages])
+
+  React.useEffect(() => {
+    if (!activeConversationId || !activeConversationHasUnreadProgress) {
+      return
+    }
+
+    function markActiveConversationRead() {
+      if (document.visibilityState !== "visible") {
+        return
+      }
+
+      void markConversationRead(activeConversationId).catch(() => undefined)
+    }
+
+    markActiveConversationRead()
+    const interval = window.setInterval(markActiveConversationRead, 20_000)
+
+    function handleVisibilityChange() {
+      markActiveConversationRead()
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+
+    return () => {
+      window.clearInterval(interval)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
+  }, [
+    activeConversationId,
+    activeConversationHasUnreadProgress,
+    markConversationRead,
+  ])
 
   const loadBeforeMessages = React.useCallback(() => {
     if (!activeConversationId) {
@@ -264,6 +303,11 @@ export function ChatPage() {
                               {conversation.name}
                             </span>
                           </span>
+                          {conversation.unreadCount > 0 && (
+                            <ConversationUnreadBadge
+                              count={conversation.unreadCount}
+                            />
+                          )}
                           {lastMessageTime && (
                             <span className="shrink-0 pr-2 text-xs font-normal text-muted-foreground">
                               {lastMessageTime}
@@ -559,6 +603,25 @@ function getContactDisplayName(contact: { name: string; nickname: string }) {
   const nickname = contact.nickname.trim()
 
   return nickname || contact.name.trim()
+}
+
+function ConversationUnreadBadge({ count }: { count: number }) {
+  return (
+    <Badge
+      aria-label={`${count} 条未读消息`}
+      className="h-5 min-w-5 shrink-0 rounded-full bg-red-500 px-1.5 text-[11px] leading-none font-medium text-white tabular-nums hover:bg-red-500"
+    >
+      {formatUnreadCount(count)}
+    </Badge>
+  )
+}
+
+function formatUnreadCount(count: number) {
+  if (count > 99) {
+    return "99+"
+  }
+
+  return String(count)
 }
 
 function toConversationPanelMessage(
