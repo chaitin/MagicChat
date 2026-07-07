@@ -182,15 +182,13 @@ function GroupConversationAvatarControl({
   name: string
   onClick: () => void
 }) {
-  const avatarNode = avatar ? (
-    <Avatar className="size-20 rounded-sm bg-muted after:rounded-sm">
-      <AvatarImage alt={name} className="rounded-sm" src={avatar} />
-      <AvatarFallback className="rounded-sm text-xl">
-        {getInitial(name)}
-      </AvatarFallback>
-    </Avatar>
-  ) : (
-    <GroupAvatar className="size-20" members={members} name={name} />
+  const avatarNode = (
+    <GroupAvatar
+      avatar={avatar}
+      className="size-20"
+      members={members}
+      name={name}
+    />
   )
 
   if (!canChangeAvatar) {

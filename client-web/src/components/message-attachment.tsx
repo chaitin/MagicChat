@@ -121,7 +121,8 @@ function triggerBrowserDownload(url: string, fileName: string) {
 
   link.href = url
   link.download = fileName
-  link.rel = "noopener"
+  link.rel = "noopener noreferrer"
+  link.target = "_blank"
   document.body.appendChild(link)
   link.click()
   link.remove()

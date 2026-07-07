@@ -82,7 +82,7 @@ function ConversationInfoContent({
     <>
       <SheetHeader className="border-b">
         <SheetTitle>会话信息</SheetTitle>
-        <SheetDescription>应用会话</SheetDescription>
+        <SheetDescription>应用</SheetDescription>
       </SheetHeader>
       <div className="px-4 py-6 text-sm">{conversation.name}</div>
     </>

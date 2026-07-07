@@ -20,6 +20,9 @@ const maxGroupConversationMembers = 200
 const maxClientConversationListItems = 100
 
 const (
+	builtinAssistantAppMemberID         = "00000000-0000-0000-0000-000000000001"
+	builtinAssistantAvatar              = "/logo.png"
+	builtinAssistantConversationName    = "女菩萨"
 	messageTypeSystemEvent              = "system_event"
 	systemEventGroupMembersInvited      = "group_members_invited"
 	systemEventGroupAvatarUpdated       = "group_avatar_updated"
@@ -163,19 +166,26 @@ func (s *Server) listClientConversations(c echo.Context) error {
 		return failure(c, http.StatusInternalServerError, "internal_error", "服务端错误")
 	}
 
+	assistantConversation, err := s.ensureBuiltinAssistantConversation(user)
+	if err != nil {
+		return failure(c, http.StatusInternalServerError, "internal_error", "服务端错误")
+	}
+
 	var conversations []store.Conversation
 	if err := s.db.Model(&store.Conversation{}).
 		Joins("JOIN conversation_members cm ON cm.conversation_id = conversations.id").
 		Where("cm.member_type = ? AND cm.member_id = ? AND cm.left_at IS NULL", store.ConversationMemberTypeUser, user.ID).
+		Where("conversations.id <> ?", assistantConversation.ID).
 		Where("conversations.status = ?", store.ConversationStatusActive).
 		Order("COALESCE(conversations.last_message_at, conversations.created_at) DESC").
 		Order("conversations.id ASC").
-		Limit(maxClientConversationListItems).
+		Limit(maxClientConversationListItems - 1).
 		Find(&conversations).Error; err != nil {
 		return failure(c, http.StatusInternalServerError, "internal_error", "服务端错误")
 	}
 
-	conversationIDs := make([]string, 0, len(conversations))
+	conversationIDs := make([]string, 0, len(conversations)+1)
+	conversationIDs = append(conversationIDs, assistantConversation.ID)
 	for _, conversation := range conversations {
 		conversationIDs = append(conversationIDs, conversation.ID)
 	}
@@ -185,7 +195,13 @@ func (s *Server) listClientConversations(c echo.Context) error {
 		return failure(c, http.StatusInternalServerError, "internal_error", "服务端错误")
 	}
 
-	responses := make([]conversationListItemResponse, 0, len(conversations))
+	responses := make([]conversationListItemResponse, 0, len(conversations)+1)
+	responses = append(responses, newConversationListItemResponse(
+		assistantConversation,
+		user.ID,
+		membersByConversationID[assistantConversation.ID],
+		usersByID,
+	))
 	for _, conversation := range conversations {
 		responses = append(responses, newConversationListItemResponse(
 			conversation,
@@ -198,6 +214,165 @@ func (s *Server) listClientConversations(c echo.Context) error {
 	return success(c, http.StatusOK, listClientConversationsResponse{
 		Conversations: responses,
 	})
+}
+
+func (s *Server) ensureBuiltinAssistantConversation(user store.User) (store.Conversation, error) {
+	conversationID := builtinAssistantConversationID(user.ID)
+	now := time.Now().UTC()
+	conversation := store.Conversation{}
+
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&conversation, "id = ?", conversationID).Error
+		if err == nil {
+			if err := ensureBuiltinAssistantConversationFields(tx, &conversation, user.ID, now); err != nil {
+				return err
+			}
+			return ensureBuiltinAssistantConversationMembers(tx, conversation.ID, user.ID, now)
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+
+		conversation = store.Conversation{
+			ID:              conversationID,
+			Kind:            store.ConversationKindApp,
+			Name:            builtinAssistantConversationName,
+			Avatar:          builtinAssistantAvatar,
+			CreatedByUserID: user.ID,
+			Status:          store.ConversationStatusActive,
+			PostingPolicy:   store.ConversationPostingPolicyOpen,
+			CreatedAt:       now,
+			UpdatedAt:       now,
+		}
+		if err := tx.Create(&conversation).Error; err != nil {
+			return err
+		}
+
+		return ensureBuiltinAssistantConversationMembers(tx, conversation.ID, user.ID, now)
+	})
+	if err != nil {
+		if isUniqueConstraintError(err) {
+			if findErr := s.db.First(&conversation, "id = ?", conversationID).Error; findErr == nil {
+				return conversation, nil
+			}
+		}
+		return store.Conversation{}, err
+	}
+
+	return conversation, nil
+}
+
+func ensureBuiltinAssistantConversationFields(db *gorm.DB, conversation *store.Conversation, userID string, now time.Time) error {
+	updates := map[string]any{}
+	if conversation.Kind != store.ConversationKindApp {
+		updates["kind"] = store.ConversationKindApp
+	}
+	if conversation.Name != builtinAssistantConversationName {
+		updates["name"] = builtinAssistantConversationName
+	}
+	if conversation.Avatar != builtinAssistantAvatar {
+		updates["avatar"] = builtinAssistantAvatar
+	}
+	if conversation.CreatedByUserID != userID {
+		updates["created_by_user_id"] = userID
+	}
+	if conversation.Status != store.ConversationStatusActive {
+		updates["status"] = store.ConversationStatusActive
+	}
+	if conversation.PostingPolicy != store.ConversationPostingPolicyOpen {
+		updates["posting_policy"] = store.ConversationPostingPolicyOpen
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+
+	updates["updated_at"] = now
+	if err := db.Model(&store.Conversation{}).Where("id = ?", conversation.ID).Updates(updates).Error; err != nil {
+		return err
+	}
+	for field, value := range updates {
+		switch field {
+		case "kind":
+			conversation.Kind = value.(string)
+		case "name":
+			conversation.Name = value.(string)
+		case "avatar":
+			conversation.Avatar = value.(string)
+		case "created_by_user_id":
+			conversation.CreatedByUserID = value.(string)
+		case "status":
+			conversation.Status = value.(string)
+		case "posting_policy":
+			conversation.PostingPolicy = value.(string)
+		case "updated_at":
+			conversation.UpdatedAt = value.(time.Time)
+		}
+	}
+
+	return nil
+}
+
+func ensureBuiltinAssistantConversationMembers(db *gorm.DB, conversationID string, userID string, now time.Time) error {
+	if err := ensureBuiltinAssistantConversationMember(db, store.ConversationMember{
+		ConversationID:        conversationID,
+		MemberType:            store.ConversationMemberTypeUser,
+		MemberID:              userID,
+		Role:                  store.ConversationMemberRoleOwner,
+		JoinedAt:              now,
+		HistoryVisibleFromSeq: 1,
+	}); err != nil {
+		return err
+	}
+
+	return ensureBuiltinAssistantConversationMember(db, store.ConversationMember{
+		ConversationID:        conversationID,
+		MemberType:            store.ConversationMemberTypeApp,
+		MemberID:              builtinAssistantAppMemberID,
+		Role:                  store.ConversationMemberRoleMember,
+		JoinedAt:              now,
+		HistoryVisibleFromSeq: 1,
+	})
+}
+
+func ensureBuiltinAssistantConversationMember(db *gorm.DB, member store.ConversationMember) error {
+	var existing store.ConversationMember
+	err := db.First(
+		&existing,
+		"conversation_id = ? AND member_type = ? AND member_id = ?",
+		member.ConversationID,
+		member.MemberType,
+		member.MemberID,
+	).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return db.Create(&member).Error
+	}
+	if err != nil {
+		return err
+	}
+
+	updates := map[string]any{}
+	if existing.Role != member.Role {
+		updates["role"] = member.Role
+	}
+	if existing.HistoryVisibleFromSeq < 1 {
+		updates["history_visible_from_seq"] = int64(1)
+	}
+	if existing.LeftAt != nil {
+		updates["left_at"] = nil
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+
+	return db.Model(&store.ConversationMember{}).
+		Where("conversation_id = ? AND member_type = ? AND member_id = ?", member.ConversationID, member.MemberType, member.MemberID).
+		Updates(updates).Error
+}
+
+func builtinAssistantConversationID(userID string) string {
+	namespace := uuid.NewSHA1(uuid.NameSpaceURL, []byte("mygod:builtin-assistant-conversation"))
+
+	return uuid.NewSHA1(namespace, []byte(strings.ToLower(strings.TrimSpace(userID)))).String()
 }
 
 // markConversationRead godoc

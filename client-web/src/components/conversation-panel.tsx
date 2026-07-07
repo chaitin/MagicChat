@@ -603,8 +603,8 @@ function MessageBubble({
             className={cn(
               "rounded-md px-4 py-3 text-sm leading-relaxed shadow-xs",
               fromMe
-                ? "bg-teal-100 text-foreground hover:bg-teal-200 data-[state=open]:bg-teal-200 dark:bg-teal-950 hover:dark:bg-teal-900 dark:data-[state=open]:bg-teal-900"
-                : "bg-neutral-200 text-foreground hover:bg-neutral-300 data-[state=open]:bg-neutral-300 dark:bg-neutral-800 hover:dark:bg-neutral-700 dark:data-[state=open]:bg-neutral-700"
+                ? "bg-teal-100 text-foreground hover:bg-teal-200/70 data-[state=open]:bg-teal-200/70 dark:bg-teal-950 hover:dark:bg-teal-900/70 dark:data-[state=open]:bg-teal-900/70"
+                : "bg-neutral-100 text-foreground hover:bg-neutral-200/70 data-[state=open]:bg-neutral-200/70 dark:bg-neutral-900 hover:dark:bg-neutral-800/70 dark:data-[state=open]:bg-neutral-800/70"
             )}
             data-message-action-trigger
           >
@@ -678,7 +678,7 @@ function getConversationHeaderDescription(conversation: ClientConversation) {
     return "私聊"
   }
   if (conversation.type === "app") {
-    return "应用会话"
+    return "应用"
   }
 
   return `${conversation.memberCount} 人群聊`

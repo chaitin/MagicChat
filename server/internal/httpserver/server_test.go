@@ -835,54 +835,114 @@ func TestListClientConversationsReturnsRecentCurrentUserConversations(t *testing
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	conversations := requireConversations(t, requireSuccess(t, body))
-	if len(conversations) != 2 {
-		t.Fatalf("conversation count = %d, want 2: %#v", len(conversations), conversations)
+	if len(conversations) != 3 {
+		t.Fatalf("conversation count = %d, want 3: %#v", len(conversations), conversations)
 	}
 
 	first := conversations[0].(map[string]any)
-	if first["id"] != newDirect.ID {
-		t.Fatalf("first id = %v, want new direct %s", first["id"], newDirect.ID)
+	if first["type"] != store.ConversationKindApp {
+		t.Fatalf("first type = %v, want app", first["type"])
 	}
-	if first["type"] != store.ConversationKindDirect {
-		t.Fatalf("first type = %v, want direct", first["type"])
+	if first["name"] != builtinAssistantConversationName {
+		t.Fatalf("assistant name = %v, want %s", first["name"], builtinAssistantConversationName)
 	}
-	if first["name"] != bob.Name {
-		t.Fatalf("direct name = %v, want %s", first["name"], bob.Name)
+	if first["avatar"] != builtinAssistantAvatar {
+		t.Fatalf("assistant avatar = %v, want %s", first["avatar"], builtinAssistantAvatar)
 	}
-	if first["avatar"] != bob.Avatar {
-		t.Fatalf("direct avatar = %v, want %s", first["avatar"], bob.Avatar)
-	}
-	if first["member_count"] != float64(2) {
-		t.Fatalf("direct member_count = %v, want 2", first["member_count"])
-	}
-	if first["last_message_summary"] != "newer direct" {
-		t.Fatalf("direct last_message_summary = %v, want newer direct", first["last_message_summary"])
-	}
-	if first["last_message_seq"] != float64(5) {
-		t.Fatalf("direct last_message_seq = %v, want 5", first["last_message_seq"])
-	}
-	if first["last_read_seq"] != float64(2) {
-		t.Fatalf("direct last_read_seq = %v, want 2", first["last_read_seq"])
-	}
-	if first["unread_count"] != float64(3) {
-		t.Fatalf("direct unread_count = %v, want 3", first["unread_count"])
-	}
-	if first["last_message_at"] != newDirectLastAt.Format(time.RFC3339) {
-		t.Fatalf("direct last_message_at = %v, want %s", first["last_message_at"], newDirectLastAt.Format(time.RFC3339))
+	if first["member_count"] != float64(1) {
+		t.Fatalf("assistant member_count = %v, want 1", first["member_count"])
 	}
 
 	second := conversations[1].(map[string]any)
-	if second["id"] != oldGroup.ID {
-		t.Fatalf("second id = %v, want old group %s", second["id"], oldGroup.ID)
+	if second["id"] != newDirect.ID {
+		t.Fatalf("second id = %v, want new direct %s", second["id"], newDirect.ID)
 	}
-	if second["type"] != store.ConversationKindGroup {
-		t.Fatalf("second type = %v, want group", second["type"])
+	if second["type"] != store.ConversationKindDirect {
+		t.Fatalf("second type = %v, want direct", second["type"])
 	}
-	if second["name"] != oldGroup.Name {
-		t.Fatalf("group name = %v, want %s", second["name"], oldGroup.Name)
+	if second["name"] != bob.Name {
+		t.Fatalf("direct name = %v, want %s", second["name"], bob.Name)
+	}
+	if second["avatar"] != bob.Avatar {
+		t.Fatalf("direct avatar = %v, want %s", second["avatar"], bob.Avatar)
 	}
 	if second["member_count"] != float64(2) {
-		t.Fatalf("group member_count = %v, want 2", second["member_count"])
+		t.Fatalf("direct member_count = %v, want 2", second["member_count"])
+	}
+	if second["last_message_summary"] != "newer direct" {
+		t.Fatalf("direct last_message_summary = %v, want newer direct", second["last_message_summary"])
+	}
+	if second["last_message_seq"] != float64(5) {
+		t.Fatalf("direct last_message_seq = %v, want 5", second["last_message_seq"])
+	}
+	if second["last_read_seq"] != float64(2) {
+		t.Fatalf("direct last_read_seq = %v, want 2", second["last_read_seq"])
+	}
+	if second["unread_count"] != float64(3) {
+		t.Fatalf("direct unread_count = %v, want 3", second["unread_count"])
+	}
+	if second["last_message_at"] != newDirectLastAt.Format(time.RFC3339) {
+		t.Fatalf("direct last_message_at = %v, want %s", second["last_message_at"], newDirectLastAt.Format(time.RFC3339))
+	}
+
+	third := conversations[2].(map[string]any)
+	if third["id"] != oldGroup.ID {
+		t.Fatalf("third id = %v, want old group %s", third["id"], oldGroup.ID)
+	}
+	if third["type"] != store.ConversationKindGroup {
+		t.Fatalf("third type = %v, want group", third["type"])
+	}
+	if third["name"] != oldGroup.Name {
+		t.Fatalf("group name = %v, want %s", third["name"], oldGroup.Name)
+	}
+	if third["member_count"] != float64(2) {
+		t.Fatalf("group member_count = %v, want 2", third["member_count"])
+	}
+}
+
+func TestListClientConversationsCreatesBuiltinAssistantConversationOnce(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+	now := time.Date(2026, 7, 3, 9, 0, 0, 0, time.UTC)
+	alice := insertTestUser(t, db, "alice@example.com", "Alice", store.UserStatusActive, now)
+	userCookie := loginAsUser(t, server, alice.Email)
+
+	for i := 0; i < 2; i++ {
+		resp, body := getJSON(t, server, "/api/client/conversations", userCookie)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200", resp.StatusCode)
+		}
+		conversations := requireConversations(t, requireSuccess(t, body))
+		if len(conversations) != 1 {
+			t.Fatalf("conversation count = %d, want 1: %#v", len(conversations), conversations)
+		}
+		assistant := conversations[0].(map[string]any)
+		if assistant["id"] != builtinAssistantConversationID(alice.ID) {
+			t.Fatalf("assistant id = %v, want deterministic id", assistant["id"])
+		}
+		if assistant["type"] != store.ConversationKindApp {
+			t.Fatalf("assistant type = %v, want app", assistant["type"])
+		}
+	}
+
+	var conversationCount int64
+	if err := db.Model(&store.Conversation{}).
+		Where("kind = ? AND created_by_user_id = ?", store.ConversationKindApp, alice.ID).
+		Count(&conversationCount).Error; err != nil {
+		t.Fatalf("count assistant conversations: %v", err)
+	}
+	if conversationCount != 1 {
+		t.Fatalf("assistant conversation count = %d, want 1", conversationCount)
+	}
+
+	var memberCount int64
+	if err := db.Model(&store.ConversationMember{}).
+		Where("conversation_id = ?", builtinAssistantConversationID(alice.ID)).
+		Count(&memberCount).Error; err != nil {
+		t.Fatalf("count assistant members: %v", err)
+	}
+	if memberCount != 2 {
+		t.Fatalf("assistant member count = %d, want user and app members", memberCount)
 	}
 }
 
@@ -916,12 +976,16 @@ func TestListClientConversationsLimitsToRecent100(t *testing.T) {
 		t.Fatalf("conversation count = %d, want 100", len(conversations))
 	}
 	first := conversations[0].(map[string]any)
+	second := conversations[1].(map[string]any)
 	last := conversations[99].(map[string]any)
-	if first["name"] != "Group 000" {
-		t.Fatalf("first name = %v, want Group 000", first["name"])
+	if first["type"] != store.ConversationKindApp {
+		t.Fatalf("first type = %v, want app", first["type"])
 	}
-	if last["name"] != "Group 099" {
-		t.Fatalf("last name = %v, want Group 099", last["name"])
+	if second["name"] != "Group 000" {
+		t.Fatalf("second name = %v, want Group 000", second["name"])
+	}
+	if last["name"] != "Group 098" {
+		t.Fatalf("last name = %v, want Group 098", last["name"])
 	}
 }
 

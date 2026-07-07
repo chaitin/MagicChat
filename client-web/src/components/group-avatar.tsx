@@ -1,5 +1,6 @@
 import type { ClientConversationMember } from "@/lib/client-data-api"
 import { cn } from "@/lib/utils"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 type GroupAvatarMember = Pick<
   ClientConversationMember,
@@ -7,6 +8,7 @@ type GroupAvatarMember = Pick<
 >
 
 type GroupAvatarProps = {
+  avatar?: string
   className?: string
   members?: GroupAvatarMember[]
   name: string
@@ -19,6 +21,7 @@ const memberRoleOrder: Record<GroupAvatarMember["role"], number> = {
 }
 
 export function GroupAvatar({
+  avatar = "",
   className,
   members = [],
   name,
@@ -26,23 +29,26 @@ export function GroupAvatar({
   const entries = buildGroupAvatarEntries(members, name)
 
   return (
-    <div
-      aria-label={name}
-      className={cn(
-        "relative size-8 shrink-0 overflow-hidden rounded-sm bg-muted p-0.5 select-none after:absolute after:inset-0 after:rounded-sm after:border after:border-border after:mix-blend-darken dark:after:mix-blend-lighten",
-        className
-      )}
-      role="img"
+    <Avatar
+      className={cn("size-8 rounded-sm bg-muted after:rounded-sm", className)}
     >
-      {entries.map((entry, index) => (
-        <GroupAvatarTile
-          key={`${entry.displayName}-${index}`}
-          avatar={entry.avatar}
-          displayName={entry.displayName}
-          placement={getTilePlacement(index, entries.length)}
-        />
-      ))}
-    </div>
+      {avatar && <AvatarImage alt={name} className="rounded-sm" src={avatar} />}
+      <AvatarFallback
+        aria-label={name}
+        className="overflow-hidden rounded-sm bg-muted p-0"
+      >
+        <div className="relative size-full p-0.5">
+          {entries.map((entry, index) => (
+            <GroupAvatarTile
+              key={`${entry.displayName}-${index}`}
+              avatar={entry.avatar}
+              displayName={entry.displayName}
+              placement={getTilePlacement(index, entries.length)}
+            />
+          ))}
+        </div>
+      </AvatarFallback>
+    </Avatar>
   )
 }
 

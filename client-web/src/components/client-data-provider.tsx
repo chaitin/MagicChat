@@ -138,7 +138,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
 
   const refreshConversations = useCallback(async () => {
     try {
-      setConversations(await listClientConversations())
+      setConversations(pinAppConversations(await listClientConversations()))
     } catch (error) {
       throw handleError(error, "加载会话列表失败")
     }
@@ -200,13 +200,13 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
             : conversation.unreadCount,
         }
 
-        return [
+        return pinAppConversations([
           updatedConversation,
           ...currentConversations.filter(
             (currentConversation) =>
               currentConversation.id !== message.conversationId
           ),
-        ]
+        ])
       })
 
       if (!conversationExists) {
@@ -568,12 +568,14 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
   )
 
   const upsertConversation = useCallback((conversation: ClientConversation) => {
-    setConversations((currentConversations) => [
-      conversation,
-      ...currentConversations.filter(
-        (currentConversation) => currentConversation.id !== conversation.id
-      ),
-    ])
+    setConversations((currentConversations) =>
+      pinAppConversations([
+        conversation,
+        ...currentConversations.filter(
+          (currentConversation) => currentConversation.id !== conversation.id
+        ),
+      ])
+    )
   }, [])
 
   const openDirectConversation = useCallback(
@@ -656,7 +658,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
       await minimumLoading
       setMe(nextMe)
       setContacts(nextContacts)
-      setConversations(nextConversations)
+      setConversations(pinAppConversations(nextConversations))
       setBootstrapState("ready")
     } catch (error) {
       const requestError = handleError(error, "加载工作区失败")
@@ -882,6 +884,21 @@ function getNewestMessageSeq(state: ClientConversationMessageState) {
   const lastMessage = state.messages[state.messages.length - 1]
 
   return Math.max(state.page?.newestSeq ?? 0, lastMessage?.seq ?? 0)
+}
+
+function pinAppConversations(conversations: ClientConversation[]) {
+  const appConversations: ClientConversation[] = []
+  const otherConversations: ClientConversation[] = []
+
+  for (const conversation of conversations) {
+    if (conversation.type === "app") {
+      appConversations.push(conversation)
+    } else {
+      otherConversations.push(conversation)
+    }
+  }
+
+  return [...appConversations, ...otherConversations]
 }
 
 function getClientDataErrorMessage(error: unknown, fallbackMessage: string) {
