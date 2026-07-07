@@ -8,8 +8,12 @@ import { useRealtime } from "@/lib/realtime-context"
 export function ClientConversationRealtimeSync() {
   const location = useLocation()
   const { ready: realtimeReady, subscribeRealtimeEvent } = useRealtime()
-  const { handleIncomingConversationMessage, syncLoadedConversationMessages } =
-    useClientData()
+  const {
+    handleIncomingConversationMessage,
+    refreshConversations,
+    syncLoadedConversationMessages,
+  } = useClientData()
+  const hasSeenRealtimeReadyRef = React.useRef(realtimeReady)
   const previousRealtimeReadyRef = React.useRef(realtimeReady)
   const activeConversationId = React.useMemo(
     () => new URLSearchParams(location.search).get("conversation_id") ?? "",
@@ -41,8 +45,12 @@ export function ClientConversationRealtimeSync() {
       return
     }
 
+    if (hasSeenRealtimeReadyRef.current) {
+      void refreshConversations().catch(() => undefined)
+    }
+    hasSeenRealtimeReadyRef.current = true
     syncLoadedConversationMessages()
-  }, [realtimeReady, syncLoadedConversationMessages])
+  }, [realtimeReady, refreshConversations, syncLoadedConversationMessages])
 
   return null
 }

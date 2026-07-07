@@ -262,13 +262,70 @@ function createSendMessageResponse({
   )
 }
 
+function createClientConversationsResponse({
+  teamLastMessageSeq = 3,
+  teamLastReadSeq = 3,
+  teamUnreadCount = 0,
+}: {
+  teamLastMessageSeq?: number
+  teamLastReadSeq?: number
+  teamUnreadCount?: number
+} = {}) {
+  return new Response(
+    JSON.stringify({
+      success: true,
+      data: {
+        conversations: [
+          {
+            avatar: "/assets/avatars/builtin/03.webp",
+            created_at: "2026-07-03T07:00:00Z",
+            id: "conversation-bob",
+            last_message_at: "2026-07-03T08:00:00Z",
+            last_message_id: "message-1",
+            last_message_seq: 12,
+            last_message_summary: "好的，我看一下",
+            last_read_seq: 12,
+            member_count: 2,
+            name: "Bob Li",
+            type: "direct",
+            unread_count: 0,
+          },
+          {
+            avatar: "",
+            created_at: "2026-07-03T06:00:00Z",
+            id: "conversation-team",
+            last_message_at: "2026-07-02T07:30:00Z",
+            last_message_id: "message-2",
+            last_message_seq: teamLastMessageSeq,
+            last_message_summary: "今天下午同步",
+            last_read_seq: teamLastReadSeq,
+            member_count: 3,
+            name: "产品讨论组",
+            type: "group",
+            unread_count: teamUnreadCount,
+          },
+        ],
+      },
+    }),
+    {
+      headers: {
+        "content-type": "application/json",
+      },
+      status: 200,
+    }
+  )
+}
+
 type ConversationMessagesHandler = (
   conversationId: string,
   url: URL,
   init?: RequestInit
 ) => Promise<Response> | Response
 
+type ConversationsHandler = () => Promise<Response> | Response
+
 function createClientFetchMock({
+  conversationsHandler,
   conversationMessagesHandler,
   currentUserAvatar = "/assets/avatars/builtin/17.webp",
   currentUserNickname = "Al",
@@ -280,6 +337,7 @@ function createClientFetchMock({
   logoutStatus = 200,
   sendMessageResponse,
 }: {
+  conversationsHandler?: ConversationsHandler
   conversationMessagesHandler?: ConversationMessagesHandler
   currentUserAvatar?: string
   currentUserNickname?: string
@@ -499,45 +557,11 @@ function createClientFetchMock({
     }
 
     if (path === "/api/client/conversations") {
-      return new Response(
-        JSON.stringify({
-          success: true,
-          data: {
-            conversations: [
-              {
-                avatar: "/assets/avatars/builtin/03.webp",
-                created_at: "2026-07-03T07:00:00Z",
-                id: "conversation-bob",
-                last_message_at: "2026-07-03T08:00:00Z",
-                last_message_id: "message-1",
-                last_message_seq: 12,
-                last_message_summary: "好的，我看一下",
-                member_count: 2,
-                name: "Bob Li",
-                type: "direct",
-              },
-              {
-                avatar: "",
-                created_at: "2026-07-03T06:00:00Z",
-                id: "conversation-team",
-                last_message_at: "2026-07-02T07:30:00Z",
-                last_message_id: "message-2",
-                last_message_seq: 3,
-                last_message_summary: "今天下午同步",
-                member_count: 3,
-                name: "产品讨论组",
-                type: "group",
-              },
-            ],
-          },
-        }),
-        {
-          headers: {
-            "content-type": "application/json",
-          },
-          status: 200,
-        }
-      )
+      if (conversationsHandler) {
+        return conversationsHandler()
+      }
+
+      return createClientConversationsResponse()
     }
 
     const messagesMatch = path.match(
@@ -2433,6 +2457,53 @@ describe("App", () => {
         method: "GET",
       }
     )
+  }, 10_000)
+
+  it("实时连接恢复后刷新会话列表同步断线期间未读数", async () => {
+    let conversationListRequests = 0
+    const fetcher = createClientFetchMock({
+      conversationsHandler: () => {
+        conversationListRequests += 1
+
+        if (conversationListRequests > 1) {
+          return createClientConversationsResponse({
+            teamLastMessageSeq: 5,
+            teamLastReadSeq: 3,
+            teamUnreadCount: 2,
+          })
+        }
+
+        return createClientConversationsResponse()
+      },
+    })
+    vi.stubGlobal("fetch", fetcher)
+
+    renderApp("/chat?conversation_id=conversation-bob")
+
+    const firstSocket = await openLatestAppWebSocket()
+    await screen.findByTestId("conversation-panel-history")
+    const teamConversationButton = screen.getByRole("button", {
+      name: /产品讨论组/,
+    })
+    expect(within(teamConversationButton).queryByText("2")).not.toBeInTheDocument()
+
+    firstSocket.failClose()
+    const secondSocket = await openLatestAppWebSocket(1, { ready: false })
+    secondSocket.receive({
+      v: 1,
+      kind: "event",
+      event: "system.ready",
+      payload: {},
+    })
+
+    await waitFor(() =>
+      expect(
+        within(
+          screen.getByRole("button", { name: /产品讨论组/ })
+        ).getByText("2")
+      ).toBeInTheDocument()
+    )
+    expect(conversationListRequests).toBeGreaterThanOrEqual(2)
   }, 10_000)
 
   it("实时连接恢复后会补拉所有已加载会话的漏掉消息", async () => {

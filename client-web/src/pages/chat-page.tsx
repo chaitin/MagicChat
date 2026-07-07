@@ -607,10 +607,7 @@ function getContactDisplayName(contact: { name: string; nickname: string }) {
 
 function ConversationUnreadBadge({ count }: { count: number }) {
   return (
-    <Badge
-      aria-label={`${count} 条未读消息`}
-      className="h-5 min-w-5 shrink-0 rounded-full bg-red-500 px-1.5 text-[11px] leading-none font-medium text-white tabular-nums hover:bg-red-500"
-    >
+    <Badge aria-label={`${count} 条未读消息`} variant="destructive">
       {formatUnreadCount(count)}
     </Badge>
   )
