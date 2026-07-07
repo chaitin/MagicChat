@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -152,6 +153,9 @@ func (c *Client) ensureBucketCORS(ctx context.Context, bucket string) error {
 			},
 		},
 	})
+	if strings.TrimSpace(c.cfg.Endpoint) != "" && isAPIErrorCode(err, "NotImplemented") {
+		return nil
+	}
 
 	return err
 }

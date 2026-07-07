@@ -36,6 +36,7 @@ type StorageConfig struct {
 	ForcePathStyle  bool                   `yaml:"force_path_style"`
 	Buckets         StorageBucketsConfig   `yaml:"buckets"`
 	Lifecycle       StorageLifecycleConfig `yaml:"lifecycle"`
+	AssetsHostname  string                 `yaml:"-"`
 }
 
 type StorageBucketsConfig struct {
@@ -96,6 +97,7 @@ func normalizeStorageConfig(cfg *StorageConfig) error {
 	cfg.Region = strings.TrimSpace(cfg.Region)
 	cfg.AccessKeyID = strings.TrimSpace(cfg.AccessKeyID)
 	cfg.SecretAccessKey = strings.TrimSpace(cfg.SecretAccessKey)
+	cfg.AssetsHostname = strings.TrimSpace(firstNonEmptyEnv("ASSETS_HOSTNAME"))
 	cfg.Buckets.Public = strings.TrimSpace(cfg.Buckets.Public)
 	cfg.Buckets.Private = strings.TrimSpace(cfg.Buckets.Private)
 	cfg.Buckets.Temporary = strings.TrimSpace(cfg.Buckets.Temporary)
@@ -123,6 +125,12 @@ func normalizeStorageConfig(cfg *StorageConfig) error {
 	}
 	if cfg.Buckets.Temporary == "" {
 		return fmt.Errorf("storage.buckets.temporary is required")
+	}
+	if cfg.AssetsHostname == "" {
+		return fmt.Errorf("ASSETS_HOSTNAME is required")
+	}
+	if strings.Contains(cfg.AssetsHostname, "://") || strings.Contains(cfg.AssetsHostname, "/") {
+		return fmt.Errorf("ASSETS_HOSTNAME must be a hostname without scheme or path")
 	}
 	if cfg.Lifecycle.TemporaryExpireDays <= 0 {
 		cfg.Lifecycle.TemporaryExpireDays = 180

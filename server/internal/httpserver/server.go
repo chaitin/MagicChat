@@ -69,6 +69,8 @@ func NewRouterWithRealtimeAndLLMHealthChecker(db *gorm.DB, cfg config.Config, re
 	client := router.Group("/api/client", server.requireUserSession)
 	client.GET("/me", server.getCurrentUser)
 	client.PATCH("/me", server.updateCurrentUser)
+	client.POST("/temporary-files", server.createTemporaryFile)
+	client.POST("/temporary-files/read-urls", server.readTemporaryFileURLs)
 	client.GET("/contacts/users", server.listContactUsers)
 	client.GET("/assistant/models", server.listClientLLMModels)
 	client.GET("/conversations", server.listClientConversations)

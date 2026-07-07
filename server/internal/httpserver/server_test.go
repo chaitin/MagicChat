@@ -60,6 +60,7 @@ func migrateTestSchema(db *gorm.DB) error {
 		&store.ConversationMember{},
 		&store.Message{},
 		&store.DirectConversation{},
+		&store.TemporaryFile{},
 		&store.AppSettings{},
 		&store.ThirdPartyLoginProvider{},
 		&store.ThirdPartyLoginState{},

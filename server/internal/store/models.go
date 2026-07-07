@@ -141,6 +141,17 @@ type DirectConversation struct {
 	CreatedAt      time.Time    `gorm:"not null"`
 }
 
+type TemporaryFile struct {
+	ID        string    `gorm:"type:uuid;primaryKey"`
+	ObjectKey string    `gorm:"not null;uniqueIndex"`
+	SizeBytes int64     `gorm:"not null;check:size_bytes >= 0"`
+	CreatedAt time.Time `gorm:"not null"`
+}
+
+func (TemporaryFile) TableName() string {
+	return "temporary_files"
+}
+
 type AppSettings struct {
 	ID               int       `gorm:"primaryKey"`
 	AppName          string    `gorm:"size:120;not null"`

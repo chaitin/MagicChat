@@ -163,6 +163,11 @@ definitions:
       message:
         $ref: '#/definitions/httpserver.messageResponse'
     type: object
+  httpserver.createTemporaryFileResponse:
+    properties:
+      file:
+        $ref: '#/definitions/httpserver.temporaryFileResponse'
+    type: object
   httpserver.createUserRequest:
     properties:
       email:
@@ -469,6 +474,20 @@ definitions:
         example: 企业 SSO
         type: string
     type: object
+  httpserver.readTemporaryFileURLsRequest:
+    properties:
+      file_ids:
+        items:
+          type: string
+        type: array
+    type: object
+  httpserver.readTemporaryFileURLsResponse:
+    properties:
+      urls:
+        items:
+          $ref: '#/definitions/httpserver.temporaryFileReadURLResponse'
+        type: array
+    type: object
   httpserver.resetUserPasswordResponse:
     properties:
       new_password:
@@ -483,6 +502,29 @@ definitions:
       success:
         example: true
         type: boolean
+    type: object
+  httpserver.temporaryFileReadURLResponse:
+    properties:
+      expires_at:
+        format: date-time
+        type: string
+      file_id:
+        example: 7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4
+        type: string
+      url:
+        type: string
+    type: object
+  httpserver.temporaryFileResponse:
+    properties:
+      created_at:
+        format: date-time
+        type: string
+      id:
+        example: 7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4
+        type: string
+      size_bytes:
+        example: 123456
+        type: integer
     type: object
   httpserver.thirdPartyProviderEnvelope:
     properties:
@@ -2120,4 +2162,89 @@ paths:
       summary: 修改当前用户资料
       tags:
       - 客户端认证
+  /api/client/temporary-files:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 普通用户上传临时文件。文件会写入 temporary bucket，成功后返回临时文件 ID。
+      parameters:
+      - description: 临时文件
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpserver.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/httpserver.createTemporaryFileResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+      summary: 上传临时文件
+      tags:
+      - 客户端文件
+  /api/client/temporary-files/read-urls:
+    post:
+      consumes:
+      - application/json
+      description: 普通用户按临时文件 ID 批量申请 24 小时有效的访问地址。
+      parameters:
+      - description: 临时文件 ID 列表
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/httpserver.readTemporaryFileURLsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpserver.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/httpserver.readTemporaryFileURLsResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+      summary: 批量申请临时文件访问地址
+      tags:
+      - 客户端文件
 swagger: "2.0"

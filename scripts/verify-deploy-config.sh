@@ -25,6 +25,7 @@ assert_file "compose.yml"
 assert_file "server/Dockerfile"
 assert_file "deploy/nginx/Dockerfile"
 assert_file "deploy/nginx/nginx.conf"
+assert_file "deploy/nginx/templates/default.conf.template"
 assert_file "deploy/server/config.example.yaml"
 assert_file ".github/workflows/docker.yml"
 assert_file ".dockerignore"
@@ -34,8 +35,11 @@ assert_contains "compose.yml" "ghcr.1ms.run/chaitin/mygod"
 assert_contains "compose.yml" "rustfs/rustfs"
 assert_contains "compose.yml" 'RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-mygod}'
 assert_contains "compose.yml" 'RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-change-me}'
+assert_contains "compose.yml" 'CLIENT_HOSTNAME: ${CLIENT_HOSTNAME:-client.localhost}'
+assert_contains "compose.yml" 'ADMIN_HOSTNAME: ${ADMIN_HOSTNAME:-admin.localhost}'
+assert_contains "compose.yml" 'ASSETS_HOSTNAME: ${ASSETS_HOSTNAME:-assets.localhost}'
+assert_contains "compose.yml" "80:80"
 assert_contains "compose.yml" "443:443"
-assert_contains "compose.yml" "8443:8443"
 assert_contains "compose.yml" "./data/postgres/data:/var/lib/postgresql/data"
 assert_contains "compose.yml" "./data/rustfs/data:/data"
 assert_contains "compose.yml" "./data/server/config:/app/config:ro"
@@ -64,15 +68,31 @@ assert_contains "deploy/server/config.example.yaml" "temporary: \"mygod-temporar
 assert_contains "deploy/server/config.example.yaml" "temporary_expire_days: 180"
 
 assert_contains "deploy/nginx/Dockerfile" "COPY deploy/nginx/nginx.conf /etc/nginx/nginx.conf"
+assert_contains "deploy/nginx/Dockerfile" "COPY deploy/nginx/templates /etc/nginx/templates"
 
-assert_contains "deploy/nginx/nginx.conf" "listen 443 ssl"
-assert_contains "deploy/nginx/nginx.conf" "listen 8443 ssl"
-assert_contains "deploy/nginx/nginx.conf" "root /usr/share/nginx/client"
-assert_contains "deploy/nginx/nginx.conf" "root /usr/share/nginx/admin"
-assert_contains "deploy/nginx/nginx.conf" "location /api/client/ws"
-assert_contains "deploy/nginx/nginx.conf" "proxy_set_header Upgrade"
-assert_contains "deploy/nginx/nginx.conf" "location /api/client/"
-assert_contains "deploy/nginx/nginx.conf" "location /api/admin/"
+assert_contains "deploy/nginx/nginx.conf" "upstream mygod_server"
+assert_contains "deploy/nginx/nginx.conf" "upstream mygod_s3"
+assert_contains "deploy/nginx/nginx.conf" "include /etc/nginx/conf.d/*.conf"
+
+assert_contains "deploy/nginx/templates/default.conf.template" "listen 80 default_server"
+assert_contains "deploy/nginx/templates/default.conf.template" 'server_name ${CLIENT_HOSTNAME} ${ADMIN_HOSTNAME} ${ASSETS_HOSTNAME}'
+assert_contains "deploy/nginx/templates/default.conf.template" 'return 301 https://$host$request_uri'
+assert_contains "deploy/nginx/templates/default.conf.template" 'server_name ${CLIENT_HOSTNAME}'
+assert_contains "deploy/nginx/templates/default.conf.template" 'server_name ${ADMIN_HOSTNAME}'
+assert_contains "deploy/nginx/templates/default.conf.template" 'server_name ${ASSETS_HOSTNAME}'
+assert_contains "deploy/nginx/templates/default.conf.template" "/etc/nginx/certs/client.crt"
+assert_contains "deploy/nginx/templates/default.conf.template" "/etc/nginx/certs/client.key"
+assert_contains "deploy/nginx/templates/default.conf.template" "/etc/nginx/certs/admin.crt"
+assert_contains "deploy/nginx/templates/default.conf.template" "/etc/nginx/certs/admin.key"
+assert_contains "deploy/nginx/templates/default.conf.template" "/etc/nginx/certs/assets.crt"
+assert_contains "deploy/nginx/templates/default.conf.template" "/etc/nginx/certs/assets.key"
+assert_contains "deploy/nginx/templates/default.conf.template" "root /usr/share/nginx/client"
+assert_contains "deploy/nginx/templates/default.conf.template" "root /usr/share/nginx/admin"
+assert_contains "deploy/nginx/templates/default.conf.template" "location /api/client/ws"
+assert_contains "deploy/nginx/templates/default.conf.template" "proxy_set_header Upgrade"
+assert_contains "deploy/nginx/templates/default.conf.template" "location /api/client/"
+assert_contains "deploy/nginx/templates/default.conf.template" "location /api/admin/"
+assert_contains "deploy/nginx/templates/default.conf.template" "proxy_pass http://mygod_s3"
 
 assert_contains "server/Dockerfile" "go build"
 assert_contains "server/Dockerfile" "COPY server/migrations"

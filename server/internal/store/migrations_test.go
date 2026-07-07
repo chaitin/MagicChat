@@ -15,6 +15,7 @@ func TestMigrationDirectoryContainsExpectedMigrations(t *testing.T) {
 	want := []string{
 		"00001_init_schema.sql",
 		"00002_add_conversation_member_last_read_seq.sql",
+		"00003_create_temporary_files.sql",
 	}
 	if len(matches) != len(want) {
 		t.Fatalf("migration file count = %d, want %d: %v", len(matches), len(want), matches)
@@ -129,6 +130,31 @@ func TestInitialSchemaMigrationDefinesCurrentSchema(t *testing.T) {
 	} {
 		if strings.Contains(sql, forbidden) {
 			t.Fatalf("init schema migration contains legacy fragment %q", forbidden)
+		}
+	}
+}
+
+func TestTemporaryFilesMigrationDefinesSchema(t *testing.T) {
+	rawSQL, err := os.ReadFile("../../migrations/00003_create_temporary_files.sql")
+	if err != nil {
+		t.Fatalf("read temporary files migration: %v", err)
+	}
+	sql := normalizeSQL(string(rawSQL))
+
+	for _, required := range []string{
+		"-- +goose up",
+		"create table temporary_files",
+		"id uuid primary key",
+		"object_key text not null",
+		"size_bytes bigint not null",
+		"created_at timestamptz not null default now()",
+		"constraint temporary_files_object_key_unique unique (object_key)",
+		"constraint temporary_files_size_bytes_check check (size_bytes >= 0)",
+		"-- +goose down",
+		"drop table temporary_files",
+	} {
+		if !strings.Contains(sql, required) {
+			t.Fatalf("temporary files migration missing %q", required)
 		}
 	}
 }

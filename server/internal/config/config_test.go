@@ -67,6 +67,7 @@ storage:
 	}
 
 	t.Setenv("CONFIG", path)
+	t.Setenv("ASSETS_HOSTNAME", "assets.example.com")
 
 	cfg, err := Load()
 	if err != nil {
@@ -87,6 +88,9 @@ storage:
 	}
 	if cfg.Storage.Buckets.Public != "mygod-public" {
 		t.Fatalf("Storage.Buckets.Public = %q", cfg.Storage.Buckets.Public)
+	}
+	if cfg.Storage.AssetsHostname != "assets.example.com" {
+		t.Fatalf("Storage.AssetsHostname = %q, want assets.example.com", cfg.Storage.AssetsHostname)
 	}
 	if cfg.Storage.Lifecycle.TemporaryExpireDays != 180 {
 		t.Fatalf("Storage.Lifecycle.TemporaryExpireDays = %d, want 180 default", cfg.Storage.Lifecycle.TemporaryExpireDays)
@@ -118,6 +122,7 @@ storage:
 	}
 
 	t.Setenv("CONFIG", path)
+	t.Setenv("ASSETS_HOSTNAME", "assets.example.com")
 	t.Setenv("RUSTFS_ACCESS_KEY", "env-access-key")
 	t.Setenv("RUSTFS_SECRET_KEY", "env-secret-key")
 
@@ -131,6 +136,75 @@ storage:
 	}
 	if cfg.Storage.SecretAccessKey != "env-secret-key" {
 		t.Fatalf("Storage.SecretAccessKey = %q, want env-secret-key", cfg.Storage.SecretAccessKey)
+	}
+}
+
+func TestLoadRejectsMissingAssetsHostname(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := []byte(`
+database:
+  dsn: "postgres://app:app@localhost:5432/app?sslmode=disable"
+admin:
+  password: "secret-admin-password"
+storage:
+  provider: "s3"
+  endpoint: "http://rustfs:9000"
+  access_key_id: "mygod"
+  secret_access_key: "storage-secret"
+  buckets:
+    public: "mygod-public"
+    private: "mygod-private"
+    temporary: "mygod-temporary"
+`)
+
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("CONFIG", path)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want missing assets hostname error")
+	}
+	if !strings.Contains(err.Error(), "ASSETS_HOSTNAME") {
+		t.Fatalf("Load() error = %q, want ASSETS_HOSTNAME", err.Error())
+	}
+}
+
+func TestLoadRejectsInvalidAssetsHostname(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := []byte(`
+database:
+  dsn: "postgres://app:app@localhost:5432/app?sslmode=disable"
+admin:
+  password: "secret-admin-password"
+storage:
+  provider: "s3"
+  endpoint: "http://rustfs:9000"
+  access_key_id: "mygod"
+  secret_access_key: "storage-secret"
+  buckets:
+    public: "mygod-public"
+    private: "mygod-private"
+    temporary: "mygod-temporary"
+`)
+
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("CONFIG", path)
+	t.Setenv("ASSETS_HOSTNAME", "https://assets.example.com")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want invalid assets hostname error")
+	}
+	if !strings.Contains(err.Error(), "ASSETS_HOSTNAME") {
+		t.Fatalf("Load() error = %q, want ASSETS_HOSTNAME", err.Error())
 	}
 }
 

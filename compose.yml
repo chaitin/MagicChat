@@ -40,6 +40,7 @@ services:
         condition: service_started
     environment:
       CONFIG: /app/config/config.yaml
+      ASSETS_HOSTNAME: ${ASSETS_HOSTNAME:-assets.localhost}
       RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-mygod}
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-change-me}
     volumes:
@@ -58,9 +59,15 @@ services:
     depends_on:
       server:
         condition: service_healthy
+      rustfs:
+        condition: service_started
+    environment:
+      CLIENT_HOSTNAME: ${CLIENT_HOSTNAME:-client.localhost}
+      ADMIN_HOSTNAME: ${ADMIN_HOSTNAME:-admin.localhost}
+      ASSETS_HOSTNAME: ${ASSETS_HOSTNAME:-assets.localhost}
     ports:
+      - "80:80"
       - "443:443"
-      - "8443:8443"
     volumes:
       - ./data/nginx/certs:/etc/nginx/certs:ro
       - ./data/nginx/log:/var/log/nginx
