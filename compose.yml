@@ -1,5 +1,6 @@
 name: mygod
 
+# Use IMAGE_REGISTRY=ghcr.1ms.run/chaitin/mygod when the GHCR mirror is needed.
 services:
   postgres:
     image: postgres:16-alpine
@@ -18,7 +19,7 @@ services:
       start_period: 10s
 
   server:
-    image: ${IMAGE_REGISTRY:-ghcr.1ms.run/chaitin/mygod}/server:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/chaitin/mygod}/server:${IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -36,7 +37,7 @@ services:
       start_period: 10s
 
   nginx:
-    image: ${IMAGE_REGISTRY:-ghcr.1ms.run/chaitin/mygod}/nginx:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/chaitin/mygod}/nginx:${IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
       server:
