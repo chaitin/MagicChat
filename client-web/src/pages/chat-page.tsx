@@ -17,6 +17,7 @@ import {
   ConversationPanel,
   type ConversationPanelMessage,
 } from "@/components/conversation-panel"
+import { GroupAvatar } from "@/components/group-avatar"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -280,18 +281,26 @@ export function ChatPage() {
                       variant="ghost"
                     >
                       <ItemMedia>
-                        <Avatar className="size-10 rounded-sm bg-muted after:rounded-sm">
-                          {conversation.avatar && (
-                            <AvatarImage
-                              alt={conversation.name}
-                              className="rounded-sm"
-                              src={conversation.avatar}
-                            />
-                          )}
-                          <AvatarFallback className="rounded-sm">
-                            {getConversationInitial(conversation.name)}
-                          </AvatarFallback>
-                        </Avatar>
+                        {conversation.type === "group" ? (
+                          <GroupAvatar
+                            className="size-10"
+                            members={conversation.members}
+                            name={conversation.name}
+                          />
+                        ) : (
+                          <Avatar className="size-10 rounded-sm bg-muted after:rounded-sm">
+                            {conversation.avatar && (
+                              <AvatarImage
+                                alt={conversation.name}
+                                className="rounded-sm"
+                                src={conversation.avatar}
+                              />
+                            )}
+                            <AvatarFallback className="rounded-sm">
+                              {getConversationInitial(conversation.name)}
+                            </AvatarFallback>
+                          </Avatar>
+                        )}
                       </ItemMedia>
                       <ItemContent className="min-w-0 flex-1 overflow-hidden">
                         <div
