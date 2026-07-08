@@ -940,6 +940,26 @@ func (s *Server) findOrCreateThirdPartyUser(provider store.ThirdPartyLoginProvid
 
 	var resultUser store.User
 	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if email, emailFromProvider, emailErr := thirdPartyProfileEmailFromProvider(profile); emailErr != nil {
+			return thirdPartyUserError{status: http.StatusBadRequest, code: "invalid_third_party_login", message: "第三方邮箱格式错误"}
+		} else if emailFromProvider {
+			user, found, findErr := findThirdPartyUserByEmail(tx, email)
+			if findErr != nil {
+				return findErr
+			}
+			if found {
+				updatedUser, updateErr := syncThirdPartyUserFieldsFromProfile(tx, user, profile)
+				if updateErr != nil {
+					return updateErr
+				}
+				if upsertErr := upsertThirdPartyAccount(tx, provider, profile, updatedUser.ID); upsertErr != nil {
+					return upsertErr
+				}
+				resultUser = updatedUser
+				return nil
+			}
+		}
+
 		var account store.ThirdPartyAccount
 		err := tx.Preload("User").
 			Where("provider_id = ? AND external_user_id = ?", provider.ID, profile.ExternalUserID).
@@ -954,7 +974,7 @@ func (s *Server) findOrCreateThirdPartyUser(provider store.ThirdPartyLoginProvid
 			if updateErr := tx.Model(&account).Update("profile", profile.Raw).Error; updateErr != nil {
 				return updateErr
 			}
-			updatedUser, updateErr := refreshThirdPartyBoundUserFromProfile(tx, provider, account.User, profile)
+			updatedUser, updateErr := syncThirdPartyUserFieldsFromProfile(tx, account.User, profile)
 			if updateErr != nil {
 				return updateErr
 			}
@@ -969,17 +989,7 @@ func (s *Server) findOrCreateThirdPartyUser(provider store.ThirdPartyLoginProvid
 		if err != nil {
 			return err
 		}
-		account = store.ThirdPartyAccount{
-			ID:             uuid.NewString(),
-			ProviderID:     provider.ID,
-			ExternalUserID: profile.ExternalUserID,
-			UserID:         user.ID,
-			Profile:        profile.Raw,
-		}
-		if err := tx.Create(&account).Error; err != nil {
-			if isUniqueConstraintError(err) {
-				return thirdPartyUserError{status: http.StatusConflict, code: "conflict", message: "第三方账号已绑定"}
-			}
+		if err := upsertThirdPartyAccount(tx, provider, profile, user.ID); err != nil {
 			return err
 		}
 		resultUser = user
@@ -992,18 +1002,95 @@ func (s *Server) findOrCreateThirdPartyUser(provider store.ThirdPartyLoginProvid
 	return resultUser, nil
 }
 
-func refreshThirdPartyBoundUserFromProfile(tx *gorm.DB, provider store.ThirdPartyLoginProvider, user store.User, profile externalUserProfile) (store.User, error) {
-	if provider.Type != store.ThirdPartyLoginProviderTypeDingTalk {
-		return user, nil
+func upsertThirdPartyAccount(tx *gorm.DB, provider store.ThirdPartyLoginProvider, profile externalUserProfile, userID string) error {
+	var account store.ThirdPartyAccount
+	err := tx.Where("provider_id = ? AND external_user_id = ?", provider.ID, profile.ExternalUserID).First(&account).Error
+	if err == nil {
+		return tx.Model(&account).Updates(map[string]any{
+			"profile": profile.Raw,
+			"user_id": userID,
+		}).Error
 	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+
+	account = store.ThirdPartyAccount{
+		ID:             uuid.NewString(),
+		ProviderID:     provider.ID,
+		ExternalUserID: profile.ExternalUserID,
+		UserID:         userID,
+		Profile:        profile.Raw,
+	}
+	if err := tx.Create(&account).Error; err != nil {
+		if isUniqueConstraintError(err) {
+			return thirdPartyUserError{status: http.StatusConflict, code: "conflict", message: "第三方账号已绑定"}
+		}
+		return err
+	}
+
+	return nil
+}
+
+func ensureThirdPartyPhoneAvailable(tx *gorm.DB, phone *string, userID string) error {
+	if phone == nil {
+		return nil
+	}
+
+	query := tx.Model(&store.User{}).Where("phone = ?", *phone)
+	if userID != "" {
+		query = query.Where("id <> ?", userID)
+	}
+
+	var existingCount int64
+	if err := query.Count(&existingCount).Error; err != nil {
+		return err
+	}
+	if existingCount > 0 {
+		return thirdPartyUserError{status: http.StatusConflict, code: "conflict", message: "手机号已存在"}
+	}
+
+	return nil
+}
+
+func syncThirdPartyUserFieldsFromProfile(tx *gorm.DB, user store.User, profile externalUserProfile) (store.User, error) {
+	updates := map[string]any{}
 	name := strings.TrimSpace(profile.Name)
-	if name == "" || name == strings.TrimSpace(user.Name) {
+	if name != "" && name != strings.TrimSpace(user.Name) {
+		updates["name"] = name
+		user.Name = name
+	}
+
+	rawPhone := strings.TrimSpace(profile.Phone)
+	if rawPhone != "" {
+		phone, err := normalizePhone(rawPhone)
+		if err != nil {
+			return store.User{}, thirdPartyUserError{status: http.StatusBadRequest, code: "invalid_third_party_login", message: "手机号格式错误"}
+		}
+		if phone != nil {
+			currentPhone := ""
+			if user.Phone != nil {
+				currentPhone = *user.Phone
+			}
+			if *phone != currentPhone {
+				if err := ensureThirdPartyPhoneAvailable(tx, phone, user.ID); err != nil {
+					return store.User{}, err
+				}
+				updates["phone"] = *phone
+				user.Phone = phone
+			}
+		}
+	}
+
+	if len(updates) == 0 {
 		return user, nil
 	}
-	if err := tx.Model(&store.User{}).Where("id = ?", user.ID).Update("name", name).Error; err != nil {
+	if err := tx.Model(&store.User{}).Where("id = ?", user.ID).Updates(updates).Error; err != nil {
+		if isUniqueConstraintError(err) {
+			return store.User{}, thirdPartyUserError{status: http.StatusConflict, code: "conflict", message: "手机号已存在"}
+		}
 		return store.User{}, err
 	}
-	user.Name = name
 
 	return user, nil
 }
@@ -1020,7 +1107,7 @@ func (s *Server) findOrCreateThirdPartyBoundUser(tx *gorm.DB, provider store.Thi
 		if user.Status != store.UserStatusActive {
 			return store.User{}, thirdPartyUserError{status: http.StatusUnauthorized, code: "invalid_credentials", message: "用户已被禁用"}
 		}
-		return user, nil
+		return syncThirdPartyUserFieldsFromProfile(tx, user, profile)
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return store.User{}, err
@@ -1030,14 +1117,8 @@ func (s *Server) findOrCreateThirdPartyBoundUser(tx *gorm.DB, provider store.Thi
 	if err != nil {
 		return store.User{}, thirdPartyUserError{status: http.StatusBadRequest, code: "invalid_third_party_login", message: "手机号格式错误"}
 	}
-	if phone != nil {
-		var phoneCount int64
-		if err := tx.Model(&store.User{}).Where("phone = ?", *phone).Count(&phoneCount).Error; err != nil {
-			return store.User{}, err
-		}
-		if phoneCount > 0 {
-			return store.User{}, thirdPartyUserError{status: http.StatusConflict, code: "conflict", message: "手机号已存在"}
-		}
+	if err := ensureThirdPartyPhoneAvailable(tx, phone, ""); err != nil {
+		return store.User{}, err
 	}
 
 	password, err := auth.GenerateInitialPassword(32)
@@ -1084,13 +1165,36 @@ func (s *Server) findOrCreateThirdPartyBoundUser(tx *gorm.DB, provider store.Thi
 }
 
 func thirdPartyProfileEmail(provider store.ThirdPartyLoginProvider, profile externalUserProfile) (string, bool, error) {
-	rawEmail := strings.TrimSpace(profile.Email)
-	if rawEmail != "" {
-		email, err := normalizeEmail(rawEmail)
-		return email, true, err
+	if email, ok, err := thirdPartyProfileEmailFromProvider(profile); ok || err != nil {
+		return email, ok, err
 	}
 
 	return syntheticThirdPartyEmail(provider, profile.ExternalUserID), false, nil
+}
+
+func thirdPartyProfileEmailFromProvider(profile externalUserProfile) (string, bool, error) {
+	rawEmail := strings.TrimSpace(profile.Email)
+	if rawEmail == "" {
+		return "", false, nil
+	}
+	email, err := normalizeEmail(rawEmail)
+	return email, true, err
+}
+
+func findThirdPartyUserByEmail(tx *gorm.DB, email string) (store.User, bool, error) {
+	var user store.User
+	err := tx.Where("email = ?", email).First(&user).Error
+	if err == nil {
+		if user.Status != store.UserStatusActive {
+			return store.User{}, false, thirdPartyUserError{status: http.StatusUnauthorized, code: "invalid_credentials", message: "用户已被禁用"}
+		}
+		return user, true, nil
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return store.User{}, false, nil
+	}
+
+	return store.User{}, false, err
 }
 
 func syntheticThirdPartyEmail(provider store.ThirdPartyLoginProvider, externalUserID string) string {

@@ -45,8 +45,6 @@ func TestInitialSchemaMigrationDefinesCurrentSchema(t *testing.T) {
 		"last_online_at timestamptz",
 		"constraint users_status_check check (status in ('active', 'disabled'))",
 		"create unique index users_email_lower_unique on users (lower(email))",
-		"create unique index users_phone_unique",
-		"where phone is not null",
 		"create table admin_sessions",
 		"constraint admin_sessions_token_hash_unique unique (token_hash)",
 		"create table user_sessions",
@@ -126,6 +124,8 @@ func TestInitialSchemaMigrationDefinesCurrentSchema(t *testing.T) {
 		"drop table apps",
 		"drop table temporary_files",
 		"-- +goose down",
+		"create unique index users_phone_unique",
+		"where phone is not null",
 	} {
 		if !strings.Contains(sql, required) {
 			t.Fatalf("init schema migration missing %q", required)

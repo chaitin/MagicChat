@@ -3342,6 +3342,140 @@ func TestDingTalkLoginUpdatesExistingBoundUserName(t *testing.T) {
 	}
 }
 
+func TestThirdPartyLoginUpdatesExistingEmailUserNameAndPhoneOnly(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+	now := time.Date(2026, 7, 8, 10, 0, 0, 0, time.UTC)
+	provider := insertTestThirdPartyLoginProvider(t, db, store.ThirdPartyLoginProvider{
+		Name:         "Enterprise SSO",
+		Key:          "enterprise",
+		Type:         store.ThirdPartyLoginProviderTypeOIDC,
+		Enabled:      true,
+		ClientID:     "client-id",
+		ClientSecret: "client-secret",
+		Scopes:       json.RawMessage(`["openid","email","profile"]`),
+		Config: thirdPartyProviderConfig(t, map[string]any{
+			"authorize_url":     "https://sso.example.com/authorize",
+			"token_url":         "https://sso.example.com/token",
+			"userinfo_url":      "https://sso.example.com/userinfo",
+			"external_id_field": "sub",
+			"email_field":       "email",
+			"phone_field":       "mobile",
+			"name_field":        "name",
+			"nickname_field":    "nickname",
+			"avatar_field":      "picture",
+		}),
+	})
+	user := insertTestUser(t, db, "alice@example.com", "Old Name", store.UserStatusActive, now)
+	oldPhone := "+8613800000000"
+	if err := db.Model(&user).Updates(map[string]any{
+		"avatar":   "https://example.com/old.webp",
+		"nickname": "Keep Nick",
+		"phone":    oldPhone,
+	}).Error; err != nil {
+		t.Fatalf("update existing user profile: %v", err)
+	}
+
+	resolvedUser, err := (&Server{db: db}).findOrCreateThirdPartyUser(provider, externalUserProfile{
+		ExternalUserID: "alice-external-id",
+		Email:          "ALICE@example.com",
+		Name:           "Alice Real Name",
+		Nickname:       "Third Party Nick",
+		Phone:          "13900000000",
+		Avatar:         "https://example.com/new.webp",
+		Raw:            json.RawMessage(`{"sub":"alice-external-id","email":"ALICE@example.com","name":"Alice Real Name","nickname":"Third Party Nick","mobile":"13900000000","picture":"https://example.com/new.webp"}`),
+	})
+	if err != nil {
+		t.Fatalf("find or create third-party user: %v", err)
+	}
+	if resolvedUser.ID != user.ID {
+		t.Fatalf("resolved user id = %q, want %q", resolvedUser.ID, user.ID)
+	}
+
+	var storedUser store.User
+	if err := db.First(&storedUser, "id = ?", user.ID).Error; err != nil {
+		t.Fatalf("find stored user: %v", err)
+	}
+	if storedUser.Name != "Alice Real Name" {
+		t.Fatalf("stored user name = %q, want Alice Real Name", storedUser.Name)
+	}
+	if storedUser.Phone == nil || *storedUser.Phone != "+8613900000000" {
+		t.Fatalf("stored user phone = %#v, want +8613900000000", storedUser.Phone)
+	}
+	if storedUser.Nickname != "Keep Nick" {
+		t.Fatalf("stored user nickname = %q, want Keep Nick", storedUser.Nickname)
+	}
+	if storedUser.Avatar != "https://example.com/old.webp" {
+		t.Fatalf("stored user avatar = %q, want old avatar", storedUser.Avatar)
+	}
+
+	var account store.ThirdPartyAccount
+	if err := db.First(&account, "provider_id = ? AND external_user_id = ?", provider.ID, "alice-external-id").Error; err != nil {
+		t.Fatalf("find third-party account: %v", err)
+	}
+	if account.UserID != user.ID {
+		t.Fatalf("third-party account user_id = %q, want %q", account.UserID, user.ID)
+	}
+}
+
+func TestThirdPartyLoginRejectsPhoneAlreadyOwnedByAnotherUser(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+	now := time.Date(2026, 7, 8, 11, 0, 0, 0, time.UTC)
+	provider := insertTestThirdPartyLoginProvider(t, db, store.ThirdPartyLoginProvider{
+		Name:         "Enterprise SSO",
+		Key:          "enterprise",
+		Type:         store.ThirdPartyLoginProviderTypeOIDC,
+		Enabled:      true,
+		ClientID:     "client-id",
+		ClientSecret: "client-secret",
+		Scopes:       json.RawMessage(`["openid","email","profile"]`),
+		Config: thirdPartyProviderConfig(t, map[string]any{
+			"authorize_url":     "https://sso.example.com/authorize",
+			"token_url":         "https://sso.example.com/token",
+			"userinfo_url":      "https://sso.example.com/userinfo",
+			"external_id_field": "sub",
+			"email_field":       "email",
+			"phone_field":       "mobile",
+			"name_field":        "name",
+		}),
+	})
+	alice := insertTestUser(t, db, "alice@example.com", "Old Name", store.UserStatusActive, now)
+	bob := insertTestUser(t, db, "bob@example.com", "Bob", store.UserStatusActive, now)
+	if err := db.Model(&bob).Update("phone", "+8613900000000").Error; err != nil {
+		t.Fatalf("set bob phone: %v", err)
+	}
+
+	_, err := (&Server{db: db}).findOrCreateThirdPartyUser(provider, externalUserProfile{
+		ExternalUserID: "alice-external-id",
+		Email:          "ALICE@example.com",
+		Name:           "Alice Real Name",
+		Phone:          "13900000000",
+		Raw:            json.RawMessage(`{"sub":"alice-external-id","email":"ALICE@example.com","name":"Alice Real Name","mobile":"13900000000"}`),
+	})
+	if err == nil {
+		t.Fatal("find or create third-party user error = nil, want conflict")
+	}
+	userErr, ok := err.(thirdPartyUserError)
+	if !ok {
+		t.Fatalf("find or create third-party user error = %T %v, want thirdPartyUserError", err, err)
+	}
+	if userErr.status != http.StatusConflict || userErr.code != "conflict" {
+		t.Fatalf("third-party user error = status %d code %q, want 409 conflict", userErr.status, userErr.code)
+	}
+
+	var storedAlice store.User
+	if err := db.First(&storedAlice, "id = ?", alice.ID).Error; err != nil {
+		t.Fatalf("find stored alice: %v", err)
+	}
+	if storedAlice.Phone != nil {
+		t.Fatalf("stored alice phone = %#v, want nil", storedAlice.Phone)
+	}
+	if storedAlice.Name != "Old Name" {
+		t.Fatalf("stored alice name = %q, want Old Name", storedAlice.Name)
+	}
+}
+
 func TestFeishuLoginExchangesCodeWithJSONBody(t *testing.T) {
 	var tokenCalled bool
 	var userinfoCalled bool
@@ -5703,7 +5837,7 @@ func TestDuplicateUserPhoneReturnsConflict(t *testing.T) {
 		"phone": "+8613812345678",
 	}, adminCookie)
 	if duplicateResp.StatusCode != http.StatusConflict {
-		t.Fatalf("duplicate status = %d, want 409", duplicateResp.StatusCode)
+		t.Fatalf("duplicate status = %d, want 409, body = %#v", duplicateResp.StatusCode, duplicateBody)
 	}
 	requireError(t, duplicateBody, "conflict")
 }
