@@ -1,6 +1,6 @@
 export const imageMessageMaxBytes = 2 * 1024 * 1024
 
-const imageMessageMaxDimension = 1024
+const imageMessageMaxDimension = 1920
 const imageMessageOutputType = "image/webp"
 const imageMessageOutputQuality = 0.82
 const acceptedImageMessageTypes = new Set([

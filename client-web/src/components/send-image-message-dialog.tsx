@@ -21,6 +21,12 @@ type SendImageMessageDialogProps = {
   sending: boolean
 }
 
+const imagePreviewBaseMaxWidth = 384
+const imagePreviewBaseMaxHeight = 288
+const minImagePreviewZoom = 0.5
+const maxImagePreviewZoom = 2
+const imagePreviewZoomStep = 0.1
+
 export function SendImageMessageDialog({
   conversationName,
   image,
@@ -31,11 +37,47 @@ export function SendImageMessageDialog({
 }: SendImageMessageDialogProps) {
   const previewURL = useObjectURL(image)
   const confirmButtonRef = React.useRef<HTMLButtonElement | null>(null)
+  const [zoom, setZoom] = React.useState(1)
+  const [imageSize, setImageSize] = React.useState<{
+    height: number
+    width: number
+  } | null>(null)
+  const previewSize = imageSize
+    ? getContainedSize(
+        imageSize,
+        imagePreviewBaseMaxWidth,
+        imagePreviewBaseMaxHeight
+      )
+    : null
+
+  React.useEffect(() => {
+    if (open) {
+      setZoom(1)
+    }
+  }, [image, open])
+
+  React.useEffect(() => {
+    setImageSize(null)
+  }, [previewURL])
+
+  function handlePreviewWheel(event: React.WheelEvent<HTMLDivElement>) {
+    if (!image || event.deltaY === 0) {
+      return
+    }
+
+    event.preventDefault()
+    setZoom((currentZoom) =>
+      clampPreviewZoom(
+        currentZoom +
+          (event.deltaY < 0 ? imagePreviewZoomStep : -imagePreviewZoomStep)
+      )
+    )
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="gap-5 sm:max-w-md"
+        className="max-h-[calc(100vh-2rem)] w-fit max-w-[calc(100vw-2rem)] gap-5 overflow-hidden sm:max-w-[calc(100vw-2rem)]"
         onOpenAutoFocus={(event) => {
           if (!image || sending) {
             return
@@ -53,12 +95,33 @@ export function SendImageMessageDialog({
         </DialogHeader>
         {image && previewURL && (
           <div className="grid gap-3">
-            <div className="flex max-h-80 min-h-44 items-center justify-center overflow-hidden rounded-md border bg-muted/20 p-2">
-              <img
-                alt="待发送图片预览"
-                className="max-h-72 max-w-full rounded-sm object-contain"
-                src={previewURL}
-              />
+            <div
+              className="max-h-[calc(100vh-14rem)] max-w-[calc(100vw-5rem)] min-h-44 justify-self-center overflow-auto rounded-md border bg-muted/20 p-2"
+              onWheel={handlePreviewWheel}
+            >
+              <div className="flex min-h-40 min-w-full">
+                <img
+                  alt="待发送图片预览"
+                  className="m-auto max-w-none shrink-0 rounded-sm object-contain"
+                  draggable={false}
+                  onLoad={(event) => {
+                    const target = event.currentTarget
+                    setImageSize({
+                      height: target.naturalHeight,
+                      width: target.naturalWidth,
+                    })
+                  }}
+                  src={previewURL}
+                  style={
+                    previewSize
+                      ? {
+                          height: previewSize.height * zoom,
+                          width: previewSize.width * zoom,
+                        }
+                      : undefined
+                  }
+                />
+              </div>
             </div>
             <p className="min-w-0 text-sm text-muted-foreground">
               将要发送到{" "}
@@ -86,6 +149,26 @@ export function SendImageMessageDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function getContainedSize(
+  size: { height: number; width: number },
+  maxWidth: number,
+  maxHeight: number
+) {
+  const scale = Math.min(1, maxWidth / size.width, maxHeight / size.height)
+
+  return {
+    height: Math.max(1, Math.round(size.height * scale)),
+    width: Math.max(1, Math.round(size.width * scale)),
+  }
+}
+
+function clampPreviewZoom(zoom: number) {
+  return Math.min(
+    maxImagePreviewZoom,
+    Math.max(minImagePreviewZoom, Number(zoom.toFixed(2)))
   )
 }
 

@@ -240,7 +240,7 @@ func TestCreateConversationImageMessageRejectsLargeDimensions(t *testing.T) {
 		"/api/client/conversations/"+conversation.ID+"/messages/images",
 		"client-image-message-1",
 		"image.webp",
-		testWebPVP8X(1025, 768),
+		testWebPVP8X(1921, 1080),
 		loginAsUser(t, server, alice.Email),
 	)
 	if resp.StatusCode != http.StatusBadRequest {

@@ -19,7 +19,7 @@ const (
 	imageMessageContentType     = "image/webp"
 	maxImageMessageUploadBytes  = 2 * 1024 * 1024
 	maxImageMessageRequestBytes = maxImageMessageUploadBytes + 1*1024*1024
-	maxImageMessageDimension    = 1024
+	maxImageMessageDimension    = 1920
 	messageTypeImage            = "image"
 )
 
@@ -114,7 +114,7 @@ func (s *Server) createConversationImageMessage(c echo.Context) error {
 		return failure(c, http.StatusBadRequest, "invalid_request", "图片必须是 WebP 格式")
 	}
 	if width > maxImageMessageDimension || height > maxImageMessageDimension {
-		return failure(c, http.StatusBadRequest, "invalid_request", "图片最大宽高不能超过 1024px")
+		return failure(c, http.StatusBadRequest, "invalid_request", "图片最大宽高不能超过 1920px")
 	}
 
 	storageClient, err := s.newObjectStoreClient(c.Request().Context())
