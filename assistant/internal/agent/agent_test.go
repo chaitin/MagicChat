@@ -3,23 +3,51 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
 	"assistant/internal/llm"
+	"assistant/internal/mcpclient"
 )
 
-type modelFunc func(context.Context, llm.Request) (string, error)
+type modelFunc func(context.Context, llm.Request) (llm.Response, error)
 
-func (f modelFunc) Generate(ctx context.Context, request llm.Request) (string, error) {
+func (f modelFunc) CreateMessage(ctx context.Context, request llm.Request) (llm.Response, error) {
 	return f(ctx, request)
+}
+
+type sinkFunc func(context.Context, string) error
+
+func (f sinkFunc) SendMarkdown(ctx context.Context, content string) error {
+	return f(ctx, content)
+}
+
+type fakeToolRegistry struct {
+	callInputs []json.RawMessage
+	callNames  []string
+	results    map[string]mcpclient.ToolResult
+	tools      []mcpclient.Tool
+}
+
+func (r *fakeToolRegistry) Tools() []mcpclient.Tool {
+	return r.tools
+}
+
+func (r *fakeToolRegistry) CallTool(ctx context.Context, name string, input json.RawMessage) (mcpclient.ToolResult, error) {
+	r.callNames = append(r.callNames, name)
+	r.callInputs = append(r.callInputs, input)
+	if result, ok := r.results[name]; ok {
+		return result, nil
+	}
+	return mcpclient.ToolResult{Content: "ok"}, nil
 }
 
 func TestAgentBuildsSystemPromptAndUserContext(t *testing.T) {
 	var gotRequest llm.Request
-	agent := New(modelFunc(func(ctx context.Context, request llm.Request) (string, error) {
+	agent := New(modelFunc(func(ctx context.Context, request llm.Request) (llm.Response, error) {
 		gotRequest = request
-		return " 好的，我来处理 ", nil
+		return llm.Response{Blocks: []llm.Block{{Type: llm.BlockTypeText, Text: " 好的，我来处理 "}}}, nil
 	}))
 
 	reply, err := agent.Reply(context.Background(), Request{
@@ -152,9 +180,9 @@ func TestAgentBuildsSystemPromptAndUserContext(t *testing.T) {
 
 func TestAgentBuildsEmptyHistoryAsArray(t *testing.T) {
 	var gotRequest llm.Request
-	agent := New(modelFunc(func(ctx context.Context, request llm.Request) (string, error) {
+	agent := New(modelFunc(func(ctx context.Context, request llm.Request) (llm.Response, error) {
 		gotRequest = request
-		return "好的", nil
+		return llm.Response{Blocks: []llm.Block{{Type: llm.BlockTypeText, Text: "好的"}}}, nil
 	}))
 
 	_, err := agent.Reply(context.Background(), Request{
@@ -179,5 +207,251 @@ func TestAgentBuildsEmptyHistoryAsArray(t *testing.T) {
 	contextMessage := gotRequest.Messages[0]
 	if !strings.Contains(contextMessage.Content, `"messages":[]`) {
 		t.Fatalf("context content = %q, want messages to be an empty array", contextMessage.Content)
+	}
+}
+
+func TestAgentRunSendsThinkingAndTextAsMarkdown(t *testing.T) {
+	agent := New(modelFunc(func(ctx context.Context, request llm.Request) (llm.Response, error) {
+		return llm.Response{Blocks: []llm.Block{
+			{Type: llm.BlockTypeThinking, Thinking: "我需要先判断用户意图"},
+			{Type: llm.BlockTypeText, Text: "可以，我来处理。"},
+		}}, nil
+	}))
+
+	var outputs []string
+	err := agent.Run(context.Background(), Request{Content: "你好"}, sinkFunc(func(ctx context.Context, content string) error {
+		outputs = append(outputs, content)
+		return nil
+	}))
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(outputs) != 2 {
+		t.Fatalf("output count = %d, want 2", len(outputs))
+	}
+	if outputs[0] != "**思考过程**\n\n我需要先判断用户意图" {
+		t.Fatalf("thinking output = %q, want markdown thinking block", outputs[0])
+	}
+	if outputs[1] != "可以，我来处理。" {
+		t.Fatalf("text output = %q, want text markdown", outputs[1])
+	}
+}
+
+func TestAgentRunAsksAgainWhenModelReturnsNoConclusion(t *testing.T) {
+	var requests []llm.Request
+	agent := New(modelFunc(func(ctx context.Context, request llm.Request) (llm.Response, error) {
+		requests = append(requests, request)
+		if len(requests) == 1 {
+			return llm.Response{Blocks: []llm.Block{
+				{Type: llm.BlockTypeThinking, Thinking: "我还在分析"},
+			}}, nil
+		}
+		return llm.Response{Blocks: []llm.Block{
+			{Type: llm.BlockTypeText, Text: "这是最终回答。"},
+		}}, nil
+	}))
+
+	var outputs []string
+	err := agent.Run(context.Background(), Request{Content: "给个结论"}, sinkFunc(func(ctx context.Context, content string) error {
+		outputs = append(outputs, content)
+		return nil
+	}))
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if strings.Join(outputs, "\n") != "**思考过程**\n\n我还在分析\n这是最终回答。" {
+		t.Fatalf("outputs = %v, want thinking then final answer", outputs)
+	}
+	if len(requests) != 2 {
+		t.Fatalf("model request count = %d, want 2", len(requests))
+	}
+	secondMessages := requests[1].Messages
+	if len(secondMessages) != 3 {
+		t.Fatalf("second request message count = %d, want original, assistant thinking, and follow-up", len(secondMessages))
+	}
+	followup := secondMessages[2]
+	if followup.Role != llm.RoleUser {
+		t.Fatalf("follow-up role = %q, want user", followup.Role)
+	}
+	if !strings.Contains(followup.Content, "直接给出最终回答") {
+		t.Fatalf("follow-up content = %q, want direct final-answer instruction", followup.Content)
+	}
+}
+
+func TestAgentRunReportsLLMErrorToUser(t *testing.T) {
+	agent := New(modelFunc(func(ctx context.Context, request llm.Request) (llm.Response, error) {
+		return llm.Response{}, errors.New("model failed")
+	}))
+
+	var outputs []string
+	err := agent.Run(context.Background(), Request{Content: "你好"}, sinkFunc(func(ctx context.Context, content string) error {
+		outputs = append(outputs, content)
+		return nil
+	}))
+	if err == nil {
+		t.Fatal("Run() error = nil, want model error")
+	}
+	if len(outputs) != 1 {
+		t.Fatalf("output count = %d, want one error message", len(outputs))
+	}
+	if outputs[0] != "调用大模型出现异常，无法生成回复" {
+		t.Fatalf("error output = %q, want fixed model error message", outputs[0])
+	}
+}
+
+func TestAgentRunDoesNotReportCancellationToUser(t *testing.T) {
+	agent := New(modelFunc(func(ctx context.Context, request llm.Request) (llm.Response, error) {
+		return llm.Response{}, context.Canceled
+	}))
+
+	var outputs []string
+	err := agent.Run(context.Background(), Request{Content: "你好"}, sinkFunc(func(ctx context.Context, content string) error {
+		outputs = append(outputs, content)
+		return nil
+	}))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() error = %v, want context.Canceled", err)
+	}
+	if len(outputs) != 0 {
+		t.Fatalf("output count = %d, want no user-facing cancellation message", len(outputs))
+	}
+}
+
+func TestAgentRunCallsToolAndFeedsResultIntoNextTurn(t *testing.T) {
+	registry := &fakeToolRegistry{
+		tools: []mcpclient.Tool{
+			{
+				Description: "Search documents",
+				InputSchema: map[string]any{"type": "object"},
+				Name:        "main__search",
+			},
+		},
+		results: map[string]mcpclient.ToolResult{
+			"main__search": {Content: "搜索结果"},
+		},
+	}
+	var requests []llm.Request
+	agent := New(modelFunc(func(ctx context.Context, request llm.Request) (llm.Response, error) {
+		requests = append(requests, request)
+		if len(requests) == 1 {
+			return llm.Response{Blocks: []llm.Block{
+				{Type: llm.BlockTypeText, Text: "我先查一下。"},
+				{Type: llm.BlockTypeToolUse, ToolUseID: "toolu_1", ToolName: "main__search", ToolInput: json.RawMessage(`{"q":"mygod"}`)},
+			}}, nil
+		}
+		return llm.Response{Blocks: []llm.Block{{Type: llm.BlockTypeText, Text: "查到了：搜索结果"}}}, nil
+	}), WithToolRegistry(registry))
+
+	var outputs []string
+	err := agent.Run(context.Background(), Request{
+		Conversation: Conversation{ID: "conversation-1"},
+		Content:      "查一下 MyGod",
+	}, sinkFunc(func(ctx context.Context, content string) error {
+		outputs = append(outputs, content)
+		return nil
+	}))
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if strings.Join(outputs, "\n") != "我先查一下。\n查到了：搜索结果" {
+		t.Fatalf("outputs = %v, want intermediate and final text", outputs)
+	}
+	if len(requests) != 2 {
+		t.Fatalf("model request count = %d, want 2", len(requests))
+	}
+	if len(requests[0].Tools) != 1 || requests[0].Tools[0].Name != "main__search" {
+		t.Fatalf("tools = %+v, want exposed MCP tool", requests[0].Tools)
+	}
+	if len(registry.callNames) != 1 || registry.callNames[0] != "main__search" {
+		t.Fatalf("tool calls = %v, want main__search", registry.callNames)
+	}
+	if string(registry.callInputs[0]) != `{"q":"mygod"}` {
+		t.Fatalf("tool input = %s, want original JSON", registry.callInputs[0])
+	}
+	secondMessages := requests[1].Messages
+	if len(secondMessages) != 4 {
+		t.Fatalf("second request message count = %d, want original context plus assistant and tool result", len(secondMessages))
+	}
+	assistantMessage := secondMessages[2]
+	if assistantMessage.Role != llm.RoleAssistant || len(assistantMessage.Blocks) != 2 || assistantMessage.Blocks[1].Type != llm.BlockTypeToolUse {
+		t.Fatalf("assistant message = %+v, want preserved tool_use response", assistantMessage)
+	}
+	toolResultMessage := secondMessages[3]
+	if toolResultMessage.Role != llm.RoleUser || len(toolResultMessage.Blocks) != 1 {
+		t.Fatalf("tool result message = %+v, want user tool_result", toolResultMessage)
+	}
+	toolResult := toolResultMessage.Blocks[0]
+	if toolResult.Type != llm.BlockTypeToolResult || toolResult.ToolUseID != "toolu_1" || toolResult.Text != "搜索结果" || toolResult.IsError {
+		t.Fatalf("tool result block = %+v, want successful tool_result", toolResult)
+	}
+}
+
+func TestAgentRunCallsMultipleToolsSerially(t *testing.T) {
+	registry := &fakeToolRegistry{}
+	agent := New(modelFunc(func(ctx context.Context, request llm.Request) (llm.Response, error) {
+		if len(registry.callNames) == 0 {
+			return llm.Response{Blocks: []llm.Block{
+				{Type: llm.BlockTypeToolUse, ToolUseID: "toolu_1", ToolName: "main__first", ToolInput: json.RawMessage(`{"step":1}`)},
+				{Type: llm.BlockTypeToolUse, ToolUseID: "toolu_2", ToolName: "main__second", ToolInput: json.RawMessage(`{"step":2}`)},
+			}}, nil
+		}
+		return llm.Response{Blocks: []llm.Block{{Type: llm.BlockTypeText, Text: "完成"}}}, nil
+	}), WithToolRegistry(registry))
+
+	err := agent.Run(context.Background(), Request{Content: "执行两个工具"}, sinkFunc(func(ctx context.Context, content string) error {
+		return nil
+	}))
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if strings.Join(registry.callNames, ",") != "main__first,main__second" {
+		t.Fatalf("tool call order = %v, want first then second", registry.callNames)
+	}
+}
+
+func TestAgentRunSendsFallbackAfterMaxTurns(t *testing.T) {
+	registry := &fakeToolRegistry{}
+	agent := New(modelFunc(func(ctx context.Context, request llm.Request) (llm.Response, error) {
+		return llm.Response{Blocks: []llm.Block{
+			{Type: llm.BlockTypeToolUse, ToolUseID: "toolu_1", ToolName: "main__search", ToolInput: json.RawMessage(`{}`)},
+		}}, nil
+	}), WithToolRegistry(registry), WithMaxTurns(1))
+
+	var outputs []string
+	err := agent.Run(context.Background(), Request{Content: "查一下"}, sinkFunc(func(ctx context.Context, content string) error {
+		outputs = append(outputs, content)
+		return nil
+	}))
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(outputs) != 1 {
+		t.Fatalf("output count = %d, want loop-limit fallback", len(outputs))
+	}
+	if outputs[0] != LoopLimitFallback {
+		t.Fatalf("fallback = %q, want %q", outputs[0], LoopLimitFallback)
+	}
+}
+
+func TestAgentRunSendsFallbackAfterRepeatedNoConclusion(t *testing.T) {
+	agent := New(modelFunc(func(ctx context.Context, request llm.Request) (llm.Response, error) {
+		return llm.Response{Blocks: []llm.Block{
+			{Type: llm.BlockTypeThinking, Thinking: "还没有结论"},
+		}}, nil
+	}), WithMaxTurns(2))
+
+	var outputs []string
+	err := agent.Run(context.Background(), Request{Content: "给个结论"}, sinkFunc(func(ctx context.Context, content string) error {
+		outputs = append(outputs, content)
+		return nil
+	}))
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(outputs) != 3 {
+		t.Fatalf("output count = %d, want two thinking outputs and fallback", len(outputs))
+	}
+	if outputs[2] != LoopLimitFallback {
+		t.Fatalf("fallback = %q, want %q", outputs[2], LoopLimitFallback)
 	}
 }

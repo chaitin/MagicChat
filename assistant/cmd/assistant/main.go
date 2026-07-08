@@ -17,10 +17,14 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	client := appclient.New(cfg)
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	client, err := appclient.New(ctx, cfg)
+	if err != nil {
+		log.Fatalf("init app client: %v", err)
+	}
+	defer client.Close()
 
 	log.Printf("AI assistant app client connecting to %s", cfg.WebSocketURL)
 	if err := client.Run(ctx); err != nil {

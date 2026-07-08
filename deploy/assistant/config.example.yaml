@@ -7,3 +7,9 @@ llm:
   base_url: ""
   api_key: ""
   model_name: ""
+
+agent:
+  max_turns: 20
+
+mcp:
+  servers: []

@@ -83,6 +83,8 @@ assert_contains "deploy/assistant/config.example.yaml" 'websocket_url: "ws://ser
 assert_contains "deploy/assistant/config.example.yaml" 'base_url: ""'
 assert_contains "deploy/assistant/config.example.yaml" 'api_key: ""'
 assert_contains "deploy/assistant/config.example.yaml" 'model_name: ""'
+assert_contains "deploy/assistant/config.example.yaml" "max_turns: 20"
+assert_contains "deploy/assistant/config.example.yaml" "servers: []"
 
 assert_contains "deploy/server/config.example.yaml" "postgres://app:app@postgres:5432/app?sslmode=disable"
 assert_contains "deploy/server/config.example.yaml" 'ai_assistant_secret: "change-me"'

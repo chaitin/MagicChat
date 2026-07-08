@@ -5,16 +5,17 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
 	"assistant/internal/agent"
 	"assistant/internal/config"
 	"assistant/internal/llm"
+	"assistant/internal/mcpclient"
 
 	"github.com/gorilla/websocket"
 )
@@ -45,10 +46,11 @@ type Client struct {
 	cfg            config.Config
 	dialer         *websocket.Dialer
 	assistantAgent replyAgent
+	mcpSources     []mcpclient.Source
 }
 
 type replyAgent interface {
-	Reply(ctx context.Context, request agent.Request) (string, error)
+	Run(ctx context.Context, request agent.Request, sink agent.OutputSink) error
 }
 
 type appRequester interface {
@@ -91,14 +93,14 @@ type messagePayload struct {
 	Summary string          `json:"summary"`
 }
 
-type textMessageBody struct {
+type messageBody struct {
 	Content string `json:"content"`
 	Type    string `json:"type"`
 }
 
 type sendMessageRequestPayload struct {
 	Target  sendMessageTarget `json:"target"`
-	Message textMessageBody   `json:"message"`
+	Message messageBody       `json:"message"`
 }
 
 type sendMessageTarget struct {
@@ -131,12 +133,27 @@ type historyMessagePayload struct {
 	Summary   string        `json:"summary"`
 }
 
-func New(cfg config.Config) *Client {
+func New(ctx context.Context, cfg config.Config) (*Client, error) {
+	sources, err := mcpclient.NewSDKSources(ctx, cfg.MCP.Servers)
+	if err != nil {
+		return nil, err
+	}
+	registry, err := mcpclient.NewRegistry(ctx, sources)
+	if err != nil {
+		mcpclient.CloseSources(sources)
+		return nil, err
+	}
+
 	return &Client{
 		cfg:            cfg,
 		dialer:         websocket.DefaultDialer,
-		assistantAgent: agent.New(llm.NewAnthropicClient(cfg.LLM)),
-	}
+		assistantAgent: agent.New(llm.NewAnthropicClient(cfg.LLM), agent.WithToolRegistry(registry), agent.WithMaxTurns(cfg.Agent.MaxTurns)),
+		mcpSources:     sources,
+	}, nil
+}
+
+func (c *Client) Close() {
+	mcpclient.CloseSources(c.mcpSources)
 }
 
 func (c *Client) Run(ctx context.Context) error {
@@ -188,6 +205,9 @@ func (c *Client) connectOnce(ctx context.Context) (bool, error) {
 }
 
 func serveConnection(ctx context.Context, conn *websocket.Conn, assistantAgent replyAgent) error {
+	connCtx, cancelConnection := context.WithCancel(ctx)
+	defer cancelConnection()
+
 	var writeMu sync.Mutex
 	writeJSON := func(message envelope) error {
 		writeMu.Lock()
@@ -203,6 +223,8 @@ func serveConnection(ctx context.Context, conn *websocket.Conn, assistantAgent r
 		return conn.WriteControl(messageType, data, time.Now().Add(writeWait))
 	}
 	requester := newConnectionRequester(writeJSON)
+	runner := newUserAgentRunner()
+	defer runner.CancelAll()
 
 	conn.SetReadLimit(maxMessageBytes)
 	_ = conn.SetReadDeadline(time.Now().Add(pongWait))
@@ -229,7 +251,7 @@ func serveConnection(ctx context.Context, conn *websocket.Conn, assistantAgent r
 				requester.HandleResponse(message)
 				continue
 			}
-			go handleParsedServerMessage(ctx, message, requester, assistantAgent, writeJSON)
+			go handleParsedServerMessage(connCtx, message, requester, assistantAgent, runner, writeJSON)
 		}
 	}()
 
@@ -238,10 +260,11 @@ func serveConnection(ctx context.Context, conn *websocket.Conn, assistantAgent r
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-connCtx.Done():
 			_ = writeControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "shutdown"))
 			return nil
 		case err := <-readErr:
+			cancelConnection()
 			return err
 		case <-ticker.C:
 			if err := writeControl(websocket.PingMessage, nil); err != nil {
@@ -352,10 +375,10 @@ func handleServerMessage(ctx context.Context, messageType int, data []byte, requ
 	if !ok {
 		return
 	}
-	handleParsedServerMessage(ctx, message, requester, assistantAgent, writeJSON)
+	handleParsedServerMessage(ctx, message, requester, assistantAgent, directAgentRunner{}, writeJSON)
 }
 
-func handleParsedServerMessage(ctx context.Context, message envelope, requester appRequester, assistantAgent replyAgent, writeJSON func(envelope) error) {
+func handleParsedServerMessage(ctx context.Context, message envelope, requester appRequester, assistantAgent replyAgent, runner agentRunner, writeJSON func(envelope) error) {
 	if message.Kind == kindResponse {
 		return
 	}
@@ -368,12 +391,12 @@ func handleParsedServerMessage(ctx context.Context, message envelope, requester 
 		log.Printf("ignore invalid message.created payload: %v", err)
 		return
 	}
-	var body textMessageBody
+	var body messageBody
 	if err := json.Unmarshal(payload.Message.Body, &body); err != nil {
 		log.Printf("ignore invalid message body: %v", err)
 		return
 	}
-	if body.Type != "text" {
+	if body.Type != "text" && body.Type != "markdown" {
 		return
 	}
 
@@ -382,43 +405,55 @@ func handleParsedServerMessage(ctx context.Context, message envelope, requester 
 		senderName = payload.Sender.Nickname
 	}
 	log.Printf(
-		"received text message from %s (%s) in conversation %s: %s",
+		"received %s message from %s (%s) in conversation %s: %s",
+		body.Type,
 		senderName,
 		payload.Sender.ID,
 		payload.Conversation.ID,
 		body.Content,
 	)
-	history, err := loadConversationHistory(ctx, requester, payload)
-	if err != nil {
-		log.Printf("load conversation history failed: %v", err)
-		return
-	}
-	reply, err := assistantAgent.Reply(ctx, agent.Request{
-		Conversation: agent.Conversation{
-			ID:   payload.Conversation.ID,
-			Name: payload.Conversation.Name,
-			Type: payload.Conversation.Type,
-		},
-		Sender: agent.Sender{
-			ID:   payload.Sender.ID,
-			Name: senderName,
-			Type: payload.Sender.Type,
-		},
-		MessageID: payload.Message.ID,
-		Content:   body.Content,
-		History:   history,
+
+	sink := agent.OutputSinkFunc(func(ctx context.Context, content string) error {
+		return sendMarkdownReply(writeJSON, payload.Conversation, content)
 	})
-	if err != nil {
-		log.Printf("agent reply failed: %v", err)
-		return
+	runner.Start(ctx, userAgentKey(payload.Sender), sink, func(ctx context.Context, sink agent.OutputSink) error {
+		history, err := loadConversationHistory(ctx, requester, payload)
+		if err != nil {
+			if !errors.Is(err, context.Canceled) {
+				log.Printf("load conversation history failed: %v", err)
+			}
+			return err
+		}
+		err = assistantAgent.Run(ctx, agent.Request{
+			Conversation: agent.Conversation{
+				ID:   payload.Conversation.ID,
+				Name: payload.Conversation.Name,
+				Type: payload.Conversation.Type,
+			},
+			Sender: agent.Sender{
+				ID:   payload.Sender.ID,
+				Name: senderName,
+				Type: payload.Sender.Type,
+			},
+			MessageID: payload.Message.ID,
+			Content:   body.Content,
+			History:   history,
+		}, sink)
+		if err != nil && !errors.Is(err, context.Canceled) {
+			log.Printf("agent reply failed: %v", err)
+		}
+		return err
+	})
+}
+
+func userAgentKey(sender senderPayload) string {
+	if sender.ID != "" {
+		return sender.ID
 	}
-	if strings.TrimSpace(reply) == "" {
-		log.Printf("ignore empty LLM reply for message %s", payload.Message.ID)
-		return
+	if sender.Type != "" || sender.Name != "" {
+		return sender.Type + ":" + sender.Name
 	}
-	if err := sendTextReply(writeJSON, payload.Conversation, reply); err != nil {
-		log.Printf("send LLM reply failed: %v", err)
-	}
+	return "unknown"
 }
 
 func loadConversationHistory(ctx context.Context, requester appRequester, payload messageCreatedPayload) ([]agent.HistoryMessage, error) {
@@ -456,7 +491,7 @@ func loadConversationHistory(ctx context.Context, requester appRequester, payloa
 	return history, nil
 }
 
-func sendTextReply(writeJSON func(envelope) error, conversation conversationPayload, content string) error {
+func sendMarkdownReply(writeJSON func(envelope) error, conversation conversationPayload, content string) error {
 	targetType := conversation.Type
 	switch targetType {
 	case "app", "group":
@@ -469,8 +504,8 @@ func sendTextReply(writeJSON func(envelope) error, conversation conversationPayl
 			Type:           targetType,
 			ConversationID: conversation.ID,
 		},
-		Message: textMessageBody{
-			Type:    "text",
+		Message: messageBody{
+			Type:    "markdown",
 			Content: content,
 		},
 	})
