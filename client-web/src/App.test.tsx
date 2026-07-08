@@ -2520,7 +2520,7 @@ describe("App", () => {
     expect(screen.getByPlaceholderText("输入消息")).toHaveValue("")
   }, 10_000)
 
-  it("群聊信息抽屉不展示群聊头像和群名摘要", async () => {
+  it("群聊信息抽屉不展示顶部群聊摘要", async () => {
     const user = userEvent.setup()
 
     renderApp("/chat?conversation_id=conversation-team")
@@ -2537,11 +2537,13 @@ describe("App", () => {
       name: "群聊信息",
     })
 
-    expect(within(groupInfoSheet).getByText("3 人群聊")).toBeInTheDocument()
-    expect(within(groupInfoSheet).queryByText("群名")).not.toBeInTheDocument()
     expect(
-      within(groupInfoSheet).queryByText("产品讨论组")
+      within(groupInfoSheet).queryByText("3 人群聊")
     ).not.toBeInTheDocument()
+    expect(within(groupInfoSheet).getByText("群聊名称")).toBeInTheDocument()
+    expect(
+      within(groupInfoSheet).getByDisplayValue("产品讨论组")
+    ).toBeInTheDocument()
     expect(within(groupInfoSheet).queryByText("群聊")).not.toBeInTheDocument()
   }, 10_000)
 
