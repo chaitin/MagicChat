@@ -37,28 +37,26 @@ export function SendImageMessageDialog({
 }: SendImageMessageDialogProps) {
   const previewURL = useObjectURL(image)
   const confirmButtonRef = React.useRef<HTMLButtonElement | null>(null)
-  const [zoom, setZoom] = React.useState(1)
+  const imageKey = previewURL ?? ""
+  const [zoomState, setZoomState] = React.useState({
+    imageKey: "",
+    value: 1,
+  })
   const [imageSize, setImageSize] = React.useState<{
     height: number
+    imageKey: string
     width: number
   } | null>(null)
-  const previewSize = imageSize
+  const zoom = zoomState.imageKey === imageKey ? zoomState.value : 1
+  const currentImageSize =
+    imageSize?.imageKey === imageKey ? imageSize : null
+  const previewSize = currentImageSize
     ? getContainedSize(
-        imageSize,
+        currentImageSize,
         imagePreviewBaseMaxWidth,
         imagePreviewBaseMaxHeight
       )
     : null
-
-  React.useEffect(() => {
-    if (open) {
-      setZoom(1)
-    }
-  }, [image, open])
-
-  React.useEffect(() => {
-    setImageSize(null)
-  }, [previewURL])
 
   function handlePreviewWheel(event: React.WheelEvent<HTMLDivElement>) {
     if (!image || event.deltaY === 0) {
@@ -66,12 +64,18 @@ export function SendImageMessageDialog({
     }
 
     event.preventDefault()
-    setZoom((currentZoom) =>
-      clampPreviewZoom(
-        currentZoom +
+    setZoomState((currentZoomState) => {
+      const currentZoom =
+        currentZoomState.imageKey === imageKey ? currentZoomState.value : 1
+
+      return {
+        imageKey,
+        value: clampPreviewZoom(
+          currentZoom +
           (event.deltaY < 0 ? imagePreviewZoomStep : -imagePreviewZoomStep)
-      )
-    )
+        ),
+      }
+    })
   }
 
   return (
@@ -108,6 +112,7 @@ export function SendImageMessageDialog({
                     const target = event.currentTarget
                     setImageSize({
                       height: target.naturalHeight,
+                      imageKey,
                       width: target.naturalWidth,
                     })
                   }}
