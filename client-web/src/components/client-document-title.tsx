@@ -1,26 +1,25 @@
-import { useContext, useEffect, useMemo } from "react"
+import { useContext, useEffect, useMemo, useRef } from "react"
 
 import { useAppInfo } from "@/lib/app-info-context"
 import { ClientDataContext } from "@/lib/client-data-context"
 
 type ClientDocumentTitleProps = {
-  alertEmojis?: [string, string]
-  alertTitle?: string
+  alertIconHref?: string
   disableMessageAlert?: boolean
   title: string
 }
 
-const alertEmojiBlinkIntervalMs = 500
-const defaultAlertEmojis: [string, string] = ["🔔", "💬"]
+const faviconBlinkIntervalMs = 500
+const defaultAlertIconHref = "/notification-bell.png?v=20260708-2"
 
 export function ClientDocumentTitle({
-  alertEmojis = defaultAlertEmojis,
-  alertTitle = "新消息",
+  alertIconHref = defaultAlertIconHref,
   disableMessageAlert = false,
   title,
 }: ClientDocumentTitleProps) {
   const { appName } = useAppInfo()
   const clientData = useContext(ClientDataContext)
+  const defaultFaviconHrefRef = useRef<string | null>(null)
   const conversations = clientData?.conversations
   const unreadCount = useMemo(() => {
     if (disableMessageAlert || !conversations) {
@@ -34,32 +33,53 @@ export function ClientDocumentTitle({
   }, [conversations, disableMessageAlert])
   const hasMessageAlert = unreadCount > 0
   const pageTitle = `${title} - ${appName}`
-  const firstAlertEmoji = alertEmojis[0]
-  const secondAlertEmoji = alertEmojis[1]
 
   useEffect(() => {
+    const faviconLink = getFaviconLink()
+    if (!defaultFaviconHrefRef.current) {
+      defaultFaviconHrefRef.current =
+        faviconLink.getAttribute("href") ?? "/logo.png"
+    }
+    const defaultFaviconHref = defaultFaviconHrefRef.current
+
+    document.title = pageTitle
+
     if (!hasMessageAlert) {
-      document.title = pageTitle
+      setFaviconHref(defaultFaviconHref)
       return
     }
 
-    let alertEmojiIndex = 0
-    const alertEmojiOptions = [firstAlertEmoji, secondAlertEmoji]
-    document.title = `${alertEmojiOptions[alertEmojiIndex]} 【${alertTitle}】- ${appName}`
+    let showingAlertIcon = true
+    setFaviconHref(alertIconHref)
     const intervalId = window.setInterval(() => {
-      alertEmojiIndex = alertEmojiIndex === 0 ? 1 : 0
-      document.title = `${alertEmojiOptions[alertEmojiIndex]} 【${alertTitle}】- ${appName}`
-    }, alertEmojiBlinkIntervalMs)
+      showingAlertIcon = !showingAlertIcon
+      setFaviconHref(showingAlertIcon ? alertIconHref : defaultFaviconHref)
+    }, faviconBlinkIntervalMs)
 
-    return () => window.clearInterval(intervalId)
-  }, [
-    alertTitle,
-    appName,
-    firstAlertEmoji,
-    hasMessageAlert,
-    pageTitle,
-    secondAlertEmoji,
-  ])
+    return () => {
+      window.clearInterval(intervalId)
+      setFaviconHref(defaultFaviconHref)
+    }
+  }, [alertIconHref, hasMessageAlert, pageTitle])
 
   return null
+}
+
+function getFaviconLink() {
+  let faviconLink = document.querySelector<HTMLLinkElement>('link[rel~="icon"]')
+  if (faviconLink) {
+    return faviconLink
+  }
+
+  faviconLink = document.createElement("link")
+  faviconLink.rel = "icon"
+  faviconLink.type = "image/png"
+  document.head.appendChild(faviconLink)
+
+  return faviconLink
+}
+
+function setFaviconHref(href: string) {
+  const faviconLink = getFaviconLink()
+  faviconLink.setAttribute("href", href)
 }

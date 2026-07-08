@@ -1,3 +1,4 @@
+import * as React from "react"
 import { LoaderCircle } from "lucide-react"
 
 import { formatFileSize } from "@/lib/file-format"
@@ -29,9 +30,21 @@ export function SendFileMessageDialog({
   open,
   sending,
 }: SendFileMessageDialogProps) {
+  const confirmButtonRef = React.useRef<HTMLButtonElement | null>(null)
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-5 sm:max-w-md">
+      <DialogContent
+        className="gap-5 sm:max-w-md"
+        onOpenAutoFocus={(event) => {
+          if (!file || sending) {
+            return
+          }
+
+          event.preventDefault()
+          confirmButtonRef.current?.focus()
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="text-base">发送文件</DialogTitle>
           <DialogDescription className="sr-only">
@@ -60,7 +73,12 @@ export function SendFileMessageDialog({
               取消
             </Button>
           </DialogClose>
-          <Button disabled={!file || sending} onClick={onConfirm} type="button">
+          <Button
+            ref={confirmButtonRef}
+            disabled={!file || sending}
+            onClick={onConfirm}
+            type="button"
+          >
             {sending && <LoaderCircle className="size-4 animate-spin" />}
             发送
           </Button>

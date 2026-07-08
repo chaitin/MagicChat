@@ -1321,9 +1321,20 @@ describe("App", () => {
     )
     expect(historyContent).toHaveClass("w-full")
     expect(historyContent).not.toHaveClass("max-w-4xl", "mx-auto")
-    expect(
-      within(initialHistory).getByText("好的，我看一下")
-    ).toBeInTheDocument()
+    const messageText = within(initialHistory).getByText("好的，我看一下")
+    expect(messageText).toBeInTheDocument()
+    const messageBubble = messageText.closest("[data-message-action-trigger]")
+    if (!messageBubble) {
+      throw new Error("message bubble not found")
+    }
+    expect(messageBubble).toHaveClass("max-w-full", "rounded-md", "p-3")
+    expect(messageBubble).not.toHaveClass("px-4", "py-3")
+    const messageBubbleColumn = messageBubble.parentElement
+    if (!messageBubbleColumn) {
+      throw new Error("message bubble column not found")
+    }
+    expect(messageBubbleColumn).toHaveClass("max-w-[min(70%,64rem)]")
+    expect(messageBubbleColumn).not.toHaveClass("max-w-[min(70%,42rem)]")
     expect(within(initialHistory).getByAltText("Bob Li")).toHaveAttribute(
       "src",
       "/assets/avatars/builtin/03.webp"

@@ -30,10 +30,21 @@ export function SendImageMessageDialog({
   sending,
 }: SendImageMessageDialogProps) {
   const previewURL = useObjectURL(image)
+  const confirmButtonRef = React.useRef<HTMLButtonElement | null>(null)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-5 sm:max-w-md">
+      <DialogContent
+        className="gap-5 sm:max-w-md"
+        onOpenAutoFocus={(event) => {
+          if (!image || sending) {
+            return
+          }
+
+          event.preventDefault()
+          confirmButtonRef.current?.focus()
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="text-base">发送图片</DialogTitle>
           <DialogDescription className="sr-only">
@@ -64,6 +75,7 @@ export function SendImageMessageDialog({
             </Button>
           </DialogClose>
           <Button
+            ref={confirmButtonRef}
             disabled={!image || sending}
             onClick={onConfirm}
             type="button"

@@ -798,7 +798,7 @@ function MessageBubble({
       {!fromMe && <MessageAvatar fallback={fallback} message={message} />}
       <div
         className={cn(
-          "flex max-w-[min(70%,42rem)] flex-col gap-1",
+          "flex max-w-[min(70%,64rem)] flex-col gap-1",
           fromMe ? "items-end" : "items-start"
         )}
       >
@@ -809,7 +809,7 @@ function MessageBubble({
         <MessageActionMenu>
           <div
             className={cn(
-              "max-w-full rounded-md px-4 py-3 text-sm leading-relaxed shadow-xs",
+              "max-w-full rounded-md p-3 text-sm leading-relaxed shadow-xs",
               fromMe
                 ? "bg-teal-100 text-foreground hover:bg-teal-200/70 data-[state=open]:bg-teal-200/70 dark:bg-teal-950 hover:dark:bg-teal-900/70 dark:data-[state=open]:bg-teal-900/70"
                 : "bg-neutral-200/80 text-foreground hover:bg-neutral-200 data-[state=open]:bg-neutral-200 dark:bg-neutral-800/80 hover:dark:bg-neutral-800 dark:data-[state=open]:bg-neutral-800"
