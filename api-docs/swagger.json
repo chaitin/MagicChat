@@ -3784,6 +3784,10 @@
                     "type": "string",
                     "example": "7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"
                 },
+                "last_mentioned_seq": {
+                    "type": "integer",
+                    "example": 0
+                },
                 "last_message_at": {
                     "type": "string",
                     "format": "date-time"
@@ -3862,6 +3866,10 @@
                 "role": {
                     "type": "string",
                     "example": "member"
+                },
+                "type": {
+                    "type": "string",
+                    "example": "user"
                 }
             }
         },
@@ -4031,6 +4039,10 @@
                 "id": {
                     "type": "string",
                     "example": "7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"
+                },
+                "last_mentioned_seq": {
+                    "type": "integer",
+                    "example": 0
                 },
                 "last_message_at": {
                     "type": "string",

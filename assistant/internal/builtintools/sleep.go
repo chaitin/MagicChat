@@ -47,12 +47,28 @@ type AppRequester interface {
 	Request(context.Context, string, any) (json.RawMessage, error)
 }
 
-type Scope struct {
-	ConversationID   string
-	ConversationType string
-	CurrentUserID    string
-	Requester        AppRequester
+type Authorization struct {
+	ActorUserID      string
 	TriggerMessageID string
+}
+
+type AuthorizationResolver interface {
+	ResolveAuthorization(ref string) (Authorization, bool)
+}
+
+type AuthorizationResolverFunc func(ref string) (Authorization, bool)
+
+func (f AuthorizationResolverFunc) ResolveAuthorization(ref string) (Authorization, bool) {
+	return f(ref)
+}
+
+type Scope struct {
+	AuthorizationResolver AuthorizationResolver
+	ConversationID        string
+	ConversationType      string
+	CurrentUserID         string
+	Requester             AppRequester
+	TriggerMessageID      string
 }
 
 type Source struct {
@@ -68,36 +84,41 @@ type contactsInput struct {
 }
 
 type recentConversationsInput struct {
-	Keyword string `json:"keyword"`
-	Limit   int    `json:"limit"`
+	AuthorizationRef string `json:"authorization_ref"`
+	Keyword          string `json:"keyword"`
+	Limit            int    `json:"limit"`
 }
 
 type readHistoryInput struct {
-	AppID          string `json:"app_id"`
-	BeforeSeq      int64  `json:"before_seq"`
-	ConversationID string `json:"conversation_id"`
-	Limit          int    `json:"limit"`
-	UserID         string `json:"user_id"`
+	AppID            string `json:"app_id"`
+	AuthorizationRef string `json:"authorization_ref"`
+	BeforeSeq        int64  `json:"before_seq"`
+	ConversationID   string `json:"conversation_id"`
+	Limit            int    `json:"limit"`
+	UserID           string `json:"user_id"`
 }
 
 type messageInput struct {
-	ContactID      string `json:"contact_id"`
-	Content        string `json:"content"`
-	ConversationID string `json:"conversation_id"`
-	Name           string `json:"name"`
-	TargetType     string `json:"target_type"`
-	Type           string `json:"type"`
-	URL            string `json:"url"`
+	AuthorizationRef string `json:"authorization_ref"`
+	ContactID        string `json:"contact_id"`
+	Content          string `json:"content"`
+	ConversationID   string `json:"conversation_id"`
+	Name             string `json:"name"`
+	TargetType       string `json:"target_type"`
+	Type             string `json:"type"`
+	URL              string `json:"url"`
 }
 
 type createGroupInput struct {
-	MemberIDs []string `json:"member_ids"`
-	Name      string   `json:"name"`
+	AuthorizationRef string   `json:"authorization_ref"`
+	MemberIDs        []string `json:"member_ids"`
+	Name             string   `json:"name"`
 }
 
 type addGroupMembersInput struct {
-	ConversationID string   `json:"conversation_id"`
-	MemberIDs      []string `json:"member_ids"`
+	AuthorizationRef string   `json:"authorization_ref"`
+	ConversationID   string   `json:"conversation_id"`
+	MemberIDs        []string `json:"member_ids"`
 }
 
 type readFileURLsInput struct {
@@ -105,10 +126,11 @@ type readFileURLsInput struct {
 }
 
 type scopedMessagePayload struct {
-	Content string `json:"content,omitempty"`
-	Name    string `json:"name,omitempty"`
-	Type    string `json:"type"`
-	URL     string `json:"url,omitempty"`
+	AuthorizationRef string `json:"-"`
+	Content          string `json:"content,omitempty"`
+	Name             string `json:"name,omitempty"`
+	Type             string `json:"type"`
+	URL              string `json:"url,omitempty"`
 }
 
 type sendMessageTargetPayload struct {
@@ -122,11 +144,12 @@ type sendMessagePayload struct {
 }
 
 type sendAsUserPayload struct {
-	ActorUserID      string               `json:"actor_user_id"`
-	Message          scopedMessagePayload `json:"message"`
-	Target           sendAsUserTarget     `json:"target"`
-	TargetUserID     string               `json:"target_user_id,omitempty"`
-	TriggerMessageID string               `json:"trigger_message_id"`
+	ActorUserID                 string               `json:"actor_user_id"`
+	AuthorizationConversationID string               `json:"authorization_conversation_id,omitempty"`
+	Message                     scopedMessagePayload `json:"message"`
+	Target                      sendAsUserTarget     `json:"target"`
+	TargetUserID                string               `json:"target_user_id,omitempty"`
+	TriggerMessageID            string               `json:"trigger_message_id"`
 }
 
 type sendAsUserTarget struct {
@@ -136,34 +159,38 @@ type sendAsUserTarget struct {
 }
 
 type recentConversationsPayload struct {
-	ActorUserID      string `json:"actor_user_id"`
-	Keyword          string `json:"keyword"`
-	Limit            int    `json:"limit"`
-	TriggerMessageID string `json:"trigger_message_id"`
+	ActorUserID                 string `json:"actor_user_id"`
+	AuthorizationConversationID string `json:"authorization_conversation_id,omitempty"`
+	Keyword                     string `json:"keyword"`
+	Limit                       int    `json:"limit"`
+	TriggerMessageID            string `json:"trigger_message_id"`
 }
 
 type readHistoryPayload struct {
-	AppID            string `json:"app_id,omitempty"`
-	ActorUserID      string `json:"actor_user_id"`
-	BeforeSeq        int64  `json:"before_seq,omitempty"`
-	ConversationID   string `json:"conversation_id,omitempty"`
-	Limit            int    `json:"limit,omitempty"`
-	TriggerMessageID string `json:"trigger_message_id"`
-	UserID           string `json:"user_id,omitempty"`
+	AppID                       string `json:"app_id,omitempty"`
+	ActorUserID                 string `json:"actor_user_id"`
+	AuthorizationConversationID string `json:"authorization_conversation_id,omitempty"`
+	BeforeSeq                   int64  `json:"before_seq,omitempty"`
+	ConversationID              string `json:"conversation_id,omitempty"`
+	Limit                       int    `json:"limit,omitempty"`
+	TriggerMessageID            string `json:"trigger_message_id"`
+	UserID                      string `json:"user_id,omitempty"`
 }
 
 type createGroupPayload struct {
-	ActorUserID      string   `json:"actor_user_id"`
-	MemberIDs        []string `json:"member_ids"`
-	Name             string   `json:"name"`
-	TriggerMessageID string   `json:"trigger_message_id"`
+	ActorUserID                 string   `json:"actor_user_id"`
+	AuthorizationConversationID string   `json:"authorization_conversation_id,omitempty"`
+	MemberIDs                   []string `json:"member_ids"`
+	Name                        string   `json:"name"`
+	TriggerMessageID            string   `json:"trigger_message_id"`
 }
 
 type addGroupMembersPayload struct {
-	ActorUserID      string   `json:"actor_user_id"`
-	ConversationID   string   `json:"conversation_id"`
-	MemberIDs        []string `json:"member_ids"`
-	TriggerMessageID string   `json:"trigger_message_id"`
+	ActorUserID                 string   `json:"actor_user_id"`
+	AuthorizationConversationID string   `json:"authorization_conversation_id,omitempty"`
+	ConversationID              string   `json:"conversation_id"`
+	MemberIDs                   []string `json:"member_ids"`
+	TriggerMessageID            string   `json:"trigger_message_id"`
 }
 
 type readTemporaryFileURLsPayload struct {
@@ -242,10 +269,12 @@ func (s *Source) ListTools(ctx context.Context) ([]mcpclient.Tool, error) {
 		},
 		{
 			Name:        recentConversationsToolName,
-			Description: "查询当前触发用户最近使用的会话，返回私聊、群聊、应用会话。可用于确认会话 ID、会话类型、成员数量和最近活动时间；返回字段包括 type、conversation_id、name、member_count、last_active_at。keyword 按会话名称，或私聊对象的姓名、昵称搜索，不查消息内容；limit 默认 20，最大 100。",
+			Description: "查询授权用户最近使用的会话，返回私聊、群聊、应用会话。需要 authorization_ref，且只能使用当前上下文 authorization_candidates 提供的 ref。可用于确认会话 ID、会话类型、成员数量和最近活动时间；返回字段包括 type、conversation_id、name、member_count、last_active_at。keyword 按会话名称，或私聊对象的姓名、昵称搜索，不查消息内容；limit 默认 20，最大 100。",
 			InputSchema: map[string]any{
-				"type": "object",
+				"type":     "object",
+				"required": []string{"authorization_ref"},
 				"properties": map[string]any{
+					"authorization_ref": authorizationRefSchema(),
 					"keyword": map[string]any{
 						"type":        "string",
 						"description": "可选搜索词，按会话名称，或私聊对象的姓名、昵称搜索；不传或为空返回所有最近会话。",
@@ -261,7 +290,7 @@ func (s *Source) ListTools(ctx context.Context) ([]mcpclient.Tool, error) {
 		},
 		{
 			Name:        readHistoryToolName,
-			Description: "读取当前触发用户有权限访问的聊天记录。conversation_id、user_id、app_id 三选一：conversation_id 读取指定会话，user_id 读取和该用户的私聊，app_id 读取和该应用的会话。before_seq 不传表示读取最新消息，传入时读取 seq 小于 before_seq 的更早消息；limit 默认 20，最大 100。图片和附件只返回 file_id，需要真实 URL 时再调用 read_file_urls。",
+			Description: "读取授权用户有权限访问的聊天记录。需要 authorization_ref，且只能使用当前上下文 authorization_candidates 提供的 ref。conversation_id、user_id、app_id 三选一：conversation_id 读取指定会话，user_id 读取和该用户的私聊，app_id 读取和该应用的会话。before_seq 不传表示读取最新消息，传入时读取 seq 小于 before_seq 的更早消息；limit 默认 20，最大 100。图片和附件只返回 file_id，需要真实 URL 时再调用 read_file_urls。",
 			InputSchema: readHistoryInputSchema(),
 		},
 		{
@@ -271,17 +300,17 @@ func (s *Source) ListTools(ctx context.Context) ([]mcpclient.Tool, error) {
 		},
 		{
 			Name:        sendAsUserToolName,
-			Description: "以当前触发用户的身份发送到私聊或已有群聊。只有用户明确要求“替我发给某人/以我的身份发给某人”或“替我发到某个已有群聊”时才能使用；target_type=user 时 contact_id 必须来自 contacts，target_type=group 时 conversation_id 必须来自 recent_conversations。目标群聊不明确、查到多个相似群或没有查到时先追问，不要猜 conversation_id。不要用它回复当前会话；回复当前会话必须用 reply。不要用它创建群聊或拉人进群。发送 file 时必须提供 name，不要猜文件名；已有可下载文件用 url，assistant 生成的小文件用 content；没有明确文件名时先追问。",
+			Description: "以授权用户的身份发送到私聊或已有群聊。需要 authorization_ref，且只能使用当前上下文 authorization_candidates 提供的 ref；只有对应授权消息明确要求“替我发给某人/以我的身份发给某人”或“替我发到某个已有群聊”时才能使用。target_type=user 时 contact_id 必须来自 contacts，target_type=group 时 conversation_id 必须来自 recent_conversations。目标群聊不明确、查到多个相似群或没有查到时先追问，不要猜 conversation_id。不要用它回复当前会话；回复当前会话必须用 reply。不要用它创建群聊或拉人进群。发送 file 时必须提供 name，不要猜文件名；已有可下载文件用 url，assistant 生成的小文件用 content；没有明确文件名时先追问。",
 			InputSchema: messageInputSchema(true),
 		},
 		{
 			Name:        createGroupToolName,
-			Description: "以当前触发用户的身份创建新群聊。只在用户明确要求创建新群聊、建群、拉一个新群时使用。不要用它发送消息、不要用它回复当前会话、不要用它总结或查询已有群聊、不要用它给已有群聊加人；已有群聊加人应使用 add_group_members。成员 ID 必须来自 contacts 工具返回的用户联系人；联系人身份不明确、群名不明确、成员列表不明确时先追问。当前触发用户会自动成为群主，不要把当前用户放进 member_ids。",
+			Description: "以授权用户的身份创建新群聊。需要 authorization_ref，且只能使用当前上下文 authorization_candidates 提供的 ref；只在对应授权消息明确要求创建新群聊、建群、拉一个新群时使用。不要用它发送消息、不要用它回复当前会话、不要用它总结或查询已有群聊、不要用它给已有群聊加人；已有群聊加人应使用 add_group_members。成员 ID 必须来自 contacts 工具返回的用户联系人；联系人身份不明确、群名不明确、成员列表不明确时先追问。授权用户会自动成为群主，不要把授权用户放进 member_ids。",
 			InputSchema: createGroupInputSchema(),
 		},
 		{
 			Name:        addGroupMembersToolName,
-			Description: "以当前触发用户的身份把成员加入已有群聊。只在用户明确要求把人加入已有群聊、拉人进群、邀请成员进群时使用。不要用它创建群聊、不要用它发送消息、不要用它回复当前会话；创建新群聊应使用 create_group。成员 ID 必须来自 contacts 工具返回的用户联系人。当前会话是目标群聊时可以省略 conversation_id；如果当前会话不是目标群聊，或目标群聊不明确、成员身份不明确时先追问。",
+			Description: "以授权用户的身份把成员加入已有群聊。需要 authorization_ref，且只能使用当前上下文 authorization_candidates 提供的 ref；只在对应授权消息明确要求把人加入已有群聊、拉人进群、邀请成员进群时使用。不要用它创建群聊、不要用它发送消息、不要用它回复当前会话；创建新群聊应使用 create_group。成员 ID 必须来自 contacts 工具返回的用户联系人。当前会话是目标群聊时可以省略 conversation_id；如果当前会话不是目标群聊，或目标群聊不明确、成员身份不明确时先追问。",
 			InputSchema: addGroupMembersInputSchema(),
 		},
 		{
@@ -355,10 +384,6 @@ func callRecentConversations(ctx context.Context, input json.RawMessage) (mcpcli
 	if err != nil {
 		return mcpclient.ToolResult{}, err
 	}
-	actorUserID, triggerMessageID, err := requireActorTriggerScope(scope)
-	if err != nil {
-		return mcpclient.ToolResult{}, err
-	}
 
 	var parsed recentConversationsInput
 	if len(input) > 0 {
@@ -366,21 +391,22 @@ func callRecentConversations(ctx context.Context, input json.RawMessage) (mcpcli
 			return mcpclient.ToolResult{}, fmt.Errorf("parse recent_conversations input: %w", err)
 		}
 	}
+	auth, err := requireAuthorization(scope, parsed.AuthorizationRef)
+	if err != nil {
+		return mcpclient.ToolResult{}, err
+	}
 
 	return requestTool(ctx, scope.Requester, methodConversationsList, recentConversationsPayload{
-		ActorUserID:      actorUserID,
-		Keyword:          strings.TrimSpace(parsed.Keyword),
-		Limit:            parsed.Limit,
-		TriggerMessageID: triggerMessageID,
+		ActorUserID:                 auth.ActorUserID,
+		AuthorizationConversationID: strings.TrimSpace(scope.ConversationID),
+		Keyword:                     strings.TrimSpace(parsed.Keyword),
+		Limit:                       parsed.Limit,
+		TriggerMessageID:            auth.TriggerMessageID,
 	})
 }
 
 func callReadHistory(ctx context.Context, input json.RawMessage) (mcpclient.ToolResult, error) {
 	scope, err := requireScope(ctx)
-	if err != nil {
-		return mcpclient.ToolResult{}, err
-	}
-	actorUserID, triggerMessageID, err := requireActorTriggerScope(scope)
 	if err != nil {
 		return mcpclient.ToolResult{}, err
 	}
@@ -391,14 +417,19 @@ func callReadHistory(ctx context.Context, input json.RawMessage) (mcpclient.Tool
 			return mcpclient.ToolResult{}, fmt.Errorf("parse read_history input: %w", err)
 		}
 	}
+	auth, err := requireAuthorization(scope, parsed.AuthorizationRef)
+	if err != nil {
+		return mcpclient.ToolResult{}, err
+	}
 	payload := readHistoryPayload{
-		ActorUserID:      actorUserID,
-		AppID:            strings.TrimSpace(parsed.AppID),
-		BeforeSeq:        parsed.BeforeSeq,
-		ConversationID:   strings.TrimSpace(parsed.ConversationID),
-		Limit:            parsed.Limit,
-		TriggerMessageID: triggerMessageID,
-		UserID:           strings.TrimSpace(parsed.UserID),
+		ActorUserID:                 auth.ActorUserID,
+		AppID:                       strings.TrimSpace(parsed.AppID),
+		AuthorizationConversationID: strings.TrimSpace(scope.ConversationID),
+		BeforeSeq:                   parsed.BeforeSeq,
+		ConversationID:              strings.TrimSpace(parsed.ConversationID),
+		Limit:                       parsed.Limit,
+		TriggerMessageID:            auth.TriggerMessageID,
+		UserID:                      strings.TrimSpace(parsed.UserID),
 	}
 	if countReadHistorySelectors(payload) != 1 {
 		return mcpclient.ToolResult{}, fmt.Errorf("exactly one of conversation_id, user_id, app_id is required")
@@ -454,20 +485,22 @@ func callSendAsUser(ctx context.Context, input json.RawMessage) (mcpclient.ToolR
 	if err != nil {
 		return mcpclient.ToolResult{}, err
 	}
-	if strings.TrimSpace(scope.CurrentUserID) == "" || strings.TrimSpace(scope.TriggerMessageID) == "" {
-		return mcpclient.ToolResult{}, fmt.Errorf("current user trigger scope is missing")
-	}
 	parsed, target, targetUserID, err := parseSendAsUserInput(input)
+	if err != nil {
+		return mcpclient.ToolResult{}, err
+	}
+	auth, err := requireAuthorization(scope, parsed.AuthorizationRef)
 	if err != nil {
 		return mcpclient.ToolResult{}, err
 	}
 
 	return requestTool(ctx, scope.Requester, methodMessageSendAsUser, sendAsUserPayload{
-		ActorUserID:      strings.TrimSpace(scope.CurrentUserID),
-		Target:           target,
-		TargetUserID:     targetUserID,
-		TriggerMessageID: strings.TrimSpace(scope.TriggerMessageID),
-		Message:          parsed,
+		ActorUserID:                 auth.ActorUserID,
+		AuthorizationConversationID: strings.TrimSpace(scope.ConversationID),
+		Target:                      target,
+		TargetUserID:                targetUserID,
+		TriggerMessageID:            auth.TriggerMessageID,
+		Message:                     parsed,
 	})
 }
 
@@ -476,14 +509,14 @@ func callCreateGroup(ctx context.Context, input json.RawMessage) (mcpclient.Tool
 	if err != nil {
 		return mcpclient.ToolResult{}, err
 	}
-	actorUserID, triggerMessageID, err := requireActorTriggerScope(scope)
-	if err != nil {
-		return mcpclient.ToolResult{}, err
-	}
 
 	var parsed createGroupInput
 	if err := json.Unmarshal(input, &parsed); err != nil {
 		return mcpclient.ToolResult{}, fmt.Errorf("parse create_group input: %w", err)
+	}
+	auth, err := requireAuthorization(scope, parsed.AuthorizationRef)
+	if err != nil {
+		return mcpclient.ToolResult{}, err
 	}
 	name := strings.TrimSpace(parsed.Name)
 	if name == "" {
@@ -495,10 +528,11 @@ func callCreateGroup(ctx context.Context, input json.RawMessage) (mcpclient.Tool
 	}
 
 	return requestTool(ctx, scope.Requester, methodCreateGroup, createGroupPayload{
-		ActorUserID:      actorUserID,
-		TriggerMessageID: triggerMessageID,
-		Name:             name,
-		MemberIDs:        memberIDs,
+		ActorUserID:                 auth.ActorUserID,
+		AuthorizationConversationID: strings.TrimSpace(scope.ConversationID),
+		TriggerMessageID:            auth.TriggerMessageID,
+		Name:                        name,
+		MemberIDs:                   memberIDs,
 	})
 }
 
@@ -507,14 +541,14 @@ func callAddGroupMembers(ctx context.Context, input json.RawMessage) (mcpclient.
 	if err != nil {
 		return mcpclient.ToolResult{}, err
 	}
-	actorUserID, triggerMessageID, err := requireActorTriggerScope(scope)
-	if err != nil {
-		return mcpclient.ToolResult{}, err
-	}
 
 	var parsed addGroupMembersInput
 	if err := json.Unmarshal(input, &parsed); err != nil {
 		return mcpclient.ToolResult{}, fmt.Errorf("parse add_group_members input: %w", err)
+	}
+	auth, err := requireAuthorization(scope, parsed.AuthorizationRef)
+	if err != nil {
+		return mcpclient.ToolResult{}, err
 	}
 	conversationID := strings.TrimSpace(parsed.ConversationID)
 	if conversationID == "" {
@@ -529,10 +563,11 @@ func callAddGroupMembers(ctx context.Context, input json.RawMessage) (mcpclient.
 	}
 
 	return requestTool(ctx, scope.Requester, methodAddGroupMembers, addGroupMembersPayload{
-		ActorUserID:      actorUserID,
-		ConversationID:   conversationID,
-		TriggerMessageID: triggerMessageID,
-		MemberIDs:        memberIDs,
+		ActorUserID:                 auth.ActorUserID,
+		AuthorizationConversationID: strings.TrimSpace(scope.ConversationID),
+		ConversationID:              conversationID,
+		TriggerMessageID:            auth.TriggerMessageID,
+		MemberIDs:                   memberIDs,
 	})
 }
 
@@ -632,6 +667,35 @@ func requestTemporaryFileURLs(ctx context.Context, requester AppRequester, fileI
 	return response.URLs, nil
 }
 
+func requireAuthorization(scope Scope, authorizationRef string) (Authorization, error) {
+	if scope.AuthorizationResolver == nil {
+		actorUserID, triggerMessageID, err := requireActorTriggerScope(scope)
+		if err != nil {
+			return Authorization{}, err
+		}
+		return Authorization{
+			ActorUserID:      actorUserID,
+			TriggerMessageID: triggerMessageID,
+		}, nil
+	}
+
+	authorizationRef = strings.TrimSpace(authorizationRef)
+	if authorizationRef == "" {
+		return Authorization{}, fmt.Errorf("authorization_ref is required")
+	}
+	authorization, ok := scope.AuthorizationResolver.ResolveAuthorization(authorizationRef)
+	if !ok {
+		return Authorization{}, fmt.Errorf("authorization_ref is invalid")
+	}
+	authorization.ActorUserID = strings.TrimSpace(authorization.ActorUserID)
+	authorization.TriggerMessageID = strings.TrimSpace(authorization.TriggerMessageID)
+	if authorization.ActorUserID == "" || authorization.TriggerMessageID == "" {
+		return Authorization{}, fmt.Errorf("authorization_ref is invalid")
+	}
+
+	return authorization, nil
+}
+
 func requireActorTriggerScope(scope Scope) (string, string, error) {
 	actorUserID := strings.TrimSpace(scope.CurrentUserID)
 	triggerMessageID := strings.TrimSpace(scope.TriggerMessageID)
@@ -698,8 +762,9 @@ func parseMessageInput(input json.RawMessage, requireContact bool) (scopedMessag
 	}
 
 	return scopedMessagePayload{
-		Type:    messageType,
-		Content: content,
+		AuthorizationRef: strings.TrimSpace(parsed.AuthorizationRef),
+		Type:             messageType,
+		Content:          content,
 	}, nil
 }
 
@@ -716,15 +781,17 @@ func parseFileMessageInput(parsed messageInput) (scopedMessagePayload, error) {
 		return scopedMessagePayload{}, fmt.Errorf("file url and content are mutually exclusive")
 	case hasURL:
 		return scopedMessagePayload{
-			Type: messageTypeFile,
-			Name: name,
-			URL:  url,
+			AuthorizationRef: strings.TrimSpace(parsed.AuthorizationRef),
+			Type:             messageTypeFile,
+			Name:             name,
+			URL:              url,
 		}, nil
 	case hasContent:
 		return scopedMessagePayload{
-			Type:    messageTypeFile,
-			Name:    name,
-			Content: parsed.Content,
+			AuthorizationRef: strings.TrimSpace(parsed.AuthorizationRef),
+			Type:             messageTypeFile,
+			Name:             name,
+			Content:          parsed.Content,
 		}, nil
 	default:
 		return scopedMessagePayload{}, fmt.Errorf("file url or content is required")
@@ -807,7 +874,8 @@ func messageInputSchema(requireContact bool) map[string]any {
 		},
 	}
 	if requireContact {
-		required = append([]string{"target_type"}, required...)
+		required = append([]string{"authorization_ref", "target_type"}, required...)
+		properties["authorization_ref"] = authorizationRefSchema()
 		properties["target_type"] = map[string]any{
 			"type":        "string",
 			"enum":        []string{"user", "group"},
@@ -832,8 +900,10 @@ func messageInputSchema(requireContact bool) map[string]any {
 
 func readHistoryInputSchema() map[string]any {
 	return map[string]any{
-		"type": "object",
+		"type":     "object",
+		"required": []string{"authorization_ref"},
 		"properties": map[string]any{
+			"authorization_ref": authorizationRefSchema(),
 			"conversation_id": map[string]any{
 				"type":        "string",
 				"description": "可选，会话 ID。与 user_id、app_id 三选一；用于读取指定会话的历史。",
@@ -864,8 +934,9 @@ func readHistoryInputSchema() map[string]any {
 func createGroupInputSchema() map[string]any {
 	return map[string]any{
 		"type":     "object",
-		"required": []string{"name", "member_ids"},
+		"required": []string{"authorization_ref", "name", "member_ids"},
 		"properties": map[string]any{
+			"authorization_ref": authorizationRefSchema(),
 			"name": map[string]any{
 				"type":        "string",
 				"description": "新群聊名称。只有用户明确给出或能从请求中明确推断群名时填写；不明确时先追问。",
@@ -884,8 +955,9 @@ func createGroupInputSchema() map[string]any {
 func addGroupMembersInputSchema() map[string]any {
 	return map[string]any{
 		"type":     "object",
-		"required": []string{"member_ids"},
+		"required": []string{"authorization_ref", "member_ids"},
 		"properties": map[string]any{
+			"authorization_ref": authorizationRefSchema(),
 			"conversation_id": map[string]any{
 				"type":        "string",
 				"description": "目标已有群聊 ID。当前会话是目标群聊时可省略；当前会话不是目标群聊或目标群聊不明确时先追问，不要猜测。",
@@ -898,6 +970,13 @@ func addGroupMembersInputSchema() map[string]any {
 				},
 			},
 		},
+	}
+}
+
+func authorizationRefSchema() map[string]any {
+	return map[string]any{
+		"type":        "string",
+		"description": "必填，授权来源，只能填写当前上下文 authorization_candidates 中提供的 authorization_ref，不能编造或填写真实消息 ID。",
 	}
 }
 

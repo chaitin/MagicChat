@@ -753,6 +753,59 @@ func TestSendAsUserToolCallsMessageSendAsUserWithTriggerContext(t *testing.T) {
 	}
 }
 
+func TestSendAsUserToolResolvesAuthorizationRef(t *testing.T) {
+	requester := &fakeRequester{}
+	ctx := WithScope(context.Background(), Scope{
+		AuthorizationResolver: AuthorizationResolverFunc(func(ref string) (Authorization, bool) {
+			if ref != "auth_2" {
+				return Authorization{}, false
+			}
+			return Authorization{
+				ActorUserID:      "user-2",
+				TriggerMessageID: "message-2",
+			}, true
+		}),
+		Requester: requester,
+	})
+	source := NewSource()
+
+	_, err := source.CallTool(ctx, "send_as_user", json.RawMessage(`{"authorization_ref":"auth_2","contact_id":"user-3","type":"markdown","content":"**收到**"}`))
+	if err != nil {
+		t.Fatalf("CallTool() error = %v", err)
+	}
+	if len(requester.calls) != 1 {
+		t.Fatalf("request call count = %d, want 1", len(requester.calls))
+	}
+	var payload struct {
+		ActorUserID      string `json:"actor_user_id"`
+		TargetUserID     string `json:"target_user_id"`
+		TriggerMessageID string `json:"trigger_message_id"`
+	}
+	if err := json.Unmarshal(requester.calls[0].payload, &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if payload.ActorUserID != "user-2" || payload.TriggerMessageID != "message-2" || payload.TargetUserID != "user-3" {
+		t.Fatalf("payload = %#v, want authorization ref actor/trigger and target", payload)
+	}
+}
+
+func TestAuthorizationRefRequiredWhenResolverConfigured(t *testing.T) {
+	ctx := WithScope(context.Background(), Scope{
+		AuthorizationResolver: AuthorizationResolverFunc(func(ref string) (Authorization, bool) {
+			return Authorization{}, false
+		}),
+		Requester: &fakeRequester{},
+	})
+	source := NewSource()
+
+	if _, err := source.CallTool(ctx, "send_as_user", json.RawMessage(`{"contact_id":"user-2","type":"text","content":"hello"}`)); err == nil {
+		t.Fatal("CallTool() error = nil, want missing authorization_ref error")
+	}
+	if _, err := source.CallTool(ctx, "send_as_user", json.RawMessage(`{"authorization_ref":"auth-missing","contact_id":"user-2","type":"text","content":"hello"}`)); err == nil {
+		t.Fatal("CallTool() error = nil, want invalid authorization_ref error")
+	}
+}
+
 func TestSendAsUserToolCallsMessageSendAsUserForGroupConversation(t *testing.T) {
 	requester := &fakeRequester{}
 	ctx := WithScope(context.Background(), Scope{

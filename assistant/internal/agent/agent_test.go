@@ -480,6 +480,108 @@ func TestAgentRunCallsToolAndFeedsResultIntoNextTurn(t *testing.T) {
 	}
 }
 
+func TestAgentSessionAppendsNewInstructionBeforeNextTurn(t *testing.T) {
+	registry := &fakeToolRegistry{
+		tools:   []mcpclient.Tool{{Name: "main__wait"}},
+		results: map[string]mcpclient.ToolResult{"main__wait": {Content: "waited"}},
+	}
+	var requests []llm.Request
+	var session *Session
+	agent := New(modelFunc(func(ctx context.Context, request llm.Request) (llm.Response, error) {
+		requests = append(requests, request)
+		switch len(requests) {
+		case 1:
+			if err := session.Append(Request{
+				MessageID: "message-2",
+				Sender:    Sender{ID: "user-1", Name: "Alice", Type: "user"},
+				Content:   "第二条补充",
+			}); err != nil {
+				t.Fatalf("Append() error = %v", err)
+			}
+			return llm.Response{Blocks: []llm.Block{
+				{Type: llm.BlockTypeToolUse, ToolUseID: "toolu_1", ToolName: "main__wait", ToolInput: json.RawMessage(`{}`)},
+			}}, nil
+		default:
+			return llm.Response{Blocks: []llm.Block{{Type: llm.BlockTypeText, Text: "处理了补充"}}}, nil
+		}
+	}), WithToolRegistry(registry))
+
+	var err error
+	session, err = agent.NewSession(Request{
+		MessageID: "message-1",
+		Sender:    Sender{ID: "user-1", Name: "Alice", Type: "user"},
+		Content:   "第一条",
+	})
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	if err := session.RunCycle(context.Background(), sinkFunc(func(ctx context.Context, content string) error {
+		return nil
+	})); err != nil {
+		t.Fatalf("RunCycle() error = %v", err)
+	}
+	if len(requests) != 2 {
+		t.Fatalf("model request count = %d, want 2", len(requests))
+	}
+	secondRequestJSON, err := json.Marshal(requests[1].Messages)
+	if err != nil {
+		t.Fatalf("marshal second request messages: %v", err)
+	}
+	if !strings.Contains(string(secondRequestJSON), "第二条补充") {
+		t.Fatalf("second request messages = %s, want appended instruction", secondRequestJSON)
+	}
+	if strings.Index(string(secondRequestJSON), "toolu_1") > strings.Index(string(secondRequestJSON), "第二条补充") {
+		t.Fatalf("second request messages = %s, want appended instruction after tool result", secondRequestJSON)
+	}
+}
+
+func TestAgentSessionCompactsConsumedToolResults(t *testing.T) {
+	const largeToolResult = "搜索结果：" + "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"
+	registry := &fakeToolRegistry{
+		tools:   []mcpclient.Tool{{Name: "main__search"}},
+		results: map[string]mcpclient.ToolResult{"main__search": {Content: largeToolResult}},
+	}
+	var requests []llm.Request
+	agent := New(modelFunc(func(ctx context.Context, request llm.Request) (llm.Response, error) {
+		requests = append(requests, request)
+		switch len(requests) {
+		case 1:
+			return llm.Response{Blocks: []llm.Block{
+				{Type: llm.BlockTypeToolUse, ToolUseID: "toolu_1", ToolName: "main__search", ToolInput: json.RawMessage(`{"q":"mygod"}`)},
+			}}, nil
+		case 2:
+			return llm.Response{Blocks: []llm.Block{
+				{Type: llm.BlockTypeThinking, Thinking: "继续分析工具结果"},
+			}}, nil
+		default:
+			return llm.Response{Blocks: []llm.Block{{Type: llm.BlockTypeText, Text: "完成"}}}, nil
+		}
+	}), WithToolRegistry(registry), WithMaxTurns(3))
+
+	session, err := agent.NewSession(Request{Content: "查一下 MyGod"})
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	if err := session.RunCycle(context.Background(), sinkFunc(func(ctx context.Context, content string) error {
+		return nil
+	})); err != nil {
+		t.Fatalf("RunCycle() error = %v", err)
+	}
+	if len(requests) != 3 {
+		t.Fatalf("model request count = %d, want 3", len(requests))
+	}
+	thirdRequestJSON, err := json.Marshal(requests[2].Messages)
+	if err != nil {
+		t.Fatalf("marshal third request messages: %v", err)
+	}
+	if strings.Contains(string(thirdRequestJSON), largeToolResult) {
+		t.Fatalf("third request messages = %s, want consumed full tool result compacted", thirdRequestJSON)
+	}
+	if !strings.Contains(string(thirdRequestJSON), "tool_memory") || !strings.Contains(string(thirdRequestJSON), "main__search") {
+		t.Fatalf("third request messages = %s, want compacted tool memory", thirdRequestJSON)
+	}
+}
+
 func TestAgentRunCallsMultipleToolsSerially(t *testing.T) {
 	registry := &fakeToolRegistry{}
 	agent := New(modelFunc(func(ctx context.Context, request llm.Request) (llm.Response, error) {

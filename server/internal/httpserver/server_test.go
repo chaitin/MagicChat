@@ -1608,6 +1608,78 @@ func TestAppWebSocketMessageSendAsUserRejectsSpoofedActor(t *testing.T) {
 	}
 }
 
+func TestAppWebSocketMessageSendAsUserRejectsAuthorizationConversationMismatch(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+
+	now := time.Date(2026, 7, 8, 10, 0, 0, 0, time.UTC)
+	alice := insertTestUser(t, db, "alice@example.com", "Alice", store.UserStatusActive, now)
+	bob := insertTestUser(t, db, "bob@example.com", "Bob", store.UserStatusActive, now)
+	app := insertTestApp(t, db, store.App{
+		Name:             "女菩萨",
+		Enabled:          true,
+		Visibility:       store.AppVisibilityPublic,
+		ConnectionSecret: "assistant-secret",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	})
+	aliceCookie := loginAsUser(t, server, alice.Email)
+	appConn := dialAppWebSocket(t, server, app.ID, app.ConnectionSecret)
+
+	createConversationResp, createConversationBody := postJSON(t, server, "/api/client/conversations/apps", map[string]any{
+		"app_id": app.ID,
+	}, aliceCookie)
+	if createConversationResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create app conversation status = %d, want 201, body = %#v", createConversationResp.StatusCode, createConversationBody)
+	}
+	appConversation := requireSuccess(t, createConversationBody)["conversation"].(map[string]any)
+	triggerResp, triggerBody := postJSON(t, server, "/api/client/conversations/"+appConversation["id"].(string)+"/messages", map[string]any{
+		"client_message_id": "trigger-mismatch-1",
+		"body": map[string]any{
+			"type":    "text",
+			"content": "帮我发给 Bob",
+		},
+	}, aliceCookie)
+	if triggerResp.StatusCode != http.StatusCreated {
+		t.Fatalf("trigger message status = %d, want 201, body = %#v", triggerResp.StatusCode, triggerBody)
+	}
+	triggerMessage := requireSuccess(t, triggerBody)["message"].(map[string]any)
+	triggerEvent := readRealtimeEvent(t, appConn)
+	if triggerEvent.Kind != realtime.KindEvent || triggerEvent.Event != realtime.EventMessageCreated {
+		t.Fatalf("trigger app event = %#v, want message.created", triggerEvent)
+	}
+
+	request := realtime.Envelope{
+		V:      realtime.ProtocolVersion,
+		Kind:   realtime.KindRequest,
+		ID:     "app-send-as-user-auth-conversation-mismatch",
+		Method: appMethodMessageSendAsUser,
+		Payload: mustMarshalPayloadForTest(t, map[string]any{
+			"actor_user_id":                 alice.ID,
+			"authorization_conversation_id": uuid.NewString(),
+			"target_user_id":                bob.ID,
+			"trigger_message_id":            triggerMessage["id"],
+			"message": map[string]any{
+				"type":    "text",
+				"content": "不应该发送",
+			},
+		}),
+	}
+	if err := appConn.WriteJSON(request); err != nil {
+		t.Fatalf("WriteJSON() error = %v", err)
+	}
+	response := readRealtimeEvent(t, appConn)
+	if response.Kind != realtime.KindResponse || response.ReplyTo != request.ID {
+		t.Fatalf("response = %#v, want matching response", response)
+	}
+	if response.OK == nil || *response.OK {
+		t.Fatalf("response ok = %#v, want false", response.OK)
+	}
+	if response.Error == nil || response.Error.Code != "forbidden" {
+		t.Fatalf("response error = %#v, want forbidden", response.Error)
+	}
+}
+
 func TestAppWebSocketGroupConversationCreateUsesTriggeringUser(t *testing.T) {
 	server, db := newTestRouter(t)
 	defer server.Close()

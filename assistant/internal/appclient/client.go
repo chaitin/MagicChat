@@ -42,7 +42,7 @@ const (
 	methodConversationMessagesList = "conversation.messages.list"
 	methodTemporaryFilesReadURLs   = "temporary_files.read_urls"
 
-	defaultConversationContextLimit = 50
+	defaultConversationContextLimit = 30
 )
 
 type Client struct {
@@ -259,7 +259,7 @@ func serveConnection(ctx context.Context, conn *websocket.Conn, assistantAgent r
 		return conn.WriteControl(messageType, data, time.Now().Add(writeWait))
 	}
 	requester := newConnectionRequester(writeJSON)
-	runner := newUserAgentRunner()
+	runner := newConversationAgentRunner()
 	defer runner.CancelAll()
 
 	conn.SetReadLimit(maxMessageBytes)
@@ -461,39 +461,41 @@ func handleParsedServerMessage(ctx context.Context, message envelope, requester 
 	sink := agent.OutputSinkFunc(func(ctx context.Context, content string) error {
 		return sendMarkdownReply(writeJSON, payload.Conversation, content)
 	})
-	runner.Start(ctx, userAgentKey(payload.Sender), sink, func(ctx context.Context, sink agent.OutputSink) error {
-		historyMessages, err := loadConversationHistoryMessages(ctx, requester, payload)
-		if err != nil {
-			if !errors.Is(err, context.Canceled) {
-				log.Printf("load conversation history failed: %v", err)
-			}
-			return err
+	prepared, err := prepareAgentRun(ctx, requester, payload, body, senderName)
+	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			log.Printf("prepare agent run failed: %v", err)
+			sendAgentFallback(ctx, sink)
 		}
-		fileURLs, err := readTemporaryFileURLsForMessage(ctx, requester, body)
-		if err != nil {
-			if !errors.Is(err, context.Canceled) {
-				log.Printf("read temporary file URLs failed: %v", err)
-			}
-			return err
-		}
-		content, err := buildAgentMessageContent(body, fileURLs)
-		if err != nil {
-			log.Printf("prepare agent message content failed: %v", err)
-			return err
-		}
-		history, err := buildAgentHistory(payload.Message.ID, historyMessages)
-		if err != nil {
-			log.Printf("prepare conversation history failed: %v", err)
-			return err
-		}
-		agentCtx := builtintools.WithScope(ctx, builtintools.Scope{
-			ConversationID:   payload.Conversation.ID,
-			ConversationType: payload.Conversation.Type,
-			CurrentUserID:    payload.Sender.ID,
-			Requester:        requester,
-			TriggerMessageID: payload.Message.ID,
-		})
-		err = assistantAgent.Run(agentCtx, agent.Request{
+		return
+	}
+	runner.Start(ctx, payload.Conversation.ID, sink, assistantAgent, prepared)
+}
+
+func prepareAgentRun(ctx context.Context, requester appRequester, payload messageCreatedPayload, body messageBody, senderName string) (preparedAgentRun, error) {
+	historyMessages, err := loadConversationHistoryMessages(ctx, requester, payload)
+	if err != nil {
+		return preparedAgentRun{}, fmt.Errorf("load conversation history: %w", err)
+	}
+	fileURLs, err := readTemporaryFileURLsForMessage(ctx, requester, body)
+	if err != nil {
+		return preparedAgentRun{}, fmt.Errorf("read temporary file URLs: %w", err)
+	}
+	content, err := buildAgentMessageContent(body, fileURLs)
+	if err != nil {
+		return preparedAgentRun{}, fmt.Errorf("prepare agent message content: %w", err)
+	}
+	history, err := buildAgentHistory(payload.Message.ID, historyMessages)
+	if err != nil {
+		return preparedAgentRun{}, fmt.Errorf("prepare conversation history: %w", err)
+	}
+	authorization := authorizationForMessage(payload)
+
+	return preparedAgentRun{
+		Authorization: authorization,
+		MessageSeq:    payload.Message.Seq,
+		Request: agent.Request{
+			AuthorizationRef: authorization.Ref,
 			Conversation: agent.Conversation{
 				ID:   payload.Conversation.ID,
 				Name: payload.Conversation.Name,
@@ -509,12 +511,41 @@ func handleParsedServerMessage(ctx context.Context, message envelope, requester 
 			Content:     content,
 			CurrentTime: time.Now().UTC(),
 			History:     history,
-		}, sink)
-		if err != nil && !errors.Is(err, context.Canceled) {
-			log.Printf("agent reply failed: %v", err)
-		}
-		return err
-	})
+		},
+		Scope: builtintools.Scope{
+			ConversationID:   payload.Conversation.ID,
+			ConversationType: payload.Conversation.Type,
+			Requester:        requester,
+		},
+	}, nil
+}
+
+func authorizationForMessage(payload messageCreatedPayload) preparedAuthorization {
+	if payload.Sender.Type != "user" || payload.Sender.ID == "" || payload.Message.ID == "" {
+		return preparedAuthorization{}
+	}
+	ref := fmt.Sprintf("auth_%d", payload.Message.Seq)
+	if payload.Message.Seq <= 0 {
+		ref = "auth_current"
+	}
+	senderName := payload.Sender.Name
+	if payload.Sender.Nickname != "" {
+		senderName = payload.Sender.Nickname
+	}
+	return preparedAuthorization{
+		Authorization: builtintools.Authorization{
+			ActorUserID:      payload.Sender.ID,
+			TriggerMessageID: payload.Message.ID,
+		},
+		Candidate: agent.AuthorizationCandidate{
+			Ref:            ref,
+			SenderID:       payload.Sender.ID,
+			SenderName:     senderName,
+			MessageSeq:     payload.Message.Seq,
+			MessageSummary: payload.Message.Summary,
+		},
+		Ref: ref,
+	}
 }
 
 func isSupportedIncomingMessageType(messageType string) bool {
@@ -647,16 +678,6 @@ func temporaryFileURLForBody(body messageBody, fileURLs map[string]temporaryFile
 		return temporaryFileReadURLPayload{}, false
 	}
 	return readURL, true
-}
-
-func userAgentKey(sender senderPayload) string {
-	if sender.ID != "" {
-		return sender.ID
-	}
-	if sender.Type != "" || sender.Name != "" {
-		return sender.Type + ":" + sender.Name
-	}
-	return "unknown"
 }
 
 func loadConversationHistoryMessages(ctx context.Context, requester appRequester, payload messageCreatedPayload) ([]historyMessagePayload, error) {

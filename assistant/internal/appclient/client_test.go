@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -15,6 +16,7 @@ import (
 	"assistant/internal/agent"
 	"assistant/internal/builtintools"
 	"assistant/internal/config"
+	"assistant/internal/llm"
 	"assistant/internal/mcpclient"
 
 	"github.com/gorilla/websocket"
@@ -169,8 +171,8 @@ func TestHandleServerMessageSendsLLMReply(t *testing.T) {
 	if historyPayload.BeforeOrEqualSeq != 3 {
 		t.Fatalf("history before_or_equal_seq = %d, want 3", historyPayload.BeforeOrEqualSeq)
 	}
-	if historyPayload.Limit != 50 {
-		t.Fatalf("history limit = %d, want 50", historyPayload.Limit)
+	if historyPayload.Limit != 30 {
+		t.Fatalf("history limit = %d, want 30", historyPayload.Limit)
 	}
 	if len(agentRequests) != 1 {
 		t.Fatalf("agent request count = %d, want 1", len(agentRequests))
@@ -677,7 +679,11 @@ func TestHandleServerMessageProvidesBuiltinToolScope(t *testing.T) {
 		}
 	})
 	replyAgent := replyAgentFunc(func(ctx context.Context, request agent.Request, sink agent.OutputSink) error {
+		if len(request.AuthorizationCandidates) != 1 || request.AuthorizationCandidates[0].Ref != "auth_1" {
+			t.Fatalf("authorization candidates = %#v, want current trigger auth_1", request.AuthorizationCandidates)
+		}
 		_, err := builtintools.NewSource().CallTool(ctx, "send_as_user", json.RawMessage(`{
+			"authorization_ref":"auth_1",
 			"contact_id":"user-2",
 			"type":"markdown",
 			"content":"**收到**"
@@ -700,93 +706,8 @@ func TestHandleServerMessageProvidesBuiltinToolScope(t *testing.T) {
 	}
 }
 
-func TestUserAgentRunnerCancelsPreviousMessageFromSameUser(t *testing.T) {
-	runner := newUserAgentRunner()
-	requester := appRequestFunc(func(ctx context.Context, method string, payload any) (json.RawMessage, error) {
-		return json.Marshal(appListConversationMessagesResponsePayload{})
-	})
-
-	firstStarted := make(chan struct{})
-	firstCanceled := make(chan struct{})
-	secondDone := make(chan struct{})
-	replyAgent := replyAgentFunc(func(ctx context.Context, request agent.Request, sink agent.OutputSink) error {
-		switch request.MessageID {
-		case "message-1":
-			close(firstStarted)
-			<-ctx.Done()
-			close(firstCanceled)
-			_ = sink.SendMarkdown(context.Background(), "旧回复")
-			return ctx.Err()
-		case "message-2":
-			err := sink.SendMarkdown(ctx, "新回复")
-			close(secondDone)
-			return err
-		default:
-			t.Fatalf("unexpected message id %q", request.MessageID)
-			return nil
-		}
-	})
-
-	var sent sentMessages
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	handleParsedServerMessage(ctx, testMessageCreatedEnvelope(t, "user-1", "message-1", 1, "第一条"), requester, replyAgent, runner, sent.write)
-	waitForSignal(t, firstStarted, "first agent to start")
-
-	handleParsedServerMessage(ctx, testMessageCreatedEnvelope(t, "user-1", "message-2", 2, "第二条"), requester, replyAgent, runner, sent.write)
-	waitForSignal(t, firstCanceled, "first agent to be canceled")
-	waitForSignal(t, secondDone, "second agent to finish")
-
-	if got := sent.contents(t); !slices.Equal(got, []string{"新回复"}) {
-		t.Fatalf("sent messages = %v, want only latest reply", got)
-	}
-}
-
-func TestUserAgentRunnerDoesNotCancelDifferentUsers(t *testing.T) {
-	runner := newUserAgentRunner()
-	firstStarted := make(chan struct{})
-	firstReleased := make(chan struct{})
-	firstDone := make(chan struct{})
-	firstCanceled := make(chan struct{}, 1)
-	secondDone := make(chan struct{})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	sink := agent.OutputSinkFunc(func(ctx context.Context, content string) error {
-		return nil
-	})
-
-	runner.Start(ctx, "user-1", sink, func(ctx context.Context, sink agent.OutputSink) error {
-		close(firstStarted)
-		select {
-		case <-ctx.Done():
-			firstCanceled <- struct{}{}
-			return ctx.Err()
-		case <-firstReleased:
-			close(firstDone)
-			return nil
-		}
-	})
-	waitForSignal(t, firstStarted, "first user job to start")
-
-	runner.Start(ctx, "user-2", sink, func(ctx context.Context, sink agent.OutputSink) error {
-		close(secondDone)
-		return nil
-	})
-	waitForSignal(t, secondDone, "second user job to finish")
-
-	select {
-	case <-firstCanceled:
-		t.Fatal("first user job was canceled by different user's message")
-	default:
-	}
-
-	close(firstReleased)
-	waitForSignal(t, firstDone, "first user job to finish")
-}
-
-func TestUserAgentRunnerCancelAllCancelsOutstandingJobs(t *testing.T) {
-	runner := newUserAgentRunner()
+func TestConversationAgentRunnerCancelAllCancelsOutstandingJobs(t *testing.T) {
+	runner := newConversationAgentRunner()
 	firstStarted := make(chan struct{})
 	firstCanceled := make(chan struct{})
 	secondStarted := make(chan struct{})
@@ -797,71 +718,291 @@ func TestUserAgentRunnerCancelAllCancelsOutstandingJobs(t *testing.T) {
 	sink := agent.OutputSinkFunc(func(ctx context.Context, content string) error {
 		return nil
 	})
-
-	runner.Start(ctx, "user-1", sink, func(ctx context.Context, sink agent.OutputSink) error {
-		close(firstStarted)
-		<-ctx.Done()
-		close(firstCanceled)
-		return ctx.Err()
-	})
-	runner.Start(ctx, "user-2", sink, func(ctx context.Context, sink agent.OutputSink) error {
+	assistantAgent := agent.New(llmModelFunc(func(ctx context.Context, request llm.Request) (llm.Response, error) {
+		requestJSON, err := json.Marshal(request.Messages)
+		if err != nil {
+			t.Fatalf("marshal request messages: %v", err)
+		}
+		if strings.Contains(string(requestJSON), "conversation-1") {
+			close(firstStarted)
+			<-ctx.Done()
+			close(firstCanceled)
+			return llm.Response{}, ctx.Err()
+		}
 		close(secondStarted)
 		<-ctx.Done()
 		close(secondCanceled)
-		return ctx.Err()
-	})
-	waitForSignal(t, firstStarted, "first user job to start")
-	waitForSignal(t, secondStarted, "second user job to start")
+		return llm.Response{}, ctx.Err()
+	}))
+
+	runner.Start(ctx, "conversation-1", sink, assistantAgent, preparedTextRun("conversation-1", "message-1", 1, "第一条"))
+	runner.Start(ctx, "conversation-2", sink, assistantAgent, preparedTextRun("conversation-2", "message-2", 1, "第二条"))
+	waitForSignal(t, firstStarted, "first conversation job to start")
+	waitForSignal(t, secondStarted, "second conversation job to start")
 
 	runner.CancelAll()
 
-	waitForSignal(t, firstCanceled, "first user job to be canceled")
-	waitForSignal(t, secondCanceled, "second user job to be canceled")
+	waitForSignal(t, firstCanceled, "first conversation job to be canceled")
+	waitForSignal(t, secondCanceled, "second conversation job to be canceled")
 }
 
-func TestUserAgentRunnerKeepsCurrentCheckAtomicWithSend(t *testing.T) {
-	runner := newUserAgentRunner()
+func TestConversationAgentRunnerDoesNotRunAppendedMessageWhileSendIsInProgress(t *testing.T) {
+	runner := newConversationAgentRunner()
 	sendStarted := make(chan struct{})
 	releaseSend := make(chan struct{})
-	firstDone := make(chan struct{})
-	replacementStartAttempted := make(chan struct{})
-	replacementReturned := make(chan struct{})
+	secondRequestSeen := make(chan struct{})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	var sendStartedOnce sync.Once
 	blockingSink := agent.OutputSinkFunc(func(ctx context.Context, content string) error {
-		close(sendStarted)
+		sendStartedOnce.Do(func() {
+			close(sendStarted)
+		})
 		<-releaseSend
 		return nil
 	})
+	assistantAgent := agent.New(llmModelFunc(func(ctx context.Context, request llm.Request) (llm.Response, error) {
+		requestJSON, err := json.Marshal(request.Messages)
+		if err != nil {
+			t.Fatalf("marshal request messages: %v", err)
+		}
+		if strings.Contains(string(requestJSON), "第二条") {
+			close(secondRequestSeen)
+		}
+		return llm.Response{Blocks: []llm.Block{{Type: llm.BlockTypeText, Text: "回复"}}}, nil
+	}))
 
-	runner.Start(ctx, "user-1", blockingSink, func(ctx context.Context, sink agent.OutputSink) error {
-		err := sink.SendMarkdown(ctx, "旧回复")
-		close(firstDone)
-		return err
-	})
+	runner.Start(ctx, "conversation-1", blockingSink, assistantAgent, preparedTextRun("conversation-1", "message-1", 1, "第一条"))
 	waitForSignal(t, sendStarted, "first send to start")
 
-	go func() {
-		close(replacementStartAttempted)
-		runner.Start(ctx, "user-1", agent.OutputSinkFunc(func(ctx context.Context, content string) error {
-			return nil
-		}), func(ctx context.Context, sink agent.OutputSink) error {
-			return nil
-		})
-		close(replacementReturned)
-	}()
-	waitForSignal(t, replacementStartAttempted, "replacement job to start")
+	runner.Start(ctx, "conversation-1", blockingSink, assistantAgent, preparedTextRun("conversation-1", "message-2", 2, "第二条"))
 
 	select {
-	case <-replacementReturned:
-		t.Fatal("replacement job started while previous send was between current check and write")
+	case <-secondRequestSeen:
+		t.Fatal("appended message ran while previous send was still in progress")
 	case <-time.After(50 * time.Millisecond):
 	}
 
 	close(releaseSend)
-	waitForSignal(t, firstDone, "first send to finish")
-	waitForSignal(t, replacementReturned, "replacement job to start")
+	waitForSignal(t, secondRequestSeen, "appended message to run after first send")
+}
+
+func TestConversationAgentRunnerAppendsSameConversationMessageToActiveSession(t *testing.T) {
+	model := &recordingLoopModel{
+		secondRequestSeen: make(chan struct{}),
+	}
+	registry := &blockingToolRegistry{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	assistantAgent := agent.New(model, agent.WithToolRegistry(registry), agent.WithMaxTurns(3))
+	runner := newConversationAgentRunner()
+	defer runner.CancelAll()
+
+	requester := appRequestFunc(func(ctx context.Context, method string, payload any) (json.RawMessage, error) {
+		if method != methodConversationMessagesList {
+			t.Fatalf("unexpected app request method %q", method)
+		}
+		var historyRequest appListConversationMessagesRequestPayload
+		rawPayload, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal history payload: %v", err)
+		}
+		if err := json.Unmarshal(rawPayload, &historyRequest); err != nil {
+			t.Fatalf("unmarshal history payload: %v", err)
+		}
+		switch historyRequest.BeforeOrEqualSeq {
+		case 1:
+			return json.Marshal(appListConversationMessagesResponsePayload{
+				Messages: []historyMessagePayload{
+					historyTextMessage("message-1", 1, "user-1", "Alice", "第一条"),
+				},
+			})
+		case 3:
+			return json.Marshal(appListConversationMessagesResponsePayload{
+				Messages: []historyMessagePayload{
+					historyTextMessage("message-old", 0, "user-2", "Bob", "很早以前的旧背景"),
+					historyTextMessage("message-2", 2, "user-2", "Bob", "这是一条中间背景"),
+					historyTextMessage("message-3", 3, "user-1", "Alice", "第二条"),
+				},
+			})
+		default:
+			t.Fatalf("history before_or_equal_seq = %d, want 1 or 3", historyRequest.BeforeOrEqualSeq)
+			return nil, nil
+		}
+	})
+	sent := &sentMessages{}
+
+	handleParsedServerMessage(
+		context.Background(),
+		testMessageCreatedEnvelope(t, "user-1", "message-1", 1, "第一条"),
+		requester,
+		assistantAgent,
+		runner,
+		sent.write,
+	)
+	waitForSignal(t, registry.started, "first tool call to start")
+
+	handleParsedServerMessage(
+		context.Background(),
+		testMessageCreatedEnvelope(t, "user-1", "message-3", 3, "第二条"),
+		requester,
+		assistantAgent,
+		runner,
+		sent.write,
+	)
+
+	close(registry.release)
+	waitForSignal(t, model.secondRequestSeen, "second model request")
+
+	secondRequest := model.requestAt(t, 1)
+	secondRequestJSON, err := json.Marshal(secondRequest.Messages)
+	if err != nil {
+		t.Fatalf("marshal second request messages: %v", err)
+	}
+	for _, snippet := range []string{"第二条", "这是一条中间背景", "auth_1", "auth_3"} {
+		if !strings.Contains(string(secondRequestJSON), snippet) {
+			t.Fatalf("second request messages = %s, want to contain %q", secondRequestJSON, snippet)
+		}
+	}
+	if strings.Contains(string(secondRequestJSON), "很早以前的旧背景") {
+		t.Fatalf("second request messages = %s, want old history before previous trigger filtered", secondRequestJSON)
+	}
+}
+
+func TestConversationAuthorizationStoreKeepsLatestFiveRefs(t *testing.T) {
+	store := newConversationAuthorizationStore()
+	for i := 1; i <= 6; i++ {
+		ref := fmt.Sprintf("auth_%d", i)
+		store.Add(preparedAuthorization{
+			Authorization: builtintools.Authorization{
+				ActorUserID:      fmt.Sprintf("user-%d", i),
+				TriggerMessageID: fmt.Sprintf("message-%d", i),
+			},
+			Candidate: agent.AuthorizationCandidate{
+				Ref:        ref,
+				SenderID:   fmt.Sprintf("user-%d", i),
+				SenderName: "User",
+				MessageSeq: int64(i),
+			},
+			Ref: ref,
+		})
+	}
+
+	if _, ok := store.ResolveAuthorization("auth_1"); ok {
+		t.Fatal("auth_1 still resolves, want oldest ref evicted")
+	}
+	if _, ok := store.ResolveAuthorization("auth_6"); !ok {
+		t.Fatal("auth_6 does not resolve, want newest ref retained")
+	}
+	candidates := store.Candidates()
+	if len(candidates) != 5 {
+		t.Fatalf("candidate count = %d, want 5", len(candidates))
+	}
+	if candidates[0].Ref != "auth_2" || candidates[4].Ref != "auth_6" {
+		t.Fatalf("candidates = %#v, want auth_2..auth_6", candidates)
+	}
+}
+
+type recordingLoopModel struct {
+	mu                sync.Mutex
+	requests          []llm.Request
+	secondRequestSeen chan struct{}
+}
+
+func (m *recordingLoopModel) CreateMessage(ctx context.Context, request llm.Request) (llm.Response, error) {
+	m.mu.Lock()
+	m.requests = append(m.requests, request)
+	requestCount := len(m.requests)
+	m.mu.Unlock()
+
+	switch requestCount {
+	case 1:
+		return llm.Response{Blocks: []llm.Block{
+			{Type: llm.BlockTypeToolUse, ToolUseID: "toolu_wait", ToolName: "test__wait", ToolInput: json.RawMessage(`{}`)},
+		}}, nil
+	case 2:
+		close(m.secondRequestSeen)
+		return llm.Response{Blocks: []llm.Block{{Type: llm.BlockTypeText, Text: "处理第二条"}}}, nil
+	default:
+		return llm.Response{Blocks: []llm.Block{{Type: llm.BlockTypeText, Text: "完成"}}}, nil
+	}
+}
+
+func (m *recordingLoopModel) requestAt(t *testing.T, index int) llm.Request {
+	t.Helper()
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.requests) <= index {
+		t.Fatalf("model request count = %d, want index %d", len(m.requests), index)
+	}
+	return m.requests[index]
+}
+
+type blockingToolRegistry struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (r *blockingToolRegistry) Tools() []mcpclient.Tool {
+	return []mcpclient.Tool{{Name: "test__wait"}}
+}
+
+func (r *blockingToolRegistry) CallTool(ctx context.Context, name string, input json.RawMessage) (mcpclient.ToolResult, error) {
+	close(r.started)
+	select {
+	case <-ctx.Done():
+		return mcpclient.ToolResult{}, ctx.Err()
+	case <-r.release:
+		return mcpclient.ToolResult{Content: "waited"}, nil
+	}
+}
+
+type llmModelFunc func(context.Context, llm.Request) (llm.Response, error)
+
+func (f llmModelFunc) CreateMessage(ctx context.Context, request llm.Request) (llm.Response, error) {
+	return f(ctx, request)
+}
+
+func preparedTextRun(conversationID string, messageID string, seq int64, content string) preparedAgentRun {
+	return preparedAgentRun{
+		Authorization: preparedAuthorization{
+			Authorization: builtintools.Authorization{
+				ActorUserID:      "user-1",
+				TriggerMessageID: messageID,
+			},
+			Candidate: agent.AuthorizationCandidate{
+				Ref:            "auth_1",
+				SenderID:       "user-1",
+				SenderName:     "Alice",
+				MessageSeq:     seq,
+				MessageSummary: content,
+			},
+			Ref: "auth_1",
+		},
+		MessageSeq: seq,
+		Request: agent.Request{
+			AuthorizationRef: "auth_1",
+			Conversation: agent.Conversation{
+				ID:   conversationID,
+				Name: "AI 女菩萨",
+				Type: "app",
+			},
+			Sender: agent.Sender{
+				ID:   "user-1",
+				Name: "Alice",
+				Type: "user",
+			},
+			MessageID: messageID,
+			Content:   content,
+		},
+		Scope: builtintools.Scope{
+			ConversationID:   conversationID,
+			ConversationType: "app",
+		},
+	}
 }
 
 type sentMessages struct {
@@ -946,6 +1087,22 @@ func testMessageCreatedEnvelopeWithRawBody(t *testing.T, userID string, messageI
 		ID:      "event-" + messageID,
 		Event:   eventMessageCreated,
 		Payload: payload,
+	}
+}
+
+func historyTextMessage(messageID string, seq int64, senderID string, senderName string, content string) historyMessagePayload {
+	body, _ := json.Marshal(messageBody{Type: "text", Content: content})
+	return historyMessagePayload{
+		CreatedAt: time.Date(2026, 7, 8, 10, int(seq), 0, 0, time.UTC),
+		ID:        messageID,
+		Seq:       seq,
+		Sender: senderPayload{
+			ID:   senderID,
+			Name: senderName,
+			Type: "user",
+		},
+		Summary: content,
+		Body:    body,
 	}
 }
 

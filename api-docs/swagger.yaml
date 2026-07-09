@@ -158,6 +158,9 @@ definitions:
       id:
         example: 7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4
         type: string
+      last_mentioned_seq:
+        example: 0
+        type: integer
       last_message_at:
         format: date-time
         type: string
@@ -215,6 +218,9 @@ definitions:
         type: string
       role:
         example: member
+        type: string
+      type:
+        example: user
         type: string
     type: object
   httpserver.createAppConversationRequest:
@@ -329,6 +335,9 @@ definitions:
       id:
         example: 7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4
         type: string
+      last_mentioned_seq:
+        example: 0
+        type: integer
       last_message_at:
         format: date-time
         type: string

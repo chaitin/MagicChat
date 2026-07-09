@@ -66,11 +66,12 @@ type appAddGroupConversationMembersResponse struct {
 }
 
 type appSendAsUserRequest struct {
-	ActorUserID      string              `json:"actor_user_id"`
-	Message          json.RawMessage     `json:"message"`
-	Target           appSendAsUserTarget `json:"target"`
-	TargetUserID     string              `json:"target_user_id"`
-	TriggerMessageID string              `json:"trigger_message_id"`
+	ActorUserID                 string              `json:"actor_user_id"`
+	AuthorizationConversationID string              `json:"authorization_conversation_id"`
+	Message                     json.RawMessage     `json:"message"`
+	Target                      appSendAsUserTarget `json:"target"`
+	TargetUserID                string              `json:"target_user_id"`
+	TriggerMessageID            string              `json:"trigger_message_id"`
 }
 
 type appSendAsUserTarget struct {
@@ -80,17 +81,19 @@ type appSendAsUserTarget struct {
 }
 
 type appCreateGroupConversationRequest struct {
-	ActorUserID      string   `json:"actor_user_id"`
-	MemberIDs        []string `json:"member_ids"`
-	Name             string   `json:"name"`
-	TriggerMessageID string   `json:"trigger_message_id"`
+	ActorUserID                 string   `json:"actor_user_id"`
+	AuthorizationConversationID string   `json:"authorization_conversation_id"`
+	MemberIDs                   []string `json:"member_ids"`
+	Name                        string   `json:"name"`
+	TriggerMessageID            string   `json:"trigger_message_id"`
 }
 
 type appAddGroupConversationMembersRequest struct {
-	ActorUserID      string   `json:"actor_user_id"`
-	ConversationID   string   `json:"conversation_id"`
-	MemberIDs        []string `json:"member_ids"`
-	TriggerMessageID string   `json:"trigger_message_id"`
+	ActorUserID                 string   `json:"actor_user_id"`
+	AuthorizationConversationID string   `json:"authorization_conversation_id"`
+	ConversationID              string   `json:"conversation_id"`
+	MemberIDs                   []string `json:"member_ids"`
+	TriggerMessageID            string   `json:"trigger_message_id"`
 }
 
 type appListContactUsersRequest struct {
@@ -102,10 +105,11 @@ type appListContactUsersResponse struct {
 }
 
 type appListConversationsRequest struct {
-	ActorUserID      string `json:"actor_user_id"`
-	Keyword          string `json:"keyword"`
-	Limit            int    `json:"limit"`
-	TriggerMessageID string `json:"trigger_message_id"`
+	ActorUserID                 string `json:"actor_user_id"`
+	AuthorizationConversationID string `json:"authorization_conversation_id"`
+	Keyword                     string `json:"keyword"`
+	Limit                       int    `json:"limit"`
+	TriggerMessageID            string `json:"trigger_message_id"`
 }
 
 type appListConversationsResponse struct {
@@ -125,13 +129,14 @@ type appListConversationMessagesResponse struct {
 }
 
 type appReadConversationHistoryRequest struct {
-	ActorUserID      string `json:"actor_user_id"`
-	AppID            string `json:"app_id"`
-	BeforeSeq        int64  `json:"before_seq"`
-	ConversationID   string `json:"conversation_id"`
-	Limit            int    `json:"limit"`
-	TriggerMessageID string `json:"trigger_message_id"`
-	UserID           string `json:"user_id"`
+	ActorUserID                 string `json:"actor_user_id"`
+	AppID                       string `json:"app_id"`
+	AuthorizationConversationID string `json:"authorization_conversation_id"`
+	BeforeSeq                   int64  `json:"before_seq"`
+	ConversationID              string `json:"conversation_id"`
+	Limit                       int    `json:"limit"`
+	TriggerMessageID            string `json:"trigger_message_id"`
+	UserID                      string `json:"user_id"`
 }
 
 type appReadConversationHistoryResponse struct {
@@ -141,10 +146,11 @@ type appReadConversationHistoryResponse struct {
 }
 
 type appListGroupConversationsRequest struct {
-	ActorUserID      string `json:"actor_user_id"`
-	Keyword          string `json:"keyword"`
-	Limit            int    `json:"limit"`
-	TriggerMessageID string `json:"trigger_message_id"`
+	ActorUserID                 string `json:"actor_user_id"`
+	AuthorizationConversationID string `json:"authorization_conversation_id"`
+	Keyword                     string `json:"keyword"`
+	Limit                       int    `json:"limit"`
+	TriggerMessageID            string `json:"trigger_message_id"`
 }
 
 type appListGroupConversationsResponse struct {
@@ -308,7 +314,7 @@ func (s *Server) handleAppSendMessageAsUser(appID string, request realtime.Envel
 	if err != nil {
 		return appSendMessageResponse{}, err
 	}
-	if err := s.requireAppSendAsUserTrigger(appID, req.ActorUserID, req.TriggerMessageID); err != nil {
+	if err := s.requireAppSendAsUserTrigger(appID, req.ActorUserID, req.TriggerMessageID, req.AuthorizationConversationID); err != nil {
 		return appSendMessageResponse{}, err
 	}
 
@@ -390,7 +396,7 @@ func (s *Server) handleAppListConversations(appID string, request realtime.Envel
 	if err != nil {
 		return appListConversationsResponse{}, err
 	}
-	if err := s.requireAppSendAsUserTrigger(appID, actorUserID, triggerMessageID); err != nil {
+	if err := s.requireAppSendAsUserTrigger(appID, actorUserID, triggerMessageID, req.AuthorizationConversationID); err != nil {
 		return appListConversationsResponse{}, err
 	}
 	actor, err := s.findActiveAppActor(actorUserID)
@@ -426,7 +432,7 @@ func (s *Server) handleAppListGroupConversations(appID string, request realtime.
 	if err != nil {
 		return appListGroupConversationsResponse{}, err
 	}
-	if err := s.requireAppSendAsUserTrigger(appID, actorUserID, triggerMessageID); err != nil {
+	if err := s.requireAppSendAsUserTrigger(appID, actorUserID, triggerMessageID, req.AuthorizationConversationID); err != nil {
 		return appListGroupConversationsResponse{}, err
 	}
 	actor, err := s.findActiveAppActor(actorUserID)
@@ -492,7 +498,7 @@ func (s *Server) handleAppCreateGroupConversation(appID string, request realtime
 		return appCreateGroupConversationResponse{}, newAppRequestFailure("invalid_request", "至少选择一名成员")
 	}
 
-	if err := s.requireAppSendAsUserTrigger(appID, actorUserID, triggerMessageID); err != nil {
+	if err := s.requireAppSendAsUserTrigger(appID, actorUserID, triggerMessageID, req.AuthorizationConversationID); err != nil {
 		return appCreateGroupConversationResponse{}, err
 	}
 	actor, err := s.findActiveAppActor(actorUserID)
@@ -534,7 +540,7 @@ func (s *Server) handleAppAddGroupConversationMembers(appID string, request real
 		return appAddGroupConversationMembersResponse{}, newAppRequestFailure("invalid_request", "至少选择一名成员")
 	}
 
-	if err := s.requireAppSendAsUserTrigger(appID, actorUserID, triggerMessageID); err != nil {
+	if err := s.requireAppSendAsUserTrigger(appID, actorUserID, triggerMessageID, req.AuthorizationConversationID); err != nil {
 		return appAddGroupConversationMembersResponse{}, err
 	}
 	actor, err := s.findActiveAppActor(actorUserID)
@@ -636,7 +642,7 @@ func (s *Server) handleAppReadConversationHistory(appID string, request realtime
 	if err != nil {
 		return appReadConversationHistoryResponse{}, err
 	}
-	if err := s.requireAppSendAsUserTrigger(appID, req.ActorUserID, req.TriggerMessageID); err != nil {
+	if err := s.requireAppSendAsUserTrigger(appID, req.ActorUserID, req.TriggerMessageID, req.AuthorizationConversationID); err != nil {
 		return appReadConversationHistoryResponse{}, err
 	}
 	actor, err := s.findActiveAppActor(req.ActorUserID)
@@ -868,7 +874,7 @@ func (s *Server) findActiveAppActor(userID string) (store.User, error) {
 	return user, nil
 }
 
-func (s *Server) requireAppSendAsUserTrigger(appID string, actorUserID string, triggerMessageID string) error {
+func (s *Server) requireAppSendAsUserTrigger(appID string, actorUserID string, triggerMessageID string, authorizationConversationID string) error {
 	var trigger store.Message
 	err := s.db.First(
 		&trigger,
@@ -882,6 +888,15 @@ func (s *Server) requireAppSendAsUserTrigger(appID string, actorUserID string, t
 	}
 	if err != nil {
 		return err
+	}
+	authorizationConversationID = strings.TrimSpace(authorizationConversationID)
+	if authorizationConversationID != "" {
+		if _, err := uuid.Parse(authorizationConversationID); err != nil {
+			return newAppRequestFailure("invalid_request", "授权会话 ID 格式错误")
+		}
+		if trigger.ConversationID != authorizationConversationID {
+			return newAppRequestFailure("forbidden", "触发消息无效")
+		}
 	}
 
 	_, err = s.requireReadableAppConversationMember(appID, trigger.ConversationID)
