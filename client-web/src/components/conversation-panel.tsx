@@ -482,6 +482,10 @@ function ConversationPanelComposer({
   const [selectedImage, setSelectedImage] = React.useState<File | null>(null)
 
   React.useEffect(() => {
+    textareaRef.current?.focus()
+  }, [])
+
+  React.useEffect(() => {
     const wasSending = previousSendingRef.current
     previousSendingRef.current = sending
 
