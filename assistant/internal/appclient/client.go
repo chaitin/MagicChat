@@ -133,8 +133,7 @@ type appListConversationMessagesResponsePayload struct {
 }
 
 type readTemporaryFileURLsRequestPayload struct {
-	ConversationID string   `json:"conversation_id"`
-	FileIDs        []string `json:"file_ids"`
+	FileIDs []string `json:"file_ids"`
 }
 
 type readTemporaryFileURLsResponsePayload struct {
@@ -470,7 +469,7 @@ func handleParsedServerMessage(ctx context.Context, message envelope, requester 
 			}
 			return err
 		}
-		fileURLs, err := readTemporaryFileURLsForMessages(ctx, requester, payload.Conversation.ID, body, historyMessages)
+		fileURLs, err := readTemporaryFileURLsForMessage(ctx, requester, body)
 		if err != nil {
 			if !errors.Is(err, context.Canceled) {
 				log.Printf("read temporary file URLs failed: %v", err)
@@ -482,7 +481,7 @@ func handleParsedServerMessage(ctx context.Context, message envelope, requester 
 			log.Printf("prepare agent message content failed: %v", err)
 			return err
 		}
-		history, err := buildAgentHistory(payload.Message.ID, historyMessages, fileURLs)
+		history, err := buildAgentHistory(payload.Message.ID, historyMessages)
 		if err != nil {
 			log.Printf("prepare conversation history failed: %v", err)
 			return err
@@ -552,15 +551,15 @@ func buildAgentMessageContent(body messageBody, fileURLs map[string]temporaryFil
 	}
 }
 
-func readTemporaryFileURLsForMessages(ctx context.Context, requester appRequester, conversationID string, currentBody messageBody, historyMessages []historyMessagePayload) (map[string]temporaryFileReadURLPayload, error) {
-	fileIDs, err := collectTemporaryFileIDs(currentBody, historyMessages)
+func readTemporaryFileURLsForMessage(ctx context.Context, requester appRequester, body messageBody) (map[string]temporaryFileReadURLPayload, error) {
+	fileIDs, err := collectTemporaryFileIDs(body)
 	if err != nil {
 		return nil, err
 	}
-	return readTemporaryFileURLs(ctx, requester, conversationID, fileIDs)
+	return readTemporaryFileURLs(ctx, requester, fileIDs)
 }
 
-func collectTemporaryFileIDs(currentBody messageBody, historyMessages []historyMessagePayload) ([]string, error) {
+func collectTemporaryFileIDs(body messageBody) ([]string, error) {
 	fileIDs := make([]string, 0)
 	seen := map[string]struct{}{}
 	add := func(fileID string) {
@@ -570,20 +569,8 @@ func collectTemporaryFileIDs(currentBody messageBody, historyMessages []historyM
 		seen[fileID] = struct{}{}
 		fileIDs = append(fileIDs, fileID)
 	}
-	if err := collectTemporaryFileIDFromBody(currentBody, add); err != nil {
+	if err := collectTemporaryFileIDFromBody(body, add); err != nil {
 		return nil, err
-	}
-	for _, message := range historyMessages {
-		if len(message.Body) == 0 {
-			continue
-		}
-		var body messageBody
-		if err := json.Unmarshal(message.Body, &body); err != nil {
-			return nil, fmt.Errorf("history message %s body: %w", message.ID, err)
-		}
-		if err := collectTemporaryFileIDFromBody(body, add); err != nil {
-			return nil, fmt.Errorf("history message %s body: %w", message.ID, err)
-		}
 	}
 
 	return fileIDs, nil
@@ -600,11 +587,11 @@ func collectTemporaryFileIDFromBody(body messageBody, add func(string)) error {
 	return nil
 }
 
-func readTemporaryFileURLs(ctx context.Context, requester appRequester, conversationID string, fileIDs []string) (map[string]temporaryFileReadURLPayload, error) {
+func readTemporaryFileURLs(ctx context.Context, requester appRequester, fileIDs []string) (map[string]temporaryFileReadURLPayload, error) {
 	if len(fileIDs) == 0 {
 		return map[string]temporaryFileReadURLPayload{}, nil
 	}
-	urls, err := requestTemporaryFileURLs(ctx, requester, conversationID, fileIDs)
+	urls, err := requestTemporaryFileURLs(ctx, requester, fileIDs)
 	if err == nil || errors.Is(err, context.Canceled) {
 		return urls, err
 	}
@@ -614,7 +601,7 @@ func readTemporaryFileURLs(ctx context.Context, requester appRequester, conversa
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		singleURLs, err := requestTemporaryFileURLs(ctx, requester, conversationID, []string{fileID})
+		singleURLs, err := requestTemporaryFileURLs(ctx, requester, []string{fileID})
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				return nil, err
@@ -629,10 +616,9 @@ func readTemporaryFileURLs(ctx context.Context, requester appRequester, conversa
 	return urls, nil
 }
 
-func requestTemporaryFileURLs(ctx context.Context, requester appRequester, conversationID string, fileIDs []string) (map[string]temporaryFileReadURLPayload, error) {
+func requestTemporaryFileURLs(ctx context.Context, requester appRequester, fileIDs []string) (map[string]temporaryFileReadURLPayload, error) {
 	raw, err := requester.Request(ctx, methodTemporaryFilesReadURLs, readTemporaryFileURLsRequestPayload{
-		ConversationID: conversationID,
-		FileIDs:        fileIDs,
+		FileIDs: fileIDs,
 	})
 	if err != nil {
 		return nil, err
@@ -691,7 +677,7 @@ func loadConversationHistoryMessages(ctx context.Context, requester appRequester
 	return response.Messages, nil
 }
 
-func buildAgentHistory(currentMessageID string, messages []historyMessagePayload, fileURLs map[string]temporaryFileReadURLPayload) ([]agent.HistoryMessage, error) {
+func buildAgentHistory(currentMessageID string, messages []historyMessagePayload) ([]agent.HistoryMessage, error) {
 	history := make([]agent.HistoryMessage, 0, len(messages))
 	for _, message := range messages {
 		if message.ID == currentMessageID {
@@ -701,7 +687,7 @@ func buildAgentHistory(currentMessageID string, messages []historyMessagePayload
 		if message.Sender.Nickname != "" {
 			senderName = message.Sender.Nickname
 		}
-		body, err := enrichHistoryMessageBody(message.Body, fileURLs)
+		body, err := buildHistoryMessageBody(message.Body)
 		if err != nil {
 			return nil, fmt.Errorf("history message %s body: %w", message.ID, err)
 		}
@@ -717,7 +703,7 @@ func buildAgentHistory(currentMessageID string, messages []historyMessagePayload
 	return history, nil
 }
 
-func enrichHistoryMessageBody(raw json.RawMessage, fileURLs map[string]temporaryFileReadURLPayload) (json.RawMessage, error) {
+func buildHistoryMessageBody(raw json.RawMessage) (json.RawMessage, error) {
 	if len(raw) == 0 {
 		return nil, nil
 	}
@@ -732,10 +718,7 @@ func enrichHistoryMessageBody(raw json.RawMessage, fileURLs map[string]temporary
 	messageType, _ := fields["type"].(string)
 	switch messageType {
 	case "image", "file":
-		fileID, _ := fields["file_id"].(string)
-		if readURL, ok := fileURLs[fileID]; ok && readURL.URL != "" {
-			fields["url"] = readURL.URL
-		}
+		delete(fields, "url")
 	}
 
 	body, err := json.Marshal(fields)

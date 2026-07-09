@@ -265,7 +265,7 @@ func TestNewReturnsErrorWhenMCPServerCannotInitialize(t *testing.T) {
 	}
 }
 
-func TestNewToolRegistryIncludesBuiltinSleepTool(t *testing.T) {
+func TestNewToolRegistryIncludesBuiltinTools(t *testing.T) {
 	registry, sources, err := newToolRegistry(context.Background(), nil)
 	defer func() {
 		if sources != nil {
@@ -276,12 +276,15 @@ func TestNewToolRegistryIncludesBuiltinSleepTool(t *testing.T) {
 		t.Fatalf("newToolRegistry() error = %v", err)
 	}
 
+	toolNames := map[string]bool{}
 	for _, tool := range registry.Tools() {
-		if tool.Name == "builtin__sleep" {
-			return
+		toolNames[tool.Name] = true
+	}
+	for _, toolName := range []string{"builtin__sleep", "builtin__read_file_urls"} {
+		if !toolNames[toolName] {
+			t.Fatalf("tools = %+v, want %s", registry.Tools(), toolName)
 		}
 	}
-	t.Fatalf("tools = %+v, want builtin__sleep", registry.Tools())
 }
 
 func TestHandleServerMessageReadsTemporaryFileURLForImageAndFileMessages(t *testing.T) {
@@ -313,9 +316,9 @@ func TestHandleServerMessageReadsTemporaryFileURLForImageAndFileMessages(t *test
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var readURLPayload struct {
-				ConversationID string   `json:"conversation_id"`
-				FileIDs        []string `json:"file_ids"`
+				FileIDs []string `json:"file_ids"`
 			}
+			var readURLPayloadMap map[string]any
 			var agentRequests []agent.Request
 			requester := appRequestFunc(func(ctx context.Context, method string, payload any) (json.RawMessage, error) {
 				switch method {
@@ -323,6 +326,9 @@ func TestHandleServerMessageReadsTemporaryFileURLForImageAndFileMessages(t *test
 					rawPayload, err := json.Marshal(payload)
 					if err != nil {
 						t.Fatalf("marshal read URL payload: %v", err)
+					}
+					if err := json.Unmarshal(rawPayload, &readURLPayloadMap); err != nil {
+						t.Fatalf("unmarshal read URL payload map: %v", err)
 					}
 					if err := json.Unmarshal(rawPayload, &readURLPayload); err != nil {
 						t.Fatalf("unmarshal read URL payload: %v", err)
@@ -362,8 +368,8 @@ func TestHandleServerMessageReadsTemporaryFileURLForImageAndFileMessages(t *test
 				func(message envelope) error { return nil },
 			)
 
-			if readURLPayload.ConversationID != "conversation-1" {
-				t.Fatalf("read URL conversation_id = %q, want conversation-1", readURLPayload.ConversationID)
+			if _, ok := readURLPayloadMap["conversation_id"]; ok {
+				t.Fatalf("read URL payload = %#v, want file_ids only", readURLPayloadMap)
 			}
 			if len(readURLPayload.FileIDs) != 1 || readURLPayload.FileIDs[0] != tt.body["file_id"] {
 				t.Fatalf("read URL file_ids = %#v, want body file id", readURLPayload.FileIDs)
@@ -380,11 +386,11 @@ func TestHandleServerMessageReadsTemporaryFileURLForImageAndFileMessages(t *test
 	}
 }
 
-func TestHandleServerMessageEnrichesCurrentAndHistoryFileURLs(t *testing.T) {
+func TestHandleServerMessagePrefetchesCurrentFileURLAndKeepsHistoryFileIDs(t *testing.T) {
 	var readURLPayload struct {
-		ConversationID string   `json:"conversation_id"`
-		FileIDs        []string `json:"file_ids"`
+		FileIDs []string `json:"file_ids"`
 	}
+	var readURLPayloadMap map[string]any
 	var agentRequests []agent.Request
 	requester := appRequestFunc(func(ctx context.Context, method string, payload any) (json.RawMessage, error) {
 		switch method {
@@ -445,6 +451,9 @@ func TestHandleServerMessageEnrichesCurrentAndHistoryFileURLs(t *testing.T) {
 			if err != nil {
 				t.Fatalf("marshal read URL payload: %v", err)
 			}
+			if err := json.Unmarshal(rawPayload, &readURLPayloadMap); err != nil {
+				t.Fatalf("unmarshal read URL payload map: %v", err)
+			}
 			if err := json.Unmarshal(rawPayload, &readURLPayload); err != nil {
 				t.Fatalf("unmarshal read URL payload: %v", err)
 			}
@@ -479,10 +488,10 @@ func TestHandleServerMessageEnrichesCurrentAndHistoryFileURLs(t *testing.T) {
 		func(message envelope) error { return nil },
 	)
 
-	if readURLPayload.ConversationID != "conversation-1" {
-		t.Fatalf("read URL conversation_id = %q, want conversation-1", readURLPayload.ConversationID)
+	if _, ok := readURLPayloadMap["conversation_id"]; ok {
+		t.Fatalf("read URL payload = %#v, want file_ids only", readURLPayloadMap)
 	}
-	wantFileIDs := []string{"file-current-image", "file-history-image", "file-history-report"}
+	wantFileIDs := []string{"file-current-image"}
 	if !slices.Equal(readURLPayload.FileIDs, wantFileIDs) {
 		t.Fatalf("read URL file_ids = %#v, want %#v", readURLPayload.FileIDs, wantFileIDs)
 	}
@@ -503,17 +512,18 @@ func TestHandleServerMessageEnrichesCurrentAndHistoryFileURLs(t *testing.T) {
 	for _, snippet := range []string{
 		`"body"`,
 		`"file_id":"file-history-image"`,
-		`"url":"https://assets.example.test/file-history-image"`,
 		`"file_id":"file-history-report"`,
-		`"url":"https://assets.example.test/file-history-report"`,
 	} {
 		if !strings.Contains(string(historyJSON), snippet) {
 			t.Fatalf("history JSON = %s, want to contain %s", historyJSON, snippet)
 		}
 	}
+	if strings.Contains(string(historyJSON), `"url"`) {
+		t.Fatalf("history JSON = %s, want history file URLs omitted", historyJSON)
+	}
 }
 
-func TestHandleServerMessageContinuesWhenSomeTemporaryFileURLsFail(t *testing.T) {
+func TestHandleServerMessageDoesNotReadHistoryFileURLs(t *testing.T) {
 	var readURLCalls [][]string
 	var agentRequests []agent.Request
 	requester := appRequestFunc(func(ctx context.Context, method string, payload any) (json.RawMessage, error) {
@@ -580,22 +590,7 @@ func TestHandleServerMessageContinuesWhenSomeTemporaryFileURLsFail(t *testing.T)
 				t.Fatalf("unmarshal read URL payload: %v", err)
 			}
 			readURLCalls = append(readURLCalls, slices.Clone(readURLPayload.FileIDs))
-			if len(readURLPayload.FileIDs) != 1 {
-				return nil, errors.New("not_found: temporary file not found")
-			}
-			fileID := readURLPayload.FileIDs[0]
-			if fileID == "file-history-expired" {
-				return nil, errors.New("not_found: temporary file not found")
-			}
-			return json.Marshal(map[string]any{
-				"urls": []map[string]any{
-					{
-						"file_id":    fileID,
-						"url":        "https://assets.example.test/" + fileID,
-						"expires_at": "2026-07-08T12:00:00Z",
-					},
-				},
-			})
+			return nil, errors.New("history file URLs should not be read")
 		default:
 			t.Fatalf("unexpected app request method %q", method)
 			return nil, nil
@@ -615,13 +610,8 @@ func TestHandleServerMessageContinuesWhenSomeTemporaryFileURLsFail(t *testing.T)
 		func(message envelope) error { return nil },
 	)
 
-	wantCalls := [][]string{
-		{"file-history-image", "file-history-expired"},
-		{"file-history-image"},
-		{"file-history-expired"},
-	}
-	if !slices.EqualFunc(readURLCalls, wantCalls, slices.Equal[[]string]) {
-		t.Fatalf("read URL calls = %#v, want %#v", readURLCalls, wantCalls)
+	if len(readURLCalls) != 0 {
+		t.Fatalf("read URL calls = %#v, want none for history-only files", readURLCalls)
 	}
 	if len(agentRequests) != 1 {
 		t.Fatalf("agent request count = %d, want 1", len(agentRequests))
@@ -638,8 +628,11 @@ func TestHandleServerMessageContinuesWhenSomeTemporaryFileURLsFail(t *testing.T)
 	if err := json.Unmarshal(agentRequest.History[0].Body, &imageBody); err != nil {
 		t.Fatalf("unmarshal image body: %v", err)
 	}
-	if imageBody["url"] != "https://assets.example.test/file-history-image" {
-		t.Fatalf("image history url = %v, want resolved URL", imageBody["url"])
+	if imageBody["file_id"] != "file-history-image" {
+		t.Fatalf("image history file_id = %v, want original file_id", imageBody["file_id"])
+	}
+	if _, ok := imageBody["url"]; ok {
+		t.Fatalf("image history url = %v, want omitted", imageBody["url"])
 	}
 	var expiredBody map[string]any
 	if err := json.Unmarshal(agentRequest.History[1].Body, &expiredBody); err != nil {

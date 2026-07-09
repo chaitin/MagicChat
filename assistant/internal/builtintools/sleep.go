@@ -12,27 +12,32 @@ import (
 )
 
 const (
-	sourceName                   = "builtin"
-	sleepToolName                = "sleep"
-	contactsToolName             = "contacts"
-	myGroupsToolName             = "my_groups"
-	replyToolName                = "reply"
-	sendAsUserToolName           = "send_as_user"
-	createGroupToolName          = "create_group"
-	addGroupMembersToolName      = "add_group_members"
-	methodContactsUsersList      = "contacts.users.list"
-	methodGroupConversationsList = "group_conversations.list"
-	methodCreateGroup            = "group_conversations.create"
-	methodAddGroupMembers        = "group_conversations.members.add"
-	methodMessageSend            = "message.send"
-	methodMessageSendAsUser      = "message.send_as_user"
-	minSleepSeconds              = 1
-	maxSleepSeconds              = 60
-	defaultSleepUnit             = time.Second
-	messageTypeText              = "text"
-	messageTypeMarkdown          = "markdown"
-	messageTypeImage             = "image"
-	messageTypeFile              = "file"
+	sourceName                    = "builtin"
+	sleepToolName                 = "sleep"
+	contactsToolName              = "contacts"
+	recentConversationsToolName   = "recent_conversations"
+	readHistoryToolName           = "read_history"
+	replyToolName                 = "reply"
+	sendAsUserToolName            = "send_as_user"
+	createGroupToolName           = "create_group"
+	addGroupMembersToolName       = "add_group_members"
+	readFileURLsToolName          = "read_file_urls"
+	methodContactsUsersList       = "contacts.users.list"
+	methodConversationsList       = "conversations.list"
+	methodConversationHistoryRead = "conversation.history.read"
+	methodGroupConversationsList  = "group_conversations.list"
+	methodCreateGroup             = "group_conversations.create"
+	methodAddGroupMembers         = "group_conversations.members.add"
+	methodMessageSend             = "message.send"
+	methodMessageSendAsUser       = "message.send_as_user"
+	methodTemporaryFilesReadURLs  = "temporary_files.read_urls"
+	minSleepSeconds               = 5
+	maxSleepSeconds               = 30
+	defaultSleepUnit              = time.Second
+	messageTypeText               = "text"
+	messageTypeMarkdown           = "markdown"
+	messageTypeImage              = "image"
+	messageTypeFile               = "file"
 )
 
 type sleepFunc func(context.Context, time.Duration) error
@@ -62,8 +67,17 @@ type contactsInput struct {
 	Keyword string `json:"keyword"`
 }
 
-type myGroupsInput struct {
+type recentConversationsInput struct {
 	Keyword string `json:"keyword"`
+	Limit   int    `json:"limit"`
+}
+
+type readHistoryInput struct {
+	AppID          string `json:"app_id"`
+	BeforeSeq      int64  `json:"before_seq"`
+	ConversationID string `json:"conversation_id"`
+	Limit          int    `json:"limit"`
+	UserID         string `json:"user_id"`
 }
 
 type messageInput struct {
@@ -84,6 +98,10 @@ type createGroupInput struct {
 type addGroupMembersInput struct {
 	ConversationID string   `json:"conversation_id"`
 	MemberIDs      []string `json:"member_ids"`
+}
+
+type readFileURLsInput struct {
+	FileIDs []string `json:"file_ids"`
 }
 
 type scopedMessagePayload struct {
@@ -117,10 +135,21 @@ type sendAsUserTarget struct {
 	UserID         string `json:"user_id,omitempty"`
 }
 
-type myGroupsPayload struct {
+type recentConversationsPayload struct {
 	ActorUserID      string `json:"actor_user_id"`
 	Keyword          string `json:"keyword"`
+	Limit            int    `json:"limit"`
 	TriggerMessageID string `json:"trigger_message_id"`
+}
+
+type readHistoryPayload struct {
+	AppID            string `json:"app_id,omitempty"`
+	ActorUserID      string `json:"actor_user_id"`
+	BeforeSeq        int64  `json:"before_seq,omitempty"`
+	ConversationID   string `json:"conversation_id,omitempty"`
+	Limit            int    `json:"limit,omitempty"`
+	TriggerMessageID string `json:"trigger_message_id"`
+	UserID           string `json:"user_id,omitempty"`
 }
 
 type createGroupPayload struct {
@@ -135,6 +164,30 @@ type addGroupMembersPayload struct {
 	ConversationID   string   `json:"conversation_id"`
 	MemberIDs        []string `json:"member_ids"`
 	TriggerMessageID string   `json:"trigger_message_id"`
+}
+
+type readTemporaryFileURLsPayload struct {
+	FileIDs []string `json:"file_ids"`
+}
+
+type readTemporaryFileURLsResponse struct {
+	URLs []temporaryFileReadURL `json:"urls"`
+}
+
+type temporaryFileReadURL struct {
+	ExpiresAt string `json:"expires_at"`
+	FileID    string `json:"file_id"`
+	URL       string `json:"url"`
+}
+
+type readFileURLsToolResult struct {
+	URLs   []temporaryFileReadURL `json:"urls"`
+	Errors []readFileURLError     `json:"errors,omitempty"`
+}
+
+type readFileURLError struct {
+	Error  string `json:"error"`
+	FileID string `json:"file_id"`
 }
 
 func WithScope(ctx context.Context, scope Scope) context.Context {
@@ -161,14 +214,13 @@ func (s *Source) ListTools(ctx context.Context) ([]mcpclient.Tool, error) {
 	return []mcpclient.Tool{
 		{
 			Name:        sleepToolName,
-			Description: "等待指定秒数，常用于等待异步任务完成或协调多个工具调用。seconds 小于 1 时按 1 秒处理，大于 60 时按 60 秒处理。",
+			Description: "等待 5 到 30 秒，常用于等待异步任务完成、外部工具结果同步、文件处理、后台状态变化，或配合查询工具轮询。seconds 小于 5、缺失或不合法按 5 秒处理，大于 30 时按 30 秒处理。不用于普通回复、拖延回复或无目的等待。",
 			InputSchema: map[string]any{
-				"type":     "object",
-				"required": []string{"seconds"},
+				"type": "object",
 				"properties": map[string]any{
 					"seconds": map[string]any{
 						"type":        "number",
-						"description": "等待秒数。最小 1，最大 60，超出范围会被自动截断。",
+						"description": "等待秒数。最小 5，最大 30；缺失或不合法按 5 秒处理，超出范围会被自动截断。",
 						"minimum":     minSleepSeconds,
 						"maximum":     maxSleepSeconds,
 					},
@@ -189,17 +241,28 @@ func (s *Source) ListTools(ctx context.Context) ([]mcpclient.Tool, error) {
 			},
 		},
 		{
-			Name:        myGroupsToolName,
-			Description: "查询当前触发用户已加入的已有群聊，只返回 active 群聊。用户要求把消息发到某个群、给已有群加人或需要确认群聊 ID 时使用；目标群聊不明确、查到多个相似群或没有查到时先追问，不要猜 conversation_id。不要用它创建群聊。",
+			Name:        recentConversationsToolName,
+			Description: "查询当前触发用户最近使用的会话，返回私聊、群聊、应用会话。可用于确认会话 ID、会话类型、成员数量和最近活动时间；返回字段包括 type、conversation_id、name、member_count、last_active_at。keyword 按会话名称，或私聊对象的姓名、昵称搜索，不查消息内容；limit 默认 20，最大 100。",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"keyword": map[string]any{
 						"type":        "string",
-						"description": "可选搜索词，按群聊名称搜索；为空返回当前用户已加入的最近群聊。",
+						"description": "可选搜索词，按会话名称，或私聊对象的姓名、昵称搜索；不传或为空返回所有最近会话。",
+					},
+					"limit": map[string]any{
+						"type":        "integer",
+						"description": "可选返回数量。不传默认 20，最大 100。",
+						"minimum":     1,
+						"maximum":     100,
 					},
 				},
 			},
+		},
+		{
+			Name:        readHistoryToolName,
+			Description: "读取当前触发用户有权限访问的聊天记录。conversation_id、user_id、app_id 三选一：conversation_id 读取指定会话，user_id 读取和该用户的私聊，app_id 读取和该应用的会话。before_seq 不传表示读取最新消息，传入时读取 seq 小于 before_seq 的更早消息；limit 默认 20，最大 100。图片和附件只返回 file_id，需要真实 URL 时再调用 read_file_urls。",
+			InputSchema: readHistoryInputSchema(),
 		},
 		{
 			Name:        replyToolName,
@@ -208,7 +271,7 @@ func (s *Source) ListTools(ctx context.Context) ([]mcpclient.Tool, error) {
 		},
 		{
 			Name:        sendAsUserToolName,
-			Description: "以当前触发用户的身份发送到私聊或已有群聊。只有用户明确要求“替我发给某人/以我的身份发给某人”或“替我发到某个已有群聊”时才能使用；target_type=user 时 contact_id 必须来自 contacts，target_type=group 时 conversation_id 必须来自 my_groups。目标群聊不明确、查到多个相似群或没有查到时先追问，不要猜 conversation_id。不要用它回复当前会话；回复当前会话必须用 reply。不要用它创建群聊或拉人进群。发送 file 时必须提供 name，不要猜文件名；已有可下载文件用 url，assistant 生成的小文件用 content；没有明确文件名时先追问。",
+			Description: "以当前触发用户的身份发送到私聊或已有群聊。只有用户明确要求“替我发给某人/以我的身份发给某人”或“替我发到某个已有群聊”时才能使用；target_type=user 时 contact_id 必须来自 contacts，target_type=group 时 conversation_id 必须来自 recent_conversations。目标群聊不明确、查到多个相似群或没有查到时先追问，不要猜 conversation_id。不要用它回复当前会话；回复当前会话必须用 reply。不要用它创建群聊或拉人进群。发送 file 时必须提供 name，不要猜文件名；已有可下载文件用 url，assistant 生成的小文件用 content；没有明确文件名时先追问。",
 			InputSchema: messageInputSchema(true),
 		},
 		{
@@ -220,6 +283,11 @@ func (s *Source) ListTools(ctx context.Context) ([]mcpclient.Tool, error) {
 			Name:        addGroupMembersToolName,
 			Description: "以当前触发用户的身份把成员加入已有群聊。只在用户明确要求把人加入已有群聊、拉人进群、邀请成员进群时使用。不要用它创建群聊、不要用它发送消息、不要用它回复当前会话；创建新群聊应使用 create_group。成员 ID 必须来自 contacts 工具返回的用户联系人。当前会话是目标群聊时可以省略 conversation_id；如果当前会话不是目标群聊，或目标群聊不明确、成员身份不明确时先追问。",
 			InputSchema: addGroupMembersInputSchema(),
+		},
+		{
+			Name:        readFileURLsToolName,
+			Description: "按需把当前消息或历史消息里的 file_id 换成临时可访问 URL。只需要 file_id，不需要会话 ID；只有确实需要读取图片或附件内容时使用。历史消息默认只提供 file_id。支持一次传多个 file_id，部分失败时会在 errors 返回，不影响已成功获取的 URL。",
+			InputSchema: readFileURLsInputSchema(),
 		},
 	}, nil
 }
@@ -234,8 +302,10 @@ func (s *Source) CallTool(ctx context.Context, name string, input json.RawMessag
 		return s.callSleep(ctx, input)
 	case contactsToolName:
 		return callContacts(ctx, input)
-	case myGroupsToolName:
-		return callMyGroups(ctx, input)
+	case recentConversationsToolName:
+		return callRecentConversations(ctx, input)
+	case readHistoryToolName:
+		return callReadHistory(ctx, input)
 	case replyToolName:
 		return callReply(ctx, input)
 	case sendAsUserToolName:
@@ -244,6 +314,8 @@ func (s *Source) CallTool(ctx context.Context, name string, input json.RawMessag
 		return callCreateGroup(ctx, input)
 	case addGroupMembersToolName:
 		return callAddGroupMembers(ctx, input)
+	case readFileURLsToolName:
+		return callReadFileURLs(ctx, input)
 	default:
 		return mcpclient.ToolResult{}, fmt.Errorf("unknown builtin tool %q", name)
 	}
@@ -278,7 +350,7 @@ func callContacts(ctx context.Context, input json.RawMessage) (mcpclient.ToolRes
 	})
 }
 
-func callMyGroups(ctx context.Context, input json.RawMessage) (mcpclient.ToolResult, error) {
+func callRecentConversations(ctx context.Context, input json.RawMessage) (mcpclient.ToolResult, error) {
 	scope, err := requireScope(ctx)
 	if err != nil {
 		return mcpclient.ToolResult{}, err
@@ -288,18 +360,65 @@ func callMyGroups(ctx context.Context, input json.RawMessage) (mcpclient.ToolRes
 		return mcpclient.ToolResult{}, err
 	}
 
-	var parsed myGroupsInput
+	var parsed recentConversationsInput
 	if len(input) > 0 {
 		if err := json.Unmarshal(input, &parsed); err != nil {
-			return mcpclient.ToolResult{}, fmt.Errorf("parse my_groups input: %w", err)
+			return mcpclient.ToolResult{}, fmt.Errorf("parse recent_conversations input: %w", err)
 		}
 	}
 
-	return requestTool(ctx, scope.Requester, methodGroupConversationsList, myGroupsPayload{
+	return requestTool(ctx, scope.Requester, methodConversationsList, recentConversationsPayload{
 		ActorUserID:      actorUserID,
 		Keyword:          strings.TrimSpace(parsed.Keyword),
+		Limit:            parsed.Limit,
 		TriggerMessageID: triggerMessageID,
 	})
+}
+
+func callReadHistory(ctx context.Context, input json.RawMessage) (mcpclient.ToolResult, error) {
+	scope, err := requireScope(ctx)
+	if err != nil {
+		return mcpclient.ToolResult{}, err
+	}
+	actorUserID, triggerMessageID, err := requireActorTriggerScope(scope)
+	if err != nil {
+		return mcpclient.ToolResult{}, err
+	}
+
+	var parsed readHistoryInput
+	if len(input) > 0 {
+		if err := json.Unmarshal(input, &parsed); err != nil {
+			return mcpclient.ToolResult{}, fmt.Errorf("parse read_history input: %w", err)
+		}
+	}
+	payload := readHistoryPayload{
+		ActorUserID:      actorUserID,
+		AppID:            strings.TrimSpace(parsed.AppID),
+		BeforeSeq:        parsed.BeforeSeq,
+		ConversationID:   strings.TrimSpace(parsed.ConversationID),
+		Limit:            parsed.Limit,
+		TriggerMessageID: triggerMessageID,
+		UserID:           strings.TrimSpace(parsed.UserID),
+	}
+	if countReadHistorySelectors(payload) != 1 {
+		return mcpclient.ToolResult{}, fmt.Errorf("exactly one of conversation_id, user_id, app_id is required")
+	}
+
+	return requestTool(ctx, scope.Requester, methodConversationHistoryRead, payload)
+}
+
+func countReadHistorySelectors(payload readHistoryPayload) int {
+	count := 0
+	if payload.ConversationID != "" {
+		count++
+	}
+	if payload.UserID != "" {
+		count++
+	}
+	if payload.AppID != "" {
+		count++
+	}
+	return count
 }
 
 func callReply(ctx context.Context, input json.RawMessage) (mcpclient.ToolResult, error) {
@@ -415,6 +534,102 @@ func callAddGroupMembers(ctx context.Context, input json.RawMessage) (mcpclient.
 		TriggerMessageID: triggerMessageID,
 		MemberIDs:        memberIDs,
 	})
+}
+
+func callReadFileURLs(ctx context.Context, input json.RawMessage) (mcpclient.ToolResult, error) {
+	scope, err := requireScope(ctx)
+	if err != nil {
+		return mcpclient.ToolResult{}, err
+	}
+
+	fileIDs, err := parseReadFileURLsInput(input)
+	if err != nil {
+		return mcpclient.ToolResult{}, err
+	}
+
+	result, err := readFileURLsBestEffort(ctx, scope.Requester, fileIDs)
+	if err != nil {
+		return mcpclient.ToolResult{}, err
+	}
+	content, err := json.Marshal(result)
+	if err != nil {
+		return mcpclient.ToolResult{}, err
+	}
+
+	return mcpclient.ToolResult{Content: string(content)}, nil
+}
+
+func parseReadFileURLsInput(input json.RawMessage) ([]string, error) {
+	var parsed readFileURLsInput
+	if err := json.Unmarshal(input, &parsed); err != nil {
+		return nil, fmt.Errorf("parse read_file_urls input: %w", err)
+	}
+	fileIDs := make([]string, 0, len(parsed.FileIDs))
+	seen := map[string]struct{}{}
+	for _, rawFileID := range parsed.FileIDs {
+		fileID := strings.TrimSpace(rawFileID)
+		if fileID == "" {
+			continue
+		}
+		if _, ok := seen[fileID]; ok {
+			continue
+		}
+		seen[fileID] = struct{}{}
+		fileIDs = append(fileIDs, fileID)
+	}
+	if len(fileIDs) == 0 {
+		return nil, fmt.Errorf("file_ids is required")
+	}
+
+	return fileIDs, nil
+}
+
+func readFileURLsBestEffort(ctx context.Context, requester AppRequester, fileIDs []string) (readFileURLsToolResult, error) {
+	urls, err := requestTemporaryFileURLs(ctx, requester, fileIDs)
+	if err == nil {
+		return readFileURLsToolResult{URLs: urls}, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return readFileURLsToolResult{}, err
+	}
+
+	result := readFileURLsToolResult{
+		URLs:   make([]temporaryFileReadURL, 0, len(fileIDs)),
+		Errors: make([]readFileURLError, 0),
+	}
+	for _, fileID := range fileIDs {
+		if err := ctx.Err(); err != nil {
+			return readFileURLsToolResult{}, err
+		}
+		urls, err := requestTemporaryFileURLs(ctx, requester, []string{fileID})
+		if err != nil {
+			result.Errors = append(result.Errors, readFileURLError{FileID: fileID, Error: err.Error()})
+			continue
+		}
+		if len(urls) == 0 {
+			result.Errors = append(result.Errors, readFileURLError{FileID: fileID, Error: "temporary file read URL not found"})
+			continue
+		}
+		result.URLs = append(result.URLs, urls...)
+	}
+
+	return result, nil
+}
+
+func requestTemporaryFileURLs(ctx context.Context, requester AppRequester, fileIDs []string) ([]temporaryFileReadURL, error) {
+	raw, err := requester.Request(ctx, methodTemporaryFilesReadURLs, readTemporaryFileURLsPayload{
+		FileIDs: fileIDs,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var response readTemporaryFileURLsResponse
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return nil, err
+	}
+
+	return response.URLs, nil
 }
 
 func requireActorTriggerScope(scope Scope) (string, string, error) {
@@ -604,7 +819,7 @@ func messageInputSchema(requireContact bool) map[string]any {
 		}
 		properties["conversation_id"] = map[string]any{
 			"type":        "string",
-			"description": "target_type=group 时必填，目标已有群聊 ID，必须来自 my_groups 工具返回的群聊。",
+			"description": "target_type=group 时必填，目标已有群聊 ID，必须来自 recent_conversations 工具返回的群聊。",
 		}
 	}
 
@@ -612,6 +827,37 @@ func messageInputSchema(requireContact bool) map[string]any {
 		"type":       "object",
 		"required":   required,
 		"properties": properties,
+	}
+}
+
+func readHistoryInputSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"conversation_id": map[string]any{
+				"type":        "string",
+				"description": "可选，会话 ID。与 user_id、app_id 三选一；用于读取指定会话的历史。",
+			},
+			"user_id": map[string]any{
+				"type":        "string",
+				"description": "可选，联系人用户 ID。与 conversation_id、app_id 三选一；用于读取当前触发用户和该用户的私聊历史。",
+			},
+			"app_id": map[string]any{
+				"type":        "string",
+				"description": "可选，应用 ID。与 conversation_id、user_id 三选一；用于读取当前触发用户和该应用的会话历史。",
+			},
+			"before_seq": map[string]any{
+				"type":        "integer",
+				"description": "可选。读取 seq 小于 before_seq 的更早消息；不传表示读取最新消息。",
+				"minimum":     1,
+			},
+			"limit": map[string]any{
+				"type":        "integer",
+				"description": "可选返回数量。不传默认 20，最大 100。",
+				"minimum":     1,
+				"maximum":     100,
+			},
+		},
 	}
 }
 
@@ -655,11 +901,28 @@ func addGroupMembersInputSchema() map[string]any {
 	}
 }
 
+func readFileURLsInputSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"file_ids"},
+		"properties": map[string]any{
+			"file_ids": map[string]any{
+				"type":        "array",
+				"description": "当前消息或历史消息里的 file_id 列表。只有需要查看图片或附件内容时传入；可一次传多个。",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
+		},
+	}
+}
+
 func sleepDuration(input json.RawMessage) (time.Duration, float64, error) {
 	var parsed sleepInput
 	if len(input) > 0 {
 		if err := json.Unmarshal(input, &parsed); err != nil {
-			return 0, 0, fmt.Errorf("parse sleep input: %w", err)
+			seconds := float64(minSleepSeconds)
+			return time.Duration(seconds * float64(defaultSleepUnit)), seconds, nil
 		}
 	}
 

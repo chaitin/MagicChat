@@ -72,7 +72,7 @@ func TestAgentBuildsSystemPromptAndUserContext(t *testing.T) {
 				SenderType: "user",
 				SenderName: "Alice",
 				Summary:    "之前问了部署时间",
-				Body:       json.RawMessage(`{"type":"image","file_id":"file-history-image","url":"https://assets.example.test/file-history-image"}`),
+				Body:       json.RawMessage(`{"type":"image","file_id":"file-history-image"}`),
 			},
 			{
 				Seq:        2,
@@ -185,8 +185,11 @@ func TestAgentBuildsSystemPromptAndUserContext(t *testing.T) {
 	if contextPayload.Messages[0].Summary != "之前问了部署时间" {
 		t.Fatalf("first summary = %q, want history summary", contextPayload.Messages[0].Summary)
 	}
-	if contextPayload.Messages[0].Body.URL != "https://assets.example.test/file-history-image" {
-		t.Fatalf("first history body URL = %q, want temporary file URL", contextPayload.Messages[0].Body.URL)
+	if contextPayload.Messages[0].Body.FileID != "file-history-image" {
+		t.Fatalf("first history body file_id = %q, want file id", contextPayload.Messages[0].Body.FileID)
+	}
+	if contextPayload.Messages[0].Body.URL != "" {
+		t.Fatalf("first history body URL = %q, want omitted", contextPayload.Messages[0].Body.URL)
 	}
 	if contextPayload.Messages[1].SenderName != "女菩萨" {
 		t.Fatalf("second sender = %q, want 女菩萨", contextPayload.Messages[1].SenderName)
@@ -207,9 +210,18 @@ func TestDefaultSystemPromptDescribesBuiltinToolUsage(t *testing.T) {
 		"sleep",
 		"异步任务",
 		"提交任务",
-		"等待一会儿",
+		"5 到 30 秒",
 		"contacts",
-		"my_groups",
+		"recent_conversations",
+		"会话类型",
+		"成员数量",
+		"私聊对象",
+		"昵称",
+		"read_history",
+		"before_seq",
+		"read_file_urls",
+		"file_id",
+		"按需",
 		"reply",
 		"send_as_user",
 		"create_group",

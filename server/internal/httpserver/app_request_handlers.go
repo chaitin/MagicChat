@@ -19,13 +19,17 @@ const (
 	appMethodMessageSend               = "message.send"
 	appMethodMessageSendAsUser         = "message.send_as_user"
 	appMethodContactsUsersList         = "contacts.users.list"
+	appMethodConversationsList         = "conversations.list"
 	appMethodConversationMessagesList  = "conversation.messages.list"
+	appMethodConversationHistoryRead   = "conversation.history.read"
 	appMethodGroupConversationsList    = "group_conversations.list"
 	appMethodGroupConversationsCreate  = "group_conversations.create"
 	appMethodGroupMembersAdd           = "group_conversations.members.add"
 	appMethodTemporaryFilesReadURLs    = "temporary_files.read_urls"
 	defaultAppConversationHistoryLimit = 30
 	maxAppConversationHistoryLimit     = 100
+	defaultAppScopedHistoryReadLimit   = 20
+	defaultAppConversationListLimit    = 20
 	defaultAppGroupConversationLimit   = 30
 
 	appMessageTargetUser  = "user"
@@ -97,6 +101,18 @@ type appListContactUsersResponse struct {
 	Contacts []contactUserResponse `json:"contacts"`
 }
 
+type appListConversationsRequest struct {
+	ActorUserID      string `json:"actor_user_id"`
+	Keyword          string `json:"keyword"`
+	Limit            int    `json:"limit"`
+	TriggerMessageID string `json:"trigger_message_id"`
+}
+
+type appListConversationsResponse struct {
+	Conversations []appConversationSummaryPayload `json:"conversations"`
+	Limit         int                             `json:"limit"`
+}
+
 type appListConversationMessagesRequest struct {
 	BeforeOrEqualSeq int64  `json:"before_or_equal_seq"`
 	ConversationID   string `json:"conversation_id"`
@@ -106,6 +122,22 @@ type appListConversationMessagesRequest struct {
 type appListConversationMessagesResponse struct {
 	Limit    int                                    `json:"limit"`
 	Messages []appConversationHistoryMessagePayload `json:"messages"`
+}
+
+type appReadConversationHistoryRequest struct {
+	ActorUserID      string `json:"actor_user_id"`
+	AppID            string `json:"app_id"`
+	BeforeSeq        int64  `json:"before_seq"`
+	ConversationID   string `json:"conversation_id"`
+	Limit            int    `json:"limit"`
+	TriggerMessageID string `json:"trigger_message_id"`
+	UserID           string `json:"user_id"`
+}
+
+type appReadConversationHistoryResponse struct {
+	Conversation appConversationSummaryPayload          `json:"conversation"`
+	Limit        int                                    `json:"limit"`
+	Messages     []appConversationHistoryMessagePayload `json:"messages"`
 }
 
 type appListGroupConversationsRequest struct {
@@ -121,8 +153,7 @@ type appListGroupConversationsResponse struct {
 }
 
 type appReadTemporaryFileURLsRequest struct {
-	ConversationID string   `json:"conversation_id"`
-	FileIDs        []string `json:"file_ids"`
+	FileIDs []string `json:"file_ids"`
 }
 
 type appConversationHistoryMessagePayload struct {
@@ -132,6 +163,14 @@ type appConversationHistoryMessagePayload struct {
 	Sender    appMessageSenderPayload `json:"sender"`
 	Seq       int64                   `json:"seq"`
 	Summary   string                  `json:"summary"`
+}
+
+type appConversationSummaryPayload struct {
+	ConversationID string    `json:"conversation_id"`
+	LastActiveAt   time.Time `json:"last_active_at"`
+	MemberCount    int       `json:"member_count"`
+	Name           string    `json:"name"`
+	Type           string    `json:"type"`
 }
 
 type appRequestFailure struct {
@@ -163,8 +202,20 @@ func (s *Server) handleAppRequest(appID string, request realtime.Envelope) realt
 			return appRequestErrorResponse(request.ID, err)
 		}
 		return realtime.NewResponse(request.ID, response)
+	case appMethodConversationsList:
+		response, err := s.handleAppListConversations(appID, request)
+		if err != nil {
+			return appRequestErrorResponse(request.ID, err)
+		}
+		return realtime.NewResponse(request.ID, response)
 	case appMethodConversationMessagesList:
 		response, err := s.handleAppListConversationMessages(appID, request)
+		if err != nil {
+			return appRequestErrorResponse(request.ID, err)
+		}
+		return realtime.NewResponse(request.ID, response)
+	case appMethodConversationHistoryRead:
+		response, err := s.handleAppReadConversationHistory(appID, request)
 		if err != nil {
 			return appRequestErrorResponse(request.ID, err)
 		}
@@ -324,6 +375,42 @@ func (s *Server) handleAppSendMessageAsUser(appID string, request realtime.Envel
 			},
 			Summary: message.Summary,
 		},
+	}, nil
+}
+
+func (s *Server) handleAppListConversations(appID string, request realtime.Envelope) (appListConversationsResponse, error) {
+	var req appListConversationsRequest
+	if len(request.Payload) > 0 {
+		if err := json.Unmarshal(request.Payload, &req); err != nil {
+			return appListConversationsResponse{}, newAppRequestFailure("invalid_request", "请求格式错误")
+		}
+	}
+
+	actorUserID, triggerMessageID, err := normalizeAppActorTrigger(req.ActorUserID, req.TriggerMessageID)
+	if err != nil {
+		return appListConversationsResponse{}, err
+	}
+	if err := s.requireAppSendAsUserTrigger(appID, actorUserID, triggerMessageID); err != nil {
+		return appListConversationsResponse{}, err
+	}
+	actor, err := s.findActiveAppActor(actorUserID)
+	if err != nil {
+		return appListConversationsResponse{}, err
+	}
+
+	limit := normalizeAppScopedLimit(req.Limit, defaultAppConversationListLimit)
+	conversations, err := s.loadAppUserConversations(actor.ID, strings.ToLower(strings.TrimSpace(req.Keyword)), limit)
+	if err != nil {
+		return appListConversationsResponse{}, err
+	}
+	payloads, err := s.newAppConversationSummaryPayloads(conversations, actor.ID)
+	if err != nil {
+		return appListConversationsResponse{}, err
+	}
+
+	return appListConversationsResponse{
+		Conversations: payloads,
+		Limit:         limit,
 	}, nil
 }
 
@@ -539,33 +626,64 @@ func (s *Server) handleAppListConversationMessages(appID string, request realtim
 	}, nil
 }
 
-func (s *Server) handleAppReadTemporaryFileURLs(appID string, request realtime.Envelope) (readTemporaryFileURLsResponse, error) {
+func (s *Server) handleAppReadConversationHistory(appID string, request realtime.Envelope) (appReadConversationHistoryResponse, error) {
+	var req appReadConversationHistoryRequest
+	if err := json.Unmarshal(request.Payload, &req); err != nil {
+		return appReadConversationHistoryResponse{}, newAppRequestFailure("invalid_request", "请求格式错误")
+	}
+
+	req, err := normalizeAppReadConversationHistoryRequest(req)
+	if err != nil {
+		return appReadConversationHistoryResponse{}, err
+	}
+	if err := s.requireAppSendAsUserTrigger(appID, req.ActorUserID, req.TriggerMessageID); err != nil {
+		return appReadConversationHistoryResponse{}, err
+	}
+	actor, err := s.findActiveAppActor(req.ActorUserID)
+	if err != nil {
+		return appReadConversationHistoryResponse{}, err
+	}
+	conversation, err := s.findAppHistoryConversationForActor(actor.ID, req)
+	if err != nil {
+		return appReadConversationHistoryResponse{}, mapAppHistoryReadError(err)
+	}
+
+	query := listConversationMessagesQuery{Limit: req.Limit}
+	if req.BeforeSeq > 0 {
+		query.BeforeSeq = &req.BeforeSeq
+	}
+	messages, _, err := s.listUserConversationMessages(actor.ID, conversation.ID, query)
+	if err != nil {
+		return appReadConversationHistoryResponse{}, mapAppHistoryReadError(err)
+	}
+	messagePayloads, err := s.newAppConversationHistoryMessagePayloads(messages)
+	if err != nil {
+		return appReadConversationHistoryResponse{}, err
+	}
+	conversationPayloads, err := s.newAppConversationSummaryPayloads([]store.Conversation{conversation}, actor.ID)
+	if err != nil {
+		return appReadConversationHistoryResponse{}, err
+	}
+	if len(conversationPayloads) != 1 {
+		return appReadConversationHistoryResponse{}, newAppRequestFailure("not_found", "会话不存在")
+	}
+
+	return appReadConversationHistoryResponse{
+		Conversation: conversationPayloads[0],
+		Limit:        req.Limit,
+		Messages:     messagePayloads,
+	}, nil
+}
+
+func (s *Server) handleAppReadTemporaryFileURLs(_ string, request realtime.Envelope) (readTemporaryFileURLsResponse, error) {
 	var req appReadTemporaryFileURLsRequest
 	if err := json.Unmarshal(request.Payload, &req); err != nil {
 		return readTemporaryFileURLsResponse{}, newAppRequestFailure("invalid_request", "请求格式错误")
 	}
 
-	conversationID := strings.TrimSpace(req.ConversationID)
-	if _, err := uuid.Parse(conversationID); err != nil {
-		return readTemporaryFileURLsResponse{}, newAppRequestFailure("invalid_request", "会话 ID 格式错误")
-	}
 	fileIDs, err := normalizeTemporaryFileIDs(req.FileIDs)
 	if err != nil {
 		return readTemporaryFileURLsResponse{}, newAppRequestFailure("invalid_request", err.Error())
-	}
-
-	member, err := s.requireReadableAppConversationMember(appID, conversationID)
-	if err != nil {
-		return readTemporaryFileURLsResponse{}, err
-	}
-	readableFileIDs, err := s.loadAppReadableTemporaryFileIDs(conversationID, member.HistoryVisibleFromSeq, fileIDs)
-	if err != nil {
-		return readTemporaryFileURLsResponse{}, err
-	}
-	for _, fileID := range fileIDs {
-		if _, ok := readableFileIDs[fileID]; !ok {
-			return readTemporaryFileURLsResponse{}, newAppRequestFailure("forbidden", "无权访问临时文件")
-		}
 	}
 
 	urls, err := s.presignTemporaryFileReadURLsForApp(context.Background(), fileIDs)
@@ -574,60 +692,6 @@ func (s *Server) handleAppReadTemporaryFileURLs(appID string, request realtime.E
 	}
 
 	return readTemporaryFileURLsResponse{URLs: urls}, nil
-}
-
-func (s *Server) loadAppReadableTemporaryFileIDs(conversationID string, historyVisibleFromSeq int64, fileIDs []string) (map[string]struct{}, error) {
-	requested := make(map[string]struct{}, len(fileIDs))
-	for _, fileID := range fileIDs {
-		requested[fileID] = struct{}{}
-	}
-	if historyVisibleFromSeq < 1 {
-		historyVisibleFromSeq = 1
-	}
-
-	likeClauses := make([]string, 0, len(fileIDs))
-	likeArgs := make([]any, 0, len(fileIDs))
-	for _, fileID := range fileIDs {
-		likeClauses = append(likeClauses, "body LIKE ?")
-		likeArgs = append(likeArgs, "%"+fileID+"%")
-	}
-
-	var messages []store.Message
-	if err := s.db.
-		Select("body").
-		Where("conversation_id = ? AND deleted_at IS NULL AND seq >= ?", conversationID, historyVisibleFromSeq).
-		Where("("+strings.Join(likeClauses, " OR ")+")", likeArgs...).
-		Find(&messages).Error; err != nil {
-		return nil, err
-	}
-
-	readable := make(map[string]struct{}, len(fileIDs))
-	for _, message := range messages {
-		var envelope messageBodyEnvelope
-		if err := json.Unmarshal(message.Body, &envelope); err != nil {
-			continue
-		}
-		switch envelope.Type {
-		case messageTypeImage:
-			var body imageMessageBody
-			if err := json.Unmarshal(message.Body, &body); err != nil {
-				continue
-			}
-			if _, ok := requested[body.FileID]; ok {
-				readable[body.FileID] = struct{}{}
-			}
-		case messageTypeFile:
-			var body fileMessageBody
-			if err := json.Unmarshal(message.Body, &body); err != nil {
-				continue
-			}
-			if _, ok := requested[body.FileID]; ok {
-				readable[body.FileID] = struct{}{}
-			}
-		}
-	}
-
-	return readable, nil
 }
 
 func (s *Server) presignTemporaryFileReadURLsForApp(ctx context.Context, fileIDs []string) ([]temporaryFileReadURLResponse, error) {
@@ -686,6 +750,58 @@ func normalizeAppListConversationMessagesRequest(req appListConversationMessages
 	}
 
 	return req, nil
+}
+
+func normalizeAppReadConversationHistoryRequest(req appReadConversationHistoryRequest) (appReadConversationHistoryRequest, error) {
+	actorUserID, triggerMessageID, err := normalizeAppActorTrigger(req.ActorUserID, req.TriggerMessageID)
+	if err != nil {
+		return appReadConversationHistoryRequest{}, err
+	}
+	req.ActorUserID = actorUserID
+	req.TriggerMessageID = triggerMessageID
+	req.ConversationID = strings.TrimSpace(req.ConversationID)
+	req.UserID = strings.TrimSpace(req.UserID)
+	req.AppID = strings.TrimSpace(req.AppID)
+
+	selectorCount := 0
+	if req.ConversationID != "" {
+		if _, err := uuid.Parse(req.ConversationID); err != nil {
+			return appReadConversationHistoryRequest{}, newAppRequestFailure("invalid_request", "会话 ID 格式错误")
+		}
+		selectorCount++
+	}
+	if req.UserID != "" {
+		if _, err := uuid.Parse(req.UserID); err != nil {
+			return appReadConversationHistoryRequest{}, newAppRequestFailure("invalid_request", "用户 ID 格式错误")
+		}
+		selectorCount++
+	}
+	if req.AppID != "" {
+		if _, err := uuid.Parse(req.AppID); err != nil {
+			return appReadConversationHistoryRequest{}, newAppRequestFailure("invalid_request", "应用 ID 格式错误")
+		}
+		selectorCount++
+	}
+	if selectorCount != 1 {
+		return appReadConversationHistoryRequest{}, newAppRequestFailure("invalid_request", "conversation_id、user_id、app_id 必须三选一")
+	}
+	if req.BeforeSeq < 0 {
+		return appReadConversationHistoryRequest{}, newAppRequestFailure("invalid_request", "before_seq 必须是正整数")
+	}
+	req.Limit = normalizeAppScopedLimit(req.Limit, defaultAppScopedHistoryReadLimit)
+
+	return req, nil
+}
+
+func normalizeAppScopedLimit(limit int, defaultLimit int) int {
+	if limit <= 0 {
+		limit = defaultLimit
+	}
+	if limit > maxAppConversationHistoryLimit {
+		limit = maxAppConversationHistoryLimit
+	}
+
+	return limit
 }
 
 func normalizeAppSendAsUserRequest(req appSendAsUserRequest) (appSendAsUserRequest, error) {
@@ -873,6 +989,159 @@ func (s *Server) loadAppUserGroupConversations(actorUserID string, keyword strin
 	}
 
 	return conversations, nil
+}
+
+func (s *Server) loadAppUserConversations(actorUserID string, keyword string, limit int) ([]store.Conversation, error) {
+	query := s.db.Model(&store.Conversation{}).
+		Joins("JOIN conversation_members cm ON cm.conversation_id = conversations.id").
+		Where("cm.member_type = ? AND cm.member_id = ? AND cm.left_at IS NULL", store.ConversationMemberTypeUser, actorUserID).
+		Where("conversations.status = ?", store.ConversationStatusActive)
+	if keyword != "" {
+		likeKeyword := "%" + keyword + "%"
+		query = query.Where(
+			`LOWER(conversations.name) LIKE ? OR conversations.name LIKE ? OR EXISTS (
+				SELECT 1
+				FROM direct_conversations dc
+				JOIN users direct_other
+					ON direct_other.status = ?
+					AND (
+						(dc.user_low_id = ? AND direct_other.id = dc.user_high_id)
+						OR (dc.user_high_id = ? AND direct_other.id = dc.user_low_id)
+					)
+				WHERE dc.conversation_id = conversations.id
+					AND conversations.kind = ?
+					AND (
+						LOWER(direct_other.name) LIKE ?
+						OR direct_other.name LIKE ?
+						OR LOWER(direct_other.nickname) LIKE ?
+						OR direct_other.nickname LIKE ?
+					)
+			)`,
+			likeKeyword,
+			likeKeyword,
+			store.UserStatusActive,
+			actorUserID,
+			actorUserID,
+			store.ConversationKindDirect,
+			likeKeyword,
+			likeKeyword,
+			likeKeyword,
+			likeKeyword,
+		)
+	}
+
+	var conversations []store.Conversation
+	if err := query.
+		Order("COALESCE(conversations.last_message_at, conversations.created_at) DESC").
+		Order("conversations.id ASC").
+		Limit(limit).
+		Find(&conversations).Error; err != nil {
+		return nil, err
+	}
+
+	return conversations, nil
+}
+
+func (s *Server) findAppHistoryConversationForActor(actorUserID string, req appReadConversationHistoryRequest) (store.Conversation, error) {
+	switch {
+	case req.ConversationID != "":
+		var conversation store.Conversation
+		if err := s.db.First(&conversation, "id = ?", req.ConversationID).Error; err != nil {
+			return store.Conversation{}, err
+		}
+		if _, err := s.requireReadableConversationMember(actorUserID, conversation.ID); err != nil {
+			return store.Conversation{}, err
+		}
+		return conversation, nil
+	case req.UserID != "":
+		userLowID, userHighID := orderDirectConversationUserIDs(actorUserID, req.UserID)
+		conversation, err := findDirectConversationByUserPair(s.db, userLowID, userHighID)
+		if err != nil {
+			return store.Conversation{}, err
+		}
+		if _, err := s.requireReadableConversationMember(actorUserID, conversation.ID); err != nil {
+			return store.Conversation{}, err
+		}
+		return conversation, nil
+	case req.AppID != "":
+		conversation, err := findAppConversationByUserAndApp(s.db, req.AppID, actorUserID)
+		if err != nil {
+			return store.Conversation{}, err
+		}
+		if _, err := s.requireReadableConversationMember(actorUserID, conversation.ID); err != nil {
+			return store.Conversation{}, err
+		}
+		return conversation, nil
+	default:
+		return store.Conversation{}, newAppRequestFailure("invalid_request", "conversation_id、user_id、app_id 必须三选一")
+	}
+}
+
+func (s *Server) newAppConversationSummaryPayloads(conversations []store.Conversation, currentUserID string) ([]appConversationSummaryPayload, error) {
+	conversationIDs := make([]string, 0, len(conversations))
+	for _, conversation := range conversations {
+		conversationIDs = append(conversationIDs, conversation.ID)
+	}
+	membersByConversationID, usersByID, err := s.loadConversationListMembers(conversationIDs)
+	if err != nil {
+		return nil, err
+	}
+	memberCountsByConversationID, err := s.loadConversationActiveMemberCounts(conversationIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	payloads := make([]appConversationSummaryPayload, 0, len(conversations))
+	for _, conversation := range conversations {
+		item := newConversationListItemResponse(
+			conversation,
+			currentUserID,
+			membersByConversationID[conversation.ID],
+			usersByID,
+		)
+		lastActiveAt := conversation.CreatedAt
+		if conversation.LastMessageAt != nil {
+			lastActiveAt = *conversation.LastMessageAt
+		}
+		memberCount := memberCountsByConversationID[conversation.ID]
+		if memberCount == 0 {
+			memberCount = item.MemberCount
+		}
+		payloads = append(payloads, appConversationSummaryPayload{
+			ConversationID: conversation.ID,
+			LastActiveAt:   lastActiveAt,
+			MemberCount:    memberCount,
+			Name:           item.Name,
+			Type:           item.Type,
+		})
+	}
+
+	return payloads, nil
+}
+
+func (s *Server) loadConversationActiveMemberCounts(conversationIDs []string) (map[string]int, error) {
+	counts := make(map[string]int, len(conversationIDs))
+	if len(conversationIDs) == 0 {
+		return counts, nil
+	}
+
+	type countRow struct {
+		ConversationID string
+		Count          int
+	}
+	var rows []countRow
+	if err := s.db.Model(&store.ConversationMember{}).
+		Select("conversation_id, COUNT(*) AS count").
+		Where("conversation_id IN ? AND left_at IS NULL", conversationIDs).
+		Group("conversation_id").
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		counts[row.ConversationID] = row.Count
+	}
+
+	return counts, nil
 }
 
 func (s *Server) requireReadableAppConversationMember(appID string, conversationID string) (store.ConversationMember, error) {
@@ -1275,6 +1544,17 @@ func mapAppMessageError(err error) error {
 	}
 	if errors.Is(err, errConversationNotSendable) {
 		return newAppRequestFailure("forbidden", "当前会话不能发送消息")
+	}
+
+	return err
+}
+
+func mapAppHistoryReadError(err error) error {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return newAppRequestFailure("not_found", "会话不存在")
+	}
+	if errors.Is(err, errConversationAccessDenied) {
+		return newAppRequestFailure("forbidden", "无权访问会话")
 	}
 
 	return err

@@ -1901,6 +1901,320 @@ func TestAppWebSocketGroupConversationsListReturnsTriggeringUserGroups(t *testin
 	}
 }
 
+func TestAppWebSocketRecentConversationsListUsesTriggeringUser(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+
+	now := time.Date(2026, 7, 8, 10, 0, 0, 0, time.UTC)
+	alice := insertTestUser(t, db, "alice@example.com", "Alice", store.UserStatusActive, now)
+	bob := insertTestUser(t, db, "bob@example.com", "Bob", store.UserStatusActive, now)
+	bob.Nickname = "鲍勃"
+	if err := db.Model(&store.User{}).Where("id = ?", bob.ID).Update("nickname", bob.Nickname).Error; err != nil {
+		t.Fatalf("update bob nickname: %v", err)
+	}
+	carol := insertTestUser(t, db, "carol@example.com", "Carol", store.UserStatusActive, now)
+	directLastActiveAt := now.Add(-5 * time.Minute)
+	direct := insertTestConversation(t, db, testConversationInput{
+		createdByUserID:    alice.ID,
+		kind:               store.ConversationKindDirect,
+		lastMessageAt:      &directLastActiveAt,
+		lastMessageSeq:     4,
+		lastMessageSummary: "私聊消息",
+		memberIDs:          []string{alice.ID, bob.ID},
+		now:                now.Add(-2 * time.Hour),
+	})
+	groupLastActiveAt := now.Add(-10 * time.Minute)
+	group := insertTestConversation(t, db, testConversationInput{
+		createdByUserID:    alice.ID,
+		kind:               store.ConversationKindGroup,
+		lastMessageAt:      &groupLastActiveAt,
+		lastMessageSeq:     7,
+		lastMessageSummary: "群聊消息",
+		memberIDs:          []string{alice.ID, bob.ID},
+		name:               "项目讨论组",
+		now:                now.Add(-90 * time.Minute),
+	})
+	_ = insertTestConversation(t, db, testConversationInput{
+		createdByUserID:    carol.ID,
+		kind:               store.ConversationKindGroup,
+		lastMessageSummary: "不应该看到",
+		memberIDs:          []string{carol.ID},
+		name:               "项目旁观组",
+		now:                now.Add(-80 * time.Minute),
+	})
+	app := insertTestApp(t, db, store.App{
+		Name:             "女菩萨",
+		Enabled:          true,
+		Visibility:       store.AppVisibilityPublic,
+		ConnectionSecret: "assistant-secret",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	})
+	aliceCookie := loginAsUser(t, server, alice.Email)
+	appConn := dialAppWebSocket(t, server, app.ID, app.ConnectionSecret)
+
+	createConversationResp, createConversationBody := postJSON(t, server, "/api/client/conversations/apps", map[string]any{
+		"app_id": app.ID,
+	}, aliceCookie)
+	if createConversationResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create app conversation status = %d, want 201, body = %#v", createConversationResp.StatusCode, createConversationBody)
+	}
+	appConversation := requireSuccess(t, createConversationBody)["conversation"].(map[string]any)
+	triggerResp, triggerBody := postJSON(t, server, "/api/client/conversations/"+appConversation["id"].(string)+"/messages", map[string]any{
+		"client_message_id": "trigger-list-recent-conversations-1",
+		"body": map[string]any{
+			"type":    "text",
+			"content": "看看最近会话",
+		},
+	}, aliceCookie)
+	if triggerResp.StatusCode != http.StatusCreated {
+		t.Fatalf("trigger message status = %d, want 201, body = %#v", triggerResp.StatusCode, triggerBody)
+	}
+	triggerMessage := requireSuccess(t, triggerBody)["message"].(map[string]any)
+	triggerEvent := readRealtimeEvent(t, appConn)
+	if triggerEvent.Kind != realtime.KindEvent || triggerEvent.Event != realtime.EventMessageCreated {
+		t.Fatalf("trigger app event = %#v, want message.created", triggerEvent)
+	}
+
+	response := sendAppRequest(t, appConn, realtime.Envelope{
+		V:      realtime.ProtocolVersion,
+		Kind:   realtime.KindRequest,
+		ID:     "app-list-recent-conversations-request",
+		Method: appMethodConversationsList,
+		Payload: mustMarshalPayloadForTest(t, map[string]any{
+			"actor_user_id":      alice.ID,
+			"trigger_message_id": triggerMessage["id"],
+			"limit":              200,
+		}),
+	})
+	var payload map[string]any
+	if err := json.Unmarshal(response.Payload, &payload); err != nil {
+		t.Fatalf("unmarshal recent conversations response: %v", err)
+	}
+	if payload["limit"] != float64(100) {
+		t.Fatalf("limit = %v, want 100", payload["limit"])
+	}
+	conversations := payload["conversations"].([]any)
+	byID := map[string]map[string]any{}
+	for _, item := range conversations {
+		conversation := item.(map[string]any)
+		byID[conversation["conversation_id"].(string)] = conversation
+	}
+	for _, tt := range []struct {
+		id          string
+		kind        string
+		memberCount float64
+	}{
+		{id: appConversation["id"].(string), kind: store.ConversationKindApp, memberCount: 2},
+		{id: direct.ID, kind: store.ConversationKindDirect, memberCount: 2},
+		{id: group.ID, kind: store.ConversationKindGroup, memberCount: 2},
+	} {
+		conversation, ok := byID[tt.id]
+		if !ok {
+			t.Fatalf("conversation %s missing from %#v", tt.id, conversations)
+		}
+		if conversation["type"] != tt.kind {
+			t.Fatalf("conversation %s type = %v, want %s", tt.id, conversation["type"], tt.kind)
+		}
+		if conversation["member_count"] != tt.memberCount {
+			t.Fatalf("conversation %s member_count = %v, want %v", tt.id, conversation["member_count"], tt.memberCount)
+		}
+		if conversation["last_active_at"] == "" {
+			t.Fatalf("conversation %s last_active_at is empty", tt.id)
+		}
+	}
+
+	keywordResponse := sendAppRequest(t, appConn, realtime.Envelope{
+		V:      realtime.ProtocolVersion,
+		Kind:   realtime.KindRequest,
+		ID:     "app-list-recent-conversations-keyword-request",
+		Method: appMethodConversationsList,
+		Payload: mustMarshalPayloadForTest(t, map[string]any{
+			"actor_user_id":      alice.ID,
+			"trigger_message_id": triggerMessage["id"],
+			"keyword":            "项目",
+		}),
+	})
+	var keywordPayload map[string]any
+	if err := json.Unmarshal(keywordResponse.Payload, &keywordPayload); err != nil {
+		t.Fatalf("unmarshal keyword recent conversations response: %v", err)
+	}
+	if keywordPayload["limit"] != float64(20) {
+		t.Fatalf("keyword limit = %v, want default 20", keywordPayload["limit"])
+	}
+	keywordConversations := keywordPayload["conversations"].([]any)
+	if len(keywordConversations) != 1 {
+		t.Fatalf("keyword conversation count = %d, want 1: %#v", len(keywordConversations), keywordConversations)
+	}
+	keywordConversation := keywordConversations[0].(map[string]any)
+	if keywordConversation["conversation_id"] != group.ID {
+		t.Fatalf("keyword conversation id = %v, want %s", keywordConversation["conversation_id"], group.ID)
+	}
+
+	directKeywordResponse := sendAppRequest(t, appConn, realtime.Envelope{
+		V:      realtime.ProtocolVersion,
+		Kind:   realtime.KindRequest,
+		ID:     "app-list-recent-conversations-direct-keyword-request",
+		Method: appMethodConversationsList,
+		Payload: mustMarshalPayloadForTest(t, map[string]any{
+			"actor_user_id":      alice.ID,
+			"trigger_message_id": triggerMessage["id"],
+			"keyword":            "鲍勃",
+		}),
+	})
+	var directKeywordPayload map[string]any
+	if err := json.Unmarshal(directKeywordResponse.Payload, &directKeywordPayload); err != nil {
+		t.Fatalf("unmarshal direct keyword recent conversations response: %v", err)
+	}
+	directKeywordConversations := directKeywordPayload["conversations"].([]any)
+	if len(directKeywordConversations) != 1 {
+		t.Fatalf("direct keyword conversation count = %d, want 1: %#v", len(directKeywordConversations), directKeywordConversations)
+	}
+	directKeywordConversation := directKeywordConversations[0].(map[string]any)
+	if directKeywordConversation["conversation_id"] != direct.ID {
+		t.Fatalf("direct keyword conversation id = %v, want %s", directKeywordConversation["conversation_id"], direct.ID)
+	}
+}
+
+func TestAppWebSocketConversationHistoryReadSupportsConversationUserAndAppSelectors(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+
+	now := time.Date(2026, 7, 8, 10, 0, 0, 0, time.UTC)
+	alice := insertTestUser(t, db, "alice@example.com", "Alice", store.UserStatusActive, now)
+	bob := insertTestUser(t, db, "bob@example.com", "Bob", store.UserStatusActive, now)
+	direct := insertTestConversation(t, db, testConversationInput{
+		createdByUserID: alice.ID,
+		kind:            store.ConversationKindDirect,
+		memberIDs:       []string{alice.ID, bob.ID},
+		now:             now.Add(-2 * time.Hour),
+	})
+	insertTestMessage(t, db, direct.ID, alice.ID, 1, "第一条私聊", now.Add(-50*time.Minute))
+	insertTestMessage(t, db, direct.ID, bob.ID, 2, "第二条私聊", now.Add(-40*time.Minute))
+	insertTestMessage(t, db, direct.ID, alice.ID, 3, "第三条私聊", now.Add(-30*time.Minute))
+	group := insertTestConversation(t, db, testConversationInput{
+		createdByUserID: alice.ID,
+		kind:            store.ConversationKindGroup,
+		memberIDs:       []string{alice.ID, bob.ID},
+		name:            "项目讨论组",
+		now:             now.Add(-90 * time.Minute),
+	})
+	insertTestMessage(t, db, group.ID, alice.ID, 1, "第一条群聊", now.Add(-20*time.Minute))
+	insertTestMessage(t, db, group.ID, bob.ID, 2, "第二条群聊", now.Add(-10*time.Minute))
+	app := insertTestApp(t, db, store.App{
+		Name:             "女菩萨",
+		Enabled:          true,
+		Visibility:       store.AppVisibilityPublic,
+		ConnectionSecret: "assistant-secret",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	})
+	aliceCookie := loginAsUser(t, server, alice.Email)
+	appConn := dialAppWebSocket(t, server, app.ID, app.ConnectionSecret)
+
+	createConversationResp, createConversationBody := postJSON(t, server, "/api/client/conversations/apps", map[string]any{
+		"app_id": app.ID,
+	}, aliceCookie)
+	if createConversationResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create app conversation status = %d, want 201, body = %#v", createConversationResp.StatusCode, createConversationBody)
+	}
+	appConversation := requireSuccess(t, createConversationBody)["conversation"].(map[string]any)
+	triggerResp, triggerBody := postJSON(t, server, "/api/client/conversations/"+appConversation["id"].(string)+"/messages", map[string]any{
+		"client_message_id": "trigger-read-history-1",
+		"body": map[string]any{
+			"type":    "text",
+			"content": "帮我读聊天记录",
+		},
+	}, aliceCookie)
+	if triggerResp.StatusCode != http.StatusCreated {
+		t.Fatalf("trigger message status = %d, want 201, body = %#v", triggerResp.StatusCode, triggerBody)
+	}
+	triggerMessage := requireSuccess(t, triggerBody)["message"].(map[string]any)
+	triggerEvent := readRealtimeEvent(t, appConn)
+	if triggerEvent.Kind != realtime.KindEvent || triggerEvent.Event != realtime.EventMessageCreated {
+		t.Fatalf("trigger app event = %#v, want message.created", triggerEvent)
+	}
+
+	groupResponse := sendAppRequest(t, appConn, realtime.Envelope{
+		V:      realtime.ProtocolVersion,
+		Kind:   realtime.KindRequest,
+		ID:     "app-read-history-conversation",
+		Method: appMethodConversationHistoryRead,
+		Payload: mustMarshalPayloadForTest(t, map[string]any{
+			"actor_user_id":      alice.ID,
+			"trigger_message_id": triggerMessage["id"],
+			"conversation_id":    group.ID,
+			"limit":              1,
+		}),
+	})
+	var groupPayload map[string]any
+	if err := json.Unmarshal(groupResponse.Payload, &groupPayload); err != nil {
+		t.Fatalf("unmarshal group history response: %v", err)
+	}
+	groupMessages := groupPayload["messages"].([]any)
+	if len(groupMessages) != 1 || groupMessages[0].(map[string]any)["seq"] != float64(2) {
+		t.Fatalf("group messages = %#v, want latest seq 2", groupMessages)
+	}
+
+	directResponse := sendAppRequest(t, appConn, realtime.Envelope{
+		V:      realtime.ProtocolVersion,
+		Kind:   realtime.KindRequest,
+		ID:     "app-read-history-user",
+		Method: appMethodConversationHistoryRead,
+		Payload: mustMarshalPayloadForTest(t, map[string]any{
+			"actor_user_id":      alice.ID,
+			"trigger_message_id": triggerMessage["id"],
+			"user_id":            bob.ID,
+			"before_seq":         3,
+			"limit":              2,
+		}),
+	})
+	var directPayload map[string]any
+	if err := json.Unmarshal(directResponse.Payload, &directPayload); err != nil {
+		t.Fatalf("unmarshal direct history response: %v", err)
+	}
+	if directPayload["limit"] != float64(2) {
+		t.Fatalf("direct limit = %v, want 2", directPayload["limit"])
+	}
+	directConversation := directPayload["conversation"].(map[string]any)
+	if directConversation["conversation_id"] != direct.ID || directConversation["type"] != store.ConversationKindDirect {
+		t.Fatalf("direct conversation = %#v, want direct conversation", directConversation)
+	}
+	directMessages := directPayload["messages"].([]any)
+	if len(directMessages) != 2 ||
+		directMessages[0].(map[string]any)["seq"] != float64(1) ||
+		directMessages[1].(map[string]any)["seq"] != float64(2) {
+		t.Fatalf("direct messages = %#v, want seq 1 and 2", directMessages)
+	}
+
+	appResponse := sendAppRequest(t, appConn, realtime.Envelope{
+		V:      realtime.ProtocolVersion,
+		Kind:   realtime.KindRequest,
+		ID:     "app-read-history-app",
+		Method: appMethodConversationHistoryRead,
+		Payload: mustMarshalPayloadForTest(t, map[string]any{
+			"actor_user_id":      alice.ID,
+			"trigger_message_id": triggerMessage["id"],
+			"app_id":             app.ID,
+		}),
+	})
+	var appPayload map[string]any
+	if err := json.Unmarshal(appResponse.Payload, &appPayload); err != nil {
+		t.Fatalf("unmarshal app history response: %v", err)
+	}
+	if appPayload["limit"] != float64(20) {
+		t.Fatalf("app limit = %v, want default 20", appPayload["limit"])
+	}
+	appConversationPayload := appPayload["conversation"].(map[string]any)
+	if appConversationPayload["conversation_id"] != appConversation["id"] || appConversationPayload["type"] != store.ConversationKindApp {
+		t.Fatalf("app conversation = %#v, want app conversation", appConversationPayload)
+	}
+	appMessages := appPayload["messages"].([]any)
+	if len(appMessages) != 1 || appMessages[0].(map[string]any)["id"] != triggerMessage["id"] {
+		t.Fatalf("app messages = %#v, want trigger message", appMessages)
+	}
+}
+
 func TestAppWebSocketMessageSendAsUserCanSendToGroupConversation(t *testing.T) {
 	server, db := newTestRouter(t)
 	defer server.Close()
