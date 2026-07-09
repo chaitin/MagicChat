@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"assistant/internal/config"
@@ -16,11 +18,40 @@ import (
 const defaultHTTPTimeout = 60 * time.Second
 
 type SDKSource struct {
+	cfg     config.MCPServerConfig
+	connect sdkSessionConnector
+	mu      sync.Mutex
 	name    string
-	session *mcp.ClientSession
+	session sdkSession
 }
 
+type sdkSession interface {
+	CallTool(context.Context, *mcp.CallToolParams) (*mcp.CallToolResult, error)
+	Close() error
+	ListTools(context.Context, *mcp.ListToolsParams) (*mcp.ListToolsResult, error)
+}
+
+type sdkSessionConnector func(context.Context, config.MCPServerConfig) (sdkSession, error)
+
 func NewSDKSource(ctx context.Context, cfg config.MCPServerConfig) (*SDKSource, error) {
+	return newSDKSource(ctx, cfg, connectSDKSession)
+}
+
+func newSDKSource(ctx context.Context, cfg config.MCPServerConfig, connect sdkSessionConnector) (*SDKSource, error) {
+	session, err := connect(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return &SDKSource{
+		cfg:     cloneMCPServerConfig(cfg),
+		connect: connect,
+		name:    cfg.Name,
+		session: session,
+	}, nil
+}
+
+func connectSDKSession(ctx context.Context, cfg config.MCPServerConfig) (sdkSession, error) {
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:    "mygod-assistant",
 		Version: "v0.0.0",
@@ -37,10 +68,7 @@ func NewSDKSource(ctx context.Context, cfg config.MCPServerConfig) (*SDKSource, 
 		return nil, fmt.Errorf("connect mcp server %s: %w", cfg.Name, err)
 	}
 
-	return &SDKSource{
-		name:    cfg.Name,
-		session: session,
-	}, nil
+	return session, nil
 }
 
 func NewSDKSources(ctx context.Context, servers []config.MCPServerConfig) ([]Source, error) {
@@ -69,7 +97,7 @@ func (s *SDKSource) ListTools(ctx context.Context) ([]Tool, error) {
 	var tools []Tool
 	cursor := ""
 	for {
-		result, err := s.session.ListTools(ctx, &mcp.ListToolsParams{Cursor: cursor})
+		result, err := s.listTools(ctx, &mcp.ListToolsParams{Cursor: cursor})
 		if err != nil {
 			return nil, err
 		}
@@ -91,12 +119,20 @@ func (s *SDKSource) ListTools(ctx context.Context) ([]Tool, error) {
 }
 
 func (s *SDKSource) CallTool(ctx context.Context, name string, input json.RawMessage) (ToolResult, error) {
-	result, err := s.session.CallTool(ctx, &mcp.CallToolParams{
-		Name:      name,
-		Arguments: input,
-	})
+	result, err := s.callTool(ctx, name, input)
 	if err != nil {
-		return ToolResult{}, err
+		log.Printf("mcp server %s tool %s call failed, reconnecting: %v", s.name, name, err)
+		if reconnectErr := s.reconnect(ctx); reconnectErr != nil {
+			return ToolResult{}, fmt.Errorf("%w; reconnect mcp server %s failed: %v", err, s.name, reconnectErr)
+		}
+		log.Printf("mcp server %s reconnected after tool failure", s.name)
+
+		var retryErr error
+		result, retryErr = s.callTool(ctx, name, input)
+		if retryErr != nil {
+			log.Printf("mcp server %s tool %s retry failed after reconnect: %v", s.name, name, retryErr)
+			return ToolResult{}, fmt.Errorf("%w; retry after reconnect failed: %v", err, retryErr)
+		}
 	}
 
 	return ToolResult{
@@ -105,12 +141,55 @@ func (s *SDKSource) CallTool(ctx context.Context, name string, input json.RawMes
 	}, nil
 }
 
+func (s *SDKSource) listTools(ctx context.Context, params *mcp.ListToolsParams) (*mcp.ListToolsResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.session.ListTools(ctx, params)
+}
+
+func (s *SDKSource) callTool(ctx context.Context, name string, input json.RawMessage) (*mcp.CallToolResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      name,
+		Arguments: input,
+	})
+}
+
+func (s *SDKSource) reconnect(ctx context.Context) error {
+	session, err := s.connect(ctx, s.cfg)
+	if err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	previousSession := s.session
+	s.session = session
+	s.mu.Unlock()
+
+	if previousSession != nil {
+		_ = previousSession.Close()
+	}
+
+	return nil
+}
+
 func (s *SDKSource) Close() error {
-	if s == nil || s.session == nil {
+	if s == nil {
 		return nil
 	}
 
-	return s.session.Close()
+	s.mu.Lock()
+	session := s.session
+	s.session = nil
+	s.mu.Unlock()
+	if session == nil {
+		return nil
+	}
+
+	return session.Close()
 }
 
 type closeableSource interface {
@@ -181,6 +260,26 @@ func newHeaderHTTPClient(headers map[string]string) *http.Client {
 			headers: headers,
 		},
 	}
+}
+
+func cloneMCPServerConfig(cfg config.MCPServerConfig) config.MCPServerConfig {
+	return config.MCPServerConfig{
+		Headers: cloneStringMap(cfg.Headers),
+		Name:    cfg.Name,
+		URL:     cfg.URL,
+	}
+}
+
+func cloneStringMap(values map[string]string) map[string]string {
+	if values == nil {
+		return nil
+	}
+	cloned := make(map[string]string, len(values))
+	for key, value := range values {
+		cloned[key] = value
+	}
+
+	return cloned
 }
 
 func (t headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {

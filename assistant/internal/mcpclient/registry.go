@@ -1,10 +1,16 @@
 package mcpclient
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"strings"
+	"time"
 )
+
+const toolInputLogMaxLength = 2048
 
 type Tool struct {
 	Description  string
@@ -91,7 +97,57 @@ func (r *Registry) CallTool(ctx context.Context, name string, input json.RawMess
 		return ToolResult{}, fmt.Errorf("unknown mcp tool %q", name)
 	}
 
-	return route.source.CallTool(ctx, route.originalName, input)
+	startedAt := time.Now()
+	result, err := route.source.CallTool(ctx, route.originalName, input)
+	duration := time.Since(startedAt)
+	sourceName := route.source.SourceName()
+	if err != nil {
+		log.Printf(
+			"mcp tool call failed server=%s exposed_tool=%s original_tool=%s duration=%s error=%q input=%s",
+			sourceName,
+			name,
+			route.originalName,
+			duration,
+			err.Error(),
+			formatToolInputForLog(input),
+		)
+		return ToolResult{}, err
+	}
+	if result.IsError {
+		log.Printf(
+			"mcp tool returned error server=%s exposed_tool=%s original_tool=%s duration=%s content=%q input=%s",
+			sourceName,
+			name,
+			route.originalName,
+			duration,
+			truncateLogValue(result.Content, toolInputLogMaxLength),
+			formatToolInputForLog(input),
+		)
+	}
+
+	return result, nil
+}
+
+func formatToolInputForLog(input json.RawMessage) string {
+	trimmed := strings.TrimSpace(string(input))
+	if trimmed == "" {
+		return "{}"
+	}
+
+	var compacted bytes.Buffer
+	if err := json.Compact(&compacted, []byte(trimmed)); err == nil {
+		return truncateLogValue(compacted.String(), toolInputLogMaxLength)
+	}
+
+	return truncateLogValue(trimmed, toolInputLogMaxLength)
+}
+
+func truncateLogValue(value string, maxLength int) string {
+	if maxLength <= 0 || len(value) <= maxLength {
+		return value
+	}
+
+	return value[:maxLength] + "...(truncated)"
 }
 
 func sanitizeToolName(name string) string {

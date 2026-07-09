@@ -9,9 +9,13 @@ import (
 
 	"assistant/internal/appclient"
 	"assistant/internal/config"
+	"assistant/internal/logging"
 )
 
 func main() {
+	closeLog := logging.Configure()
+	defer closeLog()
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("load config: %v", err)

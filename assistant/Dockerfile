@@ -17,7 +17,7 @@ WORKDIR /app
 
 COPY --from=build /out/assistant /app/assistant
 
-RUN chown -R app:app /app
+RUN mkdir -p /app/log && chown -R app:app /app
 
 USER app
 

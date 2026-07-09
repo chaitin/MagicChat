@@ -41,9 +41,11 @@ services:
         condition: service_healthy
     environment:
       CONFIG: /app/config/config.yaml
+      LOG_FILE: /app/log/assistant.log
       MYGOD_APP_SECRET: ${MYGOD_AI_ASSISTANT_SECRET:-change-me}
     volumes:
       - ./data/assistant/config:/app/config:ro
+      - ./data/assistant/log:/app/log
 
   server:
     container_name: mygod-server
