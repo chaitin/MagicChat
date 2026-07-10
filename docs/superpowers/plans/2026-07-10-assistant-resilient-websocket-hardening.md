@@ -1,6 +1,6 @@
 # Assistant Resilient WebSocket Hardening Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Completed steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Close the remaining ordering, memory-bound, permanent-authentication, and exact-message-size gaps in the resilient assistant WebSocket implementation.
 
@@ -16,7 +16,7 @@
 - Modify: `assistant/internal/appclient/runner.go:86-129`
 - Modify: `assistant/internal/appclient/runner_test.go`
 
-- [ ] **Step 1: Write the failing watermark-eviction test**
+- [x] **Step 1: Write the failing watermark-eviction test**
 
 Add `fmt` to `runner_test.go` and add:
 
@@ -56,7 +56,7 @@ func TestConversationAgentRunnerUsesJobWatermarkAfterGlobalEviction(t *testing.T
 }
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [x] **Step 2: Run the test and verify RED**
 
 ```bash
 cd assistant
@@ -65,7 +65,7 @@ go test ./internal/appclient -run TestConversationAgentRunnerUsesJobWatermarkAft
 
 Expected: FAIL because the existing-job branch appends seq 7 after the process watermark is evicted.
 
-- [ ] **Step 3: Add the job-local check before `Session.Append`**
+- [x] **Step 3: Add the job-local check before `Session.Append`**
 
 Inside `if job, ok := r.jobs[key]`, before stopping the timer, add:
 
@@ -78,7 +78,7 @@ if prepared.MessageSeq > 0 && prepared.MessageSeq <= job.lastSeenSeq {
 
 Keep the process-level check at the top of `Start`; it covers jobs already removed by idle cleanup.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 ```bash
 cd assistant
@@ -87,7 +87,7 @@ go test ./internal/appclient -run 'TestConversationAgentRunner(UsesJobWatermarkA
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add assistant/internal/appclient/runner.go assistant/internal/appclient/runner_test.go
@@ -102,7 +102,7 @@ git commit -m "fix: retain session-local sequence dedupe"
 - Modify: `assistant/internal/appclient/client.go:223-246`
 - Modify: `assistant/internal/appclient/transport_test.go`
 
-- [ ] **Step 1: Write the failing transport authentication test**
+- [x] **Step 1: Write the failing transport authentication test**
 
 ```go
 func TestWebSocketManagerReturnsPermanentAuthenticationError(t *testing.T) {
@@ -123,7 +123,7 @@ func TestWebSocketManagerReturnsPermanentAuthenticationError(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the transport test and verify RED**
+- [x] **Step 2: Run the transport test and verify RED**
 
 ```bash
 cd assistant
@@ -132,7 +132,7 @@ go test ./internal/appclient -run TestWebSocketManagerReturnsPermanentAuthentica
 
 Expected: build failure because `errWebSocketAuthentication` is undefined.
 
-- [ ] **Step 3: Introduce and return the permanent sentinel**
+- [x] **Step 3: Introduce and return the permanent sentinel**
 
 Define beside `errWebSocketUnavailable`:
 
@@ -146,7 +146,7 @@ Wrap 401/403 in `webSocketManager.Run`:
 return fmt.Errorf("%w: dial %s failed: %v, status=%d", errWebSocketAuthentication, m.cfg.WebSocketURL, err, resp.StatusCode)
 ```
 
-- [ ] **Step 4: Write the failing `Client.Run` propagation test**
+- [x] **Step 4: Write the failing `Client.Run` propagation test**
 
 ```go
 func TestClientRunReturnsPermanentAuthenticationError(t *testing.T) {
@@ -165,7 +165,7 @@ func TestClientRunReturnsPermanentAuthenticationError(t *testing.T) {
 }
 ```
 
-- [ ] **Step 5: Run the propagation test and verify RED**
+- [x] **Step 5: Run the propagation test and verify RED**
 
 ```bash
 cd assistant
@@ -174,7 +174,7 @@ go test ./internal/appclient -run TestClientRunReturnsPermanentAuthenticationErr
 
 Expected: FAIL because `Client.Run` waits for context cancellation and returns nil.
 
-- [ ] **Step 6: Propagate permanent errors from `Client.Run`**
+- [x] **Step 6: Propagate permanent errors from `Client.Run`**
 
 Immediately after the context check following `transport.Run`, add:
 
@@ -184,7 +184,7 @@ if errors.Is(err, errWebSocketAuthentication) {
 }
 ```
 
-- [ ] **Step 7: Verify and commit**
+- [x] **Step 7: Verify and commit**
 
 ```bash
 cd assistant
@@ -202,7 +202,7 @@ Expected: PASS before commit.
 - Modify: `server/internal/appconnection/connection.go:78-123`
 - Modify: `server/internal/appconnection/manager_test.go`
 
-- [ ] **Step 1: Write the exact-boundary WebSocket test**
+- [x] **Step 1: Write the exact-boundary WebSocket test**
 
 ```go
 func exactSizeResponse(t *testing.T, replyTo string, size int) realtime.Envelope {
@@ -240,7 +240,7 @@ func TestConnectionWritesEnvelopeAtExactOneMiBBoundary(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [x] **Step 2: Run the test and verify RED**
 
 ```bash
 cd server
@@ -249,7 +249,7 @@ go test ./internal/appconnection -run TestConnectionWritesEnvelopeAtExactOneMiBB
 
 Expected: FAIL with `websocket: read limit exceeded` because `WriteJSON` appends a newline.
 
-- [ ] **Step 3: Encode once and write raw text bytes**
+- [x] **Step 3: Encode once and write raw text bytes**
 
 Replace the envelope-returning limit helper with:
 
@@ -331,7 +331,7 @@ func TestEncodeOutboundEnvelopeSkipsOversizedEvent(t *testing.T) {
 }
 ```
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 ```bash
 cd server
@@ -352,7 +352,7 @@ Expected: PASS before commit.
 - Modify: `assistant/internal/appclient/transport.go:74-235`
 - Modify: `assistant/internal/appclient/transport_test.go`
 
-- [ ] **Step 1: Write the failing server pagination test**
+- [x] **Step 1: Write the failing server pagination test**
 
 Add `gorm.io/gorm/clause` to `server_test.go`, then add:
 
@@ -415,7 +415,7 @@ func TestAppWebSocketReplaysOutboxInBoundedPages(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the pagination test and verify RED**
+- [x] **Step 2: Run the pagination test and verify RED**
 
 ```bash
 cd server
@@ -424,7 +424,7 @@ go test ./internal/httpserver -run TestAppWebSocketReplaysOutboxInBoundedPages -
 
 Expected: FAIL because current replay performs one query with no limit.
 
-- [ ] **Step 3: Implement keyset pagination**
+- [x] **Step 3: Implement keyset pagination**
 
 Add:
 
@@ -457,7 +457,7 @@ for {
 }
 ```
 
-- [ ] **Step 4: Write the failing assistant admission tests**
+- [x] **Step 4: Write the failing assistant admission tests**
 
 Add:
 
@@ -584,7 +584,7 @@ func TestWebSocketManagerInvalidatesGenerationWhenHandlerRejectsEvent(t *testing
 }
 ```
 
-- [ ] **Step 5: Run assistant admission tests and verify RED**
+- [x] **Step 5: Run assistant admission tests and verify RED**
 
 ```bash
 cd assistant
@@ -593,7 +593,7 @@ go test ./internal/appclient -run 'Test(ClientRejectsNewCursorWhenEventQueueIsFu
 
 Expected: build failure because bounded admission and boolean callbacks do not exist.
 
-- [ ] **Step 6: Implement bounded admission and generation invalidation**
+- [x] **Step 6: Implement bounded admission and generation invalidation**
 
 Add:
 
@@ -675,7 +675,7 @@ if ok && handle != nil && !handle(message) {
 
 Update every existing manager callback in tests to return true.
 
-- [ ] **Step 7: Verify and commit bounded replay**
+- [x] **Step 7: Verify and commit bounded replay**
 
 ```bash
 cd server
@@ -691,6 +691,18 @@ git commit -m "fix: bound app event replay memory"
 
 Expected: PASS with no race report before commit.
 
+#### Completed review follow-up: protect responses and bound writer fairness
+
+- [x] `d704ddf` added an independent bounded response queue, routed every normal/error response through reliable admission, made the writer response-first, and added the real `Client.Run` overflow integration test.
+- [x] `7224371` bounded response priority to bursts of at most 16 consecutive responses so ready events and pings cannot be starved.
+- [x] `5fe51d0` made the fairness point service both a ready ping and one ready event when they are simultaneously ready, preventing event starvation.
+
+Verification recorded for these review follow-ups:
+
+- `TestConnectionPrioritizesRequestResponseOverQueuedEvent` was observed RED before the response-queue implementation and GREEN afterward.
+- `TestConnectionServicesQueuedEventWithinResponseBurst`, `TestConnectionSendsPingWithinResponseBurst`, and `TestConnectionServicesPingAndEventAtResponseFairnessPoint` cover event, ping, and simultaneous-ready fairness.
+- `TestClientRecoversFromEventQueueOverflowWithPrioritizedResponses` runs a real `Client.Run` through 257 events, overflow close, reconnect, stable history request ID, ACK 1..257, and duplicate-seq agent deduplication.
+
 ### Task 5: Create message events inside the message transaction
 
 **Files:**
@@ -701,7 +713,7 @@ Expected: PASS with no race report before commit.
 - Modify: `server/internal/httpserver/app_message_events.go`
 - Modify: `server/internal/httpserver/server_test.go`
 
-- [ ] **Step 1: Write failing atomicity and ordering tests**
+- [x] **Step 1: Write failing atomicity and ordering tests**
 
 Add `EmitAppEvent: true` to the test calls and add two unexported ordering test seams to `Server`:
 
@@ -824,7 +836,7 @@ func TestConcurrentAppMessagesPersistOutboxInSequenceOrder(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the tests and verify RED**
+- [x] **Step 2: Run the tests and verify RED**
 
 ```bash
 cd server
@@ -833,7 +845,7 @@ go test ./internal/httpserver -run 'Test(UserMessageRollsBackWhenAppEventOutboxI
 
 Expected: build failure because `EmitAppEvent` and `afterUserMessageCommit` are undefined.
 
-- [ ] **Step 3: Add explicit event-emission metadata**
+- [x] **Step 3: Add explicit event-emission metadata**
 
 Extend `createMessageMetadata`:
 
@@ -852,7 +864,7 @@ createMessageMetadata{
 
 Do not set `EmitAppEvent` in `handleAppSendMessageAsUser`; delegated app output must not recursively trigger apps.
 
-- [ ] **Step 4: Split event creation from live delivery**
+- [x] **Step 4: Split event creation from live delivery**
 
 Replace post-commit discovery with these transaction-aware helpers in `app_message_events.go`:
 
@@ -978,7 +990,7 @@ func (s *Server) deliverStoredAppEvents(events []store.AppEventOutbox) {
 
 Delete `dispatchAppMessageCreatedEvent`, `sendAppMessageCreatedEvent`, `enqueueAppEvent`, and the receiver-based lookup helpers they replace.
 
-- [ ] **Step 5: Insert outbox rows before the message transaction commits**
+- [x] **Step 5: Insert outbox rows before the message transaction commits**
 
 Add `outboxEvents` and `appEventLockHeld` beside the existing return state at the top of `createUserMessageWithMetadata`. After message and mention metadata are ready inside the new-message branch, move `created = true` before event creation and add:
 
@@ -1021,7 +1033,7 @@ return message, created, memberUserIDs, mentionedUserIDs, nil
 
 Remove the old transaction-error/return block it replaces, and remove post-handler calls to `dispatchAppMessageCreatedEvent` from the text, image, and file handlers.
 
-- [ ] **Step 6: Add duplicate-message outbox coverage**
+- [x] **Step 6: Add duplicate-message outbox coverage**
 
 Immediately after reading the first event in `TestAppWebSocketReceivesTextMessageEvents`, resend the same request and add:
 
@@ -1042,7 +1054,7 @@ if outboxCount != 1 {
 }
 ```
 
-- [ ] **Step 7: Verify and commit transactional ordering**
+- [x] **Step 7: Verify and commit transactional ordering**
 
 ```bash
 cd server
@@ -1058,31 +1070,37 @@ Expected: PASS before commit.
 ### Task 6: Full verification, review, and documentation sync
 
 **Files:**
+- Modify: `docs/superpowers/specs/2026-07-10-assistant-resilient-websocket-hardening-design.md`
 - Modify: `docs/superpowers/plans/2026-07-10-assistant-resilient-websocket-hardening.md`
-- Modify if generated: `api-docs/swagger.json`
-- Modify if generated: `api-docs/swagger.yaml`
+- Inspect only if a commit hook generates a real diff: `api-docs/swagger.json`, `api-docs/swagger.yaml`
 
-- [ ] **Step 1: Format changed Go files**
+- [x] **Step 1: Format changed Go files**
 
 ```bash
 git diff --name-only f4a9660..HEAD -- '*.go' | xargs gofmt -w
 ```
 
-- [ ] **Step 2: Run full tests without cache**
+Completed: all changed Go files were formatted and `gofmt` produced no diff.
+
+- [x] **Step 2: Run full tests without cache**
 
 ```bash
 cd assistant && go test ./... -count=1
 cd ../server && go test ./... -count=1
 ```
 
-- [ ] **Step 3: Run race tests without cache**
+Completed: both module-wide uncached test commands exited successfully.
+
+- [x] **Step 3: Run race tests without cache**
 
 ```bash
 cd assistant && go test -race -count=1 ./internal/appclient ./internal/agent
 cd ../server && go test -race -count=1 ./internal/appconnection ./internal/httpserver
 ```
 
-- [ ] **Step 4: Run deployment and diff checks**
+Completed: both uncached race commands exited successfully with no race report.
+
+- [x] **Step 4: Run deployment and diff checks**
 
 ```bash
 ./scripts/verify-deploy-config.sh
@@ -1091,20 +1109,25 @@ git status --short
 git log --oneline --decorate -12
 ```
 
-- [ ] **Step 5: Request final code review**
+Completed: deploy config verification and diff/worktree checks exited successfully.
+
+- [x] **Step 5: Request final code review**
 
 Review `f4a9660..HEAD` against `docs/superpowers/specs/2026-07-10-assistant-resilient-websocket-hardening-design.md`. Require explicit checks for seq/cursor ordering, message/outbox rollback, bounded replay/admission, permanent auth propagation, exact 1 MiB writes, goroutine lifetime, and race safety. Fix every Critical or Important finding with a new failing test.
 
-- [ ] **Step 6: Mark the plan complete and commit docs**
+Completed at `5fe51d0`: final reviewer reported `Ready: Yes` with no findings.
+
+- [x] **Step 6: Mark the plan complete and commit docs**
 
 Change completed checkboxes in this file to `[x]`, then:
 
 ```bash
-git add api-docs docs/superpowers/plans/2026-07-10-assistant-resilient-websocket-hardening.md
+git add docs/superpowers/specs/2026-07-10-assistant-resilient-websocket-hardening-design.md \
+  docs/superpowers/plans/2026-07-10-assistant-resilient-websocket-hardening.md
 git commit -m "docs: sync resilient websocket hardening"
 ```
 
-- [ ] **Step 7: Verify the final worktree**
+- [x] **Step 7: Verify the final worktree**
 
 ```bash
 git status --short

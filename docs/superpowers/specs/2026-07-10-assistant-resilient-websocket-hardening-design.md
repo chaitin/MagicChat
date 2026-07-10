@@ -12,6 +12,7 @@
 - message 与 app event outbox 在同一数据库事务中提交。
 - server 和 assistant 的事件重放内存都有明确上限。
 - assistant 事件队列满时不得丢 cursor，也不得阻塞 response reader。
+- server replay backlog 不得丢弃或饿死 app request response。
 - 活跃 session 即使已从全局 watermark 缓存淘汰，也不会重复追加旧 seq。
 - 401/403 等永久认证错误停止后台重连并返回调用方。
 - server 实际发送的 WebSocket message 严格不超过 1 MiB。
@@ -59,6 +60,14 @@ LIMIT 100
 
 每页按顺序调用 `EnqueueReliable`，完成一页后才加载下一页。这样 server 内存与单页大小成正比，不随断线期间累计事件总数增长。
 
+### Server Response 准入与公平调度
+
+`appconnection.Connection` 为 event/replay 与 request response 使用两个独立的有界 channel；两者容量都由 connection send buffer 控制。live event 和 replay event 进入 event channel，所有正常 response 与协议/请求错误 response 都通过 `EnqueueResponse` 可靠准入 response channel。可靠准入等待 channel 槽位时同时监听 `done`，因此 `Close` 会解除 replay 或 response producer 的阻塞。
+
+writer 常态使用 response-first 调度，使 history、ACK 等请求不会排在 replay backlog 之后。为避免持续 response backlog 饿死 event 或 ping，writer 连续最多发送 16 个 response；到达公平点后，先处理一个 ready ping，再处理一个 ready event，然后恢复 response-first。ping 与 event 同时 ready 时两者都会在该公平点取得有界进展。
+
+这关闭了原有的停滞闭环：replay event backlog 填满共享 send channel 后，history/ACK response 可能被非阻塞 admission 静默丢弃；assistant 因等待 response 无法处理并 ACK 队首，事件队列继续 overflow，重连后又从相同 cursor 重放而没有进展。独立 response channel、可靠 response admission 与有界公平调度保证重连后的稳定请求能够获得 response，使 ACK cursor 继续推进。
+
 ### Assistant 有界队列
 
 assistant 进程级事件队列最多保存 256 个尚未完成的 envelope。reader 收到 response 时仍立即交给 `Reliable App Requester`；收到 event 时尝试入队：
@@ -101,6 +110,8 @@ server 在写出 envelope 前使用 `json.Marshal` 得到完整 message bytes，
 
 - conversation 行锁提供同会话 seq 与 outbox cursor 的共同顺序边界。
 - `appEventMu` 继续保护连接注册/重放与 live delivery 之间不存在 snapshot-to-live 缝隙。
+- server event/replay 与 response 使用独立有界队列；可靠 admission 在 connection `done` 关闭后解除阻塞。
+- response-first writer 每连续 16 个 response 进入公平点，保证 ready ping 和 ready event 都有有界进展。
 - assistant 队列满只使当前 generation 失效，不影响 event worker、Session Manager 或 agent job context。
 - 未成功提交 Session Manager 或未成功发送终态 fallback 的队首事件仍不 ACK，也不允许更高 cursor 越过。
 - 永久认证错误停止连接循环；所有瞬时错误仍由现有指数退避和十次重试策略处理。
@@ -111,8 +122,11 @@ server 在写出 envelope 前使用 `json.Marshal` 得到完整 message bytes，
 - 重复 `client_message_id` 不产生第二条 outbox row。
 - 全局 watermark 淘汰后，仍存活 job 会拒绝相同或更小 seq。
 - server 重放超过一页时按 cursor 有序，单次查询不超过 100 行。
+- server event queue 已满时，request response 仍先于已排队 event 写出。
+- 持续 response backlog 下 event 与 ping 都在 16-response 公平边界内取得进展；ping 与 event 同时 ready 时两者都被处理。
 - assistant 第 257 个未完成 event 使当前 generation 断开；response 仍能在队列满时正常路由。
 - 队列溢出重连后，未 ACK event 会重新投递且不会重复执行已处理任务。
+- 使用真实 `Client.Run` 覆盖 257-event overflow、关闭当前 generation、重连、复用稳定 request ID、依次 ACK cursor 1..257，并证明重复 message seq 只触发一次 agent。
 - 401/403 只拨号一次并由 `Client.Run` 返回 permanent error。
 - marshal 后恰好 1 MiB 的 server envelope 可被 1 MiB read limit 接收；超过一字节时触发现有替代/跳过行为。
 - assistant/server 全量测试和相关 `go test -race` 通过。
@@ -122,5 +136,6 @@ server 在写出 envelope 前使用 `json.Marshal` 得到完整 message bytes，
 - 并发同会话触发不会因 cursor/seq 逆序而丢失。
 - session job 和全局 watermark 两层去重均有效。
 - 任意数量的未 ACK outbox row 不再导致单次 server 查询或 assistant 内存队列无界增长。
+- response 不会被 replay backlog 丢弃或饿死，assistant event overflow 重连后 history/ACK 能继续推进。
 - 永久认证错误不会周期性重拨。
 - server 实际 WebSocket payload 与检查长度完全一致，严格执行 1 MiB 边界。
