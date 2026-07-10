@@ -121,6 +121,22 @@ func TestRequestCacheEvictsLeastRecentlyUsedResponse(t *testing.T) {
 	}
 }
 
+func TestRequestCacheEvictsResponseOverByteBudget(t *testing.T) {
+	cache := newRequestCache(requestCacheOptions{MaxBytes: 1})
+	request := testAppRequest("request-1", "method.one", nil)
+	calls := 0
+	execute := func() realtime.Envelope {
+		calls++
+		return realtime.NewResponse(request.ID, map[string]any{"content": "larger than one byte"})
+	}
+
+	cache.Do("app-1", request, execute)
+	cache.Do("app-1", request, execute)
+	if calls != 2 {
+		t.Fatalf("handler calls = %d, want byte-budget-evicted response executed again", calls)
+	}
+}
+
 func testAppRequest(id string, method string, payload any) realtime.Envelope {
 	raw, _ := json.Marshal(payload)
 	return realtime.Envelope{V: realtime.ProtocolVersion, Kind: realtime.KindRequest, ID: id, Method: method, Payload: raw}

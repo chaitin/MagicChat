@@ -789,6 +789,23 @@ func sendAppRequest(t *testing.T, conn *websocket.Conn, request realtime.Envelop
 	return response
 }
 
+func requireReplayedAppResponse(t *testing.T, conn *websocket.Conn, request realtime.Envelope, first realtime.Envelope) {
+	t.Helper()
+
+	replayed := sendAppRequest(t, conn, request)
+	firstJSON, err := json.Marshal(first)
+	if err != nil {
+		t.Fatalf("marshal first app response: %v", err)
+	}
+	replayedJSON, err := json.Marshal(replayed)
+	if err != nil {
+		t.Fatalf("marshal replayed app response: %v", err)
+	}
+	if !bytes.Equal(replayedJSON, firstJSON) {
+		t.Fatalf("replayed response = %s, want %s", replayedJSON, firstJSON)
+	}
+}
+
 func ackAppEvent(t *testing.T, conn *websocket.Conn, cursor int64) {
 	t.Helper()
 
@@ -1665,7 +1682,7 @@ func TestAppWebSocketMessageSendAsUserStoresDelegatedByAndPushesDirectMessage(t 
 		t.Fatalf("trigger sender email = %v, want %s", triggerSender["email"], alice.Email)
 	}
 
-	response := sendAppRequest(t, appConn, realtime.Envelope{
+	request := realtime.Envelope{
 		V:      realtime.ProtocolVersion,
 		Kind:   realtime.KindRequest,
 		ID:     "app-send-as-user-request",
@@ -1679,7 +1696,8 @@ func TestAppWebSocketMessageSendAsUserStoresDelegatedByAndPushesDirectMessage(t 
 				"content": "**请看这个报告**",
 			},
 		}),
-	})
+	}
+	response := sendAppRequest(t, appConn, request)
 	payload := requireAppSendMessageResponsePayload(t, response)
 	conversation := payload["conversation"].(map[string]any)
 	if conversation["type"] != store.ConversationKindDirect {
@@ -1707,6 +1725,8 @@ func TestAppWebSocketMessageSendAsUserStoresDelegatedByAndPushesDirectMessage(t 
 	if pushedDelegatedBy["type"] != store.MessageSenderTypeApp || pushedDelegatedBy["id"] != app.ID || pushedDelegatedBy["name"] != app.Name {
 		t.Fatalf("pushed delegated_by = %#v, want app delegate", pushedDelegatedBy)
 	}
+	requireReplayedAppResponse(t, appConn, request, response)
+	requireNoRealtimeEvent(t, bobConn)
 
 	var storedMessage store.Message
 	if err := db.First(&storedMessage, "id = ?", message["id"]).Error; err != nil {
@@ -1920,7 +1940,7 @@ func TestAppWebSocketGroupConversationCreateUsesTriggeringUser(t *testing.T) {
 		t.Fatalf("trigger app event = %#v, want message.created", triggerEvent)
 	}
 
-	response := sendAppRequest(t, appConn, realtime.Envelope{
+	request := realtime.Envelope{
 		V:      realtime.ProtocolVersion,
 		Kind:   realtime.KindRequest,
 		ID:     "app-create-group-request",
@@ -1931,7 +1951,9 @@ func TestAppWebSocketGroupConversationCreateUsesTriggeringUser(t *testing.T) {
 			"name":               " 项目讨论组 ",
 			"member_ids":         []string{bob.ID, carol.ID, bob.ID},
 		}),
-	})
+	}
+	response := sendAppRequest(t, appConn, request)
+	requireReplayedAppResponse(t, appConn, request, response)
 	var payload map[string]any
 	if err := json.Unmarshal(response.Payload, &payload); err != nil {
 		t.Fatalf("unmarshal group create response: %v", err)
@@ -1967,6 +1989,13 @@ func TestAppWebSocketGroupConversationCreateUsesTriggeringUser(t *testing.T) {
 	}
 	if len(members) != 3 {
 		t.Fatalf("member count = %d, want 3", len(members))
+	}
+	var messageCount int64
+	if err := db.Model(&store.Message{}).Where("conversation_id = ?", storedConversation.ID).Count(&messageCount).Error; err != nil {
+		t.Fatalf("count group create messages: %v", err)
+	}
+	if messageCount != 1 {
+		t.Fatalf("group create message count = %d, want 1", messageCount)
 	}
 }
 
@@ -2022,7 +2051,7 @@ func TestAppWebSocketGroupConversationMembersAddUsesTriggeringUser(t *testing.T)
 		t.Fatalf("trigger app event = %#v, want message.created", triggerEvent)
 	}
 
-	response := sendAppRequest(t, appConn, realtime.Envelope{
+	request := realtime.Envelope{
 		V:      realtime.ProtocolVersion,
 		Kind:   realtime.KindRequest,
 		ID:     "app-add-group-members-request",
@@ -2033,7 +2062,9 @@ func TestAppWebSocketGroupConversationMembersAddUsesTriggeringUser(t *testing.T)
 			"conversation_id":    group.ID,
 			"member_ids":         []string{carol.ID, dave.ID},
 		}),
-	})
+	}
+	response := sendAppRequest(t, appConn, request)
+	requireReplayedAppResponse(t, appConn, request, response)
 	var payload map[string]any
 	if err := json.Unmarshal(response.Payload, &payload); err != nil {
 		t.Fatalf("unmarshal members add response: %v", err)
@@ -2063,6 +2094,13 @@ func TestAppWebSocketGroupConversationMembersAddUsesTriggeringUser(t *testing.T)
 				t.Fatalf("new member %s history_visible_from_seq = %d, want 3", member.MemberID, member.HistoryVisibleFromSeq)
 			}
 		}
+	}
+	var messageCount int64
+	if err := db.Model(&store.Message{}).Where("conversation_id = ?", group.ID).Count(&messageCount).Error; err != nil {
+		t.Fatalf("count group member messages: %v", err)
+	}
+	if messageCount != 1 {
+		t.Fatalf("group member message count = %d, want 1", messageCount)
 	}
 }
 
@@ -2747,6 +2785,8 @@ func TestAppWebSocketMessageSendSupportsUserGroupAndAppTargets(t *testing.T) {
 	if pushedGroupMessage["id"] != groupMessage["id"] {
 		t.Fatalf("group target pushed id = %v, want %v", pushedGroupMessage["id"], groupMessage["id"])
 	}
+	requireReplayedAppResponse(t, appConn, groupRequest, groupResponse)
+	requireNoRealtimeEvent(t, userConn)
 
 	var storedMessages []store.Message
 	if err := db.Order("created_at ASC").Find(&storedMessages, "sender_type = ? AND sender_id = ?", store.MessageSenderTypeApp, app.ID).Error; err != nil {
