@@ -105,6 +105,10 @@ func (r *conversationAgentRunner) Start(ctx context.Context, key string, sink ag
 	}
 
 	if job, ok := r.jobs[key]; ok {
+		if prepared.MessageSeq > 0 && prepared.MessageSeq <= job.lastSeenSeq {
+			r.mu.Unlock()
+			return true
+		}
 		if job.timer != nil {
 			job.timer.Stop()
 			job.timer = nil

@@ -2,6 +2,7 @@ package appclient
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -63,6 +64,40 @@ func TestConversationAgentRunnerIgnoresDuplicateSequence(t *testing.T) {
 	select {
 	case <-outputs:
 		t.Fatal("duplicate sequence executed a second time")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestConversationAgentRunnerUsesJobWatermarkAfterGlobalEviction(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runner := newConversationAgentRunner(ctx)
+	outputs := make(chan struct{}, 2)
+	assistantAgent := agent.New(llmModelFunc(func(context.Context, llm.Request) (llm.Response, error) {
+		return llm.Response{Blocks: []llm.Block{{Type: llm.BlockTypeText, Text: "完成"}}}, nil
+	}))
+	sink := agent.OutputSinkFunc(func(context.Context, string) error {
+		outputs <- struct{}{}
+		return nil
+	})
+	prepared := preparedTextRun("conversation-1", "message-1", 7, "第一条")
+	runner.Start(ctx, "conversation-1", sink, assistantAgent, prepared)
+	waitForSignal(t, outputs, "first response")
+
+	runner.mu.Lock()
+	for i := 0; i <= maxConversationSequenceWatermarks; i++ {
+		runner.recordSequenceLocked(fmt.Sprintf("other-%d", i), 1)
+	}
+	_, stillCached := runner.lastSeenSeq["conversation-1"]
+	runner.mu.Unlock()
+	if stillCached {
+		t.Fatal("conversation watermark was not evicted")
+	}
+
+	runner.Start(ctx, "conversation-1", sink, assistantAgent, prepared)
+	select {
+	case <-outputs:
+		t.Fatal("duplicate sequence appended after global watermark eviction")
 	case <-time.After(50 * time.Millisecond):
 	}
 }
