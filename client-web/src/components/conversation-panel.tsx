@@ -1839,7 +1839,7 @@ function TextMessageBody({
   const parts = parseMentionTemplate(content, mentionLabelResolver)
 
   return (
-    <span className="break-words whitespace-pre-wrap">
+    <span className="break-all whitespace-pre-wrap">
       {parts.map((part, index) =>
         part.type === "text" ? (
           <React.Fragment key={`text-${index}`}>{part.text}</React.Fragment>

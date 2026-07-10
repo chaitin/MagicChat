@@ -183,6 +183,34 @@ describe("ConversationPanel", () => {
     expect(onSendMessage).not.toHaveBeenCalled()
   })
 
+  it("breaks plain text messages between any characters", () => {
+    const content = "averylongcontinuousplaintextmessage"
+    const message = createAppPanelMessage({
+      appId: "app-1",
+      avatar: "",
+      author: "智能助手",
+    })
+    message.body = { content, type: "text" }
+
+    renderConversationMessages([message])
+
+    expect(screen.getByText(content)).toHaveClass("break-all")
+  })
+
+  it("breaks markdown messages between any characters", () => {
+    const content = "averylongcontinuousmarkdownmessage"
+    const message = createAppPanelMessage({
+      appId: "app-1",
+      avatar: "",
+      author: "智能助手",
+    })
+    message.body = { content: `**${content}**`, type: "markdown" }
+
+    renderConversationMessages([message])
+
+    expect(screen.getByText(content).closest("div")).toHaveClass("break-all")
+  })
+
   it("opens the app profile popover from an app message avatar", async () => {
     const user = userEvent.setup()
     const openAppConversation = vi.fn()
@@ -245,6 +273,36 @@ describe("ConversationPanel", () => {
     expect(screen.getByRole("button", { name: "发消息" })).toBeInTheDocument()
   })
 })
+
+function renderConversationMessages(messages: ConversationPanelMessage[]) {
+  render(
+    <MemoryRouter>
+      <ClientDataContext.Provider value={createClientDataValue()}>
+        <ConversationPanel
+          conversation={createConversation("conversation-1")}
+          currentUserId="user-1"
+          draft=""
+          historyError={null}
+          historyLoading={false}
+          historyLoadingBefore={false}
+          messages={messages}
+          onCancelReply={vi.fn()}
+          onDraftChange={vi.fn()}
+          onLoadBeforeMessages={vi.fn()}
+          onReplyToMessage={vi.fn()}
+          onRevokeMessage={vi.fn()}
+          onRichTextModeChange={vi.fn()}
+          onSendFile={async () => null}
+          onSendImage={async () => null}
+          onSendMessage={vi.fn()}
+          replyTarget={null}
+          richTextMode={false}
+          sending={false}
+        />
+      </ClientDataContext.Provider>
+    </MemoryRouter>
+  )
+}
 
 function createConversation(id: string): ClientConversation {
   return {

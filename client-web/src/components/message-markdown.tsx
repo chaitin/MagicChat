@@ -76,7 +76,7 @@ export function MessageMarkdown({
   )
 
   return (
-    <div className="max-w-full space-y-2 break-words">
+    <div className="max-w-full space-y-2 break-all">
       <ReactMarkdown
         allowedElements={allowedMarkdownElements}
         components={{
