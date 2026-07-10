@@ -1,4 +1,5 @@
 import {
+  BriefcaseBusiness,
   Cable,
   CircleCheckBig,
   CircleUserRound,
@@ -52,6 +53,7 @@ import { useClientData } from "@/lib/client-data-context"
 const navItems = [
   { label: "聊天", to: "/chat", icon: MessageCircleMore },
   { label: "通讯录", to: "/contacts", icon: CircleUserRound },
+  { label: "项目", to: "/projects", icon: BriefcaseBusiness },
   { label: "任务", to: "/tasks", icon: CircleCheckBig },
   { label: "连接", to: "/connections", icon: Cable },
 ]
@@ -202,7 +204,10 @@ function UserAvatarMenu({
           onNicknameSave={handleNicknameSave}
           user={user}
         />
-        <UserSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+        <UserSettingsDialog
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+        />
       </DropdownMenu>
 
       <AlertDialog open={logoutConfirmOpen} onOpenChange={setLogoutConfirmOpen}>

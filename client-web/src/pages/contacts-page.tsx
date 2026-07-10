@@ -27,16 +27,18 @@ import {
   AvatarImage,
 } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemGroup,
-  ItemMedia,
-  ItemTitle,
-} from "@/components/ui/item"
-import { ScrollArea } from "@/components/ui/scroll-area"
+  Sidebar,
+  SidebarContent,
+  SidebarHeader,
+  SidebarInput,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuAction,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from "@/components/ui/sidebar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 const CONTACT_DETAIL_PANEL_CLASS = "mt-30 w-full max-w-sm"
@@ -191,24 +193,33 @@ export function ContactsPage() {
   }
 
   return (
-    <>
-      <aside className="flex w-72 shrink-0 flex-col border-r bg-background">
-        <div className="flex h-14 items-center justify-between px-4">
-          <h1 className="text-base font-medium">通讯录</h1>
-          <Button
-            aria-label="刷新"
-            disabled={contactsRefreshing}
-            onClick={() => void refreshContacts()}
-            size="icon-sm"
-            title="刷新"
-            type="button"
-            variant="ghost"
-          >
-            <RefreshCw
-              className={cn("size-4", contactsRefreshing && "animate-spin")}
-            />
-          </Button>
-        </div>
+    <SidebarProvider
+      className="min-h-0 min-w-0 flex-1"
+      style={
+        {
+          "--sidebar-width": "18rem",
+        } as React.CSSProperties
+      }
+    >
+      <Sidebar className="border-r bg-background" collapsible="none">
+        <SidebarHeader className="gap-0 p-0">
+          <div className="flex h-14 items-center justify-between px-4">
+            <h1 className="text-base font-medium">通讯录</h1>
+            <Button
+              aria-label="刷新"
+              disabled={contactsRefreshing}
+              onClick={() => void refreshContacts()}
+              size="icon-sm"
+              title="刷新"
+              type="button"
+              variant="ghost"
+            >
+              <RefreshCw
+                className={cn("size-4", contactsRefreshing && "animate-spin")}
+              />
+            </Button>
+          </div>
+        </SidebarHeader>
         <Tabs
           className="min-h-0 flex-1 gap-0"
           onValueChange={(value) => setActiveTab(value as DirectoryTab)}
@@ -221,8 +232,9 @@ export function ContactsPage() {
               <TabsTrigger value="group">群组</TabsTrigger>
             </TabsList>
             <div className="relative mt-3">
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
+              <SidebarInput
+                aria-label={`搜索${activeTabLabel}`}
                 className="pl-8"
                 onChange={(event) => updateActiveKeyword(event.target.value)}
                 placeholder={`搜索${activeTabLabel}`}
@@ -232,7 +244,7 @@ export function ContactsPage() {
             </div>
           </div>
           <TabsContent className="min-h-0 flex-1" value="user">
-            <ScrollArea className="h-full">
+            <SidebarContent className="h-full">
               <DirectoryList ariaLabel="联系人列表">
                 {filteredContacts.map((contact) => (
                   <ContactListItem
@@ -261,10 +273,10 @@ export function ContactsPage() {
                   <DirectoryEmptyState label="联系人" />
                 )}
               </DirectoryList>
-            </ScrollArea>
+            </SidebarContent>
           </TabsContent>
           <TabsContent className="min-h-0 flex-1" value="app">
-            <ScrollArea className="h-full">
+            <SidebarContent className="h-full">
               <DirectoryList ariaLabel="应用列表">
                 {filteredApps.map((app) => (
                   <AppListItem
@@ -289,10 +301,10 @@ export function ContactsPage() {
                   <DirectoryEmptyState label="应用" />
                 )}
               </DirectoryList>
-            </ScrollArea>
+            </SidebarContent>
           </TabsContent>
           <TabsContent className="min-h-0 flex-1" value="group">
-            <ScrollArea className="h-full">
+            <SidebarContent className="h-full">
               <DirectoryList ariaLabel="群组列表">
                 {filteredGroups.map((group) => (
                   <GroupListItem
@@ -319,12 +331,12 @@ export function ContactsPage() {
                   <DirectoryEmptyState label="群组" />
                 )}
               </DirectoryList>
-            </ScrollArea>
+            </SidebarContent>
           </TabsContent>
         </Tabs>
-      </aside>
+      </Sidebar>
 
-      <main className="flex min-w-0 flex-1 flex-col bg-background">
+      <SidebarInset className="min-w-0 overflow-hidden">
         <div
           className={cn(
             "flex min-h-0 flex-1 items-start justify-center px-6",
@@ -370,8 +382,8 @@ export function ContactsPage() {
             <ContactEmptyState />
           )}
         </div>
-      </main>
-    </>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
 
@@ -383,21 +395,23 @@ function DirectoryList({
   children: React.ReactNode
 }) {
   return (
-    <ItemGroup
+    <SidebarMenu
       aria-label={ariaLabel}
-      className="gap-1 px-2 pb-3 has-data-[size=sm]:gap-1"
+      className="px-2 pb-3"
       role="listbox"
     >
       {children}
-    </ItemGroup>
+    </SidebarMenu>
   )
 }
 
 function DirectoryEmptyState({ label }: { label: string }) {
   return (
-    <div className="px-3 py-8 text-center text-sm text-muted-foreground">
-      没有匹配的{label}
-    </div>
+    <SidebarMenuItem>
+      <div className="px-3 py-8 text-center text-sm text-muted-foreground">
+        没有匹配的{label}
+      </div>
+    </SidebarMenuItem>
   )
 }
 
@@ -773,17 +787,6 @@ function DirectoryListItem({
   size?: "default" | "sm"
   title: string
 }) {
-  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
-    if (event.target !== event.currentTarget) {
-      return
-    }
-
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault()
-      onSelect()
-    }
-  }
-
   function handleActionClick(event: React.MouseEvent<HTMLButtonElement>) {
     event.stopPropagation()
     if (!actionDisabled) {
@@ -792,49 +795,40 @@ function DirectoryListItem({
   }
 
   return (
-    <Item
-      aria-label={title}
-      aria-selected={selected}
-      className={cn(
-        "group/contact-item cursor-pointer px-2 py-1.5",
-        selected ? "bg-primary/10 text-foreground" : "hover:bg-muted"
-      )}
-      onClick={onSelect}
-      onKeyDown={handleKeyDown}
-      role="option"
-      size={size}
-      tabIndex={0}
-    >
-      <ItemMedia>{media}</ItemMedia>
-      <ItemContent className="min-w-0">
-        <ItemTitle className="w-full min-w-0 truncate">
-          <span className="min-w-0 truncate">{title}</span>
-        </ItemTitle>
-      </ItemContent>
-      <ItemActions
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        aria-label={title}
+        aria-selected={selected}
         className={cn(
-          "transition-opacity",
-          selected
-            ? "opacity-100"
-            : "pointer-events-none opacity-0 group-focus-within/contact-item:pointer-events-auto group-focus-within/contact-item:opacity-100 group-hover/contact-item:pointer-events-auto group-hover/contact-item:opacity-100"
+          "gap-2.5 pr-8 data-active:bg-foreground/10 data-active:hover:bg-foreground/10",
+          size === "sm" ? "h-11" : "h-12"
         )}
+        isActive={selected}
+        onClick={onSelect}
+        role="option"
+        size="lg"
+        type="button"
       >
-        <Button
-          aria-label={actionLabel}
-          disabled={actionLoading || actionDisabled}
-          onClick={handleActionClick}
-          size="icon-xs"
-          type="button"
-          variant="ghost"
-        >
-          {actionLoading ? (
-            <Loader2Icon aria-hidden="true" className="animate-spin" />
-          ) : (
-            <MessageCircle />
-          )}
-        </Button>
-      </ItemActions>
-    </Item>
+        {media}
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+          <span className="min-w-0 truncate">{title}</span>
+        </span>
+      </SidebarMenuButton>
+      <SidebarMenuAction
+        aria-label={actionLabel}
+        className="right-2 size-6 disabled:pointer-events-none disabled:opacity-50 [&>svg]:size-3"
+        disabled={actionLoading || actionDisabled}
+        onClick={handleActionClick}
+        showOnHover={!selected}
+        type="button"
+      >
+        {actionLoading ? (
+          <Loader2Icon aria-hidden="true" className="animate-spin" />
+        ) : (
+          <MessageCircle />
+        )}
+      </SidebarMenuAction>
+    </SidebarMenuItem>
   )
 }
 

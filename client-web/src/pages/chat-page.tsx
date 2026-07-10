@@ -62,7 +62,16 @@ import {
   ItemTitle,
 } from "@/components/ui/item"
 import { Label } from "@/components/ui/label"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarHeader,
+  SidebarInput,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from "@/components/ui/sidebar"
 
 const emptyClientMessages: ClientMessage[] = []
 
@@ -440,48 +449,59 @@ export function ChatPage() {
   }
 
   return (
-    <>
-      <aside className="flex w-72 shrink-0 flex-col border-r bg-background">
-        <div className="flex h-14 items-center justify-between px-4">
-          <h1 className="text-base font-medium">消息</h1>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                aria-label="新建 Agent"
-                size="icon-sm"
-                title="新建 Agent"
-                type="button"
-                variant="ghost"
-              >
-                <Plus className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-32">
-              <DropdownMenuItem onSelect={() => setCreateGroupDialogOpen(true)}>
-                发起群聊
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        <div className="px-4 pb-3">
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input className="pl-8" placeholder="搜索" type="search" />
+    <SidebarProvider
+      className="min-h-0 min-w-0 flex-1"
+      style={
+        {
+          "--sidebar-width": "18rem",
+        } as React.CSSProperties
+      }
+    >
+      <Sidebar className="border-r bg-background" collapsible="none">
+        <SidebarHeader className="gap-0 p-0">
+          <div className="flex h-14 items-center justify-between px-4">
+            <h1 className="text-base font-medium">消息</h1>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  aria-label="新建 Agent"
+                  size="icon-sm"
+                  title="新建 Agent"
+                  type="button"
+                  variant="ghost"
+                >
+                  <Plus className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-32">
+                <DropdownMenuItem
+                  onSelect={() => setCreateGroupDialogOpen(true)}
+                >
+                  发起群聊
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-        </div>
-        <ScrollArea
-          className="min-h-0 flex-1 overflow-hidden"
-          viewportProps={{
-            className:
-              "[&>div]:!block [&>div]:!min-w-0 [&>div]:!w-full [&>div]:!max-w-full",
-            onContextMenu: handleConversationListContextMenu,
-          }}
-        >
-          <ItemGroup className="gap-1 px-2 pb-3 has-data-[size=sm]:gap-1">
+          <div className="px-4 pb-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
+              <SidebarInput
+                aria-label="搜索消息"
+                className="pl-8"
+                placeholder="搜索"
+                type="search"
+              />
+            </div>
+          </div>
+        </SidebarHeader>
+        <SidebarContent onContextMenu={handleConversationListContextMenu}>
+          <SidebarMenu className="px-2 pb-3">
             {conversations.length === 0 && (
-              <div className="px-3 py-8 text-center text-sm text-muted-foreground">
-                暂无会话
-              </div>
+              <SidebarMenuItem>
+                <div className="px-3 py-8 text-center text-sm text-muted-foreground">
+                  暂无会话
+                </div>
+              </SidebarMenuItem>
             )}
             {conversations.map((conversation) => {
               const selected = conversation.id === activeConversation?.id
@@ -504,29 +524,19 @@ export function ChatPage() {
 
               return (
                 <ConversationListItemMenu key={conversation.id}>
-                  <Item
-                    asChild
+                  <SidebarMenuItem
                     data-conversation-list-item-trigger
-                    size="sm"
-                    className={cn(
-                      "min-h-16 w-full max-w-full flex-nowrap overflow-hidden px-2 py-2",
-                      selected
-                        ? "bg-primary/10 text-foreground"
-                        : "hover:bg-muted"
-                    )}
                   >
-                    <Button
-                      className="h-auto w-full max-w-full min-w-0 shrink justify-start overflow-hidden text-left whitespace-normal"
-                      type="button"
+                    <SidebarMenuButton
+                      className="h-16 gap-3 py-2 data-active:bg-foreground/10 data-active:hover:bg-foreground/10"
+                      isActive={selected}
                       onClick={() => selectConversation(conversation.id)}
-                      variant="ghost"
+                      size="lg"
+                      type="button"
                     >
-                      <ItemMedia>
-                        <ConversationListAvatar conversation={conversation} />
-                      </ItemMedia>
-                      <ItemContent className="min-w-0 flex-1 overflow-hidden">
+                      <ConversationListAvatar conversation={conversation} />
+                      <div className="min-w-0 flex-1 overflow-hidden">
                         <div
-                          data-slot="item-title"
                           className="flex w-full min-w-0 items-center justify-between gap-2 overflow-hidden text-sm leading-snug font-medium underline-offset-4"
                         >
                           <span className="flex min-w-0 flex-1 items-center overflow-hidden">
@@ -541,7 +551,6 @@ export function ChatPage() {
                           )}
                         </div>
                         <p
-                          data-slot="item-description"
                           className="w-full min-w-0 truncate text-left text-xs leading-normal font-normal text-muted-foreground"
                         >
                           {hasUnreadMention && (
@@ -551,15 +560,15 @@ export function ChatPage() {
                           )}
                           <span>{description}</span>
                         </p>
-                      </ItemContent>
-                    </Button>
-                  </Item>
+                      </div>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 </ConversationListItemMenu>
               )
             })}
-          </ItemGroup>
-        </ScrollArea>
-      </aside>
+          </SidebarMenu>
+        </SidebarContent>
+      </Sidebar>
 
       <ConversationPanel
         key={activeConversationId || "empty"}
@@ -592,7 +601,7 @@ export function ChatPage() {
         onCreate={startGroupConversation}
         onOpenChange={setCreateGroupDialogOpen}
       />
-    </>
+    </SidebarProvider>
   )
 }
 

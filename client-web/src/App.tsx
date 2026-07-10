@@ -12,6 +12,7 @@ import { ChatPage } from "@/pages/chat-page"
 import { ConnectionsPage } from "@/pages/connections-page"
 import { ContactsPage } from "@/pages/contacts-page"
 import { LoginPage } from "@/pages/login-page"
+import { ProjectsPage } from "@/pages/projects-page"
 import { TasksPage } from "@/pages/tasks-page"
 
 export function App() {
@@ -66,6 +67,15 @@ export function App() {
               <>
                 <ClientDocumentTitle title="联系人" />
                 <ContactsPage />
+              </>
+            }
+          />
+          <Route
+            path="/projects"
+            element={
+              <>
+                <ClientDocumentTitle title="项目" />
+                <ProjectsPage />
               </>
             }
           />
