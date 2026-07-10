@@ -7973,11 +7973,21 @@ func TestCreateGroupConversationCreatesConversationAndMembers(t *testing.T) {
 	creator := insertTestUser(t, db, "creator@example.com", "Creator", store.UserStatusActive, now)
 	alice := insertTestUser(t, db, "alice@example.com", "Alice", store.UserStatusActive, now)
 	bob := insertTestUser(t, db, "bob@example.com", "Bob", store.UserStatusActive, now)
+	app := insertTestApp(t, db, store.App{
+		Name:             "AI 女菩萨",
+		Avatar:           "/assets/apps/assistant.webp",
+		Enabled:          true,
+		Visibility:       store.AppVisibilityPublic,
+		ConnectionSecret: "assistant-secret",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	})
 	userCookie := loginAsUser(t, server, creator.Email)
 
 	resp, body := postJSON(t, server, "/api/client/conversations/groups", map[string]any{
 		"name":       " 产品讨论组 ",
 		"member_ids": []string{alice.ID, bob.ID, alice.ID},
+		"app_ids":    []string{app.ID},
 	}, userCookie)
 
 	if resp.StatusCode != http.StatusCreated {
@@ -8000,18 +8010,23 @@ func TestCreateGroupConversationCreatesConversationAndMembers(t *testing.T) {
 	if conversation["created_by_user_id"] != creator.ID {
 		t.Fatalf("conversation.created_by_user_id = %v, want %s", conversation["created_by_user_id"], creator.ID)
 	}
-	if conversation["member_count"] != float64(3) {
-		t.Fatalf("conversation.member_count = %v, want 3", conversation["member_count"])
+	if conversation["member_count"] != float64(4) {
+		t.Fatalf("conversation.member_count = %v, want 4", conversation["member_count"])
+	}
+	if conversation["last_message_summary"] != "Creator 邀请 Alice,Bob,AI 女菩萨 加入群聊" {
+		t.Fatalf("conversation.last_message_summary = %v, want app invite", conversation["last_message_summary"])
 	}
 
 	members := conversation["members"].([]any)
-	if len(members) != 3 {
-		t.Fatalf("member count = %d, want 3", len(members))
+	if len(members) != 4 {
+		t.Fatalf("member count = %d, want 4", len(members))
 	}
 	rolesByID := map[string]string{}
+	typesByID := map[string]string{}
 	for _, rawMember := range members {
 		member := rawMember.(map[string]any)
 		rolesByID[member["id"].(string)] = member["role"].(string)
+		typesByID[member["id"].(string)] = member["type"].(string)
 	}
 	if rolesByID[creator.ID] != "owner" {
 		t.Fatalf("creator role = %v, want owner", rolesByID[creator.ID])
@@ -8021,6 +8036,9 @@ func TestCreateGroupConversationCreatesConversationAndMembers(t *testing.T) {
 	}
 	if rolesByID[bob.ID] != "member" {
 		t.Fatalf("bob role = %v, want member", rolesByID[bob.ID])
+	}
+	if rolesByID[app.ID] != "member" || typesByID[app.ID] != store.ConversationMemberTypeApp {
+		t.Fatalf("app response = role %v type %v, want app member", rolesByID[app.ID], typesByID[app.ID])
 	}
 
 	var storedConversation store.Conversation
@@ -8044,12 +8062,14 @@ func TestCreateGroupConversationCreatesConversationAndMembers(t *testing.T) {
 	if err := db.Where("conversation_id = ?", storedConversation.ID).Find(&storedMembers).Error; err != nil {
 		t.Fatalf("find stored members: %v", err)
 	}
-	if len(storedMembers) != 3 {
-		t.Fatalf("stored member count = %d, want 3", len(storedMembers))
+	if len(storedMembers) != 4 {
+		t.Fatalf("stored member count = %d, want 4", len(storedMembers))
 	}
 	storedRolesByID := map[string]string{}
+	storedTypesByID := map[string]string{}
 	for _, member := range storedMembers {
 		storedRolesByID[member.MemberID] = member.Role
+		storedTypesByID[member.MemberID] = member.MemberType
 	}
 	if storedRolesByID[creator.ID] != store.ConversationMemberRoleOwner {
 		t.Fatalf("stored creator role = %v, want owner", storedRolesByID[creator.ID])
@@ -8059,6 +8079,40 @@ func TestCreateGroupConversationCreatesConversationAndMembers(t *testing.T) {
 	}
 	if storedRolesByID[bob.ID] != store.ConversationMemberRoleMember {
 		t.Fatalf("stored bob role = %v, want member", storedRolesByID[bob.ID])
+	}
+	if storedRolesByID[app.ID] != store.ConversationMemberRoleMember || storedTypesByID[app.ID] != store.ConversationMemberTypeApp {
+		t.Fatalf("stored app = role %v type %v, want app member", storedRolesByID[app.ID], storedTypesByID[app.ID])
+	}
+}
+
+func TestCreateGroupConversationAllowsOwnerOnlyGroup(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+
+	now := time.Now().UTC()
+	creator := insertTestUser(t, db, "creator@example.com", "Creator", store.UserStatusActive, now)
+
+	resp, body := postJSON(t, server, "/api/client/conversations/groups", map[string]any{
+		"name": "新建群聊",
+	}, loginAsUser(t, server, creator.Email))
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201, body = %#v", resp.StatusCode, body)
+	}
+	conversation := requireSuccess(t, body)["conversation"].(map[string]any)
+	if conversation["member_count"] != float64(1) {
+		t.Fatalf("conversation.member_count = %v, want 1", conversation["member_count"])
+	}
+	if conversation["last_message_seq"] != float64(0) || conversation["last_message_summary"] != "" {
+		t.Fatalf("owner-only last message = seq %v summary %v, want empty", conversation["last_message_seq"], conversation["last_message_summary"])
+	}
+
+	var messageCount int64
+	if err := db.Model(&store.Message{}).Where("conversation_id = ?", conversation["id"]).Count(&messageCount).Error; err != nil {
+		t.Fatalf("count owner-only messages: %v", err)
+	}
+	if messageCount != 0 {
+		t.Fatalf("owner-only message count = %d, want 0", messageCount)
 	}
 }
 
@@ -8726,13 +8780,14 @@ func TestClientJoinPublicGroupCreatesMemberAndSystemMessage(t *testing.T) {
 	requireSystemEventActorBody(t, storedMessage.Body, "group_member_joined", bob.ID, "Bob")
 }
 
-func TestClientJoinPublicGroupRejectsPrivateOrFullGroup(t *testing.T) {
+func TestClientJoinPublicGroupEnforcesVisibilityAnd500MemberLimit(t *testing.T) {
 	server, db := newTestRouter(t)
 	defer server.Close()
 
 	now := time.Now().UTC()
 	owner := insertTestUser(t, db, "owner@example.com", "Owner", store.UserStatusActive, now)
 	bob := insertTestUser(t, db, "bob@example.com", "Bob", store.UserStatusActive, now)
+	carol := insertTestUser(t, db, "carol@example.com", "Carol", store.UserStatusActive, now)
 	privateGroup := insertTestConversation(t, db, testConversationInput{
 		createdByUserID: owner.ID,
 		kind:            store.ConversationKindGroup,
@@ -8749,23 +8804,36 @@ func TestClientJoinPublicGroupRejectsPrivateOrFullGroup(t *testing.T) {
 	requireError(t, privateBody, "forbidden")
 
 	memberIDs := []string{owner.ID}
-	for i := 0; i < 99; i++ {
-		member := insertTestUser(t, db, fmt.Sprintf("member-%02d@example.com", i), fmt.Sprintf("Member %02d", i), store.UserStatusActive, now)
-		memberIDs = append(memberIDs, member.ID)
+	for len(memberIDs) < 499 {
+		memberIDs = append(memberIDs, uuid.NewString())
 	}
-	fullGroup := insertTestConversation(t, db, testConversationInput{
+	almostFullGroup := insertTestConversation(t, db, testConversationInput{
 		createdByUserID: owner.ID,
 		kind:            store.ConversationKindGroup,
 		memberIDs:       memberIDs,
-		name:            "满员群",
+		name:            "即将满员群",
 		now:             now,
 		visibility:      store.ConversationVisibilityPublic,
 	})
-	fullResp, fullBody := postJSON(t, server, "/api/client/conversations/groups/"+fullGroup.ID+"/join", map[string]any{}, cookie)
+
+	lastSlotResp, lastSlotBody := postJSON(t, server, "/api/client/conversations/groups/"+almostFullGroup.ID+"/join", map[string]any{}, cookie)
+	if lastSlotResp.StatusCode != http.StatusOK {
+		t.Fatalf("500th member join status = %d, want 200, body = %#v", lastSlotResp.StatusCode, lastSlotBody)
+	}
+	joinedConversation := requireSuccess(t, lastSlotBody)["conversation"].(map[string]any)
+	if joinedConversation["member_count"] != float64(500) {
+		t.Fatalf("member_count = %v, want 500", joinedConversation["member_count"])
+	}
+
+	fullResp, fullBody := postJSON(t, server, "/api/client/conversations/groups/"+almostFullGroup.ID+"/join", map[string]any{}, loginAsUser(t, server, carol.Email))
 	if fullResp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("full join status = %d, want 400, body = %#v", fullResp.StatusCode, fullBody)
 	}
 	requireError(t, fullBody, "invalid_request")
+	errorBody := fullBody["error"].(map[string]any)
+	if errorBody["message"] != "群聊成员不能超过 500 人" {
+		t.Fatalf("error.message = %v, want 500-person limit", errorBody["message"])
+	}
 }
 
 func TestAddGroupConversationMembersCreatesMembersAndSystemMessage(t *testing.T) {

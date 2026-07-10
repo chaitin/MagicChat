@@ -17,7 +17,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-const maxGroupConversationMembers = 100
+const maxGroupConversationMembers = 500
 const maxGroupConversationNameLength = 120
 const maxClientConversationListItems = 100
 
@@ -47,6 +47,7 @@ var (
 )
 
 type createGroupConversationRequest struct {
+	AppIDs    []string `json:"app_ids" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
 	MemberIDs []string `json:"member_ids" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
 	Name      string   `json:"name" example:"产品讨论组"`
 }
@@ -161,8 +162,10 @@ type markConversationReadResponse struct {
 }
 
 type conversationMemberCandidate struct {
-	role string
-	user store.User
+	app        store.App
+	memberType string
+	role       string
+	user       store.User
 }
 
 type systemEventUserRef struct {
@@ -689,7 +692,7 @@ func (s *Server) createAppConversation(c echo.Context) error {
 // createGroupConversation godoc
 //
 // @Summary 创建群聊
-// @Description 普通用户创建群聊。当前登录用户会自动成为群主，member_ids 只需要传其他成员。
+// @Description 普通用户创建群聊。当前登录用户会自动成为群主，member_ids 和 app_ids 可选择其他成员或应用，也可以都为空。
 // @Tags 客户端会话
 // @Accept json
 // @Produce json
@@ -719,42 +722,52 @@ func (s *Server) createGroupConversation(c echo.Context) error {
 	if err != nil {
 		return failure(c, http.StatusBadRequest, "invalid_request", err.Error())
 	}
-	if len(memberIDs) == 0 {
-		return failure(c, http.StatusBadRequest, "invalid_request", "至少选择一名成员")
+	appIDs, err := normalizeGroupAppIDs(req.AppIDs)
+	if err != nil {
+		return failure(c, http.StatusBadRequest, "invalid_request", err.Error())
 	}
-	if len(memberIDs)+1 > maxGroupConversationMembers {
-		return failure(c, http.StatusBadRequest, "invalid_request", "群聊成员不能超过 100 人")
+	if len(memberIDs)+len(appIDs)+1 > maxGroupConversationMembers {
+		return failure(c, http.StatusBadRequest, "invalid_request", "群聊成员不能超过 500 人")
 	}
 
-	conversation, createdMessage, candidates, memberUserIDs, err := s.createUserGroupConversation(user, name, memberIDs)
+	conversation, createdMessage, candidates, memberUserIDs, err := s.createUserGroupConversation(user, name, memberIDs, appIDs)
 	if err != nil {
 		if errors.Is(err, errGroupConversationMemberMiss) {
-			return failure(c, http.StatusBadRequest, "invalid_request", "成员不存在或已禁用")
+			return failure(c, http.StatusBadRequest, "invalid_request", "成员或应用不存在或不可用")
 		}
 		if errors.Is(err, errGroupConversationMemberCap) {
-			return failure(c, http.StatusBadRequest, "invalid_request", "群聊成员不能超过 100 人")
+			return failure(c, http.StatusBadRequest, "invalid_request", "群聊成员不能超过 500 人")
 		}
 		return failure(c, http.StatusInternalServerError, "internal_error", "服务端错误")
 	}
 
-	s.realtime.SendToUsers(memberUserIDs, realtimeMessageCreatedEvent(newMessageResponse(createdMessage)))
+	if createdMessage != nil {
+		s.realtime.SendToUsers(memberUserIDs, realtimeMessageCreatedEvent(newMessageResponse(*createdMessage)))
+	}
 
 	return success(c, http.StatusCreated, createGroupConversationResponse{
 		Conversation: newGroupConversationResponse(conversation, candidates, user.ID),
 	})
 }
 
-func (s *Server) createUserGroupConversation(user store.User, name string, memberIDs []string) (store.Conversation, store.Message, []conversationMemberCandidate, []string, error) {
-	if len(memberIDs)+1 > maxGroupConversationMembers {
-		return store.Conversation{}, store.Message{}, nil, nil, errGroupConversationMemberCap
+func (s *Server) createUserGroupConversation(user store.User, name string, memberIDs []string, appIDs []string) (store.Conversation, *store.Message, []conversationMemberCandidate, []string, error) {
+	if len(memberIDs)+len(appIDs)+1 > maxGroupConversationMembers {
+		return store.Conversation{}, nil, nil, nil, errGroupConversationMemberCap
 	}
 
 	members, err := s.loadActiveGroupMembers(memberIDs)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return store.Conversation{}, store.Message{}, nil, nil, errGroupConversationMemberMiss
+			return store.Conversation{}, nil, nil, nil, errGroupConversationMemberMiss
 		}
-		return store.Conversation{}, store.Message{}, nil, nil, err
+		return store.Conversation{}, nil, nil, nil, err
+	}
+	apps, err := loadVisibleGroupApps(s.db, user.ID, appIDs)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return store.Conversation{}, nil, nil, nil, errGroupConversationMemberMiss
+		}
+		return store.Conversation{}, nil, nil, nil, err
 	}
 
 	now := time.Now().UTC()
@@ -769,56 +782,76 @@ func (s *Server) createUserGroupConversation(user store.User, name string, membe
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
-	candidates := make([]conversationMemberCandidate, 0, len(members)+1)
+	candidates := make([]conversationMemberCandidate, 0, len(members)+len(apps)+1)
 	candidates = append(candidates, conversationMemberCandidate{
-		role: store.ConversationMemberRoleOwner,
-		user: user,
+		memberType: store.ConversationMemberTypeUser,
+		role:       store.ConversationMemberRoleOwner,
+		user:       user,
 	})
 	for _, member := range members {
 		candidates = append(candidates, conversationMemberCandidate{
-			role: store.ConversationMemberRoleMember,
-			user: member,
+			memberType: store.ConversationMemberTypeUser,
+			role:       store.ConversationMemberRoleMember,
+			user:       member,
+		})
+	}
+	for _, app := range apps {
+		candidates = append(candidates, conversationMemberCandidate{
+			app:        app,
+			memberType: store.ConversationMemberTypeApp,
+			role:       store.ConversationMemberRoleMember,
 		})
 	}
 
-	var createdMessage store.Message
+	var createdMessage *store.Message
 	memberUserIDs := make([]string, 0, len(candidates))
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&conversation).Error; err != nil {
 			return err
 		}
 
-		systemMessageSeq := conversation.LastMessageSeq + 1
+		systemMessageSeq := conversation.LastMessageSeq
+		if len(members)+len(apps) > 0 {
+			systemMessageSeq++
+		}
 		conversationMembers := make([]store.ConversationMember, 0, len(candidates))
 		for _, candidate := range candidates {
+			memberID := candidate.user.ID
+			if candidate.memberType == store.ConversationMemberTypeApp {
+				memberID = candidate.app.ID
+			}
 			lastReadSeq := int64(0)
-			if candidate.user.ID == user.ID {
+			if candidate.memberType == store.ConversationMemberTypeUser && memberID == user.ID {
 				lastReadSeq = systemMessageSeq
 			}
 			conversationMembers = append(conversationMembers, store.ConversationMember{
 				ConversationID:        conversation.ID,
-				MemberType:            store.ConversationMemberTypeUser,
-				MemberID:              candidate.user.ID,
+				MemberType:            candidate.memberType,
+				MemberID:              memberID,
 				Role:                  candidate.role,
 				JoinedAt:              now,
 				HistoryVisibleFromSeq: 1,
 				LastReadSeq:           lastReadSeq,
 			})
-			memberUserIDs = append(memberUserIDs, candidate.user.ID)
+			if candidate.memberType == store.ConversationMemberTypeUser {
+				memberUserIDs = append(memberUserIDs, memberID)
+			}
 		}
 
 		if err := tx.Create(&conversationMembers).Error; err != nil {
 			return err
 		}
 
-		message, err := createGroupMembersInvitedSystemMessage(tx, &conversation, user, makeGroupMemberInviteeRefs(members, nil), now)
-		if err != nil {
-			return err
+		if len(members)+len(apps) > 0 {
+			message, err := createGroupMembersInvitedSystemMessage(tx, &conversation, user, makeGroupMemberInviteeRefs(members, apps), now)
+			if err != nil {
+				return err
+			}
+			createdMessage = &message
 		}
-		createdMessage = message
 		return nil
 	}); err != nil {
-		return store.Conversation{}, store.Message{}, nil, nil, err
+		return store.Conversation{}, nil, nil, nil, err
 	}
 
 	return conversation, createdMessage, candidates, memberUserIDs, nil
@@ -880,7 +913,7 @@ func (s *Server) addGroupConversationMembers(c echo.Context) error {
 			return failure(c, http.StatusBadRequest, "invalid_request", "只能向群聊添加成员")
 		}
 		if errors.Is(err, errGroupConversationMemberCap) {
-			return failure(c, http.StatusBadRequest, "invalid_request", "群聊成员不能超过 100 人")
+			return failure(c, http.StatusBadRequest, "invalid_request", "群聊成员不能超过 500 人")
 		}
 		if errors.Is(err, errGroupConversationMemberMiss) {
 			return failure(c, http.StatusBadRequest, "invalid_request", "成员或应用不存在或不可用")
@@ -1198,7 +1231,7 @@ func (s *Server) joinPublicGroupConversation(c echo.Context) error {
 			return failure(c, http.StatusForbidden, "forbidden", "无权加入群聊")
 		}
 		if errors.Is(err, errGroupConversationMemberCap) {
-			return failure(c, http.StatusBadRequest, "invalid_request", "群聊成员不能超过 100 人")
+			return failure(c, http.StatusBadRequest, "invalid_request", "群聊成员不能超过 500 人")
 		}
 		return failure(c, http.StatusInternalServerError, "internal_error", "服务端错误")
 	}
@@ -3231,6 +3264,16 @@ func newGroupConversationResponse(
 ) groupConversationResponse {
 	responses := make([]conversationMemberResponse, 0, len(members))
 	for _, member := range members {
+		if member.memberType == store.ConversationMemberTypeApp {
+			responses = append(responses, conversationMemberResponse{
+				Avatar: member.app.Avatar,
+				ID:     member.app.ID,
+				Name:   member.app.Name,
+				Role:   member.role,
+				Type:   store.ConversationMemberTypeApp,
+			})
+			continue
+		}
 		phone := ""
 		if member.user.Phone != nil {
 			phone = *member.user.Phone

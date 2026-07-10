@@ -45,7 +45,8 @@ export type ClientDataContextValue = {
   ) => Promise<ClientConversation>
   createGroupConversation: (
     name: string,
-    memberIds: string[]
+    memberIds: string[],
+    appIds?: string[]
   ) => Promise<ClientConversation>
   dissolveGroupConversation: (conversationId: string) => Promise<void>
   ensureConversationMessages: (conversationId: string) => void

@@ -67,6 +67,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item"
 import { Label } from "@/components/ui/label"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Sidebar,
   SidebarContent,
@@ -418,8 +419,12 @@ export function ChatPage() {
     setSearchParams({ conversation_id: conversationId }, { replace: true })
   }
 
-  async function startGroupConversation(name: string, memberIds: string[]) {
-    const conversation = await createGroupConversation(name, memberIds)
+  async function startGroupConversation(
+    name: string,
+    memberIds: string[],
+    appIds: string[]
+  ) {
+    const conversation = await createGroupConversation(name, memberIds, appIds)
     flushDrafts()
     setSearchParams({ conversation_id: conversation.id })
   }
@@ -593,6 +598,7 @@ export function ChatPage() {
         sending={Boolean(activeMessageState?.sending)}
       />
       <CreateGroupConversationDialog
+        apps={contactApps}
         contacts={contacts}
         currentUserId={me.id}
         open={createGroupDialogOpen}
@@ -604,15 +610,21 @@ export function ChatPage() {
 }
 
 function CreateGroupConversationDialog({
+  apps,
   contacts,
   currentUserId,
   onCreate,
   onOpenChange,
   open,
 }: {
+  apps: ContactApp[]
   contacts: ContactUser[]
   currentUserId: string
-  onCreate: (name: string, memberIds: string[]) => Promise<void>
+  onCreate: (
+    name: string,
+    memberIds: string[],
+    appIds: string[]
+  ) => Promise<void>
   onOpenChange: (open: boolean) => void
   open: boolean
 }) {
@@ -622,10 +634,11 @@ function CreateGroupConversationDialog({
         <DialogHeader>
           <DialogTitle className="text-base">发起群聊</DialogTitle>
           <DialogDescription className="sr-only">
-            输入群聊名称并选择联系人创建群聊
+            输入群聊名称并选择联系人或应用创建群聊
           </DialogDescription>
         </DialogHeader>
         <CreateGroupConversationForm
+          apps={apps}
           contacts={contacts}
           currentUserId={currentUserId}
           onCreate={onCreate}
@@ -637,25 +650,31 @@ function CreateGroupConversationDialog({
 }
 
 function CreateGroupConversationForm({
+  apps,
   contacts,
   currentUserId,
   onCreate,
   onOpenChange,
 }: {
+  apps: ContactApp[]
   contacts: ContactUser[]
   currentUserId: string
-  onCreate: (name: string, memberIds: string[]) => Promise<void>
+  onCreate: (
+    name: string,
+    memberIds: string[],
+    appIds: string[]
+  ) => Promise<void>
   onOpenChange: (open: boolean) => void
 }) {
   const [creating, setCreating] = React.useState(false)
   const [keyword, setKeyword] = React.useState("")
-  const [name, setName] = React.useState("")
-  const [selectedMemberIds, setSelectedMemberIds] = React.useState<Set<string>>(
-    () => new Set()
-  )
-  const selectedCount = selectedMemberIds.size
+  const [name, setName] = React.useState("新建群聊")
+  const [tab, setTab] = React.useState<"users" | "apps">("users")
+  const [selectedCandidateKeys, setSelectedCandidateKeys] = React.useState<
+    Set<string>
+  >(() => new Set())
   const trimmedName = name.trim()
-  const canCreate = Boolean(trimmedName) && selectedCount > 0 && !creating
+  const canCreate = Boolean(trimmedName) && !creating
   const filteredContacts = React.useMemo(() => {
     const normalizedKeyword = keyword.trim().toLowerCase()
 
@@ -677,25 +696,44 @@ function CreateGroupConversationForm({
       })
     )
   }, [contacts, currentUserId, keyword])
+  const filteredApps = React.useMemo(() => {
+    const normalizedKeyword = keyword.trim().toLowerCase()
 
-  function toggleMember(contactId: string, checked: boolean | string) {
-    setSelectedMemberIds((currentIds) => {
+    if (!normalizedKeyword) {
+      return apps
+    }
+
+    return apps.filter((app) =>
+      [app.name, app.description].some((value) =>
+        value.toLowerCase().includes(normalizedKeyword)
+      )
+    )
+  }, [apps, keyword])
+  const visibleCandidates: CreateGroupCandidate[] =
+    tab === "apps" ? filteredApps : filteredContacts
+
+  function toggleCandidate(
+    candidate: CreateGroupCandidate,
+    checked: boolean | string
+  ) {
+    const key = createGroupCandidateKey(candidate)
+    setSelectedCandidateKeys((currentKeys) => {
       const nextChecked = Boolean(checked)
-      const currentChecked = currentIds.has(contactId)
+      const currentChecked = currentKeys.has(key)
 
       if (currentChecked === nextChecked) {
-        return currentIds
+        return currentKeys
       }
 
-      const nextIds = new Set(currentIds)
+      const nextKeys = new Set(currentKeys)
 
       if (nextChecked) {
-        nextIds.add(contactId)
+        nextKeys.add(key)
       } else {
-        nextIds.delete(contactId)
+        nextKeys.delete(key)
       }
 
-      return nextIds
+      return nextKeys
     })
   }
 
@@ -709,7 +747,18 @@ function CreateGroupConversationForm({
     setCreating(true)
 
     try {
-      await onCreate(trimmedName, Array.from(selectedMemberIds))
+      const memberIds = contacts
+        .filter((contact) =>
+          selectedCandidateKeys.has(createGroupCandidateKey(contact))
+        )
+        .map((contact) => contact.id)
+      const appIds = apps
+        .filter((app) =>
+          selectedCandidateKeys.has(createGroupCandidateKey(app))
+        )
+        .map((app) => app.id)
+
+      await onCreate(trimmedName, memberIds, appIds)
       onOpenChange(false)
     } catch {
       toast.error("创建群聊失败")
@@ -729,15 +778,33 @@ function CreateGroupConversationForm({
           value={name}
         />
       </div>
+      <Tabs
+        onValueChange={(value) => {
+          setKeyword("")
+          setTab(value === "apps" ? "apps" : "users")
+        }}
+        value={tab}
+      >
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger disabled={creating} value="users">
+            成员
+          </TabsTrigger>
+          <TabsTrigger disabled={creating} value="apps">
+            应用
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
       <div className="grid gap-2">
-        <Label htmlFor="create-group-member-search">选择成员</Label>
+        <Label htmlFor="create-group-member-search">
+          {tab === "apps" ? "选择应用" : "选择成员"}
+        </Label>
         <div className="relative">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-8"
             id="create-group-member-search"
             onChange={(event) => setKeyword(event.target.value)}
-            placeholder="搜索联系人"
+            placeholder={tab === "apps" ? "搜索应用" : "搜索联系人"}
             type="search"
             value={keyword}
           />
@@ -745,26 +812,27 @@ function CreateGroupConversationForm({
       </div>
       <div className="h-64 overflow-y-auto rounded-md border">
         <ItemGroup
-          aria-label="群聊成员"
+          aria-label={tab === "apps" ? "群聊应用" : "群聊成员"}
           className="gap-1 p-2 has-data-[size=sm]:gap-1"
           role="group"
         >
-          {filteredContacts.map((contact) => {
-            const displayName = getContactDisplayName(contact)
+          {visibleCandidates.map((candidate) => {
+            const key = createGroupCandidateKey(candidate)
 
             return (
               <CreateGroupMemberItem
-                checked={selectedMemberIds.has(contact.id)}
-                contact={contact}
-                displayName={displayName}
-                key={contact.id}
-                onCheckedChange={(checked) => toggleMember(contact.id, checked)}
+                candidate={candidate}
+                checked={selectedCandidateKeys.has(key)}
+                key={key}
+                onCheckedChange={(checked) =>
+                  toggleCandidate(candidate, checked)
+                }
               />
             )
           })}
-          {filteredContacts.length === 0 && (
+          {visibleCandidates.length === 0 && (
             <div className="px-3 py-8 text-center text-sm text-muted-foreground">
-              没有匹配的联系人
+              {tab === "apps" ? "没有匹配的应用" : "没有匹配的联系人"}
             </div>
           )}
         </ItemGroup>
@@ -787,17 +855,16 @@ function CreateGroupConversationForm({
 }
 
 function CreateGroupMemberItem({
+  candidate,
   checked,
-  contact,
-  displayName,
   onCheckedChange,
 }: {
+  candidate: CreateGroupCandidate
   checked: boolean
-  contact: ContactUser
-  displayName: string
   onCheckedChange: (checked: boolean | string) => void
 }) {
-  const checkboxId = `create-group-member-${contact.id}`
+  const displayName = getCreateGroupCandidateDisplayName(candidate)
+  const checkboxId = `create-group-member-${candidate.type}-${candidate.id}`
 
   return (
     <Item
@@ -814,11 +881,11 @@ function CreateGroupMemberItem({
             className="rounded-sm bg-muted after:rounded-sm"
             data-size="sm"
           >
-            {contact.avatar && (
+            {candidate.avatar && (
               <AvatarImage
                 alt={displayName}
                 className="rounded-sm"
-                src={contact.avatar}
+                src={candidate.avatar}
               />
             )}
             <AvatarFallback className="rounded-sm">
@@ -840,6 +907,18 @@ function CreateGroupMemberItem({
       </Label>
     </Item>
   )
+}
+
+type CreateGroupCandidate = ContactUser | ContactApp
+
+function createGroupCandidateKey(candidate: CreateGroupCandidate) {
+  return `${candidate.type}:${candidate.id}`
+}
+
+function getCreateGroupCandidateDisplayName(candidate: CreateGroupCandidate) {
+  return candidate.type === "user"
+    ? getContactDisplayName(candidate)
+    : candidate.name.trim()
 }
 function getConversationListDescription(
   conversation: ClientConversation,

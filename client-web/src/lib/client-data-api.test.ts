@@ -385,6 +385,7 @@ describe("client data API", () => {
     await expect(
       createGroupConversation(
         {
+          appIds: ["app-1"],
           memberIds: ["user-2"],
           name: "新品讨论组",
         },
@@ -430,6 +431,7 @@ describe("client data API", () => {
     })
     expect(fetcher).toHaveBeenCalledWith("/api/client/conversations/groups", {
       body: JSON.stringify({
+        app_ids: ["app-1"],
         member_ids: ["user-2"],
         name: "新品讨论组",
       }),

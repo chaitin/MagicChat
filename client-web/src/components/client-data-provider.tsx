@@ -818,9 +818,10 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
   )
 
   const createGroupConversation = useCallback(
-    async (name: string, memberIds: string[]) => {
+    async (name: string, memberIds: string[], appIds: string[] = []) => {
       try {
         const conversation = await createGroupConversationRequest({
+          appIds,
           memberIds,
           name,
         })

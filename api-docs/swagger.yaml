@@ -251,6 +251,12 @@ definitions:
     type: object
   httpserver.createGroupConversationRequest:
     properties:
+      app_ids:
+        example:
+        - 7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4
+        items:
+          type: string
+        type: array
       member_ids:
         example:
         - 7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4
@@ -2499,7 +2505,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 普通用户创建群聊。当前登录用户会自动成为群主，member_ids 只需要传其他成员。
+      description: 普通用户创建群聊。当前登录用户会自动成为群主，member_ids 和 app_ids 可选择其他成员或应用，也可以都为空。
       parameters:
       - description: 群聊信息
         in: body

@@ -1,5 +1,6 @@
 import * as React from "react"
 import {
+  Bot,
   FolderClosed,
   ImageIcon,
   LoaderCircle,
@@ -9,6 +10,7 @@ import {
   Settings,
   Smile,
   Upload,
+  UserRound,
   UsersRound,
   X,
 } from "lucide-react"
@@ -396,6 +398,18 @@ function ConversationPanelHeader({
             <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
               <UsersRound className="size-3" />
               {getGroupMemberCount(conversation)} 人
+            </span>
+          )}
+          {conversation.type === "app" && (
+            <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+              <Bot className="size-3" />
+              应用
+            </span>
+          )}
+          {conversation.type === "direct" && (
+            <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+              <UserRound className="size-3" />
+              私聊
             </span>
           )}
         </div>

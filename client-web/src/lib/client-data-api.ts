@@ -638,6 +638,7 @@ export type MarkConversationReadResult = {
 }
 
 export type CreateGroupConversationInput = {
+  appIds?: string[]
   memberIds: string[]
   name: string
 }
@@ -895,6 +896,7 @@ export async function createGroupConversation(
 ) {
   const response = await fetcher("/api/client/conversations/groups", {
     body: JSON.stringify({
+      app_ids: input.appIds ?? [],
       member_ids: input.memberIds,
       name: input.name,
     }),

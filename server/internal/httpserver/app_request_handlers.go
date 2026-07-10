@@ -58,7 +58,7 @@ type appSendMessageResponse struct {
 
 type appCreateGroupConversationResponse struct {
 	Conversation groupConversationResponse `json:"conversation"`
-	Message      appMessagePayload         `json:"message"`
+	Message      *appMessagePayload        `json:"message"`
 }
 
 type appAddGroupConversationMembersResponse struct {
@@ -576,15 +576,20 @@ func (s *Server) handleAppCreateGroupConversation(appID string, request realtime
 		return appCreateGroupConversationResponse{}, err
 	}
 
-	conversation, message, candidates, memberUserIDs, err := s.createUserGroupConversation(actor, name, memberIDs)
+	conversation, message, candidates, memberUserIDs, err := s.createUserGroupConversation(actor, name, memberIDs, nil)
 	if err != nil {
 		return appCreateGroupConversationResponse{}, mapAppGroupConversationError(err)
 	}
-	s.realtime.SendToUsers(memberUserIDs, realtimeMessageCreatedEvent(newMessageResponse(message)))
+	var messageResponse *appMessagePayload
+	if message != nil {
+		response := newAppSystemMessagePayload(*message)
+		messageResponse = &response
+		s.realtime.SendToUsers(memberUserIDs, realtimeMessageCreatedEvent(newMessageResponse(*message)))
+	}
 
 	return appCreateGroupConversationResponse{
 		Conversation: newGroupConversationResponse(conversation, candidates, actor.ID),
-		Message:      newAppSystemMessagePayload(message),
+		Message:      messageResponse,
 	}, nil
 }
 
@@ -1665,7 +1670,7 @@ func mapAppGroupConversationError(err error) error {
 		return newAppRequestFailure("invalid_request", "只能向群聊添加成员")
 	}
 	if errors.Is(err, errGroupConversationMemberCap) {
-		return newAppRequestFailure("invalid_request", "群聊成员不能超过 100 人")
+		return newAppRequestFailure("invalid_request", "群聊成员不能超过 500 人")
 	}
 	if errors.Is(err, errGroupConversationMemberMiss) {
 		return newAppRequestFailure("invalid_request", "成员不存在或已禁用")
