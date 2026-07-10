@@ -79,7 +79,7 @@ func (m *webSocketManager) Run(ctx context.Context, handle func(envelope)) error
 				return nil
 			}
 			if resp != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
-				return fmt.Errorf("dial %s failed: %w, status=%d", m.cfg.WebSocketURL, err, resp.StatusCode)
+				return fmt.Errorf("%w: dial %s failed: %v, status=%d", errWebSocketAuthentication, m.cfg.WebSocketURL, err, resp.StatusCode)
 			}
 			if attempt == m.maxRetries {
 				return fmt.Errorf("%w after %d retries: %v", errWebSocketUnavailable, m.maxRetries, err)

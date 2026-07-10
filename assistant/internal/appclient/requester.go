@@ -10,6 +10,7 @@ import (
 )
 
 var errWebSocketUnavailable = errors.New("websocket unavailable")
+var errWebSocketAuthentication = errors.New("websocket authentication failed")
 
 type requestTransport interface {
 	Send(context.Context, envelope) (<-chan struct{}, error)

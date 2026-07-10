@@ -237,6 +237,9 @@ func (c *Client) Run(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return nil
 		}
+		if errors.Is(err, errWebSocketAuthentication) {
+			return err
+		}
 		if err != nil {
 			log.Printf("app websocket connection cycle failed: %v", err)
 		}

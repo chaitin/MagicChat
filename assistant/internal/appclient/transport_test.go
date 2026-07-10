@@ -53,6 +53,40 @@ func TestWebSocketManagerStopsAfterTenRetries(t *testing.T) {
 	}
 }
 
+func TestWebSocketManagerReturnsPermanentAuthenticationError(t *testing.T) {
+	attempts := 0
+	manager := newWebSocketManager(config.Config{WebSocketURL: "ws://server/ws"}, webSocketManagerOptions{
+		Dial: func(context.Context, string, http.Header) (*websocket.Conn, *http.Response, error) {
+			attempts++
+			return nil, &http.Response{StatusCode: http.StatusUnauthorized}, errors.New("unauthorized")
+		},
+	})
+
+	err := manager.Run(context.Background(), func(envelope) {})
+	if !errors.Is(err, errWebSocketAuthentication) {
+		t.Fatalf("Run() error = %v, want authentication error", err)
+	}
+	if attempts != 1 {
+		t.Fatalf("dial attempts = %d, want 1", attempts)
+	}
+}
+
+func TestClientRunReturnsPermanentAuthenticationError(t *testing.T) {
+	transport := newWebSocketManager(config.Config{WebSocketURL: "ws://server/ws"}, webSocketManagerOptions{
+		Dial: func(context.Context, string, http.Header) (*websocket.Conn, *http.Response, error) {
+			return nil, &http.Response{StatusCode: http.StatusForbidden}, errors.New("forbidden")
+		},
+	})
+	client := &Client{transport: transport, requester: newReliableRequester(transport, reliableRequesterOptions{})}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	err := client.Run(ctx)
+	if !errors.Is(err, errWebSocketAuthentication) {
+		t.Fatalf("Client.Run() error = %v, want authentication error", err)
+	}
+}
+
 func TestWebSocketManagerBacksOffAfterConnectedGenerationDrops(t *testing.T) {
 	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
