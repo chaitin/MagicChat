@@ -26,6 +26,7 @@ const (
 	appMethodGroupConversationsCreate  = "group_conversations.create"
 	appMethodGroupMembersAdd           = "group_conversations.members.add"
 	appMethodTemporaryFilesReadURLs    = "temporary_files.read_urls"
+	appMethodEventsAck                 = "events.ack"
 	defaultAppConversationHistoryLimit = 30
 	maxAppConversationHistoryLimit     = 100
 	defaultAppScopedHistoryReadLimit   = 20
@@ -162,6 +163,14 @@ type appReadTemporaryFileURLsRequest struct {
 	FileIDs []string `json:"file_ids"`
 }
 
+type appAckEventsRequest struct {
+	Cursor int64 `json:"cursor"`
+}
+
+type appAckEventsResponse struct {
+	Cursor int64 `json:"cursor"`
+}
+
 type appConversationHistoryMessagePayload struct {
 	Body      json.RawMessage         `json:"body,omitempty"`
 	CreatedAt time.Time               `json:"created_at"`
@@ -250,9 +259,67 @@ func (s *Server) handleAppRequest(appID string, request realtime.Envelope) realt
 			return appRequestErrorResponse(request.ID, err)
 		}
 		return realtime.NewResponse(request.ID, response)
+	case appMethodEventsAck:
+		response, err := s.handleAppAckEvents(appID, request)
+		if err != nil {
+			return appRequestErrorResponse(request.ID, err)
+		}
+		return realtime.NewResponse(request.ID, response)
 	default:
 		return realtime.NewErrorResponse(request.ID, "unknown_method", "未知应用方法")
 	}
+}
+
+func (s *Server) handleAppAckEvents(appID string, request realtime.Envelope) (appAckEventsResponse, error) {
+	var req appAckEventsRequest
+	if err := json.Unmarshal(request.Payload, &req); err != nil || req.Cursor <= 0 {
+		return appAckEventsResponse{}, newAppRequestFailure("invalid_request", "事件游标格式错误")
+	}
+
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var currentAck store.AppEventAck
+		err := tx.First(&currentAck, "app_id = ?", appID).Error
+		if err == nil && req.Cursor <= currentAck.LastAckedCursor {
+			return nil
+		}
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+
+		var eventCount int64
+		if err := tx.Model(&store.AppEventOutbox{}).
+			Where("app_id = ? AND id = ?", appID, req.Cursor).
+			Count(&eventCount).Error; err != nil {
+			return err
+		}
+		if eventCount == 0 {
+			return newAppRequestFailure("invalid_request", "事件游标不存在")
+		}
+
+		now := time.Now().UTC()
+		result := tx.Model(&store.AppEventAck{}).
+			Where("app_id = ? AND last_acked_cursor < ?", appID, req.Cursor).
+			Updates(map[string]any{"last_acked_cursor": req.Cursor, "updated_at": now})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			ack := store.AppEventAck{AppID: appID, LastAckedCursor: req.Cursor, UpdatedAt: now}
+			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&ack).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&store.AppEventAck{}).
+				Where("app_id = ? AND last_acked_cursor < ?", appID, req.Cursor).
+				Updates(map[string]any{"last_acked_cursor": req.Cursor, "updated_at": now}).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Where("app_id = ? AND id <= ?", appID, req.Cursor).Delete(&store.AppEventOutbox{}).Error
+	})
+	if err != nil {
+		return appAckEventsResponse{}, err
+	}
+	return appAckEventsResponse{Cursor: req.Cursor}, nil
 }
 
 func (s *Server) handleAppSendMessage(appID string, request realtime.Envelope) (appSendMessageResponse, error) {

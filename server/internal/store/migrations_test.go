@@ -20,6 +20,7 @@ func TestMigrationDirectoryContainsExpectedMigrations(t *testing.T) {
 		"00005_add_message_revoke.sql",
 		"00006_add_conversation_member_mentions.sql",
 		"00007_add_projects_and_tasks.sql",
+		"00008_add_app_event_outbox.sql",
 	}
 	if len(matches) != len(want) {
 		t.Fatalf("migration file count = %d, want %d: %v", len(matches), len(want), matches)
@@ -95,6 +96,31 @@ func TestProjectsAndTasksMigrationDefinesSchema(t *testing.T) {
 	} {
 		if !strings.Contains(sql, required) {
 			t.Fatalf("projects/tasks migration missing %q", required)
+		}
+	}
+}
+
+func TestAppEventOutboxMigrationDefinesCursorStorage(t *testing.T) {
+	rawSQL, err := os.ReadFile("../../migrations/00008_add_app_event_outbox.sql")
+	if err != nil {
+		t.Fatalf("read app event outbox migration: %v", err)
+	}
+	sql := normalizeSQL(string(rawSQL))
+	for _, required := range []string{
+		"-- +goose up",
+		"create table app_event_outbox",
+		"app_id uuid not null references apps(id) on delete cascade",
+		"event text not null",
+		"payload jsonb not null",
+		"create index app_event_outbox_app_cursor_index on app_event_outbox (app_id, id)",
+		"create table app_event_acks",
+		"last_acked_cursor bigint not null default 0",
+		"-- +goose down",
+		"drop table app_event_acks",
+		"drop table app_event_outbox",
+	} {
+		if !strings.Contains(sql, required) {
+			t.Fatalf("app event outbox migration missing %q", required)
 		}
 	}
 }

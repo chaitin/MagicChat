@@ -14,7 +14,7 @@ const (
 	defaultPingInterval    = 30 * time.Second
 	defaultPongWait        = 60 * time.Second
 	defaultWriteWait       = 10 * time.Second
-	defaultMaxMessageBytes = 64 * 1024
+	defaultMaxMessageBytes = 1 << 20
 )
 
 type Options struct {
@@ -39,6 +39,7 @@ type Manager struct {
 	writeWait       time.Duration
 	maxMessageBytes int64
 	requestHandler  RequestHandler
+	requestCache    *requestCache
 }
 
 func NewManager(options Options) *Manager {
@@ -71,16 +72,27 @@ func NewManager(options Options) *Manager {
 		writeWait:       writeWait,
 		maxMessageBytes: maxMessageBytes,
 		requestHandler:  options.RequestHandler,
+		requestCache:    newRequestCache(requestCacheOptions{}),
 	}
+}
+
+func (m *Manager) HandleRequest(appID string, request realtime.Envelope) realtime.Envelope {
+	if m.requestHandler == nil {
+		return realtime.NewErrorResponse(request.ID, "unknown_method", "未知应用方法")
+	}
+	return m.requestCache.Do(appID, request, func() realtime.Envelope {
+		return m.requestHandler(appID, request)
+	})
 }
 
 func (m *Manager) NewConnection(appID string, socket *websocket.Conn) *Connection {
 	return &Connection{
-		appID:   appID,
-		done:    make(chan struct{}),
-		manager: m,
-		send:    make(chan realtime.Envelope, m.sendBuffer),
-		socket:  socket,
+		appID:    appID,
+		done:     make(chan struct{}),
+		manager:  m,
+		response: make(chan realtime.Envelope, m.sendBuffer),
+		send:     make(chan realtime.Envelope, m.sendBuffer),
+		socket:   socket,
 	}
 }
 
@@ -122,6 +134,8 @@ func (m *Manager) SendToApp(appID string, message realtime.Envelope) int {
 	for _, conn := range connections {
 		if conn.Enqueue(message) {
 			sent++
+		} else {
+			conn.Close()
 		}
 	}
 

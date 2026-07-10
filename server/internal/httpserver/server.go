@@ -4,11 +4,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"app/internal/appconnection"
 	"app/internal/config"
 	"app/internal/realtime"
+	"app/internal/store"
 
 	"github.com/labstack/echo/v4"
 	echoSwagger "github.com/swaggo/echo-swagger"
@@ -26,6 +28,10 @@ type Server struct {
 	cfg            config.Config
 	appConnections *appconnection.Manager
 	realtime       *realtime.ConnectionPool
+	appEventMu     sync.Mutex
+
+	beforeAppEventLock     func(store.Message)
+	afterUserMessageCommit func(store.Message)
 }
 
 func NewRouter(db *gorm.DB, cfg config.Config) *echo.Echo {

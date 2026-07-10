@@ -237,6 +237,7 @@ func TestClientCanSendConversationImageMessage(t *testing.T) {
 		pushedBody["height"] != float64(768) {
 		t.Fatalf("pushed message body = %#v, want image body", pushedBody)
 	}
+	requireNoRealtimeEvent(t, bobConn)
 }
 
 func TestClientCanSendConversationImageMessageToAppConversationNotifiesApp(t *testing.T) {

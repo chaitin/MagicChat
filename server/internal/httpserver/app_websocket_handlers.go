@@ -60,9 +60,23 @@ func (s *Server) appWebSocket(c echo.Context) error {
 		return err
 	}
 
+	s.appEventMu.Lock()
 	conn := s.appConnections.NewConnection(app.ID, socket)
 	s.appConnections.Register(conn)
-	conn.Serve()
+	serveDone := make(chan struct{})
+	go func() {
+		conn.Serve()
+		close(serveDone)
+	}()
+	replayErr := s.replayAppEvents(app.ID, conn)
+	s.appEventMu.Unlock()
+	if replayErr != nil {
+		s.appConnections.Unregister(conn)
+		conn.Close()
+		<-serveDone
+		return replayErr
+	}
+	<-serveDone
 	s.appConnections.Unregister(conn)
 
 	return nil

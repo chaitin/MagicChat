@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -26,6 +27,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	gormlogger "gorm.io/gorm/logger"
 )
 
@@ -75,6 +77,8 @@ func migrateTestSchema(db *gorm.DB) error {
 		&store.TemporaryFile{},
 		&store.App{},
 		&store.AppConversation{},
+		&store.AppEventOutbox{},
+		&store.AppEventAck{},
 		&store.AppSettings{},
 		&store.ThirdPartyLoginProvider{},
 		&store.ThirdPartyLoginState{},
@@ -389,6 +393,32 @@ func insertTestConversation(t *testing.T, db *gorm.DB, input testConversationInp
 	}
 
 	return conversation
+}
+
+func insertTestAppConversationLink(t *testing.T, db *gorm.DB, appID string, userID string, conversationID string, now time.Time) {
+	t.Helper()
+
+	member := store.ConversationMember{
+		ConversationID:        conversationID,
+		MemberType:            store.ConversationMemberTypeApp,
+		MemberID:              appID,
+		Role:                  store.ConversationMemberRoleMember,
+		JoinedAt:              now,
+		HistoryVisibleFromSeq: 1,
+	}
+	if err := db.Create(&member).Error; err != nil {
+		t.Fatalf("create test app conversation member: %v", err)
+	}
+
+	link := store.AppConversation{
+		AppID:          appID,
+		UserID:         userID,
+		ConversationID: conversationID,
+		CreatedAt:      now,
+	}
+	if err := db.Create(&link).Error; err != nil {
+		t.Fatalf("create test app conversation link: %v", err)
+	}
 }
 
 func setTestConversationMemberLastReadSeq(t *testing.T, db *gorm.DB, conversationID string, memberID string, lastReadSeq int64) {
@@ -790,6 +820,39 @@ func sendAppRequest(t *testing.T, conn *websocket.Conn, request realtime.Envelop
 	return response
 }
 
+func requireReplayedAppResponse(t *testing.T, conn *websocket.Conn, request realtime.Envelope, first realtime.Envelope) {
+	t.Helper()
+
+	replayed := sendAppRequest(t, conn, request)
+	firstJSON, err := json.Marshal(first)
+	if err != nil {
+		t.Fatalf("marshal first app response: %v", err)
+	}
+	replayedJSON, err := json.Marshal(replayed)
+	if err != nil {
+		t.Fatalf("marshal replayed app response: %v", err)
+	}
+	if !bytes.Equal(replayedJSON, firstJSON) {
+		t.Fatalf("replayed response = %s, want %s", replayedJSON, firstJSON)
+	}
+}
+
+func ackAppEvent(t *testing.T, conn *websocket.Conn, cursor int64) {
+	t.Helper()
+
+	payload, err := json.Marshal(map[string]any{"cursor": cursor})
+	if err != nil {
+		t.Fatalf("marshal app event ack: %v", err)
+	}
+	sendAppRequest(t, conn, realtime.Envelope{
+		V:       realtime.ProtocolVersion,
+		Kind:    realtime.KindRequest,
+		ID:      "ack-event-" + uuid.NewString(),
+		Method:  appMethodEventsAck,
+		Payload: payload,
+	})
+}
+
 func sendRawAppRequest(t *testing.T, conn *websocket.Conn, request realtime.Envelope) realtime.Envelope {
 	t.Helper()
 
@@ -1034,6 +1097,272 @@ func TestAppWebSocketTracksAdminConnectionStatus(t *testing.T) {
 	t.Fatalf("connection_status did not become offline after websocket close")
 }
 
+func TestUserMessageRollsBackWhenAppEventOutboxInsertFails(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+
+	now := time.Date(2026, 7, 10, 9, 0, 0, 0, time.UTC)
+	alice := insertTestUser(t, db, "alice@example.com", "Alice", store.UserStatusActive, now)
+	app := insertTestApp(t, db, store.App{
+		Name:      "Echo App",
+		Enabled:   true,
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+	conversation := insertTestConversation(t, db, testConversationInput{
+		createdByUserID: alice.ID,
+		kind:            store.ConversationKindApp,
+		memberIDs:       []string{alice.ID},
+		name:            app.Name,
+		now:             now,
+	})
+	insertTestAppConversationLink(t, db, app.ID, alice.ID, conversation.ID, now)
+
+	const callbackName = "test:fail_app_event_outbox_create"
+	if err := db.Callback().Create().Before("gorm:create").Register(callbackName, func(tx *gorm.DB) {
+		if tx.Statement.Table == "app_event_outbox" {
+			tx.AddError(errors.New("forced outbox failure"))
+		}
+	}); err != nil {
+		t.Fatalf("register create callback: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := db.Callback().Create().Remove(callbackName); err != nil {
+			t.Errorf("remove create callback: %v", err)
+		}
+	})
+
+	subject := &Server{db: db}
+	callbackCalled := false
+	_, _, _, _, err := subject.createUserMessageWithMetadata(
+		context.Background(),
+		alice.ID,
+		conversation.ID,
+		"message-1",
+		json.RawMessage(`{"type":"text","content":"hello"}`),
+		staticMessageBodyFinalizer("hello"),
+		createMessageMetadata{
+			EmitAppEvent: true,
+			AfterCommitBeforeAppDelivery: func(store.Message, []string, []string) {
+				callbackCalled = true
+			},
+		},
+	)
+	if err == nil {
+		t.Fatal("createUserMessageWithMetadata() error = nil, want forced outbox failure")
+	}
+	if callbackCalled {
+		t.Fatal("AfterCommitBeforeAppDelivery called after transaction failure")
+	}
+
+	var messageCount int64
+	if err := db.Model(&store.Message{}).Count(&messageCount).Error; err != nil {
+		t.Fatalf("count messages: %v", err)
+	}
+	if messageCount != 0 {
+		t.Fatalf("message count = %d, want 0", messageCount)
+	}
+	var outboxCount int64
+	if err := db.Model(&store.AppEventOutbox{}).Count(&outboxCount).Error; err != nil {
+		t.Fatalf("count app event outbox: %v", err)
+	}
+	if outboxCount != 0 {
+		t.Fatalf("app event outbox count = %d, want 0", outboxCount)
+	}
+}
+
+func TestUserRealtimeCallbackRunsBeforeAppDeliveryBoundary(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+
+	now := time.Date(2026, 7, 10, 9, 0, 0, 0, time.UTC)
+	alice := insertTestUser(t, db, "alice@example.com", "Alice", store.UserStatusActive, now)
+	app := insertTestApp(t, db, store.App{
+		Name:      "Echo App",
+		Enabled:   true,
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+	conversation := insertTestConversation(t, db, testConversationInput{
+		createdByUserID: alice.ID,
+		kind:            store.ConversationKindApp,
+		memberIDs:       []string{alice.ID},
+		name:            app.Name,
+		now:             now,
+	})
+	insertTestAppConversationLink(t, db, app.ID, alice.ID, conversation.ID, now)
+
+	deliveryOrder := []string{}
+	subject := &Server{db: db}
+	subject.afterUserMessageCommit = func(store.Message) {
+		deliveryOrder = append(deliveryOrder, "app-delivery-boundary")
+	}
+	metadata := createMessageMetadata{
+		EmitAppEvent: true,
+		AfterCommitBeforeAppDelivery: func(message store.Message, memberUserIDs []string, mentionedUserIDs []string) {
+			deliveryOrder = append(deliveryOrder, "user-realtime")
+			if message.Seq != 1 {
+				t.Errorf("callback message seq = %d, want 1", message.Seq)
+			}
+			if !slices.Equal(memberUserIDs, []string{alice.ID}) {
+				t.Errorf("callback member user IDs = %v, want [%s]", memberUserIDs, alice.ID)
+			}
+			if len(mentionedUserIDs) != 0 {
+				t.Errorf("callback mentioned user IDs = %v, want empty", mentionedUserIDs)
+			}
+		},
+	}
+	createMessage := func() (bool, error) {
+		_, created, _, _, err := subject.createUserMessageWithMetadata(
+			context.Background(),
+			alice.ID,
+			conversation.ID,
+			"message-1",
+			json.RawMessage(`{"type":"text","content":"hello"}`),
+			staticMessageBodyFinalizer("hello"),
+			metadata,
+		)
+		return created, err
+	}
+
+	created, err := createMessage()
+	if err != nil {
+		t.Fatalf("createUserMessageWithMetadata() error = %v", err)
+	}
+	if !created {
+		t.Fatal("created = false, want true")
+	}
+	if !slices.Equal(deliveryOrder, []string{"user-realtime", "app-delivery-boundary"}) {
+		t.Fatalf("delivery order = %v, want [user-realtime app-delivery-boundary]", deliveryOrder)
+	}
+
+	created, err = createMessage()
+	if err != nil {
+		t.Fatalf("duplicate createUserMessageWithMetadata() error = %v", err)
+	}
+	if created {
+		t.Fatal("duplicate created = true, want false")
+	}
+	if !slices.Equal(deliveryOrder, []string{"user-realtime", "app-delivery-boundary"}) {
+		t.Fatalf("delivery order after duplicate = %v, want no additional callbacks", deliveryOrder)
+	}
+}
+
+func TestConcurrentAppMessagesPersistOutboxInSequenceOrder(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+
+	now := time.Date(2026, 7, 10, 9, 0, 0, 0, time.UTC)
+	alice := insertTestUser(t, db, "alice@example.com", "Alice", store.UserStatusActive, now)
+	app := insertTestApp(t, db, store.App{
+		Name:      "Echo App",
+		Enabled:   true,
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+	conversation := insertTestConversation(t, db, testConversationInput{
+		createdByUserID: alice.ID,
+		kind:            store.ConversationKindApp,
+		memberIDs:       []string{alice.ID},
+		name:            app.Name,
+		now:             now,
+	})
+	insertTestAppConversationLink(t, db, app.ID, alice.ID, conversation.ID, now)
+
+	firstCommitted := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	secondReachedEventLock := make(chan struct{})
+	appEventLockErrors := make(chan error, 1)
+	defer func() {
+		select {
+		case <-releaseFirst:
+		default:
+			close(releaseFirst)
+		}
+	}()
+
+	subject := &Server{db: db}
+	subject.afterUserMessageCommit = func(message store.Message) {
+		if message.Seq == 1 {
+			if subject.appEventMu.TryLock() {
+				subject.appEventMu.Unlock()
+				appEventLockErrors <- errors.New("appEventMu was not held after message commit")
+			} else {
+				appEventLockErrors <- nil
+			}
+			close(firstCommitted)
+			<-releaseFirst
+		}
+	}
+	subject.beforeAppEventLock = func(message store.Message) {
+		if message.Seq == 2 {
+			close(secondReachedEventLock)
+		}
+	}
+
+	createMessage := func(clientMessageID string) error {
+		_, _, _, _, err := subject.createUserMessageWithMetadata(
+			context.Background(),
+			alice.ID,
+			conversation.ID,
+			clientMessageID,
+			json.RawMessage(`{"type":"text","content":"hello"}`),
+			staticMessageBodyFinalizer("hello"),
+			createMessageMetadata{EmitAppEvent: true},
+		)
+		return err
+	}
+
+	errs := make(chan error, 2)
+	go func() { errs <- createMessage("message-1") }()
+	select {
+	case <-firstCommitted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for first message commit")
+	}
+	if err := <-appEventLockErrors; err != nil {
+		t.Fatal(err)
+	}
+
+	go func() { errs <- createMessage("message-2") }()
+	select {
+	case <-secondReachedEventLock:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for second message to reach app event lock")
+	}
+	close(releaseFirst)
+
+	for i := 0; i < 2; i++ {
+		select {
+		case err := <-errs:
+			if err != nil {
+				t.Fatalf("create message error = %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for message creation")
+		}
+	}
+
+	var events []store.AppEventOutbox
+	if err := db.Order("id ASC").Find(&events).Error; err != nil {
+		t.Fatalf("load app event outbox: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("app event outbox count = %d, want 2", len(events))
+	}
+	seqs := make([]int64, 0, len(events))
+	for _, event := range events {
+		var payload appMessageCreatedPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			t.Fatalf("unmarshal app event payload: %v", err)
+		}
+		seqs = append(seqs, payload.Message.Seq)
+	}
+	if !slices.Equal(seqs, []int64{1, 2}) {
+		t.Fatalf("app event message seqs = %v, want [1 2]", seqs)
+	}
+}
+
 func TestAppWebSocketReceivesTextMessageEvents(t *testing.T) {
 	server, db := newTestRouter(t)
 	defer server.Close()
@@ -1080,6 +1409,26 @@ func TestAppWebSocketReceivesTextMessageEvents(t *testing.T) {
 	if event.Kind != realtime.KindEvent || event.Event != realtime.EventMessageCreated {
 		t.Fatalf("app event = %#v, want message.created event", event)
 	}
+	if event.Cursor <= 0 {
+		t.Fatalf("app event cursor = %d, want positive cursor", event.Cursor)
+	}
+	duplicateResp, duplicateBody := postJSON(t, server, "/api/client/conversations/"+conversationID+"/messages", map[string]any{
+		"client_message_id": "client-message-1",
+		"body": map[string]any{
+			"type":    "text",
+			"content": "  你好，应用  ",
+		},
+	}, userCookie)
+	if duplicateResp.StatusCode != http.StatusOK {
+		t.Fatalf("duplicate text status = %d, want 200, body = %#v", duplicateResp.StatusCode, duplicateBody)
+	}
+	var outboxCount int64
+	if err := db.Model(&store.AppEventOutbox{}).Where("app_id = ?", app.ID).Count(&outboxCount).Error; err != nil {
+		t.Fatalf("count app event outbox: %v", err)
+	}
+	if outboxCount != 1 {
+		t.Fatalf("app event outbox count = %d, want 1", outboxCount)
+	}
 	var payload map[string]any
 	if err := json.Unmarshal(event.Payload, &payload); err != nil {
 		t.Fatalf("unmarshal app event payload: %v", err)
@@ -1116,6 +1465,18 @@ func TestAppWebSocketReceivesTextMessageEvents(t *testing.T) {
 	if message["id"] != createdMessage["id"] {
 		t.Fatalf("message.id = %v, want %v", message["id"], createdMessage["id"])
 	}
+
+	replayConn := dialAppWebSocket(t, server, app.ID, app.ConnectionSecret)
+	replayed := readRealtimeEvent(t, replayConn)
+	if replayed.Cursor != event.Cursor || replayed.Event != event.Event || string(replayed.Payload) != string(event.Payload) {
+		t.Fatalf("replayed event = %#v, want cursor %d payload %s", replayed, event.Cursor, event.Payload)
+	}
+	requireNoRealtimeEvent(t, appConn)
+	_ = appConn.Close()
+	ackAppEvent(t, replayConn, event.Cursor)
+	_ = replayConn.Close()
+	afterAckConn := dialAppWebSocket(t, server, app.ID, app.ConnectionSecret)
+	requireNoRealtimeEvent(t, afterAckConn)
 	if _, ok := message["conversation_id"]; ok {
 		t.Fatalf("message.conversation_id = %v, want omitted", message["conversation_id"])
 	}
@@ -1134,6 +1495,109 @@ func TestAppWebSocketReceivesTextMessageEvents(t *testing.T) {
 	}
 	if message["created_at"] == "" {
 		t.Fatalf("message.created_at = %#v, want non-empty", message["created_at"])
+	}
+}
+
+func TestAppWebSocketReplaysOutboxInBoundedPages(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+
+	now := time.Date(2026, 7, 10, 6, 0, 0, 0, time.UTC)
+	app := insertTestApp(t, db, store.App{
+		Name:             "Echo App",
+		Enabled:          true,
+		Visibility:       store.AppVisibilityPublic,
+		ConnectionSecret: "echo-app-secret",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	})
+	events := make([]store.AppEventOutbox, 205)
+	for i := range events {
+		events[i] = store.AppEventOutbox{
+			AppID:     app.ID,
+			Event:     realtime.EventMessageCreated,
+			Payload:   json.RawMessage(`{"message":"queued"}`),
+			CreatedAt: now.Add(time.Duration(i) * time.Second),
+		}
+	}
+	if err := db.Create(&events).Error; err != nil {
+		t.Fatalf("create app events: %v", err)
+	}
+
+	const callbackName = "test:capture_app_event_outbox_query_limits"
+	queryLimits := make(chan int, 8)
+	if err := db.Callback().Query().Before("gorm:query").Register(callbackName, func(tx *gorm.DB) {
+		if tx.Statement.Table != "app_event_outbox" {
+			return
+		}
+		limit := -1
+		if limitClause, ok := tx.Statement.Clauses["LIMIT"].Expression.(clause.Limit); ok && limitClause.Limit != nil {
+			limit = *limitClause.Limit
+		}
+		queryLimits <- limit
+	}); err != nil {
+		t.Fatalf("register query callback: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := db.Callback().Query().Remove(callbackName); err != nil {
+			t.Errorf("remove query callback: %v", err)
+		}
+	})
+
+	conn := dialAppWebSocket(t, server, app.ID, app.ConnectionSecret)
+	for i := range events {
+		replayed := readRealtimeEvent(t, conn)
+		if replayed.Cursor != events[i].ID {
+			t.Fatalf("replayed cursor %d = %d, want %d", i, replayed.Cursor, events[i].ID)
+		}
+	}
+
+	limits := make([]int, 0, len(queryLimits))
+	for len(queryLimits) > 0 {
+		limits = append(limits, <-queryLimits)
+	}
+	if want := []int{100, 100, 100}; !slices.Equal(limits, want) {
+		t.Fatalf("app event outbox query limits = %v, want %v", limits, want)
+	}
+}
+
+func TestAppWebSocketAckOlderCursorIsIdempotent(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+
+	now := time.Date(2026, 7, 10, 6, 0, 0, 0, time.UTC)
+	app := insertTestApp(t, db, store.App{
+		Name:             "Echo App",
+		Enabled:          true,
+		Visibility:       store.AppVisibilityPublic,
+		ConnectionSecret: "echo-app-secret",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	})
+	events := []store.AppEventOutbox{
+		{AppID: app.ID, Event: realtime.EventMessageCreated, Payload: json.RawMessage(`{"message":"first"}`), CreatedAt: now},
+		{AppID: app.ID, Event: realtime.EventMessageCreated, Payload: json.RawMessage(`{"message":"second"}`), CreatedAt: now.Add(time.Second)},
+	}
+	if err := db.Create(&events).Error; err != nil {
+		t.Fatalf("create app events: %v", err)
+	}
+
+	conn := dialAppWebSocket(t, server, app.ID, app.ConnectionSecret)
+	first := readRealtimeEvent(t, conn)
+	second := readRealtimeEvent(t, conn)
+	if first.Cursor != events[0].ID || second.Cursor != events[1].ID {
+		t.Fatalf("replayed cursors = [%d, %d], want [%d, %d]", first.Cursor, second.Cursor, events[0].ID, events[1].ID)
+	}
+
+	ackAppEvent(t, conn, second.Cursor)
+	ackAppEvent(t, conn, first.Cursor)
+
+	var ack store.AppEventAck
+	if err := db.First(&ack, "app_id = ?", app.ID).Error; err != nil {
+		t.Fatalf("load app event ack: %v", err)
+	}
+	if ack.LastAckedCursor != second.Cursor {
+		t.Fatalf("last acked cursor = %d, want %d", ack.LastAckedCursor, second.Cursor)
 	}
 }
 
@@ -1235,6 +1699,7 @@ func TestAppWebSocketReceivesGroupMessageOnlyWhenMentionedDirectly(t *testing.T)
 	if message["summary"] != mentionedContent {
 		t.Fatalf("message.summary = %v, want %s", message["summary"], mentionedContent)
 	}
+	ackAppEvent(t, mentionedConn, event.Cursor)
 	requireNoRealtimeEvent(t, otherConn)
 
 	allConn := dialAppWebSocket(t, server, app.ID, app.ConnectionSecret)
@@ -1594,7 +2059,7 @@ func TestAppWebSocketMessageSendAsUserStoresDelegatedByAndPushesDirectMessage(t 
 		t.Fatalf("trigger sender email = %v, want %s", triggerSender["email"], alice.Email)
 	}
 
-	response := sendAppRequest(t, appConn, realtime.Envelope{
+	request := realtime.Envelope{
 		V:      realtime.ProtocolVersion,
 		Kind:   realtime.KindRequest,
 		ID:     "app-send-as-user-request",
@@ -1608,7 +2073,8 @@ func TestAppWebSocketMessageSendAsUserStoresDelegatedByAndPushesDirectMessage(t 
 				"content": "**请看这个报告**",
 			},
 		}),
-	})
+	}
+	response := sendAppRequest(t, appConn, request)
 	payload := requireAppSendMessageResponsePayload(t, response)
 	conversation := payload["conversation"].(map[string]any)
 	if conversation["type"] != store.ConversationKindDirect {
@@ -1636,6 +2102,8 @@ func TestAppWebSocketMessageSendAsUserStoresDelegatedByAndPushesDirectMessage(t 
 	if pushedDelegatedBy["type"] != store.MessageSenderTypeApp || pushedDelegatedBy["id"] != app.ID || pushedDelegatedBy["name"] != app.Name {
 		t.Fatalf("pushed delegated_by = %#v, want app delegate", pushedDelegatedBy)
 	}
+	requireReplayedAppResponse(t, appConn, request, response)
+	requireNoRealtimeEvent(t, bobConn)
 
 	var storedMessage store.Message
 	if err := db.First(&storedMessage, "id = ?", message["id"]).Error; err != nil {
@@ -1849,7 +2317,7 @@ func TestAppWebSocketGroupConversationCreateUsesTriggeringUser(t *testing.T) {
 		t.Fatalf("trigger app event = %#v, want message.created", triggerEvent)
 	}
 
-	response := sendAppRequest(t, appConn, realtime.Envelope{
+	request := realtime.Envelope{
 		V:      realtime.ProtocolVersion,
 		Kind:   realtime.KindRequest,
 		ID:     "app-create-group-request",
@@ -1860,7 +2328,9 @@ func TestAppWebSocketGroupConversationCreateUsesTriggeringUser(t *testing.T) {
 			"name":               " 项目讨论组 ",
 			"member_ids":         []string{bob.ID, carol.ID, bob.ID},
 		}),
-	})
+	}
+	response := sendAppRequest(t, appConn, request)
+	requireReplayedAppResponse(t, appConn, request, response)
 	var payload map[string]any
 	if err := json.Unmarshal(response.Payload, &payload); err != nil {
 		t.Fatalf("unmarshal group create response: %v", err)
@@ -1896,6 +2366,13 @@ func TestAppWebSocketGroupConversationCreateUsesTriggeringUser(t *testing.T) {
 	}
 	if len(members) != 3 {
 		t.Fatalf("member count = %d, want 3", len(members))
+	}
+	var messageCount int64
+	if err := db.Model(&store.Message{}).Where("conversation_id = ?", storedConversation.ID).Count(&messageCount).Error; err != nil {
+		t.Fatalf("count group create messages: %v", err)
+	}
+	if messageCount != 1 {
+		t.Fatalf("group create message count = %d, want 1", messageCount)
 	}
 }
 
@@ -1951,7 +2428,7 @@ func TestAppWebSocketGroupConversationMembersAddUsesTriggeringUser(t *testing.T)
 		t.Fatalf("trigger app event = %#v, want message.created", triggerEvent)
 	}
 
-	response := sendAppRequest(t, appConn, realtime.Envelope{
+	request := realtime.Envelope{
 		V:      realtime.ProtocolVersion,
 		Kind:   realtime.KindRequest,
 		ID:     "app-add-group-members-request",
@@ -1962,7 +2439,9 @@ func TestAppWebSocketGroupConversationMembersAddUsesTriggeringUser(t *testing.T)
 			"conversation_id":    group.ID,
 			"member_ids":         []string{carol.ID, dave.ID},
 		}),
-	})
+	}
+	response := sendAppRequest(t, appConn, request)
+	requireReplayedAppResponse(t, appConn, request, response)
 	var payload map[string]any
 	if err := json.Unmarshal(response.Payload, &payload); err != nil {
 		t.Fatalf("unmarshal members add response: %v", err)
@@ -1992,6 +2471,13 @@ func TestAppWebSocketGroupConversationMembersAddUsesTriggeringUser(t *testing.T)
 				t.Fatalf("new member %s history_visible_from_seq = %d, want 3", member.MemberID, member.HistoryVisibleFromSeq)
 			}
 		}
+	}
+	var messageCount int64
+	if err := db.Model(&store.Message{}).Where("conversation_id = ?", group.ID).Count(&messageCount).Error; err != nil {
+		t.Fatalf("count group member messages: %v", err)
+	}
+	if messageCount != 1 {
+		t.Fatalf("group member message count = %d, want 1", messageCount)
 	}
 }
 
@@ -2676,6 +3162,8 @@ func TestAppWebSocketMessageSendSupportsUserGroupAndAppTargets(t *testing.T) {
 	if pushedGroupMessage["id"] != groupMessage["id"] {
 		t.Fatalf("group target pushed id = %v, want %v", pushedGroupMessage["id"], groupMessage["id"])
 	}
+	requireReplayedAppResponse(t, appConn, groupRequest, groupResponse)
+	requireNoRealtimeEvent(t, userConn)
 
 	var storedMessages []store.Message
 	if err := db.Order("created_at ASC").Find(&storedMessages, "sender_type = ? AND sender_id = ?", store.MessageSenderTypeApp, app.ID).Error; err != nil {
@@ -4024,6 +4512,7 @@ func TestCreateConversationTextMessagePushesMessageCreatedToConversationMembers(
 		if pushedBody["type"] != "text" || pushedBody["content"] != "你好，Bob" {
 			t.Fatalf("%s pushed body = %#v, want text body", name, pushedBody)
 		}
+		requireNoRealtimeEvent(t, conn)
 	}
 }
 

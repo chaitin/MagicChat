@@ -5,11 +5,14 @@ import (
 	"errors"
 	"time"
 
+	"app/internal/appconnection"
 	"app/internal/realtime"
 	"app/internal/store"
 
 	"gorm.io/gorm"
 )
+
+const appEventReplayPageSize = 100
 
 type appMessageCreatedPayload struct {
 	Conversation appMessageConversationPayload `json:"conversation"`
@@ -41,38 +44,26 @@ type appMessageSenderPayload struct {
 	Type     string `json:"type"`
 }
 
-func (s *Server) dispatchAppMessageCreatedEvent(sender store.User, message store.Message) error {
-	if s.appConnections == nil {
-		return nil
-	}
-
-	conversation, err := s.findMessageConversation(message.ConversationID)
-	if err != nil {
-		return err
-	}
-
+func (s *Server) createAppMessageEventOutbox(tx *gorm.DB, conversation store.Conversation, sender store.User, message store.Message) ([]store.AppEventOutbox, error) {
+	var appIDs []string
 	switch conversation.Kind {
 	case store.ConversationKindApp:
-		appID, ok, err := s.findMessageConversationAppID(message.ConversationID)
+		appID, ok, err := findMessageConversationAppID(tx, message.ConversationID)
 		if err != nil || !ok {
-			return err
+			return nil, err
 		}
-		s.sendAppMessageCreatedEvent(appID, conversation, sender, message)
+		appIDs = []string{appID}
 	case store.ConversationKindGroup:
-		appIDs, err := s.findMentionedGroupAppIDs(conversation.ID, message.Body)
+		var err error
+		appIDs, err = findMentionedGroupAppIDs(tx, conversation.ID, message.Body)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		for _, appID := range appIDs {
-			s.sendAppMessageCreatedEvent(appID, conversation, sender, message)
-		}
+	default:
+		return nil, nil
 	}
 
-	return nil
-}
-
-func (s *Server) sendAppMessageCreatedEvent(appID string, conversation store.Conversation, sender store.User, message store.Message) {
-	s.appConnections.SendToApp(appID, realtime.NewEvent(realtime.EventMessageCreated, appMessageCreatedPayload{
+	payload := appMessageCreatedPayload{
 		Conversation: appMessageConversationPayload{
 			ID:   conversation.ID,
 			Name: conversation.Name,
@@ -92,19 +83,79 @@ func (s *Server) sendAppMessageCreatedEvent(appID string, conversation store.Con
 			Nickname: sender.Nickname,
 			Type:     store.MessageSenderTypeUser,
 		},
-	}))
-}
-
-func (s *Server) findMessageConversation(conversationID string) (store.Conversation, error) {
-	var conversation store.Conversation
-	if err := s.db.First(&conversation, "id = ?", conversationID).Error; err != nil {
-		return store.Conversation{}, err
+	}
+	events := make([]store.AppEventOutbox, 0, len(appIDs))
+	for _, appID := range appIDs {
+		stored, err := createStoredAppEvent(tx, appID, realtime.EventMessageCreated, payload)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, stored)
 	}
 
-	return conversation, nil
+	return events, nil
 }
 
-func (s *Server) findMentionedGroupAppIDs(conversationID string, body json.RawMessage) ([]string, error) {
+func createStoredAppEvent(db *gorm.DB, appID string, event string, payload any) (store.AppEventOutbox, error) {
+	rawPayload, err := json.Marshal(payload)
+	if err != nil {
+		return store.AppEventOutbox{}, err
+	}
+	stored := store.AppEventOutbox{
+		AppID:     appID,
+		Event:     event,
+		Payload:   rawPayload,
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := db.Create(&stored).Error; err != nil {
+		return store.AppEventOutbox{}, err
+	}
+
+	return stored, nil
+}
+
+func (s *Server) deliverStoredAppEvents(events []store.AppEventOutbox) {
+	if s.appConnections == nil {
+		return
+	}
+	for _, event := range events {
+		s.appConnections.SendToApp(event.AppID, realtime.NewCursorEvent(event.ID, event.Event, event.Payload))
+	}
+}
+
+func (s *Server) replayAppEvents(appID string, conn *appconnection.Connection) error {
+	var ack store.AppEventAck
+	lastAckedCursor := int64(0)
+	err := s.db.First(&ack, "app_id = ?", appID).Error
+	if err == nil {
+		lastAckedCursor = ack.LastAckedCursor
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+
+	nextCursor := lastAckedCursor
+	for {
+		var events []store.AppEventOutbox
+		if err := s.db.
+			Where("app_id = ? AND id > ?", appID, nextCursor).
+			Order("id ASC").
+			Limit(appEventReplayPageSize).
+			Find(&events).Error; err != nil {
+			return err
+		}
+		for _, event := range events {
+			if !conn.EnqueueReliable(realtime.NewCursorEvent(event.ID, event.Event, event.Payload)) {
+				return errors.New("app connection closed during event replay")
+			}
+		}
+		if len(events) < appEventReplayPageSize {
+			return nil
+		}
+		nextCursor = events[len(events)-1].ID
+	}
+}
+
+func findMentionedGroupAppIDs(db *gorm.DB, conversationID string, body json.RawMessage) ([]string, error) {
 	targets := parseMessageMentionTargets(body)
 	if len(targets) == 0 {
 		return nil, nil
@@ -127,7 +178,7 @@ func (s *Server) findMentionedGroupAppIDs(conversationID string, body json.RawMe
 	}
 
 	var members []store.ConversationMember
-	if err := s.db.
+	if err := db.
 		Where(
 			"conversation_id = ? AND member_type = ? AND member_id IN ? AND left_at IS NULL",
 			conversationID,
@@ -153,9 +204,9 @@ func (s *Server) findMentionedGroupAppIDs(conversationID string, body json.RawMe
 	return appIDs, nil
 }
 
-func (s *Server) findMessageConversationAppID(conversationID string) (string, bool, error) {
+func findMessageConversationAppID(db *gorm.DB, conversationID string) (string, bool, error) {
 	var member store.ConversationMember
-	err := s.db.First(
+	err := db.First(
 		&member,
 		"conversation_id = ? AND member_type = ? AND left_at IS NULL",
 		conversationID,

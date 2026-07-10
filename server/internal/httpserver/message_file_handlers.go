@@ -155,7 +155,7 @@ func (s *Server) createConversationFileMessage(c echo.Context) error {
 		return failure(c, http.StatusInternalServerError, "internal_error", "服务端错误")
 	}
 
-	message, created, memberUserIDs, mentionedUserIDs, err := s.createUserMessageWithMetadata(
+	message, created, _, _, err := s.createUserMessageWithMetadata(
 		c.Request().Context(),
 		user.ID,
 		conversationID,
@@ -164,6 +164,11 @@ func (s *Server) createConversationFileMessage(c echo.Context) error {
 		staticMessageBodyFinalizer(fileMessageSummary(fileName)),
 		createMessageMetadata{
 			ReplyToMessageID: replyToMessageID,
+			EmitAppEvent:     true,
+			AfterCommitBeforeAppDelivery: func(message store.Message, memberUserIDs []string, mentionedUserIDs []string) {
+				s.sendRealtimeMessageCreatedToUsers(c.Request().Context(), memberUserIDs, message)
+				s.sendRealtimeConversationMemberMentionedToUsers(mentionedUserIDs, message)
+			},
 		},
 	)
 	if err != nil {
@@ -187,14 +192,6 @@ func (s *Server) createConversationFileMessage(c echo.Context) error {
 	if err != nil {
 		return failure(c, http.StatusInternalServerError, "internal_error", "服务端错误")
 	}
-	if created {
-		s.sendRealtimeMessageCreatedToUsers(c.Request().Context(), memberUserIDs, message)
-		s.sendRealtimeConversationMemberMentionedToUsers(mentionedUserIDs, message)
-		if err := s.dispatchAppMessageCreatedEvent(user, message); err != nil {
-			c.Logger().Warnf("dispatch app message event failed: %v", err)
-		}
-	}
-
 	status := http.StatusOK
 	if created {
 		status = http.StatusCreated

@@ -450,6 +450,7 @@ func TestClientCanSendConversationFileMessage(t *testing.T) {
 	if pushedBody["type"] != "file" || pushedBody["file_id"] != fileID || pushedBody["name"] != "message-renderer.tsx" {
 		t.Fatalf("pushed message body = %#v, want file body", pushedBody)
 	}
+	requireNoRealtimeEvent(t, bobConn)
 }
 
 func TestClientCanSendConversationFileMessageToAppConversationNotifiesApp(t *testing.T) {

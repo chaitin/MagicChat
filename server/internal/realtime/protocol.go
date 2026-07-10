@@ -23,6 +23,7 @@ const (
 type Envelope struct {
 	V       int             `json:"v"`
 	Kind    string          `json:"kind"`
+	Cursor  int64           `json:"cursor,omitempty"`
 	ID      string          `json:"id,omitempty"`
 	Method  string          `json:"method,omitempty"`
 	Event   string          `json:"event,omitempty"`
@@ -45,6 +46,12 @@ func NewEvent(event string, payload any) Envelope {
 		Event:   event,
 		Payload: mustMarshalPayload(payload),
 	}
+}
+
+func NewCursorEvent(cursor int64, event string, payload any) Envelope {
+	message := NewEvent(event, payload)
+	message.Cursor = cursor
+	return message
 }
 
 func NewResponse(replyTo string, payload any) Envelope {

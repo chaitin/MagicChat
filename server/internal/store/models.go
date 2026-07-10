@@ -252,6 +252,30 @@ func (AppConversation) TableName() string {
 	return "app_conversations"
 }
 
+type AppEventOutbox struct {
+	ID        int64           `gorm:"primaryKey;autoIncrement;index:app_event_outbox_app_cursor_index,priority:2"`
+	AppID     string          `gorm:"type:uuid;not null;index:app_event_outbox_app_cursor_index,priority:1"`
+	App       App             `gorm:"constraint:OnDelete:CASCADE;"`
+	Event     string          `gorm:"size:120;not null"`
+	Payload   json.RawMessage `gorm:"type:jsonb;not null;serializer:json"`
+	CreatedAt time.Time       `gorm:"not null"`
+}
+
+func (AppEventOutbox) TableName() string {
+	return "app_event_outbox"
+}
+
+type AppEventAck struct {
+	AppID           string    `gorm:"type:uuid;primaryKey"`
+	App             App       `gorm:"constraint:OnDelete:CASCADE;"`
+	LastAckedCursor int64     `gorm:"not null;default:0"`
+	UpdatedAt       time.Time `gorm:"not null"`
+}
+
+func (AppEventAck) TableName() string {
+	return "app_event_acks"
+}
+
 type AppSettings struct {
 	ID               int       `gorm:"primaryKey"`
 	AppName          string    `gorm:"size:120;not null"`

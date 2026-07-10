@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"regexp"
 	"strings"
 	"sync"
@@ -28,8 +27,9 @@ const (
 	pongWait            = 60 * time.Second
 	requestWait         = 30 * time.Second
 	writeWait           = 10 * time.Second
-	maxMessageBytes     = 64 * 1024
+	maxMessageBytes     = 1 << 20
 	maxReconnectBackoff = 30 * time.Second
+	maxQueuedAppEvents  = 256
 )
 
 const (
@@ -43,17 +43,35 @@ const (
 
 	methodConversationMessagesList = "conversation.messages.list"
 	methodTemporaryFilesReadURLs   = "temporary_files.read_urls"
+	methodEventsAck                = "events.ack"
 
 	defaultConversationContextLimit = 30
 )
 
 var appMentionTokenPattern = regexp.MustCompile(`\{\(@app/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\)\}`)
+var errAppEventQueueFull = errors.New("app event queue full")
 
 type Client struct {
 	cfg            config.Config
 	dialer         *websocket.Dialer
 	assistantAgent replyAgent
 	mcpSources     []mcpclient.Source
+	runner         *conversationAgentRunner
+	transport      *webSocketManager
+	requester      *reliableRequester
+
+	eventMu         sync.Mutex
+	eventQueue      []*queuedAppEvent
+	eventCursors    map[int64]struct{}
+	eventRunning    bool
+	eventVersion    uint64
+	lastAckedCursor int64
+}
+
+type queuedAppEvent struct {
+	ctx     context.Context
+	message envelope
+	handled bool
 }
 
 type replyAgent interface {
@@ -67,6 +85,7 @@ type appRequester interface {
 type envelope struct {
 	V       int             `json:"v"`
 	Kind    string          `json:"kind"`
+	Cursor  int64           `json:"cursor,omitempty"`
 	ID      string          `json:"id,omitempty"`
 	Method  string          `json:"method,omitempty"`
 	Event   string          `json:"event,omitempty"`
@@ -165,11 +184,15 @@ func New(ctx context.Context, cfg config.Config) (*Client, error) {
 		return nil, err
 	}
 
+	transport := newWebSocketManager(cfg, webSocketManagerOptions{})
 	return &Client{
 		cfg:            cfg,
 		dialer:         websocket.DefaultDialer,
 		assistantAgent: agent.New(llm.NewAnthropicClient(cfg.LLM), agent.WithToolRegistry(registry), agent.WithMaxTurns(cfg.Agent.MaxTurns)),
 		mcpSources:     sources,
+		runner:         newConversationAgentRunner(ctx),
+		transport:      transport,
+		requester:      newReliableRequester(transport, reliableRequesterOptions{}),
 	}, nil
 }
 
@@ -193,125 +216,157 @@ func newToolRegistry(ctx context.Context, servers []config.MCPServerConfig) (*mc
 }
 
 func (c *Client) Close() {
+	if c.runner != nil {
+		c.runner.CancelAll()
+	}
 	mcpclient.CloseSources(c.mcpSources)
 }
 
 func (c *Client) Run(ctx context.Context) error {
-	backoff := time.Second
 	for {
-		if err := ctx.Err(); err != nil {
+		if ctx.Err() != nil {
 			return nil
 		}
-
-		connected, err := c.connectOnce(ctx)
-		if connected {
-			backoff = time.Second
+		if c.transport == nil {
+			c.transport = newWebSocketManager(c.cfg, webSocketManagerOptions{})
 		}
-		if err != nil && ctx.Err() == nil {
-			log.Printf("app websocket disconnected: %v", err)
+		if c.requester == nil {
+			c.requester = newReliableRequester(c.transport, reliableRequesterOptions{})
 		}
-
-		select {
-		case <-ctx.Done():
+		err := c.transport.Run(ctx, func(message envelope) bool {
+			return c.handleTransportMessage(ctx, message)
+		})
+		if ctx.Err() != nil {
 			return nil
-		case <-time.After(backoff):
 		}
-
-		backoff *= 2
-		if backoff > maxReconnectBackoff {
-			backoff = maxReconnectBackoff
+		if errors.Is(err, errWebSocketAuthentication) {
+			return err
+		}
+		if err != nil {
+			log.Printf("app websocket connection cycle failed: %v", err)
+		}
+		if err := sleepContext(ctx, maxReconnectBackoff); err != nil {
+			return nil
 		}
 	}
 }
 
-func (c *Client) connectOnce(ctx context.Context) (bool, error) {
-	header := http.Header{}
-	header.Set("X-MyGod-App-ID", c.cfg.AppID)
-	header.Set("Authorization", "Bearer "+c.cfg.AppSecret)
-
-	conn, resp, err := c.dialer.DialContext(ctx, c.cfg.WebSocketURL, header)
-	if err != nil {
-		status := 0
-		if resp != nil {
-			status = resp.StatusCode
-		}
-
-		return false, fmt.Errorf("dial %s failed: %w, status=%d", c.cfg.WebSocketURL, err, status)
+func (c *Client) handleTransportMessage(ctx context.Context, message envelope) bool {
+	if message.Kind == kindResponse {
+		c.requester.HandleResponse(message)
+		return true
 	}
-	defer conn.Close()
-
-	log.Printf("app websocket connected to %s", c.cfg.WebSocketURL)
-	return true, serveConnection(ctx, conn, c.cfg.AppID, c.assistantAgent)
+	return c.enqueueAppEvent(ctx, message)
 }
 
-func serveConnection(ctx context.Context, conn *websocket.Conn, appID string, assistantAgent replyAgent) error {
-	connCtx, cancelConnection := context.WithCancel(ctx)
-	defer cancelConnection()
-
-	var writeMu sync.Mutex
-	writeJSON := func(message envelope) error {
-		writeMu.Lock()
-		defer writeMu.Unlock()
-
-		_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
-		return conn.WriteJSON(message)
+func (c *Client) enqueueAppEvent(ctx context.Context, message envelope) bool {
+	c.eventMu.Lock()
+	if message.Cursor > 0 {
+		if message.Cursor <= c.lastAckedCursor {
+			c.eventMu.Unlock()
+			return true
+		}
+		if _, exists := c.eventCursors[message.Cursor]; exists {
+			c.eventVersion++
+			if !c.eventRunning {
+				c.eventRunning = true
+				c.eventMu.Unlock()
+				go c.drainAppEvents()
+				return true
+			}
+			c.eventMu.Unlock()
+			return true
+		}
 	}
-	writeControl := func(messageType int, data []byte) error {
-		writeMu.Lock()
-		defer writeMu.Unlock()
-
-		return conn.WriteControl(messageType, data, time.Now().Add(writeWait))
+	if len(c.eventQueue) >= maxQueuedAppEvents {
+		c.eventMu.Unlock()
+		return false
 	}
-	requester := newConnectionRequester(writeJSON)
-	runner := newConversationAgentRunner()
-	defer runner.CancelAll()
+	if message.Cursor > 0 {
+		if c.eventCursors == nil {
+			c.eventCursors = make(map[int64]struct{})
+		}
+		c.eventCursors[message.Cursor] = struct{}{}
+	}
+	c.eventQueue = append(c.eventQueue, &queuedAppEvent{ctx: ctx, message: message})
+	c.eventVersion++
+	if c.eventRunning {
+		c.eventMu.Unlock()
+		return true
+	}
+	c.eventRunning = true
+	c.eventMu.Unlock()
+	go c.drainAppEvents()
+	return true
+}
 
-	conn.SetReadLimit(maxMessageBytes)
-	_ = conn.SetReadDeadline(time.Now().Add(pongWait))
-	conn.SetPongHandler(func(string) error {
-		return conn.SetReadDeadline(time.Now().Add(pongWait))
-	})
-	conn.SetPingHandler(func(message string) error {
-		return writeControl(websocket.PongMessage, []byte(message))
-	})
+func (c *Client) drainAppEvents() {
+	for {
+		c.eventMu.Lock()
+		if len(c.eventQueue) == 0 {
+			c.eventRunning = false
+			c.eventMu.Unlock()
+			return
+		}
+		queued := c.eventQueue[0]
+		version := c.eventVersion
+		c.eventMu.Unlock()
 
-	readErr := make(chan error, 1)
-	go func() {
-		for {
-			messageType, data, err := conn.ReadMessage()
-			if err != nil {
-				readErr <- err
+		if !queued.handled {
+			queued.handled = handleParsedServerMessage(
+				queued.ctx,
+				queued.message,
+				c.cfg.AppID,
+				c.requester,
+				c.assistantAgent,
+				c.runner,
+				func(writeCtx context.Context, outgoing envelope) error {
+					_, err := c.requester.RequestEnvelope(writeCtx, outgoing)
+					return err
+				},
+			)
+			if !queued.handled {
+				if c.stopOrRetryAppEvent(version) {
+					continue
+				}
 				return
 			}
-			message, ok := decodeServerMessage(messageType, data)
-			if !ok {
-				continue
-			}
-			if message.Kind == kindResponse {
-				requester.HandleResponse(message)
-				continue
-			}
-			go handleParsedServerMessage(connCtx, message, appID, requester, assistantAgent, runner, writeJSON)
 		}
-	}()
 
-	ticker := time.NewTicker(pingInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-connCtx.Done():
-			_ = writeControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "shutdown"))
-			return nil
-		case err := <-readErr:
-			cancelConnection()
-			return err
-		case <-ticker.C:
-			if err := writeControl(websocket.PingMessage, nil); err != nil {
-				return err
+		if queued.message.Cursor > 0 {
+			if _, err := c.requester.Request(queued.ctx, methodEventsAck, struct {
+				Cursor int64 `json:"cursor"`
+			}{Cursor: queued.message.Cursor}); err != nil {
+				if queued.ctx.Err() == nil {
+					log.Printf("ack app event failed: cursor=%d error=%v", queued.message.Cursor, err)
+				}
+				if c.stopOrRetryAppEvent(version) {
+					continue
+				}
+				return
 			}
 		}
+
+		c.eventMu.Lock()
+		if queued.message.Cursor > 0 {
+			delete(c.eventCursors, queued.message.Cursor)
+			if queued.message.Cursor > c.lastAckedCursor {
+				c.lastAckedCursor = queued.message.Cursor
+			}
+		}
+		c.eventQueue = c.eventQueue[1:]
+		c.eventMu.Unlock()
 	}
+}
+
+func (c *Client) stopOrRetryAppEvent(version uint64) bool {
+	c.eventMu.Lock()
+	defer c.eventMu.Unlock()
+	if c.eventVersion != version {
+		return true
+	}
+	c.eventRunning = false
+	return false
 }
 
 type pendingResponse struct {
@@ -350,7 +405,7 @@ func (r *connectionRequester) Request(ctx context.Context, method string, payloa
 		return nil, err
 	}
 	if len(encodedRequest) > maxMessageBytes {
-		return nil, fmt.Errorf("app websocket request exceeds 64KiB limit")
+		return nil, fmt.Errorf("app websocket request exceeds 1MiB limit")
 	}
 
 	responseCh := make(chan envelope, 1)
@@ -419,7 +474,18 @@ func decodeServerMessage(messageType int, data []byte) (envelope, bool) {
 	return message, true
 }
 
-func handleServerMessage(ctx context.Context, messageType int, data []byte, requester appRequester, assistantAgent replyAgent, writeJSON func(envelope) error) {
+func encodeEnvelope(message envelope) ([]byte, error) {
+	encoded, err := json.Marshal(message)
+	if err != nil {
+		return nil, err
+	}
+	if len(encoded) > maxMessageBytes {
+		return nil, fmt.Errorf("app websocket message exceeds 1MiB limit")
+	}
+	return encoded, nil
+}
+
+func handleServerMessage(ctx context.Context, messageType int, data []byte, requester appRequester, assistantAgent replyAgent, writeJSON func(context.Context, envelope) error) {
 	message, ok := decodeServerMessage(messageType, data)
 	if !ok {
 		return
@@ -427,29 +493,29 @@ func handleServerMessage(ctx context.Context, messageType int, data []byte, requ
 	handleParsedServerMessage(ctx, message, "", requester, assistantAgent, directAgentRunner{}, writeJSON)
 }
 
-func handleParsedServerMessage(ctx context.Context, message envelope, appID string, requester appRequester, assistantAgent replyAgent, runner agentRunner, writeJSON func(envelope) error) {
+func handleParsedServerMessage(ctx context.Context, message envelope, appID string, requester appRequester, assistantAgent replyAgent, runner agentRunner, writeJSON func(context.Context, envelope) error) bool {
 	if message.Kind == kindResponse {
-		return
+		return true
 	}
 	if message.Kind != kindEvent || message.Event != eventMessageCreated {
-		return
+		return true
 	}
 
 	var payload messageCreatedPayload
 	if err := json.Unmarshal(message.Payload, &payload); err != nil {
 		log.Printf("ignore invalid message.created payload: %v", err)
-		return
+		return true
 	}
 	var body messageBody
 	if err := json.Unmarshal(payload.Message.Body, &body); err != nil {
 		log.Printf("ignore invalid message body: %v", err)
-		return
+		return true
 	}
 	if !isSupportedIncomingMessageType(body.Type) {
-		return
+		return true
 	}
 	if !shouldHandleIncomingMessage(appID, payload, body) {
-		return
+		return true
 	}
 
 	senderName := payload.Sender.Name
@@ -466,17 +532,17 @@ func handleParsedServerMessage(ctx context.Context, message envelope, appID stri
 	)
 
 	sink := agent.OutputSinkFunc(func(ctx context.Context, content string) error {
-		return sendMarkdownReply(writeJSON, payload.Conversation, content)
+		return sendMarkdownReply(ctx, writeJSON, payload.Conversation, content)
 	})
 	prepared, err := prepareAgentRun(ctx, requester, payload, body, senderName)
 	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			log.Printf("prepare agent run failed: %v", err)
-			sendAgentFallback(ctx, sink)
+		if errors.Is(err, context.Canceled) {
+			return false
 		}
-		return
+		log.Printf("prepare agent run failed: %v", err)
+		return sendAgentFallback(ctx, sink) == nil
 	}
-	runner.Start(ctx, payload.Conversation.ID, sink, assistantAgent, prepared)
+	return runner.Start(ctx, payload.Conversation.ID, sink, assistantAgent, prepared)
 }
 
 func prepareAgentRun(ctx context.Context, requester appRequester, payload messageCreatedPayload, body messageBody, senderName string) (preparedAgentRun, error) {
@@ -785,7 +851,7 @@ func buildHistoryMessageBody(raw json.RawMessage) (json.RawMessage, error) {
 	return body, nil
 }
 
-func sendMarkdownReply(writeJSON func(envelope) error, conversation conversationPayload, content string) error {
+func sendMarkdownReply(ctx context.Context, writeJSON func(context.Context, envelope) error, conversation conversationPayload, content string) error {
 	targetType := conversation.Type
 	switch targetType {
 	case "app", "group":
@@ -807,7 +873,7 @@ func sendMarkdownReply(writeJSON func(envelope) error, conversation conversation
 		return err
 	}
 
-	return writeJSON(envelope{
+	return writeJSON(ctx, envelope{
 		V:       protocolVersion,
 		Kind:    kindRequest,
 		ID:      newRequestID(),

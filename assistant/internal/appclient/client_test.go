@@ -51,11 +51,57 @@ func TestConnectionRequesterRejectsOversizedOutgoingEnvelope(t *testing.T) {
 	if err == nil {
 		t.Fatal("Request() error = nil, want oversized message error")
 	}
-	if !strings.Contains(err.Error(), "64KiB") {
-		t.Fatalf("Request() error = %v, want 64KiB limit", err)
+	if !strings.Contains(err.Error(), "1MiB") {
+		t.Fatalf("Request() error = %v, want 1MiB limit", err)
 	}
 	if wrote {
 		t.Fatal("write called for oversized message")
+	}
+}
+
+func TestConnectionRequesterAllowsEnvelopeLargerThan64KiB(t *testing.T) {
+	var requester *connectionRequester
+	requester = newConnectionRequester(func(message envelope) error {
+		ok := true
+		requester.HandleResponse(envelope{
+			V:       protocolVersion,
+			Kind:    kindResponse,
+			ReplyTo: message.ID,
+			OK:      &ok,
+			Payload: json.RawMessage(`{"accepted":true}`),
+		})
+		return nil
+	})
+
+	raw, err := requester.Request(context.Background(), methodMessageSend, map[string]any{
+		"message": map[string]any{
+			"type":    "markdown",
+			"content": strings.Repeat("x", 128*1024),
+		},
+	})
+	if err != nil {
+		t.Fatalf("Request() error = %v, want nil", err)
+	}
+	if string(raw) != `{"accepted":true}` {
+		t.Fatalf("Request() payload = %s, want accepted response", raw)
+	}
+}
+
+func TestEncodeEnvelopeRejectsMessageLargerThanOneMiB(t *testing.T) {
+	payload, err := json.Marshal(map[string]any{"content": strings.Repeat("x", maxMessageBytes)})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	_, err = encodeEnvelope(envelope{
+		V:       protocolVersion,
+		Kind:    kindRequest,
+		ID:      "request-1",
+		Method:  methodMessageSend,
+		Payload: payload,
+	})
+	if err == nil || !strings.Contains(err.Error(), "1MiB") {
+		t.Fatalf("encodeEnvelope() error = %v, want 1MiB limit", err)
 	}
 }
 
@@ -157,7 +203,7 @@ func TestHandleServerMessageSendsLLMReply(t *testing.T) {
 		return sink.SendMarkdown(ctx, "你好，我是大模型回复")
 	})
 
-	handleServerMessage(context.Background(), websocket.TextMessage, raw, requester, replyAgent, func(message envelope) error {
+	handleServerMessage(context.Background(), websocket.TextMessage, raw, requester, replyAgent, func(_ context.Context, message envelope) error {
 		sent = append(sent, message)
 		return nil
 	})
@@ -269,7 +315,7 @@ func TestHandleParsedServerMessageIgnoresGroupMessageWithoutDirectAppMention(t *
 		requester,
 		replyAgent,
 		directAgentRunner{},
-		func(envelope) error { return nil },
+		func(context.Context, envelope) error { return nil },
 	)
 
 	if calledRequester {
@@ -306,7 +352,7 @@ func TestHandleParsedServerMessageRunsGroupMessageWithDirectAppMention(t *testin
 		requester,
 		replyAgent,
 		directAgentRunner{},
-		func(message envelope) error {
+		func(_ context.Context, message envelope) error {
 			sent = append(sent, message)
 			return nil
 		},
@@ -349,7 +395,7 @@ func TestHandleParsedServerMessageRunsGroupMessageWithUppercaseDirectAppMention(
 		requester,
 		replyAgent,
 		directAgentRunner{},
-		func(envelope) error { return nil },
+		func(context.Context, envelope) error { return nil },
 	)
 
 	if len(agentRequests) != 1 {
@@ -476,7 +522,7 @@ func TestHandleServerMessageReadsTemporaryFileURLForImageAndFileMessages(t *test
 				requester,
 				replyAgent,
 				directAgentRunner{},
-				func(message envelope) error { return nil },
+				func(context.Context, envelope) error { return nil },
 			)
 
 			if _, ok := readURLPayloadMap["conversation_id"]; ok {
@@ -597,7 +643,7 @@ func TestHandleServerMessagePrefetchesCurrentFileURLAndKeepsHistoryFileIDs(t *te
 		requester,
 		replyAgent,
 		directAgentRunner{},
-		func(message envelope) error { return nil },
+		func(context.Context, envelope) error { return nil },
 	)
 
 	if _, ok := readURLPayloadMap["conversation_id"]; ok {
@@ -720,7 +766,7 @@ func TestHandleServerMessageDoesNotReadHistoryFileURLs(t *testing.T) {
 		requester,
 		replyAgent,
 		directAgentRunner{},
-		func(message envelope) error { return nil },
+		func(context.Context, envelope) error { return nil },
 	)
 
 	if len(readURLCalls) != 0 {
@@ -802,7 +848,7 @@ func TestHandleServerMessageProvidesBuiltinToolScope(t *testing.T) {
 		return err
 	})
 
-	handleParsedServerMessage(context.Background(), testMessageCreatedEnvelope(t, "user-1", "message-1", 1, "帮我发给 Bob"), "", requester, replyAgent, directAgentRunner{}, func(message envelope) error {
+	handleParsedServerMessage(context.Background(), testMessageCreatedEnvelope(t, "user-1", "message-1", 1, "帮我发给 Bob"), "", requester, replyAgent, directAgentRunner{}, func(_ context.Context, message envelope) error {
 		return nil
 	})
 
@@ -818,7 +864,7 @@ func TestHandleServerMessageProvidesBuiltinToolScope(t *testing.T) {
 }
 
 func TestConversationAgentRunnerCancelAllCancelsOutstandingJobs(t *testing.T) {
-	runner := newConversationAgentRunner()
+	runner := newConversationAgentRunner(context.Background())
 	firstStarted := make(chan struct{})
 	firstCanceled := make(chan struct{})
 	secondStarted := make(chan struct{})
@@ -858,7 +904,7 @@ func TestConversationAgentRunnerCancelAllCancelsOutstandingJobs(t *testing.T) {
 }
 
 func TestConversationAgentRunnerDoesNotRunAppendedMessageWhileSendIsInProgress(t *testing.T) {
-	runner := newConversationAgentRunner()
+	runner := newConversationAgentRunner(context.Background())
 	sendStarted := make(chan struct{})
 	releaseSend := make(chan struct{})
 	secondRequestSeen := make(chan struct{})
@@ -908,7 +954,7 @@ func TestConversationAgentRunnerAppendsSameConversationMessageToActiveSession(t 
 		release: make(chan struct{}),
 	}
 	assistantAgent := agent.New(model, agent.WithToolRegistry(registry), agent.WithMaxTurns(3))
-	runner := newConversationAgentRunner()
+	runner := newConversationAgentRunner(context.Background())
 	defer runner.CancelAll()
 
 	requester := appRequestFunc(func(ctx context.Context, method string, payload any) (json.RawMessage, error) {
@@ -1123,7 +1169,7 @@ type sentMessages struct {
 	messages []envelope
 }
 
-func (s *sentMessages) write(message envelope) error {
+func (s *sentMessages) write(_ context.Context, message envelope) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.messages = append(s.messages, message)
