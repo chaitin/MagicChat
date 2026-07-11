@@ -68,17 +68,17 @@ type taskListCursor struct {
 }
 
 type taskListFilters struct {
-	Keyword        string
-	Statuses       []string
-	Priorities     []int16
-	AssigneeUserID *string
-	Label          *string
-	StartDateFrom  *time.Time
-	StartDateTo    *time.Time
-	DueDateFrom    *time.Time
-	DueDateTo      *time.Time
-	Limit          int
-	Cursor         *struct {
+	Keyword         string
+	Statuses        []string
+	Priorities      []int16
+	AssigneeUserIDs []string
+	Label           *string
+	StartDateFrom   *time.Time
+	StartDateTo     *time.Time
+	DueDateFrom     *time.Time
+	DueDateTo       *time.Time
+	Limit           int
+	Cursor          *struct {
 		UpdatedAt time.Time
 		ID        string
 	}
@@ -175,7 +175,7 @@ func (value *taskOptionalStringSlice) UnmarshalJSON(raw []byte) error {
 // @Param keyword query string false "标题或描述关键字"
 // @Param status query string false "状态，多个值用逗号分隔：todo、in_progress、done、canceled"
 // @Param priority query string false "优先级，多个值用逗号分隔：1、2、3"
-// @Param assignee_user_id query string false "负责人用户 ID"
+// @Param assignee_user_id query string false "负责人用户 ID，多个值用逗号分隔"
 // @Param label query string false "标签"
 // @Param start_date_from query string false "开始日期下限，格式 YYYY-MM-DD"
 // @Param start_date_to query string false "开始日期上限，格式 YYYY-MM-DD"
@@ -538,11 +538,11 @@ func parseTaskListFilters(c echo.Context) (taskListFilters, error) {
 		filters.Priorities = priorities
 	}
 	if _, present := params["assignee_user_id"]; present {
-		assigneeUserID, err := parseTaskUUID(c.QueryParam("assignee_user_id"), "负责人 ID 格式错误")
+		assigneeUserIDs, err := parseTaskAssigneeFilter(c.QueryParam("assignee_user_id"))
 		if err != nil {
 			return filters, err
 		}
-		filters.AssigneeUserID = &assigneeUserID
+		filters.AssigneeUserIDs = assigneeUserIDs
 	}
 	if _, present := params["label"]; present {
 		label := strings.TrimSpace(c.QueryParam("label"))
@@ -628,6 +628,24 @@ func parseTaskPriorityFilter(value string) ([]int16, error) {
 	return priorities, nil
 }
 
+func parseTaskAssigneeFilter(value string) ([]string, error) {
+	parts := strings.Split(value, ",")
+	assigneeUserIDs := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		assigneeUserID, err := parseTaskUUID(strings.TrimSpace(part), "负责人 ID 格式错误")
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := seen[assigneeUserID]; exists {
+			continue
+		}
+		seen[assigneeUserID] = struct{}{}
+		assigneeUserIDs = append(assigneeUserIDs, assigneeUserID)
+	}
+	return assigneeUserIDs, nil
+}
+
 func parseTaskFilterDate(params map[string][]string, key string) (*time.Time, error) {
 	values, present := params[key]
 	if !present {
@@ -659,8 +677,8 @@ func applyTaskListFilters(query *gorm.DB, dialect string, filters taskListFilter
 	if len(filters.Priorities) > 0 {
 		query = query.Where("priority IN ?", filters.Priorities)
 	}
-	if filters.AssigneeUserID != nil {
-		query = query.Where("assignee_user_id = ?", *filters.AssigneeUserID)
+	if len(filters.AssigneeUserIDs) > 0 {
+		query = query.Where("assignee_user_id IN ?", filters.AssigneeUserIDs)
 	}
 	if filters.Label != nil {
 		if dialect == "sqlite" {

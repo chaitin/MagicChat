@@ -1,84 +1,663 @@
 import * as React from "react"
 import {
   CalendarDays,
-  ChartNoAxesGantt,
   ChevronDown,
+  ChevronsDown,
+  ChevronsUp,
+  Circle,
+  CircleCheckBig,
+  CircleDot,
+  CircleX,
   Columns3,
+  Equal,
   ListTodo,
+  Plus,
   Search,
 } from "lucide-react"
 
+import { CreateProjectTaskDialog } from "@/components/projects/create-project-task-dialog"
 import { ProjectTaskBoardView } from "@/components/projects/project-task-board-view"
 import { ProjectTaskCalendarView } from "@/components/projects/project-task-calendar-view"
-import { ProjectTaskGanttView } from "@/components/projects/project-task-gantt-view"
 import { ProjectTaskListView } from "@/components/projects/project-task-list-view"
-import type { ProjectTask } from "@/components/projects/project-types"
+import type {
+  ProjectTask,
+  ProjectTaskPriority,
+  ProjectTaskStatus,
+} from "@/components/projects/project-types"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Spinner } from "@/components/ui/spinner"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import {
+  type ClientProjectMember,
+  listClientProjectMembers,
+} from "@/lib/project-data-api"
+import { listClientProjectTasks } from "@/lib/project-task-data-api"
 import { cn } from "@/lib/utils"
 
 const taskViews = [
   { value: "list", label: "任务列表", icon: ListTodo },
   { value: "board", label: "看板", icon: Columns3 },
   { value: "calendar", label: "日历", icon: CalendarDays },
-  { value: "gantt", label: "甘特图", icon: ChartNoAxesGantt },
 ] as const
 
 type TaskView = (typeof taskViews)[number]["value"]
 
-export function ProjectTasksTab({ tasks }: { tasks: ProjectTask[] }) {
+type TaskFilters = {
+  assigneeUserIds: string[]
+  keyword: string
+  priorities: ProjectTaskPriority[]
+  statuses: ProjectTaskStatus[]
+}
+
+const statusOptions: Array<{ label: string; value: ProjectTaskStatus }> = [
+  { label: "待办", value: "todo" },
+  { label: "进行中", value: "in_progress" },
+  { label: "已完成", value: "done" },
+  { label: "已取消", value: "canceled" },
+]
+
+const priorityOptions: Array<{
+  label: string
+  value: ProjectTaskPriority
+}> = [
+  { label: "低", value: 1 },
+  { label: "中", value: 2 },
+  { label: "高", value: 3 },
+]
+
+function createEmptyTaskFilters(): TaskFilters {
+  return {
+    assigneeUserIds: [],
+    keyword: "",
+    priorities: [],
+    statuses: ["todo", "in_progress"],
+  }
+}
+
+export function ProjectTasksTab({
+  onTasksChanged,
+  projectId,
+}: {
+  onTasksChanged: () => Promise<void>
+  projectId: string
+}) {
   const [activeView, setActiveView] = React.useState<TaskView>("list")
+  const [appliedFilters, setAppliedFilters] = React.useState<TaskFilters>(
+    createEmptyTaskFilters
+  )
+  const [createDialogOpen, setCreateDialogOpen] = React.useState(false)
+  const [filters, setFilters] = React.useState<TaskFilters>(
+    createEmptyTaskFilters
+  )
+  const [error, setError] = React.useState("")
+  const [loading, setLoading] = React.useState(true)
+  const [members, setMembers] = React.useState<ClientProjectMember[]>([])
+  const [membersError, setMembersError] = React.useState(false)
+  const [membersLoading, setMembersLoading] = React.useState(true)
+  const [tasks, setTasks] = React.useState<ProjectTask[]>([])
+
+  React.useEffect(() => {
+    let active = true
+    void listAllProjectTasks(projectId, appliedFilters)
+      .then((nextTasks) => {
+        if (active) {
+          setTasks(nextTasks)
+        }
+      })
+      .catch((loadError: unknown) => {
+        if (active) {
+          setError(
+            loadError instanceof Error ? loadError.message : "加载任务列表失败"
+          )
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [appliedFilters, projectId])
+
+  React.useEffect(() => {
+    let active = true
+
+    void listAllProjectMembers(projectId)
+      .then((nextMembers) => {
+        if (active) {
+          setMembers(nextMembers.filter((member) => member.status === "active"))
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setMembersError(true)
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setMembersLoading(false)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [projectId])
+
+  async function refreshTasks() {
+    try {
+      setTasks(await listAllProjectTasks(projectId, appliedFilters))
+      setError("")
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error ? loadError.message : "刷新任务列表失败"
+      )
+    }
+  }
+
+  async function handleTaskCreated() {
+    await Promise.allSettled([refreshTasks(), onTasksChanged()])
+  }
+
+  async function handleTaskUpdated() {
+    await Promise.allSettled([refreshTasks(), onTasksChanged()])
+  }
+
+  function applyFilters(nextFilters: TaskFilters) {
+    const normalizedFilters = {
+      ...nextFilters,
+      keyword: nextFilters.keyword.trim(),
+    }
+    setError("")
+    setLoading(true)
+    setAppliedFilters(normalizedFilters)
+  }
+
+  function handleFilterSelectionChange(nextFilters: TaskFilters) {
+    setFilters(nextFilters)
+    applyFilters(nextFilters)
+  }
+
+  function handleSearch() {
+    const normalizedFilters = {
+      ...filters,
+      keyword: filters.keyword.trim(),
+    }
+    setFilters(normalizedFilters)
+    applyFilters(normalizedFilters)
+  }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-muted/10">
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="flex min-w-0 flex-col gap-4 p-4">
-          <TaskToolbar activeView={activeView} onViewChange={setActiveView} />
-          <TaskViewContent activeView={activeView} tasks={tasks} />
-        </div>
-      </ScrollArea>
-    </div>
+    <>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-muted/10">
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="flex min-w-0 flex-col gap-4 p-4">
+            <TaskToolbar
+              activeView={activeView}
+              filters={filters}
+              members={members}
+              membersError={membersError}
+              membersLoading={membersLoading}
+              onCreateTask={() => setCreateDialogOpen(true)}
+              onFilterSelectionChange={handleFilterSelectionChange}
+              onFiltersChange={setFilters}
+              onSearch={handleSearch}
+              onViewChange={setActiveView}
+            />
+            {loading ? (
+              <div className="flex min-h-80 items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Spinner />
+                正在加载任务
+              </div>
+            ) : error ? (
+              <div className="flex min-h-80 flex-col items-center justify-center gap-3 text-sm text-destructive">
+                <span>{error}</span>
+                <Button onClick={() => void refreshTasks()} variant="outline">
+                  重新加载
+                </Button>
+              </div>
+            ) : (
+              <TaskViewContent
+                activeView={activeView}
+                emptyMessage={
+                  hasTaskFilters(appliedFilters) ? "没有匹配的任务" : "暂无任务"
+                }
+                onTaskUpdated={handleTaskUpdated}
+                tasks={tasks}
+              />
+            )}
+          </div>
+        </ScrollArea>
+      </div>
+      <CreateProjectTaskDialog
+        onCreated={handleTaskCreated}
+        onOpenChange={setCreateDialogOpen}
+        open={createDialogOpen}
+        projectId={projectId}
+      />
+    </>
   )
 }
 
 function TaskToolbar({
   activeView,
+  filters,
+  members,
+  membersError,
+  membersLoading,
+  onCreateTask,
+  onFilterSelectionChange,
+  onFiltersChange,
+  onSearch,
   onViewChange,
 }: {
   activeView: TaskView
+  filters: TaskFilters
+  members: ClientProjectMember[]
+  membersError: boolean
+  membersLoading: boolean
+  onCreateTask: () => void
+  onFilterSelectionChange: (filters: TaskFilters) => void
+  onFiltersChange: (filters: TaskFilters) => void
+  onSearch: () => void
   onViewChange: (view: TaskView) => void
 }) {
+  const selectedAssignees = members.filter((member) =>
+    filters.assigneeUserIds.includes(member.id)
+  )
+
   return (
     <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <FilterButton label="状态" />
-        <FilterButton label="优先级" />
-        <FilterButton label="负责人" />
+      <form
+        className="flex min-w-0 flex-wrap items-center gap-2"
+        onSubmit={(event) => {
+          event.preventDefault()
+          onSearch()
+        }}
+      >
+        <StatusFilter
+          onValueChange={(statuses) =>
+            onFilterSelectionChange({ ...filters, statuses })
+          }
+          value={filters.statuses}
+        />
+        <PriorityFilter
+          onValueChange={(priorities) =>
+            onFilterSelectionChange({ ...filters, priorities })
+          }
+          value={filters.priorities}
+        />
+        <AssigneeFilter
+          loading={membersLoading}
+          members={members}
+          membersError={membersError}
+          onValueChange={(assigneeUserIds) =>
+            onFilterSelectionChange({ ...filters, assigneeUserIds })
+          }
+          selectedAssignees={selectedAssignees}
+          value={filters.assigneeUserIds}
+        />
         <div className="relative min-w-52 sm:min-w-64">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             aria-label="搜索任务内容"
             className="pl-8"
+            onChange={(event) =>
+              onFiltersChange({ ...filters, keyword: event.target.value })
+            }
             placeholder="搜索任务内容"
             type="search"
+            value={filters.keyword}
           />
         </div>
-        <Button type="button" variant="outline">
-          搜索
+      </form>
+      <div className="flex shrink-0 items-center gap-2">
+        <TaskViewSwitcher value={activeView} onValueChange={onViewChange} />
+        <Button onClick={onCreateTask} type="button">
+          <Plus />
+          创建任务
         </Button>
       </div>
-      <TaskViewSwitcher value={activeView} onValueChange={onViewChange} />
     </div>
   )
 }
 
-function FilterButton({ label }: { label: string }) {
+async function listAllProjectTasks(projectId: string, filters: TaskFilters) {
+  const tasks: ProjectTask[] = []
+  const seenCursors = new Set<string>()
+  let cursor: string | undefined
+
+  do {
+    const page = await listClientProjectTasks(projectId, {
+      assigneeUserIds: filters.assigneeUserIds,
+      cursor,
+      keyword: filters.keyword || undefined,
+      limit: 100,
+      priorities: filters.priorities,
+      statuses: filters.statuses,
+    })
+    tasks.push(...page.tasks)
+    if (!page.nextCursor || seenCursors.has(page.nextCursor)) {
+      break
+    }
+    seenCursors.add(page.nextCursor)
+    cursor = page.nextCursor
+  } while (cursor)
+
+  return tasks
+}
+
+async function listAllProjectMembers(projectId: string) {
+  const members: ClientProjectMember[] = []
+  const seenCursors = new Set<string>()
+  let cursor: string | undefined
+
+  do {
+    const page = await listClientProjectMembers(projectId, {
+      cursor,
+      limit: 100,
+    })
+    members.push(...page.members)
+    if (!page.nextCursor || seenCursors.has(page.nextCursor)) {
+      break
+    }
+    seenCursors.add(page.nextCursor)
+    cursor = page.nextCursor
+  } while (cursor)
+
+  return members
+}
+
+function StatusFilter({
+  onValueChange,
+  value,
+}: {
+  onValueChange: (value: ProjectTaskStatus[]) => void
+  value: ProjectTaskStatus[]
+}) {
   return (
-    <Button type="button" variant="outline">
-      {label}
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <FilterButton
+          active={value.length > 0}
+          label={getFilterLabel("状态", value, statusOptions)}
+          prefix={value.length > 0 ? "状态" : undefined}
+        />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {statusOptions.map((option) => (
+          <DropdownMenuCheckboxItem
+            checked={value.includes(option.value)}
+            key={option.value}
+            onCheckedChange={(checked) =>
+              onValueChange(
+                updateFilterSelection(value, option.value, checked === true)
+              )
+            }
+            onSelect={(event) => event.preventDefault()}
+          >
+            <TaskStatusIcon status={option.value} />
+            {option.label}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function PriorityFilter({
+  onValueChange,
+  value,
+}: {
+  onValueChange: (value: ProjectTaskPriority[]) => void
+  value: ProjectTaskPriority[]
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <FilterButton
+          active={value.length > 0}
+          label={getFilterLabel("优先级", value, priorityOptions)}
+          prefix={value.length > 0 ? "优先级" : undefined}
+        />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {priorityOptions.map((option) => (
+          <DropdownMenuCheckboxItem
+            checked={value.includes(option.value)}
+            key={option.value}
+            onCheckedChange={(checked) =>
+              onValueChange(
+                updateFilterSelection(value, option.value, checked === true)
+              )
+            }
+            onSelect={(event) => event.preventDefault()}
+          >
+            <TaskPriorityIcon priority={option.value} />
+            {option.label}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function AssigneeFilter({
+  loading,
+  members,
+  membersError,
+  onValueChange,
+  selectedAssignees,
+  value,
+}: {
+  loading: boolean
+  members: ClientProjectMember[]
+  membersError: boolean
+  onValueChange: (value: string[]) => void
+  selectedAssignees: ClientProjectMember[]
+  value: string[]
+}) {
+  const [query, setQuery] = React.useState("")
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null)
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+  const filteredMembers = normalizedQuery
+    ? members.filter((member) =>
+        [member.displayName, member.name, member.nickname, member.email].some(
+          (field) => field.toLocaleLowerCase().includes(normalizedQuery)
+        )
+      )
+    : members
+
+  return (
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (open) {
+          requestAnimationFrame(() => searchInputRef.current?.focus())
+        } else {
+          setQuery("")
+        }
+      }}
+    >
+      <DropdownMenuTrigger asChild>
+        <FilterButton
+          active={value.length > 0}
+          className="max-w-40"
+          label={
+            selectedAssignees.length === 1
+              ? selectedAssignees[0].displayName
+              : selectedAssignees.length > 1
+                ? `${selectedAssignees.length} 项`
+                : "负责人"
+          }
+          prefix={value.length > 0 ? "负责人" : undefined}
+        />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-56">
+        <div className="relative mb-1">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            aria-label="搜索负责人"
+            className="h-8 pl-8"
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") {
+                event.stopPropagation()
+              }
+            }}
+            placeholder="搜索负责人"
+            ref={searchInputRef}
+            value={query}
+          />
+        </div>
+        {filteredMembers.map((member) => (
+          <DropdownMenuCheckboxItem
+            checked={value.includes(member.id)}
+            key={member.id}
+            onCheckedChange={(checked) =>
+              onValueChange(
+                updateFilterSelection(value, member.id, checked === true)
+              )
+            }
+            onSelect={(event) => event.preventDefault()}
+          >
+            <MemberAvatar member={member} />
+            <span className="min-w-0 flex-1 truncate">
+              {member.displayName}
+            </span>
+          </DropdownMenuCheckboxItem>
+        ))}
+        {loading && <DropdownMenuItem disabled>正在加载成员</DropdownMenuItem>}
+        {!loading && membersError && (
+          <DropdownMenuItem disabled>成员加载失败</DropdownMenuItem>
+        )}
+        {!loading && !membersError && members.length === 0 && (
+          <DropdownMenuItem disabled>暂无项目成员</DropdownMenuItem>
+        )}
+        {!loading &&
+          !membersError &&
+          members.length > 0 &&
+          filteredMembers.length === 0 && (
+            <DropdownMenuItem disabled>没有匹配的成员</DropdownMenuItem>
+          )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function TaskStatusIcon({ status }: { status: ProjectTaskStatus }) {
+  switch (status) {
+    case "in_progress":
+      return <CircleDot aria-hidden="true" className="text-sky-600" />
+    case "done":
+      return <CircleCheckBig aria-hidden="true" className="text-emerald-600" />
+    case "canceled":
+      return <CircleX aria-hidden="true" className="text-stone-400" />
+    default:
+      return <Circle aria-hidden="true" className="text-amber-600" />
+  }
+}
+
+function TaskPriorityIcon({ priority }: { priority: ProjectTaskPriority }) {
+  switch (priority) {
+    case 2:
+      return <Equal aria-hidden="true" className="text-amber-600" />
+    case 3:
+      return <ChevronsUp aria-hidden="true" className="text-rose-600" />
+    default:
+      return (
+        <ChevronsDown aria-hidden="true" className="text-muted-foreground" />
+      )
+  }
+}
+
+function FilterButton({
+  active,
+  className,
+  label,
+  prefix,
+  ...props
+}: Omit<React.ComponentProps<typeof Button>, "children"> & {
+  active: boolean
+  label: string
+  prefix?: string
+}) {
+  return (
+    <Button
+      className={cn(active && "bg-muted", className)}
+      {...props}
+      type="button"
+      variant="outline"
+    >
+      <span className="min-w-0 truncate">
+        {prefix && <span className="text-muted-foreground">{prefix}：</span>}
+        {label}
+      </span>
       <ChevronDown data-icon="inline-end" />
     </Button>
+  )
+}
+
+function MemberAvatar({ member }: { member: ClientProjectMember }) {
+  const initial = Array.from(member.displayName.trim())[0]?.toUpperCase() ?? "?"
+
+  return (
+    <Avatar className="size-5 shrink-0 rounded-sm after:rounded-sm">
+      {member.avatar && (
+        <AvatarImage
+          alt={member.displayName}
+          className="rounded-sm"
+          src={member.avatar}
+        />
+      )}
+      <AvatarFallback className="rounded-sm text-[10px]">
+        {initial}
+      </AvatarFallback>
+    </Avatar>
+  )
+}
+
+function getFilterLabel<T extends string | number>(
+  fallback: string,
+  value: T[],
+  options: Array<{ label: string; value: T }>
+) {
+  if (value.length === 0) {
+    return fallback
+  }
+  if (value.length === 1) {
+    return (
+      options.find((option) => option.value === value[0])?.label ?? fallback
+    )
+  }
+  return `${value.length} 项`
+}
+
+function updateFilterSelection<T>(value: T[], option: T, checked: boolean) {
+  if (checked) {
+    return value.includes(option) ? value : [...value, option]
+  }
+  return value.filter((current) => current !== option)
+}
+
+function hasTaskFilters(filters: TaskFilters) {
+  return Boolean(
+    filters.assigneeUserIds.length ||
+    filters.keyword ||
+    filters.priorities.length ||
+    filters.statuses.length
   )
 }
 
@@ -90,43 +669,46 @@ function TaskViewSwitcher({
   value: TaskView
 }) {
   return (
-    <div
+    <ToggleGroup
       aria-label="任务视图"
-      className="flex shrink-0 items-center rounded-md border bg-background p-0.5"
-      role="group"
+      className="shrink-0"
+      onValueChange={(nextValue) => {
+        if (nextValue) {
+          onValueChange(nextValue as TaskView)
+        }
+      }}
+      spacing={0}
+      type="single"
+      value={value}
+      variant="outline"
     >
       {taskViews.map((view) => {
         const Icon = view.icon
-        const active = value === view.value
 
         return (
-          <Button
+          <ToggleGroupItem
             aria-label={view.label}
-            aria-pressed={active}
-            className={cn(
-              "size-7 rounded-sm text-muted-foreground",
-              active && "bg-muted text-foreground shadow-xs"
-            )}
             key={view.value}
-            onClick={() => onValueChange(view.value)}
-            size="icon-xs"
             title={view.label}
-            type="button"
-            variant="ghost"
+            value={view.value}
           >
             <Icon />
-          </Button>
+          </ToggleGroupItem>
         )
       })}
-    </div>
+    </ToggleGroup>
   )
 }
 
 function TaskViewContent({
   activeView,
+  emptyMessage,
+  onTaskUpdated,
   tasks,
 }: {
   activeView: TaskView
+  emptyMessage: string
+  onTaskUpdated: () => Promise<void>
   tasks: ProjectTask[]
 }) {
   switch (activeView) {
@@ -134,9 +716,13 @@ function TaskViewContent({
       return <ProjectTaskBoardView />
     case "calendar":
       return <ProjectTaskCalendarView />
-    case "gantt":
-      return <ProjectTaskGanttView />
     default:
-      return <ProjectTaskListView tasks={tasks} />
+      return (
+        <ProjectTaskListView
+          emptyMessage={emptyMessage}
+          onTaskUpdated={onTaskUpdated}
+          tasks={tasks}
+        />
+      )
   }
 }

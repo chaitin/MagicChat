@@ -835,8 +835,10 @@ func TestTaskListFiltersEveryFieldAndCombinesCriteria(t *testing.T) {
 	now := time.Now().UTC()
 	owner := insertTestUser(t, db, "task-list-filters-owner@example.com", "List Owner", store.UserStatusActive, now)
 	assignee := insertTestUser(t, db, "task-list-filters-assignee@example.com", "List Assignee", store.UserStatusActive, now)
+	secondAssignee := insertTestUser(t, db, "task-list-filters-second-assignee@example.com", "Second Assignee", store.UserStatusActive, now)
 	project := insertProjectFixture(t, db, projectFixtureInput{Owner: owner, Name: "List Filters", UpdatedAt: now})
 	grantTaskProjectAccess(t, db, project, owner, assignee, now)
+	grantTaskProjectAccess(t, db, project, owner, secondAssignee, now)
 	date := func(day int) *time.Time {
 		value := time.Date(2026, 7, day, 0, 0, 0, 0, time.UTC)
 		return &value
@@ -865,6 +867,10 @@ func TestTaskListFiltersEveryFieldAndCombinesCriteria(t *testing.T) {
 		ProjectID: project.ID, Creator: owner, Title: "Control label", Status: store.TaskStatusCanceled,
 		Priority: store.TaskPriorityMedium, Labels: []string{"Line\nBreak"}, UpdatedAt: now,
 	})
+	secondAssigned := insertTaskTestFixture(t, db, taskFixtureInput{
+		ProjectID: project.ID, Creator: owner, Assignee: &secondAssignee, Title: "Second assignee task",
+		Status: store.TaskStatusCanceled, Priority: store.TaskPriorityMedium, UpdatedAt: now.Add(-time.Minute),
+	})
 	cookie := loginAsUser(t, server, owner.Email)
 	base := "/api/client/projects/" + project.ID + "/tasks?"
 
@@ -878,6 +884,7 @@ func TestTaskListFiltersEveryFieldAndCombinesCriteria(t *testing.T) {
 		{name: "multiple statuses", query: "status=todo,done", want: []string{todo.ID, done.ID}},
 		{name: "multiple priorities", query: "priority=1,3", want: []string{matching.ID, todo.ID}},
 		{name: "assignee", query: "assignee_user_id=" + assignee.ID, want: []string{matching.ID}},
+		{name: "multiple assignees", query: "assignee_user_id=" + assignee.ID + "," + secondAssignee.ID, want: []string{matching.ID, secondAssigned.ID}},
 		{name: "exact label", query: "label=" + url.QueryEscape(" Backend "), want: []string{matching.ID}},
 		{name: "label substring is not equal", query: "label=Back", want: []string{}},
 		{name: "label with control character", query: "label=" + url.QueryEscape("Line\nBreak"), want: []string{controlLabel.ID}},
@@ -921,6 +928,7 @@ func TestTaskListRejectsInvalidFilters(t *testing.T) {
 		"invalid priority high": "priority=4",
 		"invalid priority text": "priority=high",
 		"bad assignee UUID":     "assignee_user_id=bad-id",
+		"empty assignee item":   "assignee_user_id=" + uuid.NewString() + ",,",
 		"NUL keyword":           "keyword=" + url.QueryEscape("bad\x00keyword"),
 		"blank label":           "label=" + url.QueryEscape("   "),
 		"NUL label":             "label=" + url.QueryEscape("bad\x00label"),

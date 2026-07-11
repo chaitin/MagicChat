@@ -9,7 +9,6 @@ import { ProjectMembersTab } from "@/components/projects/project-members-tab"
 import { ProjectSettingsMenu } from "@/components/projects/project-settings-menu"
 import { ProjectTasksTab } from "@/components/projects/project-tasks-tab"
 import { ProjectTopicsTab } from "@/components/projects/project-topics-tab"
-import type { ProjectTask } from "@/components/projects/project-types"
 import { GroupAvatar } from "@/components/group-avatar"
 import {
   Avatar,
@@ -57,7 +56,6 @@ import {
   listClientProjectMembers,
 } from "@/lib/project-data-api"
 
-const emptyProjectTasks: ProjectTask[] = []
 const maxProjectGroupCount = 100
 
 export function ProjectsPage() {
@@ -486,7 +484,11 @@ function ProjectPanel({
           className="flex min-h-0 flex-1 overflow-hidden"
           value="tasks"
         >
-          <ProjectTasksTab tasks={emptyProjectTasks} />
+          <ProjectTasksTab
+            key={project.id}
+            onTasksChanged={onProjectUpdated}
+            projectId={project.id}
+          />
         </TabsContent>
         <TabsContent
           className="flex min-h-0 flex-1 overflow-hidden"
