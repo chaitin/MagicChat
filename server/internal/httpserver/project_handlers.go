@@ -65,9 +65,9 @@ type projectResponse struct {
 }
 
 type projectListResponse struct {
-	PersonalProject *projectResponse  `json:"personal_project"`
+	PersonalProject *projectResponse  `json:"personal_project" extensions:"x-nullable"`
 	Projects        []projectResponse `json:"projects"`
-	NextCursor      *string           `json:"next_cursor"`
+	NextCursor      *string           `json:"next_cursor" extensions:"x-nullable"`
 }
 
 type projectListCursor struct {
@@ -86,7 +86,7 @@ type projectGroupResponse struct {
 
 type projectGroupListResponse struct {
 	Groups     []projectGroupResponse `json:"groups"`
-	NextCursor *string                `json:"next_cursor"`
+	NextCursor *string                `json:"next_cursor" extensions:"x-nullable"`
 }
 
 type projectGroupListCursor struct {
@@ -115,7 +115,7 @@ type projectMemberResponse struct {
 
 type projectMemberListResponse struct {
 	Members    []projectMemberResponse `json:"members"`
-	NextCursor *string                 `json:"next_cursor"`
+	NextCursor *string                 `json:"next_cursor" extensions:"x-nullable"`
 }
 
 // projectGroupMutationResponse documents the empty data object returned by group link mutations.
@@ -142,7 +142,7 @@ type conversationCountRow struct {
 }
 
 type createProjectRequest struct {
-	Name        projectOptionalString      `json:"name" swaggertype:"string" example:"新版发布"`
+	Name        projectOptionalString      `json:"name" swaggertype:"string" binding:"required" example:"新版发布"`
 	Description projectOptionalString      `json:"description" swaggertype:"string" example:"协调新版发布工作"`
 	Avatar      projectOptionalString      `json:"avatar" swaggertype:"string" example:"/assets/avatars/projects/release.webp"`
 	GroupIDs    projectOptionalStringSlice `json:"group_ids" swaggertype:"array,string" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`

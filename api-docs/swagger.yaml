@@ -311,12 +311,15 @@ definitions:
       name:
         example: 新版发布
         type: string
+    required:
+    - name
     type: object
   httpserver.createTaskRequest:
     properties:
       assignee_user_id:
         example: 7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4
         type: string
+        x-nullable: true
       description:
         example: 核对发布清单并记录结果
         type: string
@@ -324,6 +327,7 @@ definitions:
         example: "2026-07-18"
         format: date
         type: string
+        x-nullable: true
       labels:
         example:
         - 发布
@@ -342,6 +346,7 @@ definitions:
         example: "2026-07-11"
         format: date
         type: string
+        x-nullable: true
       status:
         enum:
         - todo
@@ -353,6 +358,8 @@ definitions:
       title:
         example: 完成发布检查
         type: string
+    required:
+    - title
     type: object
   httpserver.createTemporaryFileResponse:
     properties:
@@ -702,6 +709,7 @@ definitions:
         type: array
       next_cursor:
         type: string
+        x-nullable: true
     type: object
   httpserver.projectGroupMutationResponse:
     type: object
@@ -724,8 +732,11 @@ definitions:
     properties:
       next_cursor:
         type: string
+        x-nullable: true
       personal_project:
-        $ref: '#/definitions/httpserver.projectResponse'
+        allOf:
+        - $ref: '#/definitions/httpserver.projectResponse'
+        x-nullable: true
       projects:
         items:
           $ref: '#/definitions/httpserver.projectResponse'
@@ -739,6 +750,7 @@ definitions:
         type: array
       next_cursor:
         type: string
+        x-nullable: true
     type: object
   httpserver.projectMemberResponse:
     properties:
@@ -861,6 +873,7 @@ definitions:
     properties:
       next_cursor:
         type: string
+        x-nullable: true
       tasks:
         items:
           $ref: '#/definitions/httpserver.taskResponse'
@@ -869,11 +882,15 @@ definitions:
   httpserver.taskResponse:
     properties:
       assignee:
-        $ref: '#/definitions/httpserver.projectUserSummary'
+        allOf:
+        - $ref: '#/definitions/httpserver.projectUserSummary'
+        x-nullable: true
       canceled_at:
         type: string
+        x-nullable: true
       completed_at:
         type: string
+        x-nullable: true
       created_at:
         type: string
       creator:
@@ -882,6 +899,7 @@ definitions:
         type: string
       due_date:
         type: string
+        x-nullable: true
       id:
         type: string
       labels:
@@ -894,6 +912,7 @@ definitions:
         type: string
       start_date:
         type: string
+        x-nullable: true
       status:
         type: string
       title:
@@ -1028,6 +1047,7 @@ definitions:
       assignee_user_id:
         example: 7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4
         type: string
+        x-nullable: true
       description:
         example: 核对发布清单并记录结果
         type: string
@@ -1035,6 +1055,7 @@ definitions:
         example: "2026-07-18"
         format: date
         type: string
+        x-nullable: true
       labels:
         example:
         - 发布
@@ -1053,6 +1074,7 @@ definitions:
         example: "2026-07-11"
         format: date
         type: string
+        x-nullable: true
       status:
         enum:
         - todo

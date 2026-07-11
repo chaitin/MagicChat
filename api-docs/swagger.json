@@ -5220,6 +5220,9 @@
         },
         "httpserver.createProjectRequest": {
             "type": "object",
+            "required": [
+                "name"
+            ],
             "properties": {
                 "avatar": {
                     "type": "string",
@@ -5246,9 +5249,13 @@
         },
         "httpserver.createTaskRequest": {
             "type": "object",
+            "required": [
+                "title"
+            ],
             "properties": {
                 "assignee_user_id": {
                     "type": "string",
+                    "x-nullable": true,
                     "example": "7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"
                 },
                 "description": {
@@ -5258,6 +5265,7 @@
                 "due_date": {
                     "type": "string",
                     "format": "date",
+                    "x-nullable": true,
                     "example": "2026-07-18"
                 },
                 "labels": {
@@ -5282,6 +5290,7 @@
                 "start_date": {
                     "type": "string",
                     "format": "date",
+                    "x-nullable": true,
                     "example": "2026-07-11"
                 },
                 "status": {
@@ -5802,7 +5811,8 @@
                     }
                 },
                 "next_cursor": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 }
             }
         },
@@ -5836,10 +5846,16 @@
             "type": "object",
             "properties": {
                 "next_cursor": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "personal_project": {
-                    "$ref": "#/definitions/httpserver.projectResponse"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/httpserver.projectResponse"
+                        }
+                    ],
+                    "x-nullable": true
                 },
                 "projects": {
                     "type": "array",
@@ -5859,7 +5875,8 @@
                     }
                 },
                 "next_cursor": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 }
             }
         },
@@ -6045,7 +6062,8 @@
             "type": "object",
             "properties": {
                 "next_cursor": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "tasks": {
                     "type": "array",
@@ -6059,13 +6077,20 @@
             "type": "object",
             "properties": {
                 "assignee": {
-                    "$ref": "#/definitions/httpserver.projectUserSummary"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/httpserver.projectUserSummary"
+                        }
+                    ],
+                    "x-nullable": true
                 },
                 "canceled_at": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "completed_at": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "created_at": {
                     "type": "string"
@@ -6077,7 +6102,8 @@
                     "type": "string"
                 },
                 "due_date": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "id": {
                     "type": "string"
@@ -6095,7 +6121,8 @@
                     "type": "string"
                 },
                 "start_date": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "status": {
                     "type": "string"
@@ -6294,6 +6321,7 @@
             "properties": {
                 "assignee_user_id": {
                     "type": "string",
+                    "x-nullable": true,
                     "example": "7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"
                 },
                 "description": {
@@ -6303,6 +6331,7 @@
                 "due_date": {
                     "type": "string",
                     "format": "date",
+                    "x-nullable": true,
                     "example": "2026-07-18"
                 },
                 "labels": {
@@ -6327,6 +6356,7 @@
                 "start_date": {
                     "type": "string",
                     "format": "date",
+                    "x-nullable": true,
                     "example": "2026-07-11"
                 },
                 "status": {

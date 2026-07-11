@@ -41,20 +41,20 @@ type taskResponse struct {
 	Description string              `json:"description"`
 	Status      string              `json:"status"`
 	Priority    int16               `json:"priority"`
-	Assignee    *projectUserSummary `json:"assignee"`
+	Assignee    *projectUserSummary `json:"assignee" extensions:"x-nullable"`
 	Creator     projectUserSummary  `json:"creator"`
-	StartDate   *string             `json:"start_date"`
-	DueDate     *string             `json:"due_date"`
+	StartDate   *string             `json:"start_date" extensions:"x-nullable"`
+	DueDate     *string             `json:"due_date" extensions:"x-nullable"`
 	Labels      []string            `json:"labels"`
-	CompletedAt *time.Time          `json:"completed_at"`
-	CanceledAt  *time.Time          `json:"canceled_at"`
+	CompletedAt *time.Time          `json:"completed_at" extensions:"x-nullable"`
+	CanceledAt  *time.Time          `json:"canceled_at" extensions:"x-nullable"`
 	CreatedAt   time.Time           `json:"created_at"`
 	UpdatedAt   time.Time           `json:"updated_at"`
 }
 
 type taskListResponse struct {
 	Tasks      []taskResponse `json:"tasks"`
-	NextCursor *string        `json:"next_cursor"`
+	NextCursor *string        `json:"next_cursor" extensions:"x-nullable"`
 }
 
 // deleteTaskResponse documents the data object returned after deleting a task.
@@ -85,13 +85,13 @@ type taskListFilters struct {
 }
 
 type createTaskRequest struct {
-	Title          taskOptionalString      `json:"title" swaggertype:"string" example:"完成发布检查"`
+	Title          taskOptionalString      `json:"title" swaggertype:"string" binding:"required" example:"完成发布检查"`
 	Description    taskOptionalString      `json:"description" swaggertype:"string" example:"核对发布清单并记录结果"`
 	Status         taskOptionalString      `json:"status" swaggertype:"string" enums:"todo,in_progress,done,canceled" example:"todo"`
 	Priority       taskOptionalInt16       `json:"priority" swaggertype:"integer" format:"int32" enums:"1,2,3" example:"2"`
-	AssigneeUserID taskOptionalString      `json:"assignee_user_id" swaggertype:"string" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
-	StartDate      taskOptionalString      `json:"start_date" swaggertype:"string" format:"date" example:"2026-07-11"`
-	DueDate        taskOptionalString      `json:"due_date" swaggertype:"string" format:"date" example:"2026-07-18"`
+	AssigneeUserID taskOptionalString      `json:"assignee_user_id" swaggertype:"string" extensions:"x-nullable" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
+	StartDate      taskOptionalString      `json:"start_date" swaggertype:"string" format:"date" extensions:"x-nullable" example:"2026-07-11"`
+	DueDate        taskOptionalString      `json:"due_date" swaggertype:"string" format:"date" extensions:"x-nullable" example:"2026-07-18"`
 	Labels         taskOptionalStringSlice `json:"labels" swaggertype:"array,string" example:"发布"`
 }
 
@@ -100,9 +100,9 @@ type updateTaskRequest struct {
 	Description    taskOptionalString      `json:"description" swaggertype:"string" example:"核对发布清单并记录结果"`
 	Status         taskOptionalString      `json:"status" swaggertype:"string" enums:"todo,in_progress,done,canceled" example:"in_progress"`
 	Priority       taskOptionalInt16       `json:"priority" swaggertype:"integer" format:"int32" enums:"1,2,3" example:"2"`
-	AssigneeUserID taskOptionalString      `json:"assignee_user_id" swaggertype:"string" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
-	StartDate      taskOptionalString      `json:"start_date" swaggertype:"string" format:"date" example:"2026-07-11"`
-	DueDate        taskOptionalString      `json:"due_date" swaggertype:"string" format:"date" example:"2026-07-18"`
+	AssigneeUserID taskOptionalString      `json:"assignee_user_id" swaggertype:"string" extensions:"x-nullable" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
+	StartDate      taskOptionalString      `json:"start_date" swaggertype:"string" format:"date" extensions:"x-nullable" example:"2026-07-11"`
+	DueDate        taskOptionalString      `json:"due_date" swaggertype:"string" format:"date" extensions:"x-nullable" example:"2026-07-18"`
 	Labels         taskOptionalStringSlice `json:"labels" swaggertype:"array,string" example:"发布"`
 }
 

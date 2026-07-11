@@ -5227,6 +5227,9 @@ const docTemplate = `{
         },
         "httpserver.createProjectRequest": {
             "type": "object",
+            "required": [
+                "name"
+            ],
             "properties": {
                 "avatar": {
                     "type": "string",
@@ -5253,9 +5256,13 @@ const docTemplate = `{
         },
         "httpserver.createTaskRequest": {
             "type": "object",
+            "required": [
+                "title"
+            ],
             "properties": {
                 "assignee_user_id": {
                     "type": "string",
+                    "x-nullable": true,
                     "example": "7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"
                 },
                 "description": {
@@ -5265,6 +5272,7 @@ const docTemplate = `{
                 "due_date": {
                     "type": "string",
                     "format": "date",
+                    "x-nullable": true,
                     "example": "2026-07-18"
                 },
                 "labels": {
@@ -5289,6 +5297,7 @@ const docTemplate = `{
                 "start_date": {
                     "type": "string",
                     "format": "date",
+                    "x-nullable": true,
                     "example": "2026-07-11"
                 },
                 "status": {
@@ -5809,7 +5818,8 @@ const docTemplate = `{
                     }
                 },
                 "next_cursor": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 }
             }
         },
@@ -5843,10 +5853,16 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "next_cursor": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "personal_project": {
-                    "$ref": "#/definitions/httpserver.projectResponse"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/httpserver.projectResponse"
+                        }
+                    ],
+                    "x-nullable": true
                 },
                 "projects": {
                     "type": "array",
@@ -5866,7 +5882,8 @@ const docTemplate = `{
                     }
                 },
                 "next_cursor": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 }
             }
         },
@@ -6052,7 +6069,8 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "next_cursor": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "tasks": {
                     "type": "array",
@@ -6066,13 +6084,20 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "assignee": {
-                    "$ref": "#/definitions/httpserver.projectUserSummary"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/httpserver.projectUserSummary"
+                        }
+                    ],
+                    "x-nullable": true
                 },
                 "canceled_at": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "completed_at": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "created_at": {
                     "type": "string"
@@ -6084,7 +6109,8 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "due_date": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "id": {
                     "type": "string"
@@ -6102,7 +6128,8 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "start_date": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "status": {
                     "type": "string"
@@ -6301,6 +6328,7 @@ const docTemplate = `{
             "properties": {
                 "assignee_user_id": {
                     "type": "string",
+                    "x-nullable": true,
                     "example": "7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"
                 },
                 "description": {
@@ -6310,6 +6338,7 @@ const docTemplate = `{
                 "due_date": {
                     "type": "string",
                     "format": "date",
+                    "x-nullable": true,
                     "example": "2026-07-18"
                 },
                 "labels": {
@@ -6334,6 +6363,7 @@ const docTemplate = `{
                 "start_date": {
                     "type": "string",
                     "format": "date",
+                    "x-nullable": true,
                     "example": "2026-07-11"
                 },
                 "status": {
