@@ -118,6 +118,9 @@ type projectMemberListResponse struct {
 	NextCursor *string                 `json:"next_cursor"`
 }
 
+// projectGroupMutationResponse documents the empty data object returned by group link mutations.
+type projectGroupMutationResponse struct{}
+
 type projectMemberListCursor struct {
 	DisplayName string `json:"display_name"`
 	ID          string `json:"id"`
@@ -139,16 +142,16 @@ type conversationCountRow struct {
 }
 
 type createProjectRequest struct {
-	Name        projectOptionalString      `json:"name"`
-	Description projectOptionalString      `json:"description"`
-	Avatar      projectOptionalString      `json:"avatar"`
-	GroupIDs    projectOptionalStringSlice `json:"group_ids"`
+	Name        projectOptionalString      `json:"name" swaggertype:"string" example:"新版发布"`
+	Description projectOptionalString      `json:"description" swaggertype:"string" example:"协调新版发布工作"`
+	Avatar      projectOptionalString      `json:"avatar" swaggertype:"string" example:"/assets/avatars/projects/release.webp"`
+	GroupIDs    projectOptionalStringSlice `json:"group_ids" swaggertype:"array,string" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
 }
 
 type updateProjectRequest struct {
-	Name        projectOptionalString `json:"name"`
-	Description projectOptionalString `json:"description"`
-	Avatar      projectOptionalString `json:"avatar"`
+	Name        projectOptionalString `json:"name" swaggertype:"string" example:"新版发布"`
+	Description projectOptionalString `json:"description" swaggertype:"string" example:"协调新版发布工作"`
+	Avatar      projectOptionalString `json:"avatar" swaggertype:"string" example:"/assets/avatars/projects/release.webp"`
 }
 
 type projectOptionalString struct {
@@ -183,6 +186,19 @@ func createPersonalProject(db *gorm.DB, user store.User, now time.Time) error {
 	return db.Create(&project).Error
 }
 
+// listProjects godoc
+//
+// @Summary 列出项目
+// @Description 获取当前用户可访问的项目及个人项目，按更新时间倒序分页。
+// @Tags 客户端项目
+// @Produce json
+// @Param limit query int false "每页数量，默认 50，最大 100"
+// @Param cursor query string false "项目分页游标"
+// @Success 200 {object} successEnvelope{data=projectListResponse}
+// @Failure 400 {object} errorEnvelope
+// @Failure 401 {object} errorEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/client/projects [get]
 func (s *Server) listProjects(c echo.Context) error {
 	user, ok := currentUser(c)
 	if !ok {
@@ -261,6 +277,19 @@ func (s *Server) listProjects(c echo.Context) error {
 	})
 }
 
+// createProject godoc
+//
+// @Summary 创建项目
+// @Description 创建普通项目，可同时关联当前可用的群聊。
+// @Tags 客户端项目
+// @Accept json
+// @Produce json
+// @Param body body createProjectRequest true "项目信息"
+// @Success 201 {object} successEnvelope{data=projectResponse}
+// @Failure 400 {object} errorEnvelope
+// @Failure 401 {object} errorEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/client/projects [post]
 func (s *Server) createProject(c echo.Context) error {
 	user, ok := currentUser(c)
 	if !ok {
@@ -325,6 +354,19 @@ func (s *Server) createProject(c echo.Context) error {
 	return success(c, http.StatusCreated, response)
 }
 
+// getProject godoc
+//
+// @Summary 获取项目
+// @Description 获取当前用户可访问的项目详情和任务统计。
+// @Tags 客户端项目
+// @Produce json
+// @Param project_id path string true "项目 ID"
+// @Success 200 {object} successEnvelope{data=projectResponse}
+// @Failure 400 {object} errorEnvelope
+// @Failure 401 {object} errorEnvelope
+// @Failure 404 {object} errorEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/client/projects/{project_id} [get]
 func (s *Server) getProject(c echo.Context) error {
 	user, ok := currentUser(c)
 	if !ok {
@@ -348,6 +390,22 @@ func (s *Server) getProject(c echo.Context) error {
 	return success(c, http.StatusOK, response)
 }
 
+// updateProject godoc
+//
+// @Summary 更新项目
+// @Description 项目所有者更新项目名称、描述或头像。
+// @Tags 客户端项目
+// @Accept json
+// @Produce json
+// @Param project_id path string true "项目 ID"
+// @Param body body updateProjectRequest true "项目更新信息"
+// @Success 200 {object} successEnvelope{data=projectResponse}
+// @Failure 400 {object} errorEnvelope
+// @Failure 401 {object} errorEnvelope
+// @Failure 403 {object} errorEnvelope
+// @Failure 404 {object} errorEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/client/projects/{project_id} [patch]
 func (s *Server) updateProject(c echo.Context) error {
 	user, ok := currentUser(c)
 	if !ok {
@@ -423,6 +481,20 @@ func (s *Server) updateProject(c echo.Context) error {
 	return success(c, http.StatusOK, response)
 }
 
+// deleteProject godoc
+//
+// @Summary 删除项目
+// @Description 项目所有者删除普通项目；个人项目不能删除。
+// @Tags 客户端项目
+// @Produce json
+// @Param project_id path string true "项目 ID"
+// @Success 200 {object} successEnvelope{data=projectResponse}
+// @Failure 400 {object} errorEnvelope
+// @Failure 401 {object} errorEnvelope
+// @Failure 403 {object} errorEnvelope
+// @Failure 404 {object} errorEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/client/projects/{project_id} [delete]
 func (s *Server) deleteProject(c echo.Context) error {
 	user, ok := currentUser(c)
 	if !ok {
@@ -468,6 +540,21 @@ func (s *Server) deleteProject(c echo.Context) error {
 	return success(c, http.StatusOK, response)
 }
 
+// listProjectGroups godoc
+//
+// @Summary 列出项目群聊
+// @Description 获取项目关联的可用群聊，按关联时间倒序分页。
+// @Tags 客户端项目
+// @Produce json
+// @Param project_id path string true "项目 ID"
+// @Param limit query int false "每页数量，默认 50，最大 100"
+// @Param cursor query string false "群聊分页游标"
+// @Success 200 {object} successEnvelope{data=projectGroupListResponse}
+// @Failure 400 {object} errorEnvelope
+// @Failure 401 {object} errorEnvelope
+// @Failure 404 {object} errorEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/client/projects/{project_id}/groups [get]
 func (s *Server) listProjectGroups(c echo.Context) error {
 	user, ok := currentUser(c)
 	if !ok {
@@ -551,6 +638,22 @@ func (s *Server) listProjectGroups(c echo.Context) error {
 	return success(c, http.StatusOK, projectGroupListResponse{Groups: groups, NextCursor: nextCursor})
 }
 
+// bindProjectGroup godoc
+//
+// @Summary 关联项目群聊
+// @Description 项目所有者将可用群聊关联到普通项目；重复关联保持成功。
+// @Tags 客户端项目
+// @Accept json
+// @Produce json
+// @Param project_id path string true "项目 ID"
+// @Param group_id path string true "群聊 ID"
+// @Success 200 {object} successEnvelope{data=projectGroupMutationResponse}
+// @Failure 400 {object} errorEnvelope
+// @Failure 401 {object} errorEnvelope
+// @Failure 403 {object} errorEnvelope
+// @Failure 404 {object} errorEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/client/projects/{project_id}/groups/{group_id} [put]
 func (s *Server) bindProjectGroup(c echo.Context) error {
 	user, ok := currentUser(c)
 	if !ok {
@@ -615,6 +718,21 @@ func (s *Server) bindProjectGroup(c echo.Context) error {
 	return success(c, http.StatusOK, map[string]any{})
 }
 
+// unbindProjectGroup godoc
+//
+// @Summary 解除项目群聊
+// @Description 项目所有者解除普通项目与群聊的关联；未关联时保持成功。
+// @Tags 客户端项目
+// @Produce json
+// @Param project_id path string true "项目 ID"
+// @Param group_id path string true "群聊 ID"
+// @Success 200 {object} successEnvelope{data=projectGroupMutationResponse}
+// @Failure 400 {object} errorEnvelope
+// @Failure 401 {object} errorEnvelope
+// @Failure 403 {object} errorEnvelope
+// @Failure 404 {object} errorEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/client/projects/{project_id}/groups/{group_id} [delete]
 func (s *Server) unbindProjectGroup(c echo.Context) error {
 	user, ok := currentUser(c)
 	if !ok {
@@ -670,6 +788,21 @@ func (s *Server) unbindProjectGroup(c echo.Context) error {
 	return success(c, http.StatusOK, map[string]any{})
 }
 
+// listProjectMembers godoc
+//
+// @Summary 列出项目成员
+// @Description 获取项目成员及其来源群聊，按显示名称分页。
+// @Tags 客户端项目
+// @Produce json
+// @Param project_id path string true "项目 ID"
+// @Param limit query int false "每页数量，默认 50，最大 100"
+// @Param cursor query string false "成员分页游标"
+// @Success 200 {object} successEnvelope{data=projectMemberListResponse}
+// @Failure 400 {object} errorEnvelope
+// @Failure 401 {object} errorEnvelope
+// @Failure 404 {object} errorEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/client/projects/{project_id}/members [get]
 func (s *Server) listProjectMembers(c echo.Context) error {
 	user, ok := currentUser(c)
 	if !ok {

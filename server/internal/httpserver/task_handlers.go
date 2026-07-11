@@ -57,6 +57,11 @@ type taskListResponse struct {
 	NextCursor *string        `json:"next_cursor"`
 }
 
+// deleteTaskResponse documents the data object returned after deleting a task.
+type deleteTaskResponse struct {
+	TaskID string `json:"task_id" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
+}
+
 type taskListCursor struct {
 	UpdatedAt string `json:"updated_at"`
 	ID        string `json:"id"`
@@ -80,25 +85,25 @@ type taskListFilters struct {
 }
 
 type createTaskRequest struct {
-	Title          taskOptionalString      `json:"title"`
-	Description    taskOptionalString      `json:"description"`
-	Status         taskOptionalString      `json:"status"`
-	Priority       taskOptionalInt16       `json:"priority"`
-	AssigneeUserID taskOptionalString      `json:"assignee_user_id"`
-	StartDate      taskOptionalString      `json:"start_date"`
-	DueDate        taskOptionalString      `json:"due_date"`
-	Labels         taskOptionalStringSlice `json:"labels"`
+	Title          taskOptionalString      `json:"title" swaggertype:"string" example:"完成发布检查"`
+	Description    taskOptionalString      `json:"description" swaggertype:"string" example:"核对发布清单并记录结果"`
+	Status         taskOptionalString      `json:"status" swaggertype:"string" enums:"todo,in_progress,done,canceled" example:"todo"`
+	Priority       taskOptionalInt16       `json:"priority" swaggertype:"integer" format:"int32" enums:"1,2,3" example:"2"`
+	AssigneeUserID taskOptionalString      `json:"assignee_user_id" swaggertype:"string" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
+	StartDate      taskOptionalString      `json:"start_date" swaggertype:"string" format:"date" example:"2026-07-11"`
+	DueDate        taskOptionalString      `json:"due_date" swaggertype:"string" format:"date" example:"2026-07-18"`
+	Labels         taskOptionalStringSlice `json:"labels" swaggertype:"array,string" example:"发布"`
 }
 
 type updateTaskRequest struct {
-	Title          taskOptionalString      `json:"title"`
-	Description    taskOptionalString      `json:"description"`
-	Status         taskOptionalString      `json:"status"`
-	Priority       taskOptionalInt16       `json:"priority"`
-	AssigneeUserID taskOptionalString      `json:"assignee_user_id"`
-	StartDate      taskOptionalString      `json:"start_date"`
-	DueDate        taskOptionalString      `json:"due_date"`
-	Labels         taskOptionalStringSlice `json:"labels"`
+	Title          taskOptionalString      `json:"title" swaggertype:"string" example:"完成发布检查"`
+	Description    taskOptionalString      `json:"description" swaggertype:"string" example:"核对发布清单并记录结果"`
+	Status         taskOptionalString      `json:"status" swaggertype:"string" enums:"todo,in_progress,done,canceled" example:"in_progress"`
+	Priority       taskOptionalInt16       `json:"priority" swaggertype:"integer" format:"int32" enums:"1,2,3" example:"2"`
+	AssigneeUserID taskOptionalString      `json:"assignee_user_id" swaggertype:"string" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
+	StartDate      taskOptionalString      `json:"start_date" swaggertype:"string" format:"date" example:"2026-07-11"`
+	DueDate        taskOptionalString      `json:"due_date" swaggertype:"string" format:"date" example:"2026-07-18"`
+	Labels         taskOptionalStringSlice `json:"labels" swaggertype:"array,string" example:"发布"`
 }
 
 type normalizedTaskPatch struct {
@@ -160,6 +165,30 @@ func (value *taskOptionalStringSlice) UnmarshalJSON(raw []byte) error {
 	return json.Unmarshal(raw, &value.Value)
 }
 
+// listTasks godoc
+//
+// @Summary 列出项目任务
+// @Description 获取项目任务，支持关键字、状态、优先级、负责人、标签和日期范围筛选。
+// @Tags 客户端任务
+// @Produce json
+// @Param project_id path string true "项目 ID"
+// @Param keyword query string false "标题或描述关键字"
+// @Param status query string false "状态，多个值用逗号分隔：todo、in_progress、done、canceled"
+// @Param priority query string false "优先级，多个值用逗号分隔：1、2、3"
+// @Param assignee_user_id query string false "负责人用户 ID"
+// @Param label query string false "标签"
+// @Param start_date_from query string false "开始日期下限，格式 YYYY-MM-DD"
+// @Param start_date_to query string false "开始日期上限，格式 YYYY-MM-DD"
+// @Param due_date_from query string false "截止日期下限，格式 YYYY-MM-DD"
+// @Param due_date_to query string false "截止日期上限，格式 YYYY-MM-DD"
+// @Param limit query int false "每页数量，默认 50，最大 100"
+// @Param cursor query string false "任务分页游标"
+// @Success 200 {object} successEnvelope{data=taskListResponse}
+// @Failure 400 {object} errorEnvelope
+// @Failure 401 {object} errorEnvelope
+// @Failure 404 {object} errorEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/client/projects/{project_id}/tasks [get]
 func (s *Server) listTasks(c echo.Context) error {
 	user, ok := currentUser(c)
 	if !ok {
@@ -213,6 +242,21 @@ func (s *Server) listTasks(c echo.Context) error {
 	return success(c, http.StatusOK, taskListResponse{Tasks: responses, NextCursor: nextCursor})
 }
 
+// createTask godoc
+//
+// @Summary 创建项目任务
+// @Description 在当前用户可访问的项目中创建任务，可指定负责人、状态、优先级、日期和标签。
+// @Tags 客户端任务
+// @Accept json
+// @Produce json
+// @Param project_id path string true "项目 ID"
+// @Param body body createTaskRequest true "任务信息"
+// @Success 201 {object} successEnvelope{data=taskResponse}
+// @Failure 400 {object} errorEnvelope
+// @Failure 401 {object} errorEnvelope
+// @Failure 404 {object} errorEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/client/projects/{project_id}/tasks [post]
 func (s *Server) createTask(c echo.Context) error {
 	user, ok := currentUser(c)
 	if !ok {
@@ -279,6 +323,20 @@ func (s *Server) createTask(c echo.Context) error {
 	return success(c, http.StatusCreated, newTaskResponse(task))
 }
 
+// getTask godoc
+//
+// @Summary 获取项目任务
+// @Description 获取当前用户可访问的项目任务详情。
+// @Tags 客户端任务
+// @Produce json
+// @Param project_id path string true "项目 ID"
+// @Param task_id path string true "任务 ID"
+// @Success 200 {object} successEnvelope{data=taskResponse}
+// @Failure 400 {object} errorEnvelope
+// @Failure 401 {object} errorEnvelope
+// @Failure 404 {object} errorEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/client/projects/{project_id}/tasks/{task_id} [get]
 func (s *Server) getTask(c echo.Context) error {
 	user, ok := currentUser(c)
 	if !ok {
@@ -298,6 +356,22 @@ func (s *Server) getTask(c echo.Context) error {
 	return success(c, http.StatusOK, newTaskResponse(task))
 }
 
+// updateTask godoc
+//
+// @Summary 更新项目任务
+// @Description 更新当前用户可访问的项目任务字段。
+// @Tags 客户端任务
+// @Accept json
+// @Produce json
+// @Param project_id path string true "项目 ID"
+// @Param task_id path string true "任务 ID"
+// @Param body body updateTaskRequest true "任务更新信息"
+// @Success 200 {object} successEnvelope{data=taskResponse}
+// @Failure 400 {object} errorEnvelope
+// @Failure 401 {object} errorEnvelope
+// @Failure 404 {object} errorEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/client/projects/{project_id}/tasks/{task_id} [patch]
 func (s *Server) updateTask(c echo.Context) error {
 	user, ok := currentUser(c)
 	if !ok {
@@ -379,6 +453,20 @@ func (s *Server) updateTask(c echo.Context) error {
 	return success(c, http.StatusOK, newTaskResponse(task))
 }
 
+// deleteTask godoc
+//
+// @Summary 删除项目任务
+// @Description 删除当前用户可访问的项目任务。
+// @Tags 客户端任务
+// @Produce json
+// @Param project_id path string true "项目 ID"
+// @Param task_id path string true "任务 ID"
+// @Success 200 {object} successEnvelope{data=deleteTaskResponse}
+// @Failure 400 {object} errorEnvelope
+// @Failure 401 {object} errorEnvelope
+// @Failure 404 {object} errorEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/client/projects/{project_id}/tasks/{task_id} [delete]
 func (s *Server) deleteTask(c echo.Context) error {
 	user, ok := currentUser(c)
 	if !ok {

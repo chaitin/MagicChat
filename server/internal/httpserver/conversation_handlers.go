@@ -704,7 +704,7 @@ func (s *Server) createAppConversation(c echo.Context) error {
 // createGroupConversation godoc
 //
 // @Summary 创建群聊
-// @Description 普通用户创建群聊。当前登录用户会自动成为群主，member_ids 和 app_ids 可选择其他成员或应用，也可以都为空。
+// @Description 普通用户创建群聊。当前登录用户会自动成为群主，member_ids 和 app_ids 可选择其他成员或应用，project_ids 可选填要关联的本人普通项目。
 // @Tags 客户端会话
 // @Accept json
 // @Produce json

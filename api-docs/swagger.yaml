@@ -266,6 +266,12 @@ definitions:
       name:
         example: 产品讨论组
         type: string
+      project_ids:
+        example:
+        - 7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4
+        items:
+          type: string
+        type: array
     type: object
   httpserver.createGroupConversationResponse:
     properties:
@@ -287,6 +293,66 @@ definitions:
     properties:
       message:
         $ref: '#/definitions/httpserver.messageResponse'
+    type: object
+  httpserver.createProjectRequest:
+    properties:
+      avatar:
+        example: /assets/avatars/projects/release.webp
+        type: string
+      description:
+        example: 协调新版发布工作
+        type: string
+      group_ids:
+        example:
+        - 7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4
+        items:
+          type: string
+        type: array
+      name:
+        example: 新版发布
+        type: string
+    type: object
+  httpserver.createTaskRequest:
+    properties:
+      assignee_user_id:
+        example: 7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4
+        type: string
+      description:
+        example: 核对发布清单并记录结果
+        type: string
+      due_date:
+        example: "2026-07-18"
+        format: date
+        type: string
+      labels:
+        example:
+        - 发布
+        items:
+          type: string
+        type: array
+      priority:
+        enum:
+        - 1
+        - 2
+        - 3
+        example: 2
+        format: int32
+        type: integer
+      start_date:
+        example: "2026-07-11"
+        format: date
+        type: string
+      status:
+        enum:
+        - todo
+        - in_progress
+        - done
+        - canceled
+        example: todo
+        type: string
+      title:
+        example: 完成发布检查
+        type: string
     type: object
   httpserver.createTemporaryFileResponse:
     properties:
@@ -317,6 +383,12 @@ definitions:
     properties:
       user:
         $ref: '#/definitions/httpserver.userResponse'
+    type: object
+  httpserver.deleteTaskResponse:
+    properties:
+      task_id:
+        example: 7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4
+        type: string
     type: object
   httpserver.dissolveGroupConversationResponse:
     properties:
@@ -622,6 +694,124 @@ definitions:
         example: user
         type: string
     type: object
+  httpserver.projectGroupListResponse:
+    properties:
+      groups:
+        items:
+          $ref: '#/definitions/httpserver.projectGroupResponse'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  httpserver.projectGroupMutationResponse:
+    type: object
+  httpserver.projectGroupResponse:
+    properties:
+      avatar:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      member_count:
+        type: integer
+      name:
+        type: string
+      status:
+        type: string
+    type: object
+  httpserver.projectListResponse:
+    properties:
+      next_cursor:
+        type: string
+      personal_project:
+        $ref: '#/definitions/httpserver.projectResponse'
+      projects:
+        items:
+          $ref: '#/definitions/httpserver.projectResponse'
+        type: array
+    type: object
+  httpserver.projectMemberListResponse:
+    properties:
+      members:
+        items:
+          $ref: '#/definitions/httpserver.projectMemberResponse'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  httpserver.projectMemberResponse:
+    properties:
+      avatar:
+        type: string
+      display_name:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      nickname:
+        type: string
+      role:
+        type: string
+      source_group_ids:
+        items:
+          type: string
+        type: array
+      status:
+        type: string
+    type: object
+  httpserver.projectResponse:
+    properties:
+      avatar:
+        type: string
+      created_at:
+        type: string
+      current_user_role:
+        type: string
+      description:
+        type: string
+      group_count:
+        type: integer
+      id:
+        type: string
+      is_personal:
+        type: boolean
+      member_count:
+        type: integer
+      name:
+        type: string
+      owner:
+        $ref: '#/definitions/httpserver.projectUserSummary'
+      task_counts:
+        $ref: '#/definitions/httpserver.projectTaskCountsResponse'
+      updated_at:
+        type: string
+    type: object
+  httpserver.projectTaskCountsResponse:
+    properties:
+      canceled:
+        type: integer
+      done:
+        type: integer
+      in_progress:
+        type: integer
+      todo:
+        type: integer
+      total:
+        type: integer
+    type: object
+  httpserver.projectUserSummary:
+    properties:
+      avatar:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      nickname:
+        type: string
+    type: object
   httpserver.publicThirdPartyProviderResponse:
     properties:
       key:
@@ -666,6 +856,50 @@ definitions:
       success:
         example: true
         type: boolean
+    type: object
+  httpserver.taskListResponse:
+    properties:
+      next_cursor:
+        type: string
+      tasks:
+        items:
+          $ref: '#/definitions/httpserver.taskResponse'
+        type: array
+    type: object
+  httpserver.taskResponse:
+    properties:
+      assignee:
+        $ref: '#/definitions/httpserver.projectUserSummary'
+      canceled_at:
+        type: string
+      completed_at:
+        type: string
+      created_at:
+        type: string
+      creator:
+        $ref: '#/definitions/httpserver.projectUserSummary'
+      description:
+        type: string
+      due_date:
+        type: string
+      id:
+        type: string
+      labels:
+        items:
+          type: string
+        type: array
+      priority:
+        type: integer
+      project_id:
+        type: string
+      start_date:
+        type: string
+      status:
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
     type: object
   httpserver.temporaryFileReadURLResponse:
     properties:
@@ -775,6 +1009,60 @@ definitions:
         type: string
       organization_name:
         example: 长亭科技
+        type: string
+    type: object
+  httpserver.updateProjectRequest:
+    properties:
+      avatar:
+        example: /assets/avatars/projects/release.webp
+        type: string
+      description:
+        example: 协调新版发布工作
+        type: string
+      name:
+        example: 新版发布
+        type: string
+    type: object
+  httpserver.updateTaskRequest:
+    properties:
+      assignee_user_id:
+        example: 7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4
+        type: string
+      description:
+        example: 核对发布清单并记录结果
+        type: string
+      due_date:
+        example: "2026-07-18"
+        format: date
+        type: string
+      labels:
+        example:
+        - 发布
+        items:
+          type: string
+        type: array
+      priority:
+        enum:
+        - 1
+        - 2
+        - 3
+        example: 2
+        format: int32
+        type: integer
+      start_date:
+        example: "2026-07-11"
+        format: date
+        type: string
+      status:
+        enum:
+        - todo
+        - in_progress
+        - done
+        - canceled
+        example: in_progress
+        type: string
+      title:
+        example: 完成发布检查
         type: string
     type: object
   httpserver.updateUserStatusResponse:
@@ -2505,7 +2793,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: 普通用户创建群聊。当前登录用户会自动成为群主，member_ids 和 app_ids 可选择其他成员或应用，也可以都为空。
+      description: 普通用户创建群聊。当前登录用户会自动成为群主，member_ids 和 app_ids 可选择其他成员或应用，project_ids
+        可选填要关联的本人普通项目。
       parameters:
       - description: 群聊信息
         in: body
@@ -3031,6 +3320,684 @@ paths:
       summary: 上传当前用户头像
       tags:
       - 客户端认证
+  /api/client/projects:
+    get:
+      description: 获取当前用户可访问的项目及个人项目，按更新时间倒序分页。
+      parameters:
+      - description: 每页数量，默认 50，最大 100
+        in: query
+        name: limit
+        type: integer
+      - description: 项目分页游标
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpserver.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/httpserver.projectListResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+      summary: 列出项目
+      tags:
+      - 客户端项目
+    post:
+      consumes:
+      - application/json
+      description: 创建普通项目，可同时关联当前可用的群聊。
+      parameters:
+      - description: 项目信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/httpserver.createProjectRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpserver.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/httpserver.projectResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+      summary: 创建项目
+      tags:
+      - 客户端项目
+  /api/client/projects/{project_id}:
+    delete:
+      description: 项目所有者删除普通项目；个人项目不能删除。
+      parameters:
+      - description: 项目 ID
+        in: path
+        name: project_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpserver.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/httpserver.projectResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+      summary: 删除项目
+      tags:
+      - 客户端项目
+    get:
+      description: 获取当前用户可访问的项目详情和任务统计。
+      parameters:
+      - description: 项目 ID
+        in: path
+        name: project_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpserver.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/httpserver.projectResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+      summary: 获取项目
+      tags:
+      - 客户端项目
+    patch:
+      consumes:
+      - application/json
+      description: 项目所有者更新项目名称、描述或头像。
+      parameters:
+      - description: 项目 ID
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: 项目更新信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/httpserver.updateProjectRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpserver.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/httpserver.projectResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+      summary: 更新项目
+      tags:
+      - 客户端项目
+  /api/client/projects/{project_id}/groups:
+    get:
+      description: 获取项目关联的可用群聊，按关联时间倒序分页。
+      parameters:
+      - description: 项目 ID
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: 每页数量，默认 50，最大 100
+        in: query
+        name: limit
+        type: integer
+      - description: 群聊分页游标
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpserver.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/httpserver.projectGroupListResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+      summary: 列出项目群聊
+      tags:
+      - 客户端项目
+  /api/client/projects/{project_id}/groups/{group_id}:
+    delete:
+      description: 项目所有者解除普通项目与群聊的关联；未关联时保持成功。
+      parameters:
+      - description: 项目 ID
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: 群聊 ID
+        in: path
+        name: group_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpserver.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/httpserver.projectGroupMutationResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+      summary: 解除项目群聊
+      tags:
+      - 客户端项目
+    put:
+      consumes:
+      - application/json
+      description: 项目所有者将可用群聊关联到普通项目；重复关联保持成功。
+      parameters:
+      - description: 项目 ID
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: 群聊 ID
+        in: path
+        name: group_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpserver.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/httpserver.projectGroupMutationResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+      summary: 关联项目群聊
+      tags:
+      - 客户端项目
+  /api/client/projects/{project_id}/members:
+    get:
+      description: 获取项目成员及其来源群聊，按显示名称分页。
+      parameters:
+      - description: 项目 ID
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: 每页数量，默认 50，最大 100
+        in: query
+        name: limit
+        type: integer
+      - description: 成员分页游标
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpserver.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/httpserver.projectMemberListResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+      summary: 列出项目成员
+      tags:
+      - 客户端项目
+  /api/client/projects/{project_id}/tasks:
+    get:
+      description: 获取项目任务，支持关键字、状态、优先级、负责人、标签和日期范围筛选。
+      parameters:
+      - description: 项目 ID
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: 标题或描述关键字
+        in: query
+        name: keyword
+        type: string
+      - description: 状态，多个值用逗号分隔：todo、in_progress、done、canceled
+        in: query
+        name: status
+        type: string
+      - description: 优先级，多个值用逗号分隔：1、2、3
+        in: query
+        name: priority
+        type: string
+      - description: 负责人用户 ID
+        in: query
+        name: assignee_user_id
+        type: string
+      - description: 标签
+        in: query
+        name: label
+        type: string
+      - description: 开始日期下限，格式 YYYY-MM-DD
+        in: query
+        name: start_date_from
+        type: string
+      - description: 开始日期上限，格式 YYYY-MM-DD
+        in: query
+        name: start_date_to
+        type: string
+      - description: 截止日期下限，格式 YYYY-MM-DD
+        in: query
+        name: due_date_from
+        type: string
+      - description: 截止日期上限，格式 YYYY-MM-DD
+        in: query
+        name: due_date_to
+        type: string
+      - description: 每页数量，默认 50，最大 100
+        in: query
+        name: limit
+        type: integer
+      - description: 任务分页游标
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpserver.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/httpserver.taskListResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+      summary: 列出项目任务
+      tags:
+      - 客户端任务
+    post:
+      consumes:
+      - application/json
+      description: 在当前用户可访问的项目中创建任务，可指定负责人、状态、优先级、日期和标签。
+      parameters:
+      - description: 项目 ID
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: 任务信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/httpserver.createTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpserver.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/httpserver.taskResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+      summary: 创建项目任务
+      tags:
+      - 客户端任务
+  /api/client/projects/{project_id}/tasks/{task_id}:
+    delete:
+      description: 删除当前用户可访问的项目任务。
+      parameters:
+      - description: 项目 ID
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: 任务 ID
+        in: path
+        name: task_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpserver.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/httpserver.deleteTaskResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+      summary: 删除项目任务
+      tags:
+      - 客户端任务
+    get:
+      description: 获取当前用户可访问的项目任务详情。
+      parameters:
+      - description: 项目 ID
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: 任务 ID
+        in: path
+        name: task_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpserver.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/httpserver.taskResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+      summary: 获取项目任务
+      tags:
+      - 客户端任务
+    patch:
+      consumes:
+      - application/json
+      description: 更新当前用户可访问的项目任务字段。
+      parameters:
+      - description: 项目 ID
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: 任务 ID
+        in: path
+        name: task_id
+        required: true
+        type: string
+      - description: 任务更新信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/httpserver.updateTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpserver.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/httpserver.taskResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpserver.errorEnvelope'
+      summary: 更新项目任务
+      tags:
+      - 客户端任务
   /api/client/temporary-files:
     post:
       consumes:
