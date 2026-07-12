@@ -142,21 +142,22 @@ type createDirectConversationResponse struct {
 }
 
 type conversationListItemResponse struct {
-	Avatar             string                       `json:"avatar" example:"/assets/avatars/builtin/07.webp"`
-	CreatedAt          time.Time                    `json:"created_at" format:"date-time"`
-	ID                 string                       `json:"id" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
-	LastMessageAt      *time.Time                   `json:"last_message_at" format:"date-time"`
-	LastMessageID      *string                      `json:"last_message_id" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
-	LastMessageSeq     int64                        `json:"last_message_seq" example:"12"`
-	LastMessageSummary string                       `json:"last_message_summary" example:"好的，我看一下"`
-	LastMentionedSeq   int64                        `json:"last_mentioned_seq" example:"0"`
-	LastReadSeq        int64                        `json:"last_read_seq" example:"9"`
-	MemberCount        int                          `json:"member_count" example:"2"`
-	Members            []conversationMemberResponse `json:"members"`
-	Name               string                       `json:"name" example:"张三"`
-	Type               string                       `json:"type" example:"direct"`
-	UnreadCount        int64                        `json:"unread_count" example:"3"`
-	Visibility         string                       `json:"visibility" example:"private"`
+	Avatar             string                         `json:"avatar" example:"/assets/avatars/builtin/07.webp"`
+	CreatedAt          time.Time                      `json:"created_at" format:"date-time"`
+	ID                 string                         `json:"id" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
+	LastMessageAt      *time.Time                     `json:"last_message_at" format:"date-time"`
+	LastMessageID      *string                        `json:"last_message_id" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
+	LastMessageSeq     int64                          `json:"last_message_seq" example:"12"`
+	LastMessageSummary string                         `json:"last_message_summary" example:"好的，我看一下"`
+	LastMentionedSeq   int64                          `json:"last_mentioned_seq" example:"0"`
+	LastReadSeq        int64                          `json:"last_read_seq" example:"9"`
+	MemberCount        int                            `json:"member_count" example:"2"`
+	Members            []conversationMemberResponse   `json:"members"`
+	Name               string                         `json:"name" example:"张三"`
+	Projects           *[]conversationProjectResponse `json:"projects,omitempty"`
+	Type               string                         `json:"type" example:"direct"`
+	UnreadCount        int64                          `json:"unread_count" example:"3"`
+	Visibility         string                         `json:"visibility" example:"private"`
 }
 
 type listClientConversationsResponse struct {
@@ -289,25 +290,35 @@ func (s *Server) listClientConversations(c echo.Context) error {
 	if err != nil {
 		return failure(c, http.StatusInternalServerError, "internal_error", "服务端错误")
 	}
+	projectsByConversationID, err := s.loadConversationProjects(c.Request().Context(), conversationIDs)
+	if err != nil {
+		return failure(c, http.StatusInternalServerError, "internal_error", "服务端错误")
+	}
 
 	responses := make([]conversationListItemResponse, 0, len(conversations)+1)
 	if hasAssistantConversation {
-		responses = append(responses, newConversationListItemResponse(
+		response := newConversationListItemResponse(
 			assistantConversation,
 			user.ID,
 			membersByConversationID[assistantConversation.ID],
 			usersByID,
 			appsByID,
-		))
+		)
+		projects := projectsByConversationID[assistantConversation.ID]
+		response.Projects = &projects
+		responses = append(responses, response)
 	}
 	for _, conversation := range conversations {
-		responses = append(responses, newConversationListItemResponse(
+		response := newConversationListItemResponse(
 			conversation,
 			user.ID,
 			membersByConversationID[conversation.ID],
 			usersByID,
 			appsByID,
-		))
+		)
+		projects := projectsByConversationID[conversation.ID]
+		response.Projects = &projects
+		responses = append(responses, response)
 	}
 
 	return success(c, http.StatusOK, listClientConversationsResponse{

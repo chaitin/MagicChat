@@ -326,10 +326,11 @@ func TestProjectListSeparatesPersonalAndPaginatesCollaborativeProjects(t *testin
 		UpdatedAt: now,
 	})
 	newerHigh := insertProjectFixture(t, db, projectFixtureInput{
-		ID:        "00000000-0000-0000-0000-000000000002",
-		Owner:     owner,
-		Name:      "Newer High",
-		UpdatedAt: now,
+		ID:          "00000000-0000-0000-0000-000000000002",
+		Owner:       owner,
+		Name:        "Newer High",
+		Description: "Project summary",
+		UpdatedAt:   now,
 	})
 	older := insertProjectFixture(t, db, projectFixtureInput{
 		ID:        "00000000-0000-0000-0000-000000000003",
@@ -357,6 +358,14 @@ func TestProjectListSeparatesPersonalAndPaginatesCollaborativeProjects(t *testin
 	}
 	if projects[0]["id"] != newerHigh.ID || projects[1]["id"] != newerLow.ID {
 		t.Fatalf("project IDs = [%v %v], want [%s %s]", projects[0]["id"], projects[1]["id"], newerHigh.ID, newerLow.ID)
+	}
+	if projects[0]["description"] != newerHigh.Description {
+		t.Fatalf("project description = %v, want %s", projects[0]["description"], newerHigh.Description)
+	}
+	for _, field := range []string{"created_at", "current_user_role", "group_count", "member_count", "owner", "task_counts"} {
+		if _, exists := projects[0][field]; exists {
+			t.Fatalf("project list unexpectedly includes detail field %q", field)
+		}
 	}
 	cursor, ok := data["next_cursor"].(string)
 	if !ok || cursor == "" {
@@ -1642,6 +1651,9 @@ func TestProjectMemberListDeduplicatesSourcesAndIncludesDisabledUsers(t *testing
 	}
 	if byID[crossGroup.ID]["display_name"] != "Alpha" || byID[crossGroup.ID]["role"] != store.ProjectRoleMember {
 		t.Fatalf("cross-group member = %#v", byID[crossGroup.ID])
+	}
+	if byID[crossGroup.ID]["email"] != crossGroup.Email {
+		t.Fatalf("cross-group member email = %v, want %s", byID[crossGroup.ID]["email"], crossGroup.Email)
 	}
 	assertStringList(t, byID[crossGroup.ID]["source_group_ids"], []string{low.ID, high.ID})
 	if byID[disabled.ID]["status"] != store.UserStatusDisabled {

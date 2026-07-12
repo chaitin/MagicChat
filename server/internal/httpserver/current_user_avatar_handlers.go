@@ -16,13 +16,13 @@ import (
 )
 
 const (
-	currentUserAvatarContentType     = "image/webp"
-	currentUserAvatarOutputSize      = 256
-	maxCurrentUserAvatarUploadBytes  = 1 * 1024 * 1024
-	maxCurrentUserAvatarRequestBytes = maxCurrentUserAvatarUploadBytes + 1*1024*1024
+	avatarContentType     = "image/webp"
+	avatarOutputSize      = 256
+	maxAvatarUploadBytes  = 1 * 1024 * 1024
+	maxAvatarRequestBytes = maxAvatarUploadBytes + 1*1024*1024
 )
 
-var errCurrentUserAvatarTooLarge = errors.New("avatar too large")
+var errAvatarTooLarge = errors.New("avatar too large")
 
 // uploadCurrentUserAvatar godoc
 //
@@ -44,7 +44,7 @@ func (s *Server) uploadCurrentUserAvatar(c echo.Context) error {
 		return failure(c, http.StatusInternalServerError, "internal_error", "服务端错误")
 	}
 
-	c.Request().Body = http.MaxBytesReader(c.Response().Writer, c.Request().Body, maxCurrentUserAvatarRequestBytes)
+	c.Request().Body = http.MaxBytesReader(c.Response().Writer, c.Request().Body, maxAvatarRequestBytes)
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
 		if isRequestBodyTooLarge(err) {
@@ -52,7 +52,7 @@ func (s *Server) uploadCurrentUserAvatar(c echo.Context) error {
 		}
 		return failure(c, http.StatusBadRequest, "invalid_request", "请选择要上传的头像")
 	}
-	if fileHeader.Size > maxCurrentUserAvatarUploadBytes {
+	if fileHeader.Size > maxAvatarUploadBytes {
 		return failure(c, http.StatusRequestEntityTooLarge, "request_too_large", "头像文件不能超过 1MiB")
 	}
 	if fileHeader.Size == 0 {
@@ -65,20 +65,16 @@ func (s *Server) uploadCurrentUserAvatar(c echo.Context) error {
 	}
 	defer file.Close()
 
-	avatarBytes, err := readCurrentUserAvatarUpload(file)
+	avatarBytes, err := readAvatarUpload(file)
 	if err != nil {
-		if errors.Is(err, errCurrentUserAvatarTooLarge) {
+		if errors.Is(err, errAvatarTooLarge) {
 			return failure(c, http.StatusRequestEntityTooLarge, "request_too_large", "头像文件不能超过 1MiB")
 		}
 		return failure(c, http.StatusBadRequest, "invalid_request", "读取头像失败")
 	}
 
-	width, height, err := parseWebPDimensions(avatarBytes)
-	if err != nil {
-		return failure(c, http.StatusBadRequest, "invalid_request", "头像必须是 WebP 图片")
-	}
-	if width != currentUserAvatarOutputSize || height != currentUserAvatarOutputSize {
-		return failure(c, http.StatusBadRequest, "invalid_request", "头像尺寸必须是 256x256")
+	if err := validateAvatarUpload(avatarBytes); err != nil {
+		return failure(c, http.StatusBadRequest, "invalid_request", "头像必须是 256x256 的 WebP 图片")
 	}
 
 	storageClient, err := s.newObjectStoreClient(c.Request().Context())
@@ -92,7 +88,7 @@ func (s *Server) uploadCurrentUserAvatar(c echo.Context) error {
 		objectKey,
 		bytes.NewReader(avatarBytes),
 		int64(len(avatarBytes)),
-		currentUserAvatarContentType,
+		avatarContentType,
 	); err != nil {
 		return failure(c, http.StatusInternalServerError, "internal_error", "上传头像失败")
 	}
@@ -115,19 +111,31 @@ func (s *Server) uploadCurrentUserAvatar(c echo.Context) error {
 	})
 }
 
-func readCurrentUserAvatarUpload(reader io.Reader) ([]byte, error) {
-	content, err := io.ReadAll(io.LimitReader(reader, maxCurrentUserAvatarUploadBytes+1))
+func readAvatarUpload(reader io.Reader) ([]byte, error) {
+	content, err := io.ReadAll(io.LimitReader(reader, maxAvatarUploadBytes+1))
 	if err != nil {
 		return nil, err
 	}
-	if len(content) > maxCurrentUserAvatarUploadBytes {
-		return nil, errCurrentUserAvatarTooLarge
+	if len(content) > maxAvatarUploadBytes {
+		return nil, errAvatarTooLarge
 	}
 	if len(content) == 0 {
 		return nil, errors.New("empty avatar")
 	}
 
 	return content, nil
+}
+
+func validateAvatarUpload(content []byte) error {
+	width, height, err := parseWebPDimensions(content)
+	if err != nil {
+		return err
+	}
+	if width != avatarOutputSize || height != avatarOutputSize {
+		return errors.New("invalid avatar dimensions")
+	}
+
+	return nil
 }
 
 func buildCurrentUserAvatarObjectKey(userID string, avatarID string) string {

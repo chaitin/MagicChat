@@ -7202,7 +7202,6 @@ func TestAdminCanManageApps(t *testing.T) {
 
 	updateAIAssistantResp, updateAIAssistantBody := putJSON(t, server, "/api/admin/apps/"+appregistry.AIAssistantAppID, map[string]any{
 		"name":        "AI 女菩萨 Pro",
-		"avatar":      "/assets/apps/assistant.webp",
 		"description": "AI Agent",
 		"visibility":  "public",
 	}, adminCookie)
@@ -7240,7 +7239,6 @@ func TestAdminCanManageApps(t *testing.T) {
 
 	createResp, createBody := postJSON(t, server, "/api/admin/apps", map[string]any{
 		"name":        "知识库助手",
-		"avatar":      "/assets/apps/kb.webp",
 		"description": "回答知识库问题",
 		"visibility":  "public",
 	}, adminCookie)
@@ -7268,7 +7266,6 @@ func TestAdminCanManageApps(t *testing.T) {
 
 	updateResp, updateBody := putJSON(t, server, "/api/admin/apps/"+appID, map[string]any{
 		"name":        "知识库 Agent",
-		"avatar":      "",
 		"description": "更新后的介绍",
 		"visibility":  "public",
 	}, adminCookie)

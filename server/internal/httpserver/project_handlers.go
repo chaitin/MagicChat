@@ -67,10 +67,19 @@ type projectResponse struct {
 	UpdatedAt       time.Time                 `json:"updated_at"`
 }
 
+type projectSummaryResponse struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Avatar      string    `json:"avatar"`
+	IsPersonal  bool      `json:"is_personal"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
 type projectListResponse struct {
-	PersonalProject projectResponse   `json:"personal_project"`
-	Projects        []projectResponse `json:"projects"`
-	NextCursor      *string           `json:"next_cursor" extensions:"x-nullable"`
+	PersonalProject projectSummaryResponse   `json:"personal_project"`
+	Projects        []projectSummaryResponse `json:"projects"`
+	NextCursor      *string                  `json:"next_cursor" extensions:"x-nullable"`
 }
 
 type projectListCursor struct {
@@ -109,6 +118,7 @@ type projectMemberResponse struct {
 	ID             string   `json:"id"`
 	Name           string   `json:"name"`
 	Nickname       string   `json:"nickname"`
+	Email          string   `json:"email"`
 	Avatar         string   `json:"avatar"`
 	Status         string   `json:"status"`
 	DisplayName    string   `json:"display_name"`
@@ -218,7 +228,6 @@ func (s *Server) listProjects(c echo.Context) error {
 	}
 
 	query := s.db.WithContext(c.Request().Context()).
-		Preload("OwnerUser").
 		Where("is_personal = ?", false).
 		Where(projectAccessSQL(), projectAccessArgs(user.ID)...)
 	if cursor != nil {
@@ -243,16 +252,6 @@ func (s *Server) listProjects(c echo.Context) error {
 		}
 		nextCursor = &encoded
 	}
-	roles := make(map[string]string, len(projects)+1)
-	for _, project := range projects {
-		role := store.ProjectRoleMember
-		if project.OwnerUserID == user.ID {
-			role = store.ProjectRoleOwner
-		}
-		roles[project.ID] = role
-	}
-
-	allProjects := append([]store.Project(nil), projects...)
 	var personal store.Project
 	err = s.db.WithContext(c.Request().Context()).
 		Preload("OwnerUser").
@@ -261,17 +260,13 @@ func (s *Server) listProjects(c echo.Context) error {
 	if err != nil {
 		return projectInternalError(c)
 	}
-	roles[personal.ID] = store.ProjectRoleOwner
-	allProjects = append(allProjects, personal)
-	allResponses, err := s.newProjectResponses(c.Request().Context(), allProjects, roles)
-	if err != nil {
-		return projectInternalError(c)
+	responses := make([]projectSummaryResponse, 0, len(projects))
+	for _, project := range projects {
+		responses = append(responses, newProjectSummaryResponse(project))
 	}
-	responses := allResponses[:len(projects)]
-	personalResponse := allResponses[len(projects)]
 
 	return success(c, http.StatusOK, projectListResponse{
-		PersonalProject: personalResponse,
+		PersonalProject: newProjectSummaryResponse(personal),
 		Projects:        responses,
 		NextCursor:      nextCursor,
 	})
@@ -931,6 +926,7 @@ func (s *Server) loadProjectMemberPage(ctx context.Context, project store.Projec
 			member_page.id,
 			member_page.name,
 			member_page.nickname,
+			member_page.email,
 			member_page.avatar,
 			member_page.status,
 			member_page.display_name
@@ -939,6 +935,7 @@ func (s *Server) loadProjectMemberPage(ctx context.Context, project store.Projec
 				member_base.id,
 				member_base.name,
 				member_base.nickname,
+				member_base.email,
 				member_base.avatar,
 				member_base.status,
 				CASE
@@ -946,11 +943,11 @@ func (s *Server) loadProjectMemberPage(ctx context.Context, project store.Projec
 					ELSE member_base.name
 				END AS display_name
 			FROM (
-				SELECT u.id, u.name, u.nickname, u.avatar, u.status
+				SELECT u.id, u.name, u.nickname, u.email, u.avatar, u.status
 				FROM users u
 				WHERE u.id = ?
 				UNION
-				SELECT u.id, u.name, u.nickname, u.avatar, u.status
+				SELECT u.id, u.name, u.nickname, u.email, u.avatar, u.status
 				FROM users u
 				JOIN conversation_members cm ON cm.member_id = u.id
 				JOIN conversations c ON c.id = cm.conversation_id
@@ -984,6 +981,7 @@ func (s *Server) loadProjectMemberPage(ctx context.Context, project store.Projec
 		ID          string `gorm:"column:id"`
 		Name        string `gorm:"column:name"`
 		Nickname    string `gorm:"column:nickname"`
+		Email       string `gorm:"column:email"`
 		Avatar      string `gorm:"column:avatar"`
 		Status      string `gorm:"column:status"`
 		DisplayName string `gorm:"column:display_name"`
@@ -1001,6 +999,7 @@ func (s *Server) loadProjectMemberPage(ctx context.Context, project store.Projec
 			ID:             row.ID,
 			Name:           row.Name,
 			Nickname:       row.Nickname,
+			Email:          row.Email,
 			Avatar:         row.Avatar,
 			Status:         row.Status,
 			DisplayName:    row.DisplayName,
@@ -1151,6 +1150,21 @@ func projectAccessArgs(userID string) []any {
 		store.ConversationStatusActive,
 		store.ConversationMemberTypeUser,
 		userID,
+	}
+}
+
+func newProjectSummaryResponse(project store.Project) projectSummaryResponse {
+	avatar := project.Avatar
+	if project.IsPersonal {
+		avatar = project.OwnerUser.Avatar
+	}
+	return projectSummaryResponse{
+		ID:          project.ID,
+		Name:        project.Name,
+		Description: project.Description,
+		Avatar:      avatar,
+		IsPersonal:  project.IsPersonal,
+		UpdatedAt:   project.UpdatedAt,
 	}
 }
 

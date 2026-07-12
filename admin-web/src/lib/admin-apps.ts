@@ -53,7 +53,7 @@ export type AdminApp = {
 
 export type AdminAppInput = Pick<
   AdminApp,
-  "avatar" | "description" | "name" | "visibility"
+  "description" | "name" | "visibility"
 >
 
 export class AdminAppsRequestError extends Error {
@@ -107,6 +107,38 @@ export async function updateAdminApp(
     input,
     fetcher
   )
+}
+
+export async function uploadAdminAppAvatar(
+  id: string,
+  file: File,
+  fetcher: AdminAppsFetch = adminFetch
+) {
+  const formData = new FormData()
+  formData.append("file", file)
+
+  const response = await fetcher(
+    `/api/admin/apps/${encodeURIComponent(id)}/avatar`,
+    {
+      body: formData,
+      credentials: "include",
+      method: "POST",
+    }
+  )
+  const payload = await readJson<
+    | AdminAppsErrorEnvelope
+    | AdminAppsSuccessEnvelope<{ app?: AdminAppResponse }>
+  >(response)
+
+  if (!response.ok || payload?.success === false) {
+    throw createRequestError(payload, response, "上传应用头像失败")
+  }
+
+  const app = (
+    payload as AdminAppsSuccessEnvelope<{ app?: AdminAppResponse }> | undefined
+  )?.data?.app
+
+  return normalizeAdminApp(app)
 }
 
 export async function deleteAdminApp(
@@ -227,7 +259,6 @@ async function updateAdminAppStatus(
 
 function toAdminAppRequest(input: AdminAppInput) {
   return {
-    avatar: input.avatar.trim(),
     description: input.description.trim(),
     name: input.name.trim(),
     visibility: input.visibility,

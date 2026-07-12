@@ -8,6 +8,7 @@ import {
   CircleCheckBig,
   CircleDot,
   CircleX,
+  ChartGantt,
   Columns3,
   Equal,
   ListTodo,
@@ -18,6 +19,7 @@ import {
 import { CreateProjectTaskDialog } from "@/components/projects/create-project-task-dialog"
 import { ProjectTaskBoardView } from "@/components/projects/project-task-board-view"
 import { ProjectTaskCalendarView } from "@/components/projects/project-task-calendar-view"
+import { ProjectTaskGanttView } from "@/components/projects/project-task-gantt-view"
 import { ProjectTaskListView } from "@/components/projects/project-task-list-view"
 import type {
   ProjectTask,
@@ -48,9 +50,12 @@ const taskViews = [
   { value: "list", label: "任务列表", icon: ListTodo },
   { value: "board", label: "看板", icon: Columns3 },
   { value: "calendar", label: "日历", icon: CalendarDays },
+  { value: "gantt", label: "甘特图", icon: ChartGantt },
 ] as const
 
 type TaskView = (typeof taskViews)[number]["value"]
+
+const projectTaskViewStorageKey = "project-task-view"
 
 type TaskFilters = {
   assigneeUserIds: string[]
@@ -80,7 +85,30 @@ function createEmptyTaskFilters(): TaskFilters {
     assigneeUserIds: [],
     keyword: "",
     priorities: [],
-    statuses: ["todo", "in_progress"],
+    statuses: [],
+  }
+}
+
+function readStoredProjectTaskView(): TaskView {
+  if (typeof window === "undefined") {
+    return "list"
+  }
+
+  try {
+    const value = window.localStorage.getItem(projectTaskViewStorageKey)
+    return taskViews.some((view) => view.value === value)
+      ? (value as TaskView)
+      : "list"
+  } catch {
+    return "list"
+  }
+}
+
+function storeProjectTaskView(view: TaskView) {
+  try {
+    window.localStorage.setItem(projectTaskViewStorageKey, view)
+  } catch {
+    // View switching should still work when local storage is unavailable.
   }
 }
 
@@ -91,7 +119,9 @@ export function ProjectTasksTab({
   onTasksChanged: () => Promise<void>
   projectId: string
 }) {
-  const [activeView, setActiveView] = React.useState<TaskView>("list")
+  const [activeView, setActiveView] = React.useState<TaskView>(
+    readStoredProjectTaskView
+  )
   const [appliedFilters, setAppliedFilters] = React.useState<TaskFilters>(
     createEmptyTaskFilters
   )
@@ -176,6 +206,17 @@ export function ProjectTasksTab({
     await Promise.allSettled([refreshTasks(), onTasksChanged()])
   }
 
+  function handleTaskStatusChange(taskId: string, status: ProjectTaskStatus) {
+    setTasks((current) =>
+      current.map((task) => (task.id === taskId ? { ...task, status } : task))
+    )
+  }
+
+  function handleViewChange(view: TaskView) {
+    setActiveView(view)
+    storeProjectTaskView(view)
+  }
+
   function applyFilters(nextFilters: TaskFilters) {
     const normalizedFilters = {
       ...nextFilters,
@@ -203,44 +244,55 @@ export function ProjectTasksTab({
   return (
     <>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-muted/10">
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="flex min-w-0 flex-col gap-4 p-4">
-            <TaskToolbar
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 p-4">
+          <TaskToolbar
+            activeView={activeView}
+            filters={filters}
+            members={members}
+            membersError={membersError}
+            membersLoading={membersLoading}
+            onCreateTask={() => setCreateDialogOpen(true)}
+            onFilterSelectionChange={handleFilterSelectionChange}
+            onFiltersChange={setFilters}
+            onSearch={handleSearch}
+            onViewChange={handleViewChange}
+          />
+          {loading ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Spinner />
+              正在加载任务
+            </div>
+          ) : error ? (
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 text-sm text-destructive">
+              <span>{error}</span>
+              <Button onClick={() => void refreshTasks()} variant="outline">
+                重新加载
+              </Button>
+            </div>
+          ) : activeView === "board" ? (
+            <TaskViewContent
               activeView={activeView}
-              filters={filters}
-              members={members}
-              membersError={membersError}
-              membersLoading={membersLoading}
-              onCreateTask={() => setCreateDialogOpen(true)}
-              onFilterSelectionChange={handleFilterSelectionChange}
-              onFiltersChange={setFilters}
-              onSearch={handleSearch}
-              onViewChange={setActiveView}
+              emptyMessage={
+                hasTaskFilters(appliedFilters) ? "没有匹配的任务" : "暂无任务"
+              }
+              onTaskStatusChange={handleTaskStatusChange}
+              onTaskUpdated={handleTaskUpdated}
+              tasks={tasks}
             />
-            {loading ? (
-              <div className="flex min-h-80 items-center justify-center gap-2 text-sm text-muted-foreground">
-                <Spinner />
-                正在加载任务
-              </div>
-            ) : error ? (
-              <div className="flex min-h-80 flex-col items-center justify-center gap-3 text-sm text-destructive">
-                <span>{error}</span>
-                <Button onClick={() => void refreshTasks()} variant="outline">
-                  重新加载
-                </Button>
-              </div>
-            ) : (
+          ) : (
+            <ScrollArea className="min-h-0 flex-1">
               <TaskViewContent
                 activeView={activeView}
                 emptyMessage={
                   hasTaskFilters(appliedFilters) ? "没有匹配的任务" : "暂无任务"
                 }
+                onTaskStatusChange={handleTaskStatusChange}
                 onTaskUpdated={handleTaskUpdated}
                 tasks={tasks}
               />
-            )}
-          </div>
-        </ScrollArea>
+            </ScrollArea>
+          )}
+        </div>
       </div>
       <CreateProjectTaskDialog
         onCreated={handleTaskCreated}
@@ -703,19 +755,42 @@ function TaskViewSwitcher({
 function TaskViewContent({
   activeView,
   emptyMessage,
+  onTaskStatusChange,
   onTaskUpdated,
   tasks,
 }: {
   activeView: TaskView
   emptyMessage: string
+  onTaskStatusChange: (taskId: string, status: ProjectTaskStatus) => void
   onTaskUpdated: () => Promise<void>
   tasks: ProjectTask[]
 }) {
   switch (activeView) {
     case "board":
-      return <ProjectTaskBoardView />
+      return (
+        <ProjectTaskBoardView
+          emptyMessage={emptyMessage}
+          onTaskStatusChange={onTaskStatusChange}
+          onTaskUpdated={onTaskUpdated}
+          tasks={tasks}
+        />
+      )
     case "calendar":
-      return <ProjectTaskCalendarView />
+      return (
+        <ProjectTaskCalendarView
+          emptyMessage={emptyMessage}
+          onTaskUpdated={onTaskUpdated}
+          tasks={tasks}
+        />
+      )
+    case "gantt":
+      return (
+        <ProjectTaskGanttView
+          emptyMessage={emptyMessage}
+          onTaskUpdated={onTaskUpdated}
+          tasks={tasks}
+        />
+      )
     default:
       return (
         <ProjectTaskListView

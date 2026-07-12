@@ -75,8 +75,14 @@ export type CreateClientProjectTaskInput = {
 }
 
 export type UpdateClientProjectTaskInput = {
+  assigneeUserId?: string | null
+  description?: string
+  dueDate?: string | null
+  labels?: string[]
   priority?: ProjectTaskPriority
+  startDate?: string | null
   status?: ProjectTaskStatus
+  title?: string
 }
 
 export type ClientProjectTaskPage = {
@@ -205,11 +211,29 @@ export async function updateClientProjectTask(
   fetcher: ProjectTaskDataFetch = fetch
 ): Promise<ProjectTask> {
   const body: Record<string, unknown> = {}
+  if (input.assigneeUserId !== undefined) {
+    body.assignee_user_id = input.assigneeUserId
+  }
+  if (input.description !== undefined) {
+    body.description = input.description
+  }
+  if (input.dueDate !== undefined) {
+    body.due_date = input.dueDate
+  }
+  if (input.labels !== undefined) {
+    body.labels = input.labels
+  }
   if (input.priority !== undefined) {
     body.priority = input.priority
   }
+  if (input.startDate !== undefined) {
+    body.start_date = input.startDate
+  }
   if (input.status !== undefined) {
     body.status = input.status
+  }
+  if (input.title !== undefined) {
+    body.title = input.title
   }
 
   const response = await fetcher(

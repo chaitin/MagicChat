@@ -23,11 +23,9 @@ const (
 	appConnectionStatusOnline   = "online"
 	appSecretBytes              = 32
 	maxAppNameLength            = 120
-	maxAppAvatarLength          = 512
 )
 
 type adminAppRequest struct {
-	Avatar      string `json:"avatar"`
 	Description string `json:"description"`
 	Name        string `json:"name"`
 	Visibility  string `json:"visibility"`
@@ -157,7 +155,6 @@ func (s *Server) updateAdminApp(c echo.Context) error {
 	}
 
 	updates := map[string]any{
-		"avatar":      updatedApp.Avatar,
 		"description": updatedApp.Description,
 		"name":        updatedApp.Name,
 		"visibility":  updatedApp.Visibility,
@@ -331,10 +328,6 @@ func newAdminAppFromRequest(req adminAppRequest) (store.App, error) {
 		return store.App{}, errors.New("应用名称不能超过 120 个字符")
 	}
 
-	avatar := strings.TrimSpace(req.Avatar)
-	if len(avatar) > maxAppAvatarLength {
-		return store.App{}, errors.New("头像地址不能超过 512 个字符")
-	}
 	description := strings.TrimSpace(req.Description)
 	visibility, err := normalizeAdminAppVisibility(req.Visibility)
 	if err != nil {
@@ -344,7 +337,6 @@ func newAdminAppFromRequest(req adminAppRequest) (store.App, error) {
 	now := time.Now().UTC()
 	return store.App{
 		Name:        name,
-		Avatar:      avatar,
 		Description: description,
 		Visibility:  visibility,
 		CreatedAt:   now,

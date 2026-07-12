@@ -46,7 +46,7 @@ func (s *Server) uploadGroupConversationAvatar(c echo.Context) error {
 		return groupConversationAvatarFailure(c, err)
 	}
 
-	c.Request().Body = http.MaxBytesReader(c.Response().Writer, c.Request().Body, maxCurrentUserAvatarRequestBytes)
+	c.Request().Body = http.MaxBytesReader(c.Response().Writer, c.Request().Body, maxAvatarRequestBytes)
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
 		if isRequestBodyTooLarge(err) {
@@ -54,7 +54,7 @@ func (s *Server) uploadGroupConversationAvatar(c echo.Context) error {
 		}
 		return failure(c, http.StatusBadRequest, "invalid_request", "请选择要上传的群头像")
 	}
-	if fileHeader.Size > maxCurrentUserAvatarUploadBytes {
+	if fileHeader.Size > maxAvatarUploadBytes {
 		return failure(c, http.StatusRequestEntityTooLarge, "request_too_large", "群头像文件不能超过 1MiB")
 	}
 	if fileHeader.Size == 0 {
@@ -67,20 +67,16 @@ func (s *Server) uploadGroupConversationAvatar(c echo.Context) error {
 	}
 	defer file.Close()
 
-	avatarBytes, err := readCurrentUserAvatarUpload(file)
+	avatarBytes, err := readAvatarUpload(file)
 	if err != nil {
-		if errors.Is(err, errCurrentUserAvatarTooLarge) {
+		if errors.Is(err, errAvatarTooLarge) {
 			return failure(c, http.StatusRequestEntityTooLarge, "request_too_large", "群头像文件不能超过 1MiB")
 		}
 		return failure(c, http.StatusBadRequest, "invalid_request", "读取群头像失败")
 	}
 
-	width, height, err := parseWebPDimensions(avatarBytes)
-	if err != nil {
-		return failure(c, http.StatusBadRequest, "invalid_request", "群头像必须是 WebP 图片")
-	}
-	if width != currentUserAvatarOutputSize || height != currentUserAvatarOutputSize {
-		return failure(c, http.StatusBadRequest, "invalid_request", "群头像尺寸必须是 256x256")
+	if err := validateAvatarUpload(avatarBytes); err != nil {
+		return failure(c, http.StatusBadRequest, "invalid_request", "群头像必须是 256x256 的 WebP 图片")
 	}
 
 	storageClient, err := s.newObjectStoreClient(c.Request().Context())
@@ -94,7 +90,7 @@ func (s *Server) uploadGroupConversationAvatar(c echo.Context) error {
 		objectKey,
 		bytes.NewReader(avatarBytes),
 		int64(len(avatarBytes)),
-		currentUserAvatarContentType,
+		avatarContentType,
 	); err != nil {
 		return failure(c, http.StatusInternalServerError, "internal_error", "上传群头像失败")
 	}

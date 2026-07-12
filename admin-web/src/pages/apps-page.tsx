@@ -26,7 +26,12 @@ import {
   listAdminApps,
   regenerateAdminAppSecret,
   updateAdminApp,
+  uploadAdminAppAvatar,
 } from "@/lib/admin-apps"
+import {
+  CustomAvatarPicker,
+  type CroppedAvatar,
+} from "@/components/custom-avatar-picker"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -589,13 +594,15 @@ function AdminAppDialog({
   const idId = useId()
   const secretId = useId()
   const nameId = useId()
-  const avatarId = useId()
   const descriptionId = useId()
   const visibilityId = useId()
   const [form, setForm] = useState<AdminAppForm>(createDefaultAdminAppForm)
+  const [isAvatarCropPending, setIsAvatarCropPending] = useState(false)
+  const [pendingAvatar, setPendingAvatar] = useState<CroppedAvatar | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const isEditing = editingApp !== null
-  const isSubmitDisabled = disabled || isSaving || form.name.trim() === ""
+  const isSubmitDisabled =
+    disabled || isSaving || isAvatarCropPending || form.name.trim() === ""
 
   useEffect(() => {
     if (!open) {
@@ -605,6 +612,8 @@ function AdminAppDialog({
     setForm(
       editingApp ? adminAppToForm(editingApp) : createDefaultAdminAppForm()
     )
+    setIsAvatarCropPending(false)
+    setPendingAvatar(null)
   }, [editingApp, open])
 
   function handleOpenChange(nextOpen: boolean) {
@@ -626,9 +635,23 @@ function AdminAppDialog({
 
     try {
       const input = adminAppFormToInput(form)
-      const app = editingApp
+      let app = editingApp
         ? await updateAdminApp(editingApp.id, input)
         : await createAdminApp(input)
+
+      if (pendingAvatar) {
+        try {
+          app = await uploadAdminAppAvatar(app.id, pendingAvatar.file)
+        } catch (error) {
+          onAppSaved(app)
+          toast.error(
+            error instanceof AdminAppsRequestError
+              ? `应用已保存，但${error.message}`
+              : "应用已保存，但头像上传失败"
+          )
+          return
+        }
+      }
 
       onAppSaved(app)
       toast.success("应用已保存")
@@ -721,18 +744,24 @@ function AdminAppDialog({
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor={avatarId}>头像地址</FieldLabel>
-              <Input
+              <FieldLabel>头像</FieldLabel>
+              {(pendingAvatar || form.avatar) && (
+                <Avatar className="size-16 rounded-sm bg-muted after:rounded-sm">
+                  <AvatarImage
+                    alt="应用头像预览"
+                    className="rounded-sm"
+                    src={pendingAvatar?.previewUrl ?? form.avatar}
+                  />
+                  <AvatarFallback className="rounded-sm">
+                    {getAdminAppInitial(form.name)}
+                  </AvatarFallback>
+                </Avatar>
+              )}
+              <CustomAvatarPicker
                 disabled={isSaving}
-                id={avatarId}
-                onChange={(event) =>
-                  setForm((currentForm) => ({
-                    ...currentForm,
-                    avatar: event.target.value,
-                  }))
-                }
-                placeholder="/logo.png"
-                value={form.avatar}
+                onChange={setPendingAvatar}
+                onEditingChange={setIsAvatarCropPending}
+                saving={isSaving}
               />
             </Field>
             <Field>
@@ -816,7 +845,6 @@ function adminAppToForm(app: AdminApp): AdminAppForm {
 
 function adminAppFormToInput(form: AdminAppForm): AdminAppInput {
   return {
-    avatar: form.avatar,
     description: form.description,
     name: form.name,
     visibility: form.visibility,
