@@ -97,26 +97,11 @@ definitions:
         example: app
         type: string
     type: object
-  httpserver.contactGroupAvatarMemberResponse:
-    properties:
-      avatar:
-        type: string
-      name:
-        type: string
-      nickname:
-        type: string
-      role:
-        type: string
-    type: object
   httpserver.contactGroupResponse:
     properties:
       avatar:
         example: /assets/avatars/groups/07.webp
         type: string
-      avatar_members:
-        items:
-          $ref: '#/definitions/httpserver.contactGroupAvatarMemberResponse'
-        type: array
       id:
         example: 7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4
         type: string
@@ -448,42 +433,6 @@ definitions:
         example: false
         type: boolean
     type: object
-  httpserver.externalContactGroupResponse:
-    properties:
-      channel:
-        type: string
-      contacts:
-        items:
-          $ref: '#/definitions/httpserver.externalContactResponse'
-        type: array
-      id:
-        type: string
-      last_sync_at:
-        type: string
-      last_sync_error:
-        type: string
-      last_sync_error_at:
-        type: string
-      name:
-        type: string
-      online:
-        type: boolean
-      remote_account_id:
-        type: string
-    type: object
-  httpserver.externalContactResponse:
-    properties:
-      avatar:
-        type: string
-      display_name:
-        type: string
-      id:
-        type: string
-      remote_contact_id:
-        type: string
-      type:
-        type: string
-    type: object
   httpserver.forwardMessagesRequest:
     properties:
       client_forward_id:
@@ -624,10 +573,6 @@ definitions:
       apps:
         items:
           $ref: '#/definitions/httpserver.contactAppResponse'
-        type: array
-      external_contact_groups:
-        items:
-          $ref: '#/definitions/httpserver.externalContactGroupResponse'
         type: array
       groups:
         items:

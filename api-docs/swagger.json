@@ -5637,35 +5637,12 @@
                 }
             }
         },
-        "httpserver.contactGroupAvatarMemberResponse": {
-            "type": "object",
-            "properties": {
-                "avatar": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "nickname": {
-                    "type": "string"
-                },
-                "role": {
-                    "type": "string"
-                }
-            }
-        },
         "httpserver.contactGroupResponse": {
             "type": "object",
             "properties": {
                 "avatar": {
                     "type": "string",
                     "example": "/assets/avatars/groups/07.webp"
-                },
-                "avatar_members": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/httpserver.contactGroupAvatarMemberResponse"
-                    }
                 },
                 "id": {
                     "type": "string",
@@ -6139,61 +6116,6 @@
                 }
             }
         },
-        "httpserver.externalContactGroupResponse": {
-            "type": "object",
-            "properties": {
-                "channel": {
-                    "type": "string"
-                },
-                "contacts": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/httpserver.externalContactResponse"
-                    }
-                },
-                "id": {
-                    "type": "string"
-                },
-                "last_sync_at": {
-                    "type": "string"
-                },
-                "last_sync_error": {
-                    "type": "string"
-                },
-                "last_sync_error_at": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "online": {
-                    "type": "boolean"
-                },
-                "remote_account_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "httpserver.externalContactResponse": {
-            "type": "object",
-            "properties": {
-                "avatar": {
-                    "type": "string"
-                },
-                "display_name": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "remote_contact_id": {
-                    "type": "string"
-                },
-                "type": {
-                    "type": "string"
-                }
-            }
-        },
         "httpserver.forwardMessagesRequest": {
             "type": "object",
             "properties": {
@@ -6397,12 +6319,6 @@
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/httpserver.contactAppResponse"
-                    }
-                },
-                "external_contact_groups": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/httpserver.externalContactGroupResponse"
                     }
                 },
                 "groups": {
