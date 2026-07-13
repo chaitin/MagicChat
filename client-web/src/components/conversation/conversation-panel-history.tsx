@@ -174,6 +174,8 @@ export function ConversationPanelHistory({
       className="min-h-0 flex-1 bg-muted/10"
       data-testid="conversation-panel-history"
       viewportProps={{
+        className:
+          "[&>div]:block! [&>div]:w-full! [&>div]:min-w-0!",
         onContextMenu: handleHistoryContextMenu,
         onScroll: handleViewportScroll,
       }}
