@@ -39,22 +39,75 @@ export function mergeConversationMessages(
   currentMessages: ClientMessage[],
   nextMessages: ClientMessage[]
 ) {
-  const messagesById = new Map<string, ClientMessage>()
-
-  for (const message of currentMessages) {
-    messagesById.set(message.id, message)
-  }
-  for (const message of nextMessages) {
-    messagesById.set(message.id, message)
+  if (nextMessages.length === 0) {
+    return currentMessages
   }
 
-  return Array.from(messagesById.values()).sort((messageA, messageB) => {
-    if (messageA.seq !== messageB.seq) {
-      return messageA.seq - messageB.seq
+  const normalizedNextMessages = deduplicateAndSortMessages(nextMessages)
+  if (currentMessages.length === 0) {
+    return normalizedNextMessages
+  }
+
+  const currentMessageIds = new Set<string>()
+  let currentMessagesAreSortedAndUnique = true
+
+  for (let index = 0; index < currentMessages.length; index += 1) {
+    const message = currentMessages[index]
+    if (currentMessageIds.has(message.id)) {
+      currentMessagesAreSortedAndUnique = false
+      break
+    }
+    currentMessageIds.add(message.id)
+
+    const previousMessage = currentMessages[index - 1]
+    if (previousMessage && compareMessages(previousMessage, message) > 0) {
+      currentMessagesAreSortedAndUnique = false
+      break
+    }
+  }
+
+  const overlapsCurrentMessages = normalizedNextMessages.some((message) =>
+    currentMessageIds.has(message.id)
+  )
+
+  if (currentMessagesAreSortedAndUnique && !overlapsCurrentMessages) {
+    const firstCurrentMessage = currentMessages[0]
+    const lastCurrentMessage = currentMessages[currentMessages.length - 1]
+    const firstNextMessage = normalizedNextMessages[0]
+    const lastNextMessage =
+      normalizedNextMessages[normalizedNextMessages.length - 1]
+
+    if (compareMessages(lastCurrentMessage, firstNextMessage) <= 0) {
+      return [...currentMessages, ...normalizedNextMessages]
     }
 
-    return messageA.createdAt.localeCompare(messageB.createdAt)
-  })
+    if (compareMessages(lastNextMessage, firstCurrentMessage) < 0) {
+      return [...normalizedNextMessages, ...currentMessages]
+    }
+  }
+
+  return deduplicateAndSortMessages([
+    ...currentMessages,
+    ...normalizedNextMessages,
+  ])
+}
+
+function deduplicateAndSortMessages(messages: ClientMessage[]) {
+  const messagesById = new Map<string, ClientMessage>()
+
+  for (const message of messages) {
+    messagesById.set(message.id, message)
+  }
+
+  return Array.from(messagesById.values()).sort(compareMessages)
+}
+
+function compareMessages(messageA: ClientMessage, messageB: ClientMessage) {
+  if (messageA.seq !== messageB.seq) {
+    return messageA.seq - messageB.seq
+  }
+
+  return messageA.createdAt.localeCompare(messageB.createdAt)
 }
 
 export function updatePageWithMessage(

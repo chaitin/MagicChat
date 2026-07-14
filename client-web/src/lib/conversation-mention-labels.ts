@@ -11,20 +11,24 @@ export function createConversationMentionLabelResolver({
   appsById,
   contactsById,
   conversation,
+  conversationMembers,
   currentUser,
 }: {
   appsById?: ReadonlyMap<string, ContactApp>
   contactsById?: ReadonlyMap<string, ContactUser>
   conversation?: ClientConversation | null
+  conversationMembers?: ClientConversationMember[]
   currentUser?: Pick<ClientUser, "id" | "name" | "nickname"> | null
 }): MentionLabelResolver {
+  const members = conversationMembers ?? conversation?.members
+
   return (target) => {
     if (target.type === "all") {
       return "所有人"
     }
 
     if (target.type === "app") {
-      const member = conversation?.members?.find(
+      const member = members?.find(
         (currentMember) =>
           currentMember.type === "app" && currentMember.id === target.id
       )
@@ -39,7 +43,7 @@ export function createConversationMentionLabelResolver({
       return formatMentionUserName(currentUser)
     }
 
-    const member = conversation?.members?.find(
+    const member = members?.find(
       (currentMember) =>
         currentMember.type === "user" && currentMember.id === target.id
     )

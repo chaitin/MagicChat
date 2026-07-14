@@ -125,6 +125,12 @@ export function ChatPage() {
 
   const activeConversationId = activeConversation?.id ?? ""
   const messageSelection = useMessageSelection(activeConversationId)
+  const {
+    maxSelectedMessages,
+    selectedMessageIds,
+    start: startSelectingMessage,
+    toggle: toggleSelectedMessage,
+  } = messageSelection
   const activeDraft = drafts[activeConversationId] ?? emptyConversationDraft
   const draft = activeDraft.text
   const replyTarget = activeDraft.replyTarget
@@ -148,6 +154,10 @@ export function ChatPage() {
     () => new Map(activeClientMessages.map((message) => [message.id, message])),
     [activeClientMessages]
   )
+  const activeClientMessagesByIdRef = React.useRef(activeClientMessagesById)
+  React.useEffect(() => {
+    activeClientMessagesByIdRef.current = activeClientMessagesById
+  }, [activeClientMessagesById])
   const contactsById = React.useMemo(
     () => new Map(contacts.map((contact) => [contact.id, contact])),
     [contacts]
@@ -167,11 +177,26 @@ export function ChatPage() {
       createConversationMentionLabelResolver({
         appsById: contactAppsByLookup,
         contactsById,
-        conversation: activeConversation,
-        currentUser: me,
+        conversationMembers: activeConversation?.members,
+        currentUser: {
+          id: me.id,
+          name: me.name,
+          nickname: me.nickname,
+        },
       }),
-    [activeConversation, contactAppsByLookup, contactsById, me]
+    [
+      activeConversation?.members,
+      contactAppsByLookup,
+      contactsById,
+      me.id,
+      me.name,
+      me.nickname,
+    ]
   )
+  const activeMentionLabelResolverRef = React.useRef(activeMentionLabelResolver)
+  React.useEffect(() => {
+    activeMentionLabelResolverRef.current = activeMentionLabelResolver
+  }, [activeMentionLabelResolver])
   const activeConversationOnline = activeConversation
     ? getConversationOnlineStatus(
         activeConversation,
@@ -209,11 +234,11 @@ export function ChatPage() {
     () =>
       activeClientMessages.filter(
         (message) =>
-          messageSelection.selectedMessageIds.has(message.id) &&
+          selectedMessageIds.has(message.id) &&
           message.body.type !== "revoked" &&
           message.body.type !== "system_event"
       ),
-    [activeClientMessages, messageSelection.selectedMessageIds]
+    [activeClientMessages, selectedMessageIds]
   )
   const visibleMessageSelection = React.useMemo(
     () => ({
@@ -327,12 +352,12 @@ export function ChatPage() {
           author: message.author,
           summary: formatConversationMessageSummary(
             message.body,
-            activeMentionLabelResolver
+            activeMentionLabelResolverRef.current
           ),
         },
       }))
     },
-    [activeConversationId, activeMentionLabelResolver, updateConversationDraft]
+    [activeConversationId, updateConversationDraft]
   )
 
   const revokeMessage = React.useCallback(
@@ -371,35 +396,29 @@ export function ChatPage() {
 
   const forwardSingleMessage = React.useCallback(
     (message: ConversationPanelMessage) => {
-      const clientMessage = activeClientMessagesById.get(message.id)
+      const clientMessage = activeClientMessagesByIdRef.current.get(message.id)
       if (clientMessage) {
         openForwardOperation([clientMessage], "separate")
       }
     },
-    [activeClientMessagesById, openForwardOperation]
+    [openForwardOperation]
   )
 
   const startMessageSelection = React.useCallback(
-    (message: ConversationPanelMessage) => messageSelection.start(message.id),
-    [messageSelection]
+    (message: ConversationPanelMessage) => startSelectingMessage(message.id),
+    [startSelectingMessage]
   )
 
   const toggleMessageSelection = React.useCallback(
     (message: ConversationPanelMessage) => {
-      const selected = messageSelection.selectedMessageIds.has(message.id)
-      if (
-        !selected &&
-        messageSelection.selectedMessageIds.size >=
-          messageSelection.maxSelectedMessages
-      ) {
-        toast.warning(
-          `一次最多选择 ${messageSelection.maxSelectedMessages} 条消息`
-        )
+      const selected = selectedMessageIds.has(message.id)
+      if (!selected && selectedMessageIds.size >= maxSelectedMessages) {
+        toast.warning(`一次最多选择 ${maxSelectedMessages} 条消息`)
         return
       }
-      messageSelection.toggle(message.id)
+      toggleSelectedMessage(message.id)
     },
-    [messageSelection]
+    [maxSelectedMessages, selectedMessageIds, toggleSelectedMessage]
   )
 
   const forwardSelectedMessages = React.useCallback(

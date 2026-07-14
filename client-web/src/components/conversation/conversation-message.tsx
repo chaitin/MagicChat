@@ -37,7 +37,7 @@ import type {
   ConversationPanelReplyTarget,
 } from "@/lib/conversation-panel-types"
 
-export function SystemMessageBadge({
+export const SystemMessageBadge = React.memo(function SystemMessageBadge({
   currentUserId,
   mentionLabelResolver,
   message,
@@ -47,7 +47,10 @@ export function SystemMessageBadge({
   message: ConversationPanelMessage
 }) {
   return (
-    <div className="flex justify-center">
+    <div
+      className="flex justify-center"
+      data-conversation-message-id={message.id}
+    >
       <Badge
         className="h-auto max-w-[min(80%,36rem)] text-center leading-relaxed whitespace-normal"
         variant="secondary"
@@ -60,23 +63,9 @@ export function SystemMessageBadge({
       </Badge>
     </div>
   )
-}
+}, areSystemMessageBadgePropsEqual)
 
-export function MessageBubble({
-  message,
-  conversation,
-  currentUserId,
-  mentionLabelResolver,
-  onInsertMention,
-  onForward,
-  onMultiSelect,
-  onReply,
-  onRevoke,
-  onToggleSelected,
-  selectable = true,
-  selected = false,
-  selectionMode = false,
-}: {
+type MessageBubbleProps = {
   message: ConversationPanelMessage
   conversation: ClientConversation
   currentUserId: string
@@ -90,7 +79,23 @@ export function MessageBubble({
   selectable?: boolean
   selected?: boolean
   selectionMode?: boolean
-}) {
+}
+
+export const MessageBubble = React.memo(function MessageBubble({
+  message,
+  conversation,
+  currentUserId,
+  mentionLabelResolver,
+  onInsertMention,
+  onForward,
+  onMultiSelect,
+  onReply,
+  onRevoke,
+  onToggleSelected,
+  selectable = true,
+  selected = false,
+  selectionMode = false,
+}: MessageBubbleProps) {
   const fromMe = message.role === "me"
   const fallback = fromMe ? "我" : getAvatarInitial(conversation.name)
   const canInsertAuthorMention =
@@ -172,6 +177,7 @@ export function MessageBubble({
         selectionMode && "px-3 py-2 pl-11",
         selected && "bg-primary/5"
       )}
+      data-conversation-message-id={message.id}
       data-message-selection-row
       onClickCapture={handleSelectionClick}
     >
@@ -241,6 +247,114 @@ export function MessageBubble({
         )}
       </div>
     </div>
+  )
+}, areMessageBubblePropsEqual)
+
+function areSystemMessageBadgePropsEqual(
+  previous: {
+    currentUserId: string
+    mentionLabelResolver: MentionLabelResolver
+    message: ConversationPanelMessage
+  },
+  next: {
+    currentUserId: string
+    mentionLabelResolver: MentionLabelResolver
+    message: ConversationPanelMessage
+  }
+) {
+  return (
+    previous.currentUserId === next.currentUserId &&
+    previous.message.body === next.message.body &&
+    (previous.mentionLabelResolver === next.mentionLabelResolver ||
+      !messageBodyUsesMentionLabels(next.message.body))
+  )
+}
+
+function areMessageBubblePropsEqual(
+  previous: MessageBubbleProps,
+  next: MessageBubbleProps
+) {
+  return (
+    previous.conversation.name === next.conversation.name &&
+    previous.conversation.type === next.conversation.type &&
+    previous.currentUserId === next.currentUserId &&
+    previous.onForward === next.onForward &&
+    previous.onInsertMention === next.onInsertMention &&
+    previous.onMultiSelect === next.onMultiSelect &&
+    previous.onReply === next.onReply &&
+    previous.onRevoke === next.onRevoke &&
+    previous.onToggleSelected === next.onToggleSelected &&
+    previous.selectable === next.selectable &&
+    previous.selected === next.selected &&
+    previous.selectionMode === next.selectionMode &&
+    arePanelMessagesEqual(previous.message, next.message) &&
+    (previous.mentionLabelResolver === next.mentionLabelResolver ||
+      !messageBodyUsesMentionLabels(next.message.body))
+  )
+}
+
+function arePanelMessagesEqual(
+  previous: ConversationPanelMessage,
+  next: ConversationPanelMessage
+) {
+  return (
+    previous.id === next.id &&
+    previous.author === next.author &&
+    previous.avatar === next.avatar &&
+    previous.body === next.body &&
+    previous.canRevoke === next.canRevoke &&
+    previous.delegatedByName === next.delegatedByName &&
+    previous.role === next.role &&
+    previous.senderAppId === next.senderAppId &&
+    previous.senderUserId === next.senderUserId &&
+    previous.time === next.time &&
+    areMentionTargetsEqual(previous.mentionTarget, next.mentionTarget) &&
+    areReplyTargetsEqual(previous.replyTo, next.replyTo) &&
+    areAppProfilesEqual(previous.senderAppProfile, next.senderAppProfile)
+  )
+}
+
+function areMentionTargetsEqual(
+  previous: ConversationPanelMessage["mentionTarget"],
+  next: ConversationPanelMessage["mentionTarget"]
+) {
+  return (
+    previous === next ||
+    (previous !== null &&
+      next !== null &&
+      previous.id === next.id &&
+      previous.label === next.label &&
+      previous.targetType === next.targetType)
+  )
+}
+
+function areReplyTargetsEqual(
+  previous: ConversationPanelMessage["replyTo"],
+  next: ConversationPanelMessage["replyTo"]
+) {
+  return (
+    previous === next ||
+    (previous !== undefined &&
+      next !== undefined &&
+      previous.id === next.id &&
+      previous.author === next.author &&
+      previous.summary === next.summary)
+  )
+}
+
+function areAppProfilesEqual(
+  previous: ConversationPanelMessage["senderAppProfile"],
+  next: ConversationPanelMessage["senderAppProfile"]
+) {
+  return (
+    previous === next ||
+    (previous !== null &&
+      next !== null &&
+      previous.id === next.id &&
+      previous.avatar === next.avatar &&
+      previous.description === next.description &&
+      previous.name === next.name &&
+      previous.online === next.online)
   )
 }
 
@@ -402,15 +516,17 @@ function MessageAvatarProfile({
   )
 }
 
-function MessageBodyRenderer({
-  body,
-  currentUserId,
-  mentionLabelResolver,
-}: {
+type MessageBodyRendererProps = {
   body: ConversationPanelMessage["body"]
   currentUserId: string
   mentionLabelResolver: MentionLabelResolver
-}) {
+}
+
+const MessageBodyRenderer = React.memo(function MessageBodyRenderer({
+  body,
+  currentUserId,
+  mentionLabelResolver,
+}: MessageBodyRendererProps) {
   switch (body.type) {
     case "file":
       return <MessageAttachment file={body} />
@@ -449,6 +565,32 @@ function MessageBodyRenderer({
     case "system_event":
       return <span>{formatClientMessageBodySummary(body)}</span>
   }
+}, areMessageBodyRendererPropsEqual)
+
+function areMessageBodyRendererPropsEqual(
+  previous: MessageBodyRendererProps,
+  next: MessageBodyRendererProps
+) {
+  return (
+    previous.body === next.body &&
+    previous.currentUserId === next.currentUserId &&
+    (previous.mentionLabelResolver === next.mentionLabelResolver ||
+      !messageBodyUsesMentionLabels(next.body))
+  )
+}
+
+function messageBodyUsesMentionLabels(
+  body: ConversationPanelMessage["body"]
+): boolean {
+  if (body.type === "text" || body.type === "markdown") {
+    return body.content.includes("{(@")
+  }
+
+  if (body.type === "forward_bundle") {
+    return body.items.some((item) => messageBodyUsesMentionLabels(item.body))
+  }
+
+  return false
 }
 
 function ForwardBundleMessage({

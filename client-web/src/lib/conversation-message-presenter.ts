@@ -21,6 +21,12 @@ import {
   type MentionLabelResolver,
 } from "@/lib/message-mentions"
 
+const messageTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
+  hour: "2-digit",
+  hour12: false,
+  minute: "2-digit",
+})
+
 export function toConversationPanelMessage(
   message: ClientMessage,
   conversation: ClientConversation,
@@ -89,11 +95,7 @@ function getMessageTime(createdAt: string) {
     return ""
   }
 
-  return new Intl.DateTimeFormat("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(date)
+  return messageTimeFormatter.format(date)
 }
 
 function canRevokeMessage(

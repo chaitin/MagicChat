@@ -71,7 +71,7 @@ type ReactMarkdownProps = React.ComponentProps<typeof ReactMarkdown>
 
 const fallbackMentionLabelResolver: MentionLabelResolver = () => undefined
 
-export function MessageMarkdown({
+export const MessageMarkdown = React.memo(function MessageMarkdown({
   content,
   currentUserId,
   mentionLabelResolver = fallbackMentionLabelResolver,
@@ -89,159 +89,16 @@ export function MessageMarkdown({
     ],
     [mentionLabelResolver]
   )
+  const components = React.useMemo(
+    () => createMarkdownComponents(currentUserId),
+    [currentUserId]
+  )
 
   return (
     <div className="max-w-full space-y-4 break-all">
       <ReactMarkdown
         allowedElements={allowedMarkdownElements}
-        components={
-          {
-            a: ({ children, href }) =>
-              href ? (
-                <MessageInlineLink href={href}>{children}</MessageInlineLink>
-              ) : (
-                <span>{children}</span>
-              ),
-            blockquote: ({ children }) => (
-              <blockquote className="border-l-2 border-border bg-foreground/5 py-2 pl-3 text-muted-foreground">
-                {children}
-              </blockquote>
-            ),
-            code: ({ children }) => (
-              <code className="rounded bg-foreground/8 px-1 py-0.5 font-mono text-[0.92em]">
-                {children}
-              </code>
-            ),
-            del: ({ children }) => (
-              <del className="text-muted-foreground">{children}</del>
-            ),
-            h1: ({ children }) => (
-              <h1 className="text-lg leading-snug font-semibold">{children}</h1>
-            ),
-            h2: ({ children }) => (
-              <h2 className="text-base leading-snug font-semibold">
-                {children}
-              </h2>
-            ),
-            h3: ({ children }) => (
-              <h3 className="text-sm leading-snug font-semibold">{children}</h3>
-            ),
-            h4: ({ children }) => (
-              <h4 className="text-sm leading-snug text-foreground/80">
-                {children}
-              </h4>
-            ),
-            h5: ({ children }) => (
-              <h5 className="text-sm leading-snug text-foreground/70">
-                {children}
-              </h5>
-            ),
-            h6: ({ children }) => (
-              <h6 className="text-sm leading-snug text-foreground/60">
-                {children}
-              </h6>
-            ),
-            hr: () => <hr className="h-px border-0 bg-foreground/20" />,
-            img: ({ alt, src }) => {
-              const imageSource = getMarkdownImageSource(src)
-
-              return imageSource ? (
-                <img
-                  alt={alt ?? ""}
-                  className="my-1 block h-auto max-h-80 max-w-full rounded-md object-contain"
-                  decoding="async"
-                  loading="lazy"
-                  src={imageSource}
-                />
-              ) : alt ? (
-                <span className="text-muted-foreground">{alt}</span>
-              ) : null
-            },
-            input: ({ checked, type }) =>
-              type === "checkbox" ? (
-                <Checkbox
-                  aria-label={checked ? "已完成" : "未完成"}
-                  checked={Boolean(checked)}
-                  className="mt-0.5 shrink-0 disabled:opacity-100"
-                  disabled
-                />
-              ) : null,
-            li: ({ children, className }) => {
-              const taskItem = className?.includes("task-list-item")
-
-              return (
-                <li
-                  className={cn(
-                    taskItem ? "flex items-start gap-2 pl-0" : "pl-1",
-                    className
-                  )}
-                >
-                  {children}
-                </li>
-              )
-            },
-            mark: ({ children }) => (
-              <mark className="rounded-sm bg-amber-200/80 px-0.5 text-inherit dark:bg-amber-800/60">
-                {children}
-              </mark>
-            ),
-            mention: ({ children, node }: MarkdownMentionProps) => (
-              <MarkdownMention currentUserId={currentUserId} node={node}>
-                {children}
-              </MarkdownMention>
-            ),
-            ol: ({ children }) => (
-              <ol className="list-decimal space-y-1 pl-5">{children}</ol>
-            ),
-            p: ({ children }) => <p>{children}</p>,
-            pre: ({ children }) => (
-              <pre className="max-w-full overflow-x-auto rounded bg-foreground/8 p-3 font-mono text-[0.92em] [&_code]:rounded-none [&_code]:bg-transparent [&_code]:p-0">
-                {children}
-              </pre>
-            ),
-            table: ({ children }) => (
-              <div className="max-w-full overflow-x-auto">
-                <table className="w-max min-w-full border-collapse text-xs">
-                  {children}
-                </table>
-              </div>
-            ),
-            td: ({ children, style }) => (
-              <td
-                className="border border-foreground/[0.08] px-2 py-2 align-top"
-                style={style}
-              >
-                {children}
-              </td>
-            ),
-            th: ({ children, style }) => (
-              <th
-                className="border border-foreground/[0.08] bg-foreground/5 px-2 py-2 text-left font-medium"
-                style={style}
-              >
-                {children}
-              </th>
-            ),
-            tr: ({ children }) => <tr>{children}</tr>,
-            sub: ({ children }) => <sub>{children}</sub>,
-            sup: ({ children }) => <sup>{children}</sup>,
-            ul: ({ children, className }) => {
-              const taskList = className?.includes("contains-task-list")
-
-              return (
-                <ul
-                  className={cn(
-                    "space-y-1",
-                    taskList ? "list-none pl-0" : "list-disc pl-5",
-                    className
-                  )}
-                >
-                  {children}
-                </ul>
-              )
-            },
-          } as ReactMarkdownProps["components"]
-        }
+        components={components}
         remarkPlugins={remarkPlugins}
         skipHtml
         unwrapDisallowed
@@ -250,6 +107,149 @@ export function MessageMarkdown({
       </ReactMarkdown>
     </div>
   )
+})
+
+function createMarkdownComponents(
+  currentUserId: string | undefined
+): ReactMarkdownProps["components"] {
+  return {
+    a: ({ children, href }) =>
+      href ? (
+        <MessageInlineLink href={href}>{children}</MessageInlineLink>
+      ) : (
+        <span>{children}</span>
+      ),
+    blockquote: ({ children }) => (
+      <blockquote className="border-l-2 border-border bg-foreground/5 py-2 pl-3 text-muted-foreground">
+        {children}
+      </blockquote>
+    ),
+    code: ({ children }) => (
+      <code className="rounded bg-foreground/8 px-1 py-0.5 font-mono text-[0.92em]">
+        {children}
+      </code>
+    ),
+    del: ({ children }) => (
+      <del className="text-muted-foreground">{children}</del>
+    ),
+    h1: ({ children }) => (
+      <h1 className="text-lg leading-snug font-semibold">{children}</h1>
+    ),
+    h2: ({ children }) => (
+      <h2 className="text-base leading-snug font-semibold">{children}</h2>
+    ),
+    h3: ({ children }) => (
+      <h3 className="text-sm leading-snug font-semibold">{children}</h3>
+    ),
+    h4: ({ children }) => (
+      <h4 className="text-sm leading-snug text-foreground/80">{children}</h4>
+    ),
+    h5: ({ children }) => (
+      <h5 className="text-sm leading-snug text-foreground/70">{children}</h5>
+    ),
+    h6: ({ children }) => (
+      <h6 className="text-sm leading-snug text-foreground/60">{children}</h6>
+    ),
+    hr: () => <hr className="h-px border-0 bg-foreground/20" />,
+    img: ({ alt, src }) => {
+      const imageSource = getMarkdownImageSource(src)
+
+      return imageSource ? (
+        <img
+          alt={alt ?? ""}
+          className="my-1 block h-auto max-h-80 max-w-full rounded-md object-contain"
+          decoding="async"
+          loading="lazy"
+          src={imageSource}
+        />
+      ) : alt ? (
+        <span className="text-muted-foreground">{alt}</span>
+      ) : null
+    },
+    input: ({ checked, type }) =>
+      type === "checkbox" ? (
+        <Checkbox
+          aria-label={checked ? "已完成" : "未完成"}
+          checked={Boolean(checked)}
+          className="mt-0.5 shrink-0 disabled:opacity-100"
+          disabled
+        />
+      ) : null,
+    li: ({ children, className }) => {
+      const taskItem = className?.includes("task-list-item")
+
+      return (
+        <li
+          className={cn(
+            taskItem ? "flex items-start gap-2 pl-0" : "pl-1",
+            className
+          )}
+        >
+          {children}
+        </li>
+      )
+    },
+    mark: ({ children }) => (
+      <mark className="rounded-sm bg-amber-200/80 px-0.5 text-inherit dark:bg-amber-800/60">
+        {children}
+      </mark>
+    ),
+    mention: ({ children, node }: MarkdownMentionProps) => (
+      <MarkdownMention currentUserId={currentUserId} node={node}>
+        {children}
+      </MarkdownMention>
+    ),
+    ol: ({ children }) => (
+      <ol className="list-decimal space-y-1 pl-5">{children}</ol>
+    ),
+    p: ({ children }) => <p>{children}</p>,
+    pre: ({ children }) => (
+      <pre className="max-w-full overflow-x-auto rounded bg-foreground/8 p-3 font-mono text-[0.92em] [&_code]:rounded-none [&_code]:bg-transparent [&_code]:p-0">
+        {children}
+      </pre>
+    ),
+    table: ({ children }) => (
+      <div className="max-w-full overflow-x-auto">
+        <table className="w-max min-w-full border-collapse text-xs">
+          {children}
+        </table>
+      </div>
+    ),
+    td: ({ children, style }) => (
+      <td
+        className="border border-foreground/[0.08] px-2 py-2 align-top"
+        style={style}
+      >
+        {children}
+      </td>
+    ),
+    th: ({ children, style }) => (
+      <th
+        className="border border-foreground/[0.08] bg-foreground/5 px-2 py-2 text-left font-medium"
+        style={style}
+      >
+        {children}
+      </th>
+    ),
+    tr: ({ children }) => <tr>{children}</tr>,
+    sub: ({ children }) => <sub>{children}</sub>,
+    sup: ({ children }) => <sup>{children}</sup>,
+    ul: ({ children, className }) => {
+      const taskList = className?.includes("contains-task-list")
+
+      return (
+        <ul
+          className={cn(
+            "space-y-1",
+            taskList ? "list-none pl-0" : "list-disc pl-5",
+            className
+          )}
+        >
+          {children}
+        </ul>
+      )
+    },
+  } as ReactMarkdownProps["components"]
 }
 
 function getMarkdownImageSource(src: string | Blob | undefined) {
