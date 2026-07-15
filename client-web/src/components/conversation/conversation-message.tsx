@@ -157,7 +157,7 @@ export const MessageBubble = React.memo(function MessageBubble({
   const messageBody = (
     <div
       className={cn(
-        "max-w-full rounded-md p-3 text-sm leading-relaxed shadow-xs",
+        "max-w-full rounded-md p-3 text-sm leading-relaxed shadow-sm",
         fromMe
           ? "bg-teal-100/60 text-foreground dark:bg-teal-950/80"
           : "bg-zinc-100 text-foreground dark:bg-zinc-800",
