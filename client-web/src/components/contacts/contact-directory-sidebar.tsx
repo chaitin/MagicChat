@@ -35,7 +35,6 @@ import {
 } from "@/components/ui/collapsible"
 import {
   Sidebar,
-  SidebarContent,
   SidebarHeader,
   SidebarInput,
   SidebarMenu,
@@ -90,9 +89,7 @@ export function ContactDirectorySidebar({
 }) {
   const activeTabLabel = getDirectoryTabLabel(activeTab)
   const joinedGroups = groups.filter((group) => group.joined)
-  const publicGroups = groups.filter(
-    (group) => !group.joined && group.visibility === "public"
-  )
+  const publicGroups = groups.filter((group) => group.visibility === "public")
 
   return (
     <Sidebar className="border-r bg-background" collapsible="none">
@@ -137,8 +134,11 @@ export function ContactDirectorySidebar({
             />
           </div>
         </div>
-        <TabsContent className="min-h-0 flex-1" value="user">
-          <SidebarContent className="h-full">
+        <TabsContent
+          className="no-scrollbar min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-3"
+          value="user"
+        >
+          <div className="flex flex-col gap-2">
             <DirectorySectionCollapsible
               defaultOpen={contacts.length > 0}
               forceOpen={Boolean(activeKeyword.trim())}
@@ -172,10 +172,13 @@ export function ContactDirectorySidebar({
                 )}
               </DirectoryList>
             </DirectorySectionCollapsible>
-          </SidebarContent>
+          </div>
         </TabsContent>
-        <TabsContent className="min-h-0 flex-1" value="app">
-          <SidebarContent className="h-full">
+        <TabsContent
+          className="no-scrollbar min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-3"
+          value="app"
+        >
+          <div className="flex flex-col gap-2">
             <DirectoryList ariaLabel="应用列表">
               {apps.map((app) => (
                 <AppListItem
@@ -195,10 +198,13 @@ export function ContactDirectorySidebar({
               ))}
               {apps.length === 0 && <DirectoryEmptyState label="应用" />}
             </DirectoryList>
-          </SidebarContent>
+          </div>
         </TabsContent>
-        <TabsContent className="min-h-0 flex-1" value="group">
-          <SidebarContent className="h-full">
+        <TabsContent
+          className="no-scrollbar min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-3"
+          value="group"
+        >
+          <div className="flex flex-col gap-2">
             <DirectorySectionCollapsible
               count={joinedGroups.length}
               defaultOpen={joinedGroups.length > 0}
@@ -230,7 +236,7 @@ export function ContactDirectorySidebar({
                 openingDirectoryItemKey={openingDirectoryItemKey}
               />
             </DirectorySectionCollapsible>
-          </SidebarContent>
+          </div>
         </TabsContent>
       </Tabs>
     </Sidebar>
@@ -521,7 +527,7 @@ function DirectoryListItem({
         aria-label={title}
         aria-selected={selected}
         className={cn(
-          "gap-2.5 data-active:bg-teal-200 data-active:hover:bg-teal-200 dark:data-active:bg-teal-800 dark:data-active:hover:bg-teal-800",
+          "gap-2.5 data-active:bg-teal-100 data-active:hover:bg-teal-100 dark:data-active:bg-teal-900 dark:data-active:hover:bg-teal-900",
           onAction && "pr-8",
           size === "sm" ? "h-11" : "h-12"
         )}

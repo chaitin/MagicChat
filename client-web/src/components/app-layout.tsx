@@ -340,11 +340,14 @@ function MainNavItem({
       className={
         active
           ? "relative rounded-full"
-          : "relative rounded-full text-teal-500 hover:bg-teal-100 hover:text-teal-500 dark:hover:bg-teal-900"
+          : "relative rounded-full text-teal-500 hover:bg-teal-50 hover:text-teal-500 dark:hover:bg-teal-950 dark:hover:text-teal-500"
       }
     >
       <NavLink to={item.to} aria-label={accessibleLabel} title={item.label}>
-        <Icon className="size-4" strokeWidth={active ? 2.5 : 2} />
+        <Icon
+          className="size-4 [stroke-width:2] transition-[stroke-width] group-hover/button:[stroke-width:2.5]"
+          strokeWidth={2}
+        />
         {showNotification && (
           <NotificationDot
             key={notificationAnimationVersion}

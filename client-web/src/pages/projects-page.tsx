@@ -256,7 +256,7 @@ function ProjectListButton({
     <SidebarMenuItem>
       <SidebarMenuButton
         aria-pressed={active}
-        className="h-16 gap-3 py-2 data-active:bg-teal-200 data-active:hover:bg-teal-200 dark:data-active:bg-teal-800 dark:data-active:hover:bg-teal-800"
+        className="h-16 gap-3 py-2 data-active:bg-teal-100 data-active:hover:bg-teal-100 dark:data-active:bg-teal-900 dark:data-active:hover:bg-teal-900"
         isActive={active}
         onClick={onSelect}
         size="lg"
@@ -265,21 +265,11 @@ function ProjectListButton({
         <ProjectAvatar className="size-9" project={project} user={user} />
         <span className="min-w-0 flex-1 overflow-hidden">
           <span className="flex w-full min-w-0 items-center justify-between gap-2 overflow-hidden text-sm leading-snug font-medium">
-            <span
-              className={cn(
-                "block min-w-0 flex-1 truncate",
-                active && "text-teal-600 dark:text-teal-400"
-              )}
-            >
+            <span className="block min-w-0 flex-1 truncate">
               {project.name}
             </span>
             {updatedAt && (
-              <span
-                className={cn(
-                  "shrink-0 pr-2 text-xs font-normal text-muted-foreground",
-                  active && "text-teal-600 dark:text-teal-500"
-                )}
-              >
+              <span className="shrink-0 pr-2 text-xs font-normal text-muted-foreground">
                 {updatedAt}
               </span>
             )}

@@ -72,6 +72,7 @@ describe("ContactDirectorySidebar", () => {
     expect(
       screen.queryByRole("button", { name: "与 Me 对话" })
     ).not.toBeInTheDocument()
+    expectTabContentToOwnScrolling("测试组织 联系人列表")
     expect(organizationTrigger).toHaveAttribute("aria-expanded", "true")
 
     await user.click(organizationTrigger)
@@ -81,10 +82,11 @@ describe("ContactDirectorySidebar", () => {
     expect(organizationTrigger).toBeInTheDocument()
   })
 
-  it("groups joined and unjoined public groups into collapsible sections", async () => {
+  it("groups joined groups and all public groups into collapsible sections", async () => {
     const user = userEvent.setup()
     const groups: ContactGroup[] = [
       createGroup("joined-group", "已加入群", true, "private"),
+      createGroup("joined-public-group", "已加入公开群", true, "public"),
       createGroup("public-group", "公开群", false, "public"),
       createGroup("private-group", "未加入私有群", false, "private"),
     ]
@@ -115,22 +117,29 @@ describe("ContactDirectorySidebar", () => {
 
     const joinedTrigger = screen.getByRole("button", { name: "我加入的" })
     const publicTrigger = screen.getByRole("button", { name: "公开群组" })
-    expect(joinedTrigger).toHaveTextContent("我加入的1")
-    expect(publicTrigger).toHaveTextContent("公开群组1")
+    expect(joinedTrigger).toHaveTextContent("我加入的2")
+    expect(publicTrigger).toHaveTextContent("公开群组2")
     expect(joinedTrigger).toHaveAttribute("aria-expanded", "true")
     expect(publicTrigger).toHaveAttribute("aria-expanded", "true")
     const joinedGroupItem = screen.getByRole("option", { name: "已加入群" })
     expect(joinedGroupItem).toBeInTheDocument()
     expect(joinedGroupItem.querySelectorAll("img")).toHaveLength(2)
+    expect(
+      screen.getAllByRole("option", { name: "已加入公开群" })
+    ).toHaveLength(2)
     expect(screen.getByRole("option", { name: "公开群" })).toBeInTheDocument()
     expect(
       screen.queryByRole("option", { name: "未加入私有群" })
     ).not.toBeInTheDocument()
+    expectTabContentToOwnScrolling("我加入的群组列表")
 
     await user.click(joinedTrigger)
     expect(
       screen.queryByRole("option", { name: "已加入群" })
     ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("option", { name: "已加入公开群" })
+    ).toBeInTheDocument()
   })
 
   it("preserves the section state while search forces matching contacts open", async () => {
@@ -233,4 +242,21 @@ function createGroup(
     type: "group",
     visibility,
   }
+}
+
+function expectTabContentToOwnScrolling(ariaLabel: string) {
+  const list = screen.getByRole("listbox", { name: ariaLabel })
+  const tabsContent = list.closest('[data-slot="tabs-content"]')
+
+  expect(tabsContent).toHaveClass(
+    "no-scrollbar",
+    "min-h-0",
+    "flex-1",
+    "overflow-x-hidden",
+    "overflow-y-auto",
+    "pb-3"
+  )
+  expect(
+    tabsContent?.querySelector('[data-slot="sidebar-content"]') ?? null
+  ).not.toBeInTheDocument()
 }
