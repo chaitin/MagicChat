@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	appapp "app/internal/application/app"
 	"app/internal/store"
 
 	"github.com/google/uuid"
@@ -28,6 +29,12 @@ func (s *Service) CreateAsApp(ctx context.Context, cmd CreateAsAppCommand) (Crea
 		}
 		if conversation.Status != store.ConversationStatusActive || conversation.PostingPolicy != store.ConversationPostingPolicyOpen {
 			return errConversationNotSendable
+		}
+		if _, err := appapp.LockUsableApp(tx, cmd.AppID); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return errConversationAccessDenied
+			}
+			return err
 		}
 		var member store.ConversationMember
 		if err := tx.First(

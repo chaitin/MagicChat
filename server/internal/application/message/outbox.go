@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	appapp "app/internal/application/app"
 	"app/internal/store"
 
 	"gorm.io/gorm"
@@ -58,6 +59,13 @@ func createAppMessageEventOutbox(db *gorm.DB, conversation store.Conversation, s
 	default:
 		return nil, nil
 	}
+	appIDs, err := lockAndFilterActiveConversationApps(db, conversation.ID, appIDs)
+	if err != nil {
+		return nil, err
+	}
+	if len(appIDs) == 0 {
+		return nil, nil
+	}
 	payload := appMessageCreatedPayload{
 		Conversation: appMessageConversationPayload{ID: conversation.ID, Name: conversation.Name, Type: conversation.Kind},
 		Message:      appMessagePayload{Body: message.Body, CreatedAt: message.CreatedAt, ID: message.ID, Seq: message.Seq, Summary: message.Summary},
@@ -74,6 +82,45 @@ func createAppMessageEventOutbox(db *gorm.DB, conversation store.Conversation, s
 			return nil, err
 		}
 		result = append(result, AppEvent{AppID: stored.AppID, Cursor: stored.ID, Event: stored.Event, Payload: stored.Payload})
+	}
+	return result, nil
+}
+
+// lockAndFilterActiveConversationApps serializes event creation with app
+// authorization updates and deletion. Rechecking membership after the app-row
+// lock prevents an event selected from a stale membership snapshot from being
+// queued after access has been revoked.
+func lockAndFilterActiveConversationApps(db *gorm.DB, conversationID string, candidateIDs []string) ([]string, error) {
+	if len(candidateIDs) == 0 {
+		return nil, nil
+	}
+	lockedApps, err := appapp.LockUsableApps(db, candidateIDs)
+	if err != nil {
+		return nil, err
+	}
+	locked := make(map[string]struct{}, len(lockedApps))
+	for _, app := range lockedApps {
+		locked[app.ID] = struct{}{}
+	}
+	var members []store.ConversationMember
+	if err := db.Select("member_id").Where(
+		"conversation_id = ? AND member_type = ? AND member_id IN ? AND left_at IS NULL",
+		conversationID, store.ConversationMemberTypeApp, candidateIDs,
+	).Find(&members).Error; err != nil {
+		return nil, err
+	}
+	active := make(map[string]struct{}, len(members))
+	for _, member := range members {
+		active[member.MemberID] = struct{}{}
+	}
+	result := make([]string, 0, len(candidateIDs))
+	for _, appID := range candidateIDs {
+		if _, ok := locked[appID]; !ok {
+			continue
+		}
+		if _, ok := active[appID]; ok {
+			result = append(result, appID)
+		}
 	}
 	return result, nil
 }

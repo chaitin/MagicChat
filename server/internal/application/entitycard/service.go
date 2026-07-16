@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	appapp "app/internal/application/app"
 	projectapp "app/internal/application/project"
 	"app/internal/messageformat"
 	"app/internal/store"
@@ -96,13 +97,8 @@ func (s *Service) resolveUser(ctx context.Context, entityID string) (Card, error
 
 func (s *Service) resolveApp(ctx context.Context, accountID, entityID string) (Card, error) {
 	var app store.App
-	err := s.db.WithContext(ctx).
-		Where("id = ? AND enabled = ?", entityID, true).
-		Where(
-			"visibility = ? OR (visibility = ? AND creator_user_id = ?)",
-			store.AppVisibilityPublic, store.AppVisibilityCreator, accountID,
-		).
-		First(&app).Error
+	query := s.db.WithContext(ctx).Where("id = ?", entityID)
+	err := appapp.ApplyUserAccessScope(query, accountID).First(&app).Error
 	if err != nil {
 		return Card{}, mapLookupError(err)
 	}

@@ -55,8 +55,9 @@ const (
 	TaskPriorityMedium int16 = 2
 	TaskPriorityHigh   int16 = 3
 
-	AppVisibilityCreator = "creator"
-	AppVisibilityPublic  = "public"
+	AppVisibilityCreator    = "creator"
+	AppVisibilityRestricted = "restricted"
+	AppVisibilityPublic     = "public"
 
 	AppSettingsID           = 1
 	DefaultAppName          = "即应"
@@ -290,6 +291,20 @@ type AppConversation struct {
 	ConversationID string       `gorm:"type:uuid;not null;uniqueIndex"`
 	Conversation   Conversation `gorm:"constraint:OnDelete:CASCADE;"`
 	CreatedAt      time.Time    `gorm:"not null"`
+}
+
+type AppUserGrant struct {
+	AppID           string    `gorm:"type:uuid;primaryKey"`
+	App             App       `gorm:"constraint:OnDelete:CASCADE;"`
+	UserID          string    `gorm:"type:uuid;primaryKey;index"`
+	User            User      `gorm:"constraint:OnDelete:CASCADE;"`
+	GrantedByUserID *string   `gorm:"type:uuid"`
+	GrantedByUser   *User     `gorm:"foreignKey:GrantedByUserID;constraint:OnDelete:SET NULL;"`
+	CreatedAt       time.Time `gorm:"not null"`
+}
+
+func (AppUserGrant) TableName() string {
+	return "app_user_grants"
 }
 
 func (AppConversation) TableName() string {

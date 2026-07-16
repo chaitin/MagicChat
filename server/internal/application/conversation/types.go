@@ -31,12 +31,6 @@ type Identity struct {
 
 type Actor = Identity
 
-type AppIdentity struct {
-	ID     string
-	Name   string
-	Avatar string
-}
-
 type Reference struct {
 	ID   string
 	Name string
@@ -292,5 +286,5 @@ type AppService interface {
 	CreateGroup(context.Context, CreateGroupCommand) (CreateGroupResult, error)
 	AddMembers(context.Context, AddMembersCommand) (ConversationMutationResult, error)
 	OpenDirectForUsers(context.Context, Identity, Identity) (Reference, bool, error)
-	OpenAppForUser(context.Context, Identity, AppIdentity) (Reference, bool, error)
+	OpenAppForUser(context.Context, Identity, string) (Reference, bool, error)
 }

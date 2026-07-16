@@ -11,6 +11,7 @@ import (
 
 	entitycardapp "app/internal/application/entitycard"
 	projectapp "app/internal/application/project"
+	"app/internal/appregistry"
 	"app/internal/realtime"
 	"app/internal/store"
 )
@@ -219,10 +220,11 @@ func TestAppReplyEntityCardUsesAuthorizedUserAndStoresAppCard(t *testing.T) {
 	project := insertProjectFixture(t, db, projectFixtureInput{Name: "设计项目", Owner: alice, UpdatedAt: now})
 	task := insertTaskTestFixture(t, db, taskFixtureInput{Creator: alice, ProjectID: project.ID, Status: store.TaskStatusDone, Title: "确认设计稿", UpdatedAt: now})
 	app := insertTestApp(t, db, store.App{
+		ID:               appregistry.AIAssistantAppID,
 		Name:             "茉莉",
 		Enabled:          true,
 		Visibility:       store.AppVisibilityPublic,
-		ConnectionSecret: "entity-card-app-secret",
+		ConnectionSecret: "test-ai-assistant-secret",
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	})

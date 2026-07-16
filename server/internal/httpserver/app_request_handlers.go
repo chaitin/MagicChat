@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	appapp "app/internal/application/app"
 	contactapp "app/internal/application/contact"
 	conversationapp "app/internal/application/conversation"
 	fileapp "app/internal/application/file"
@@ -213,7 +214,9 @@ type appListGroupConversationsResponse struct {
 }
 
 type appReadTemporaryFileURLsRequest struct {
-	FileIDs []string `json:"file_ids"`
+	ConversationID string   `json:"conversation_id"`
+	FileIDs        []string `json:"file_ids"`
+	MessageID      string   `json:"message_id"`
 }
 
 type appAckEventsRequest struct {
@@ -251,7 +254,12 @@ func (e appRequestFailure) Error() string {
 }
 
 func (s *Server) handleAppRequest(appID string, request realtime.Envelope) realtime.Envelope {
-	switch strings.TrimSpace(request.Method) {
+	method := strings.TrimSpace(request.Method)
+	if !appregistry.IsAIAssistantAppID(appID) && !isThirdPartyAppMethod(method) {
+		return realtime.NewErrorResponse(request.ID, "forbidden", "当前应用无权调用该方法")
+	}
+
+	switch method {
 	case appMethodMessageSend:
 		response, err := s.handleAppSendMessage(appID, request)
 		if err != nil {
@@ -371,6 +379,18 @@ func (s *Server) handleAppRequest(appID string, request realtime.Envelope) realt
 	}
 }
 
+func isThirdPartyAppMethod(method string) bool {
+	switch method {
+	case appMethodMessageSend,
+		appMethodConversationMessagesList,
+		appMethodTemporaryFilesReadURLs,
+		appMethodEventsAck:
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *Server) handleAppAckEvents(appID string, request realtime.Envelope) (appAckEventsResponse, error) {
 	var req appAckEventsRequest
 	if err := json.Unmarshal(request.Payload, &req); err != nil || req.Cursor <= 0 {
@@ -378,6 +398,12 @@ func (s *Server) handleAppAckEvents(appID string, request realtime.Envelope) (ap
 	}
 
 	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if _, err := appapp.LockUsableApp(tx, appID); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return newAppRequestFailure("forbidden", "应用不可用")
+			}
+			return err
+		}
 		var currentAck store.AppEventAck
 		err := tx.First(&currentAck, "app_id = ?", appID).Error
 		if err == nil && req.Cursor <= currentAck.LastAckedCursor {
@@ -432,6 +458,9 @@ func (s *Server) handleAppSendMessage(appID string, request realtime.Envelope) (
 	target, err := normalizeAppSendMessageTarget(req)
 	if err != nil {
 		return appSendMessageResponse{}, err
+	}
+	if !appregistry.IsAIAssistantAppID(appID) && isEntityCardMessageBody(req.Message) {
+		return appSendMessageResponse{}, newAppRequestFailure("forbidden", "第三方应用无权发送对象卡片")
 	}
 
 	conversation, err := s.findAppSendMessageConversation(appID, target)
@@ -512,7 +541,7 @@ func (s *Server) handleAppSendMessageAsUser(appID string, request realtime.Envel
 	if err != nil {
 		return appSendMessageResponse{}, err
 	}
-	app, ok, err := s.findAppForConnection(appID)
+	app, ok, err := s.findAppForConnection(context.Background(), appID)
 	if err != nil {
 		return appSendMessageResponse{}, err
 	}
@@ -1010,10 +1039,15 @@ func legacyAppConversationSummary(value messageapp.AppConversationSummary) appCo
 	}
 }
 
-func (s *Server) handleAppReadTemporaryFileURLs(_ string, request realtime.Envelope) (readTemporaryFileURLsResponse, error) {
+func (s *Server) handleAppReadTemporaryFileURLs(appID string, request realtime.Envelope) (readTemporaryFileURLsResponse, error) {
 	var req appReadTemporaryFileURLsRequest
 	if err := json.Unmarshal(request.Payload, &req); err != nil {
 		return readTemporaryFileURLsResponse{}, newAppRequestFailure("invalid_request", "请求格式错误")
+	}
+	if !appregistry.IsAIAssistantAppID(appID) {
+		if err := s.authorizeAppTemporaryFileReferences(context.Background(), appID, req); err != nil {
+			return readTemporaryFileURLsResponse{}, err
+		}
 	}
 
 	urls, err := s.presignTemporaryFileReadURLsForApp(context.Background(), req.FileIDs)
@@ -1022,6 +1056,73 @@ func (s *Server) handleAppReadTemporaryFileURLs(_ string, request realtime.Envel
 	}
 
 	return readTemporaryFileURLsResponse{URLs: urls}, nil
+}
+
+func (s *Server) authorizeAppTemporaryFileReferences(ctx context.Context, appID string, req appReadTemporaryFileURLsRequest) error {
+	conversationID := strings.TrimSpace(req.ConversationID)
+	messageID := strings.TrimSpace(req.MessageID)
+	if _, err := uuid.Parse(conversationID); err != nil {
+		return newAppRequestFailure("invalid_request", "会话 ID 格式错误")
+	}
+	if _, err := uuid.Parse(messageID); err != nil {
+		return newAppRequestFailure("invalid_request", "消息 ID 格式错误")
+	}
+	if len(req.FileIDs) == 0 {
+		return newAppRequestFailure("invalid_request", "临时文件 ID 不能为空")
+	}
+
+	access, err := s.messages.AuthorizeAppConversation(ctx, messageapp.AppConversationAccessCommand{
+		AppID: appID, ConversationID: conversationID,
+	})
+	if err != nil {
+		return mapMessageApplicationErrorForApp(err)
+	}
+	message, err := s.loadAppTemporaryFileReferenceMessage(ctx, conversationID, messageID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return newAppRequestFailure("forbidden", "消息不存在或无权访问")
+	}
+	if err != nil {
+		return err
+	}
+	if message.Seq < access.HistoryVisibleFromSeq {
+		return newAppRequestFailure("forbidden", "消息不存在或无权访问")
+	}
+
+	referenced := make(map[string]struct{})
+	collectForwardTemporaryFileIDs(message.Body, referenced)
+	for _, rawFileID := range req.FileIDs {
+		parsed, err := uuid.Parse(strings.TrimSpace(rawFileID))
+		if err != nil {
+			return newAppRequestFailure("invalid_request", "临时文件 ID 格式错误")
+		}
+		fileID := parsed.String()
+		if _, ok := referenced[fileID]; !ok {
+			return newAppRequestFailure("forbidden", "临时文件未被指定消息引用")
+		}
+	}
+	return nil
+}
+
+func (s *Server) loadAppTemporaryFileReferenceMessage(ctx context.Context, conversationID string, messageID string) (store.Message, error) {
+	db := s.db.WithContext(ctx)
+	now := time.Now().UTC()
+	if store.MessagePartitioningEnabled(db) {
+		var registry store.MessageRegistry
+		if err := db.Where(
+			"id = ? AND conversation_id = ? AND deleted_at IS NULL AND revoked_at IS NULL AND partition_year >= ? AND partition_year <= ?",
+			messageID, conversationID, store.MessageMinimumOnlineYear(now), store.MessageMaximumOnlineYear(now),
+		).Take(&registry).Error; err != nil {
+			return store.Message{}, err
+		}
+		return store.LoadMessageByRegistry(ctx, db, registry)
+	}
+
+	var message store.Message
+	err := db.Where(
+		"id = ? AND conversation_id = ? AND deleted_at IS NULL AND revoked_at IS NULL AND created_at >= ? AND created_at < ?",
+		messageID, conversationID, store.MessageOnlineCutoff(now), store.MessageOnlineEnd(now),
+	).Take(&message).Error
+	return message, err
 }
 
 func (s *Server) presignTemporaryFileReadURLsForApp(ctx context.Context, fileIDs []string) ([]temporaryFileReadURLResponse, error) {
@@ -1527,6 +1628,15 @@ func (s *Server) prepareAppSendFileMessageBody(ctx context.Context, envelope app
 func (s *Server) findAppSendMessageConversation(appID string, target appSendMessageTarget) (store.Conversation, error) {
 	switch target.Type {
 	case appMessageTargetUser:
+		if !appregistry.IsAIAssistantAppID(appID) {
+			allowed, err := s.apps.CanUserAccess(context.Background(), appID, target.UserID)
+			if err != nil {
+				return store.Conversation{}, err
+			}
+			if !allowed {
+				return store.Conversation{}, newAppRequestFailure("forbidden", "应用无权联系该用户")
+			}
+		}
 		var user store.User
 		err := s.db.First(&user, "id = ? AND status = ?", target.UserID, store.UserStatusActive).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -1536,7 +1646,7 @@ func (s *Server) findAppSendMessageConversation(appID string, target appSendMess
 			return store.Conversation{}, err
 		}
 
-		app, ok, err := s.findAppForConnection(appID)
+		app, ok, err := s.findAppForConnection(context.Background(), appID)
 		if err != nil {
 			return store.Conversation{}, err
 		}
@@ -1547,9 +1657,15 @@ func (s *Server) findAppSendMessageConversation(appID string, target appSendMess
 		opened, _, err := s.conversations.OpenAppForUser(
 			context.Background(),
 			conversationActorFromUser(user),
-			conversationapp.AppIdentity{ID: app.ID, Name: app.Name, Avatar: app.Avatar},
+			app.ID,
 		)
-		return store.Conversation{ID: opened.ID, Name: opened.Name, Kind: opened.Type}, err
+		if err != nil {
+			if conversationapp.ErrorCodeOf(err) == conversationapp.CodeForbidden {
+				return store.Conversation{}, newAppRequestFailure("forbidden", conversationapp.ErrorMessage(err))
+			}
+			return store.Conversation{}, err
+		}
+		return store.Conversation{ID: opened.ID, Name: opened.Name, Kind: opened.Type}, nil
 	case appMessageTargetGroup, appMessageTargetApp:
 		return s.findAppWritableConversation(appID, target.ConversationID, target.Type)
 	default:

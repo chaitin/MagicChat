@@ -27,6 +27,17 @@ func TestServiceResolvesAllEntityCardTemplates(t *testing.T) {
 	if err := db.Create(&app).Error; err != nil {
 		t.Fatalf("create app: %v", err)
 	}
+	restrictedCreatorID := assignee.ID
+	restrictedApp := store.App{
+		ID: uuid.NewString(), Name: "授权助手", Description: "仅限授权用户", CreatorUserID: &restrictedCreatorID,
+		Enabled: true, Visibility: store.AppVisibilityRestricted, ConnectionSecret: uuid.NewString(), CreatedAt: now, UpdatedAt: now,
+	}
+	if err := db.Create(&restrictedApp).Error; err != nil {
+		t.Fatalf("create restricted app: %v", err)
+	}
+	if err := db.Create(&store.AppUserGrant{AppID: restrictedApp.ID, UserID: owner.ID, GrantedByUserID: &restrictedCreatorID, CreatedAt: now}).Error; err != nil {
+		t.Fatalf("create app user grant: %v", err)
+	}
 	group := store.Conversation{
 		ID: uuid.NewString(), Kind: store.ConversationKindGroup, Name: "设计群", CreatedByUserID: owner.ID,
 		Status: store.ConversationStatusActive, PostingPolicy: store.ConversationPostingPolicyOpen,
@@ -79,6 +90,7 @@ func TestServiceResolvesAllEntityCardTemplates(t *testing.T) {
 	}{
 		{owner.ID, TypeUser, "姓名: 项目负责人\n昵称: 老板\n邮箱: owner@example.com", "联系人 - 老板", "/contacts/user/" + owner.ID},
 		{app.ID, TypeApp, "智能 设计应用", "应用 - 设计助手", "/contacts/app/" + app.ID},
+		{restrictedApp.ID, TypeApp, "仅限授权用户", "应用 - 授权助手", "/contacts/app/" + restrictedApp.ID},
 		{group.ID, TypeGroup, "2 位成员", "群聊 - 设计群", "/contacts/group/" + group.ID},
 		{projectID, TypeProject, "官网 改版项目", "项目 - 官网项目", "/projects/" + projectID},
 		{task.ID, TypeTask, "状态: 进行中\n负责人: 张三\n截止日期: 2026-07-20", "任务 - 完成首页改版", "/projects/" + projectID + "?taskId=" + task.ID},
@@ -184,7 +196,7 @@ func openEntityCardTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("open database: %v", err)
 	}
 	if err := db.AutoMigrate(
-		&store.User{}, &store.App{}, &store.Conversation{}, &store.ConversationMember{},
+		&store.User{}, &store.App{}, &store.AppUserGrant{}, &store.Conversation{}, &store.ConversationMember{},
 		&store.Project{}, &store.ProjectGroup{}, &store.Task{},
 	); err != nil {
 		t.Fatalf("migrate database: %v", err)

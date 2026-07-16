@@ -84,8 +84,8 @@ func (s *Service) PrepareUpload(ctx context.Context, cmd PrepareUploadCommand) (
 	if err := db.First(&conversation, "id = ?", conversationID).Error; err != nil {
 		return PrepareUploadResult{}, mapCreateError(err)
 	}
-	if conversation.Status != store.ConversationStatusActive || conversation.PostingPolicy != store.ConversationPostingPolicyOpen {
-		return PrepareUploadResult{}, mapCreateError(errConversationNotSendable)
+	if err := ensureConversationSendable(db, conversation); err != nil {
+		return PrepareUploadResult{}, mapCreateError(err)
 	}
 	var member store.ConversationMember
 	if err := db.First(
@@ -190,8 +190,8 @@ func (s *Service) createUserMessage(
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&conversation, "id = ?", conversationID).Error; err != nil {
 			return err
 		}
-		if conversation.Status != store.ConversationStatusActive || conversation.PostingPolicy != store.ConversationPostingPolicyOpen {
-			return errConversationNotSendable
+		if err := ensureConversationSendable(tx, conversation); err != nil {
+			return err
 		}
 		var member store.ConversationMember
 		if err := tx.First(
@@ -268,6 +268,30 @@ func (s *Service) createUserMessage(
 		return err
 	})
 	return message, created, memberUserIDs, mentionedUserIDs, events, lockHeld, err
+}
+
+func ensureConversationSendable(db *gorm.DB, conversation store.Conversation) error {
+	if conversation.Status != store.ConversationStatusActive || conversation.PostingPolicy != store.ConversationPostingPolicyOpen {
+		return errConversationNotSendable
+	}
+	if conversation.Kind != store.ConversationKindApp {
+		return nil
+	}
+	var candidateIDs []string
+	if err := db.Model(&store.ConversationMember{}).Where(
+		"conversation_id = ? AND member_type = ? AND left_at IS NULL",
+		conversation.ID, store.ConversationMemberTypeApp,
+	).Pluck("member_id", &candidateIDs).Error; err != nil {
+		return err
+	}
+	activeIDs, err := lockAndFilterActiveConversationApps(db, conversation.ID, candidateIDs)
+	if err != nil {
+		return err
+	}
+	if len(activeIDs) == 0 {
+		return errConversationNotSendable
+	}
+	return nil
 }
 
 func findExistingMessageByClientMessageID(db *gorm.DB, conversationID, senderType, senderID, clientMessageID string) (store.Message, bool, error) {

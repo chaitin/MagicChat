@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	appapp "app/internal/application/app"
 	"app/internal/store"
 
 	"github.com/google/uuid"
@@ -158,14 +159,12 @@ func loadActiveGroupMembers(db *gorm.DB, memberIDs []string) ([]store.User, erro
 	return ordered, nil
 }
 
-func loadVisibleGroupApps(db *gorm.DB, currentUserID string, appIDs []string) ([]store.App, error) {
+func loadVisibleGroupApps(db *gorm.DB, appIDs []string) ([]store.App, error) {
 	if len(appIDs) == 0 {
 		return nil, nil
 	}
-	var apps []store.App
-	if err := db.Where("id IN ? AND enabled = ?", appIDs, true).
-		Where("visibility = ? OR (visibility = ? AND creator_user_id = ?)", store.AppVisibilityPublic, store.AppVisibilityCreator, currentUserID).
-		Find(&apps).Error; err != nil {
+	apps, err := appapp.LockPublicApps(db, appIDs)
+	if err != nil {
 		return nil, err
 	}
 	if len(apps) != len(appIDs) {

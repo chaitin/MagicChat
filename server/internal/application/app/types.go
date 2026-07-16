@@ -11,10 +11,13 @@ const (
 	ConnectionStatusOffline  = "offline"
 	ConnectionStatusOnline   = "online"
 
-	VisibilityCreator = "creator"
-	VisibilityPublic  = "public"
+	VisibilityCreator    = "creator"
+	VisibilityRestricted = "restricted"
+	VisibilityPublic     = "public"
 
-	MaxAvatarBytes = 1 * 1024 * 1024
+	MaxAvatarBytes         = 1 * 1024 * 1024
+	MaxDescriptionLength   = 2000
+	MaxOwnedAppsPerAccount = 20
 )
 
 type App struct {
@@ -30,6 +33,42 @@ type App struct {
 	System           bool
 	UpdatedAt        time.Time
 	Visibility       string
+	GrantedUserIDs   []string
+}
+
+type OwnedAppCommand struct {
+	AccountID string
+	AppID     string
+}
+
+type CreateOwnedCommand struct {
+	AccountID   string
+	Description string
+	Name        string
+	Visibility  string
+	UserIDs     []string
+}
+
+type UpdateOwnedCommand struct {
+	AccountID   string
+	AppID       string
+	Description *string
+	Name        *string
+	Visibility  *string
+	UserIDs     *[]string
+}
+
+type SetOwnedEnabledCommand struct {
+	AccountID string
+	AppID     string
+	Enabled   bool
+}
+
+type UploadOwnedAvatarCommand struct {
+	AccountID string
+	AppID     string
+	Content   io.Reader
+	Size      int64
 }
 
 type CreateCommand struct {
@@ -69,4 +108,16 @@ type AdminService interface {
 
 type ConnectionService interface {
 	GetForConnection(context.Context, string) (App, error)
+	CanUserAccess(context.Context, string, string) (bool, error)
+}
+
+type ClientService interface {
+	ListOwned(context.Context, string) ([]App, error)
+	GetOwned(context.Context, OwnedAppCommand) (App, error)
+	CreateOwned(context.Context, CreateOwnedCommand) (App, error)
+	UpdateOwned(context.Context, UpdateOwnedCommand) (App, error)
+	SetOwnedEnabled(context.Context, SetOwnedEnabledCommand) (App, error)
+	RegenerateOwnedSecret(context.Context, OwnedAppCommand) (App, error)
+	DeleteOwned(context.Context, OwnedAppCommand) error
+	UploadOwnedAvatar(context.Context, UploadOwnedAvatarCommand) (App, error)
 }

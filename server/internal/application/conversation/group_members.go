@@ -105,7 +105,7 @@ func (s *Service) addMembers(db *gorm.DB, actor store.User, conversationID strin
 			}
 			return err
 		}
-		addedApps, err := loadVisibleGroupApps(tx, actor.ID, addedAppIDs)
+		addedApps, err := loadVisibleGroupApps(tx, addedAppIDs)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return ErrMemberMissing

@@ -74,26 +74,28 @@ func (s *Service) createGroup(ctx context.Context, actor store.User, name string
 		}
 		return store.Conversation{}, nil, nil, nil, err
 	}
-	apps, err := loadVisibleGroupApps(db, actor.ID, appIDs)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return store.Conversation{}, nil, nil, nil, ErrMemberMissing
-		}
-		return store.Conversation{}, nil, nil, nil, err
-	}
 	now := s.now().UTC()
 	conversation := store.Conversation{ID: uuid.NewString(), Kind: store.ConversationKindGroup, Name: name, CreatedByUserID: actor.ID, Status: store.ConversationStatusActive, PostingPolicy: store.ConversationPostingPolicyOpen, Visibility: store.ConversationVisibilityPrivate, CreatedAt: now, UpdatedAt: now}
-	candidates := make([]memberCandidate, 0, len(members)+len(apps)+1)
-	candidates = append(candidates, memberCandidate{memberType: store.ConversationMemberTypeUser, role: store.ConversationMemberRoleOwner, user: actor})
-	for _, member := range members {
-		candidates = append(candidates, memberCandidate{memberType: store.ConversationMemberTypeUser, role: store.ConversationMemberRoleMember, user: member})
-	}
-	for _, app := range apps {
-		candidates = append(candidates, memberCandidate{app: app, memberType: store.ConversationMemberTypeApp, role: store.ConversationMemberRoleMember})
-	}
+	var candidates []memberCandidate
 	var message *store.Message
-	userIDs := make([]string, 0, len(candidates))
+	var userIDs []string
 	if err := db.Transaction(func(tx *gorm.DB) error {
+		apps, err := loadVisibleGroupApps(tx, appIDs)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrMemberMissing
+			}
+			return err
+		}
+		candidates = make([]memberCandidate, 0, len(members)+len(apps)+1)
+		candidates = append(candidates, memberCandidate{memberType: store.ConversationMemberTypeUser, role: store.ConversationMemberRoleOwner, user: actor})
+		for _, member := range members {
+			candidates = append(candidates, memberCandidate{memberType: store.ConversationMemberTypeUser, role: store.ConversationMemberRoleMember, user: member})
+		}
+		for _, app := range apps {
+			candidates = append(candidates, memberCandidate{app: app, memberType: store.ConversationMemberTypeApp, role: store.ConversationMemberRoleMember})
+		}
+		userIDs = make([]string, 0, len(candidates))
 		projects, err := lockOwnedProjects(tx, projectIDs, actor.ID)
 		if err != nil {
 			return err

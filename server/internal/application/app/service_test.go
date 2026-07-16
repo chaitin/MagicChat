@@ -148,6 +148,92 @@ func TestServiceValidatesAppManagementInput(t *testing.T) {
 	}
 }
 
+func TestServicePreservesRestrictedUserManagedAppInAdminRoundTrip(t *testing.T) {
+	db := openAppTestDB(t)
+	now := time.Date(2026, 7, 16, 15, 0, 0, 0, time.UTC)
+	owner := insertOwnedAppTestUser(t, db, "admin-roundtrip-owner@example.com", now)
+	granted := insertOwnedAppTestUser(t, db, "admin-roundtrip-granted@example.com", now)
+	stored := store.App{
+		ID: uuid.NewString(), Name: "Restricted App", CreatorUserID: &owner.ID,
+		Enabled: true, Visibility: store.AppVisibilityRestricted, ConnectionSecret: "restricted-roundtrip-secret",
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := db.Create(&stored).Error; err != nil {
+		t.Fatalf("create app: %v", err)
+	}
+	if err := db.Create(&store.AppUserGrant{AppID: stored.ID, UserID: granted.ID, GrantedByUserID: &owner.ID, CreatedAt: now}).Error; err != nil {
+		t.Fatalf("create grant: %v", err)
+	}
+	service := NewService(Dependencies{DB: db})
+	updated, err := service.Update(context.Background(), UpdateCommand{
+		AppID: stored.ID, Name: "Restricted App Updated", Description: "Updated",
+		Visibility: VisibilityRestricted,
+	})
+	if err != nil || updated.Visibility != VisibilityRestricted || updated.Name != "Restricted App Updated" {
+		t.Fatalf("updated app = %#v, err = %v", updated, err)
+	}
+	var grantCount int64
+	if err := db.Model(&store.AppUserGrant{}).Where("app_id = ? AND user_id = ?", stored.ID, granted.ID).Count(&grantCount).Error; err != nil || grantCount != 1 {
+		t.Fatalf("grant count = %d, err = %v", grantCount, err)
+	}
+}
+
+func TestConnectionRejectsAppOwnedByDisabledAccount(t *testing.T) {
+	db := openAppTestDB(t)
+	now := time.Date(2026, 7, 16, 16, 0, 0, 0, time.UTC)
+	owner := insertOwnedAppTestUser(t, db, "disabled-owner@example.com", now)
+	stored := store.App{
+		ID: uuid.NewString(), Name: "Stale Enabled App", CreatorUserID: &owner.ID,
+		Enabled: true, Visibility: store.AppVisibilityPublic, ConnectionSecret: "stale-enabled-secret",
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := db.Create(&stored).Error; err != nil {
+		t.Fatalf("create app: %v", err)
+	}
+	if err := db.Model(&store.User{}).Where("id = ?", owner.ID).Update("status", store.UserStatusDisabled).Error; err != nil {
+		t.Fatalf("disable owner: %v", err)
+	}
+	service := NewService(Dependencies{DB: db})
+	connected, err := service.GetForConnection(context.Background(), stored.ID)
+	if err != nil || connected.Enabled {
+		t.Fatalf("connection app = %#v, err = %v", connected, err)
+	}
+	if allowed, err := service.CanUserAccess(context.Background(), stored.ID, owner.ID); err != nil || allowed {
+		t.Fatalf("disabled owner access = %t, err = %v", allowed, err)
+	}
+	if _, err := service.SetEnabled(context.Background(), SetEnabledCommand{AppID: stored.ID, Enabled: true}); ErrorCodeOf(err) != CodeForbidden {
+		t.Fatalf("enable disabled owner's app error = %v", err)
+	}
+}
+
+func TestAdminUpdateReconcilesAgainstLockedVisibility(t *testing.T) {
+	db := openAppTestDB(t)
+	now := time.Date(2026, 7, 16, 17, 0, 0, 0, time.UTC)
+	owner := insertOwnedAppTestUser(t, db, "admin-lock-owner@example.com", now)
+	other := insertOwnedAppTestUser(t, db, "admin-lock-other@example.com", now)
+	stored := store.App{
+		ID: uuid.NewString(), Name: "Concurrent App", CreatorUserID: &owner.ID,
+		Enabled: true, Visibility: store.AppVisibilityPublic, ConnectionSecret: "admin-lock-secret",
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := db.Create(&stored).Error; err != nil {
+		t.Fatalf("create app: %v", err)
+	}
+	conversation := insertOwnedAppConversation(t, db, stored.ID, other.ID, now)
+	insertOwnedAppEvent(t, db, stored.ID, conversation.ID, now)
+
+	service := NewService(Dependencies{DB: db})
+	updated, err := service.Update(context.Background(), UpdateCommand{
+		AppID: stored.ID, Name: stored.Name, Visibility: VisibilityRestricted,
+	})
+	if err != nil || updated.Visibility != VisibilityRestricted {
+		t.Fatalf("update app = %#v, err = %v", updated, err)
+	}
+	requireOwnedAppRowCount(t, db, &store.AppConversation{}, 0, "app_id = ? AND user_id = ?", stored.ID, other.ID)
+	requireOwnedAppActiveMemberCount(t, db, stored.ID, conversation.ID, 0)
+	requireOwnedAppRowCount(t, db, &store.AppEventOutbox{}, 0, "app_id = ?", stored.ID)
+}
+
 func TestServiceUploadsAppAvatarThroughFileModule(t *testing.T) {
 	db := openAppTestDB(t)
 	appID := uuid.NewString()
@@ -232,7 +318,11 @@ func openAppTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
-	if err := db.AutoMigrate(&store.User{}, &store.App{}); err != nil {
+	if err := db.AutoMigrate(
+		&store.User{}, &store.Conversation{}, &store.ConversationMember{},
+		&store.App{}, &store.AppConversation{}, &store.AppUserGrant{},
+		&store.AppEventOutbox{}, &store.AppEventAck{},
+	); err != nil {
 		t.Fatalf("migrate database: %v", err)
 	}
 	return db

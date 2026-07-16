@@ -52,10 +52,6 @@ func actorUser(actor Actor) store.User {
 	}
 }
 
-func appStoreValue(app AppIdentity) store.App {
-	return store.App{ID: strings.TrimSpace(app.ID), Name: app.Name, Avatar: app.Avatar}
-}
-
 func newReference(conversation store.Conversation) Reference {
 	return Reference{ID: conversation.ID, Name: conversation.Name, Type: conversation.Kind}
 }

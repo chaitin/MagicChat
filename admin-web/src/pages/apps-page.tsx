@@ -869,6 +869,8 @@ function getAdminAppVisibilityLabel(visibility: AdminAppVisibility) {
   switch (visibility) {
     case "creator":
       return "仅创建者"
+    case "restricted":
+      return "指定用户"
     case "public":
       return "所有人"
   }

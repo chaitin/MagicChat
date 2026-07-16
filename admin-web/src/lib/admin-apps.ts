@@ -34,7 +34,7 @@ type AdminAppResponse = {
 }
 
 export type AdminAppConnectionStatus = "disabled" | "offline" | "online"
-export type AdminAppVisibility = "creator" | "public"
+export type AdminAppVisibility = "creator" | "restricted" | "public"
 
 export type AdminApp = {
   avatar: string
@@ -329,7 +329,7 @@ function isAdminAppConnectionStatus(
 }
 
 function isAdminAppVisibility(value: string): value is AdminAppVisibility {
-  return value === "creator" || value === "public"
+  return value === "creator" || value === "restricted" || value === "public"
 }
 
 function createRequestError(

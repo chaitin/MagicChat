@@ -25,6 +25,7 @@ const initialPasswordLength = 16
 type Dependencies struct {
 	DB                      *gorm.DB
 	Presence                PresencePort
+	AppConnections          AppConnectionPort
 	Now                     func() time.Time
 	NewID                   func() string
 	GenerateInitialPassword func(int) (string, error)
@@ -35,6 +36,7 @@ type Dependencies struct {
 type Service struct {
 	db                      *gorm.DB
 	presence                PresencePort
+	appConnections          AppConnectionPort
 	now                     func() time.Time
 	newID                   func() string
 	generateInitialPassword func(int) (string, error)
@@ -64,7 +66,7 @@ func NewService(deps Dependencies) *Service {
 		generateAvatar = randomBuiltinAvatar
 	}
 	return &Service{
-		db: deps.DB, presence: deps.Presence, now: now, newID: newID,
+		db: deps.DB, presence: deps.Presence, appConnections: deps.AppConnections, now: now, newID: newID,
 		generateInitialPassword: generateInitialPassword, hashPassword: hashPassword,
 		generateAvatar: generateAvatar,
 	}
@@ -175,6 +177,7 @@ func (s *Service) SetStatus(ctx context.Context, cmd SetStatusCommand) (User, er
 	if err != nil {
 		return User{}, err
 	}
+	ownedAppIDs := []string{}
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if storedUser.Status != cmd.Status {
 			if err := tx.Model(&storedUser).Update("status", cmd.Status).Error; err != nil {
@@ -186,6 +189,16 @@ func (s *Service) SetStatus(ctx context.Context, cmd SetStatusCommand) (User, er
 			if err := tx.Where("user_id = ?", storedUser.ID).Delete(&store.UserSession{}).Error; err != nil {
 				return err
 			}
+			if err := tx.Model(&store.App{}).Where("creator_user_id = ?", storedUser.ID).
+				Pluck("id", &ownedAppIDs).Error; err != nil {
+				return err
+			}
+			if len(ownedAppIDs) > 0 {
+				if err := tx.Model(&store.App{}).Where("id IN ?", ownedAppIDs).
+					Updates(map[string]any{"enabled": false, "updated_at": s.now().UTC()}).Error; err != nil {
+					return err
+				}
+			}
 		}
 		return nil
 	}); err != nil {
@@ -193,6 +206,11 @@ func (s *Service) SetStatus(ctx context.Context, cmd SetStatusCommand) (User, er
 	}
 	if cmd.Status == store.UserStatusDisabled && s.presence != nil {
 		s.presence.CloseUser(storedUser.ID)
+	}
+	if cmd.Status == store.UserStatusDisabled && s.appConnections != nil {
+		for _, appID := range ownedAppIDs {
+			s.appConnections.CloseApp(appID)
+		}
 	}
 	return newUser(storedUser, s.isOnline(storedUser.ID)), nil
 }

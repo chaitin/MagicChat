@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 
+	appapp "app/internal/application/app"
 	"app/internal/appregistry"
 	"app/internal/store"
 
@@ -82,16 +83,12 @@ func (s *Service) listUsers(db *gorm.DB, keyword string) ([]User, error) {
 }
 
 func (s *Service) listApps(db *gorm.DB, identity Identity, keyword string) ([]App, error) {
-	query := db.Model(&store.App{}).Where("enabled = ?", true)
+	query := db.Model(&store.App{})
 	if identity.Type == IdentityTypeApp {
-		query = query.Where("visibility = ? OR id = ?", store.AppVisibilityPublic, identity.ID)
+		query = appapp.ApplyUsableScope(query).
+			Where("visibility = ? OR id = ?", store.AppVisibilityPublic, identity.ID)
 	} else {
-		query = query.Where(
-			"visibility = ? OR (visibility = ? AND creator_user_id = ?)",
-			store.AppVisibilityPublic,
-			store.AppVisibilityCreator,
-			identity.ID,
-		)
+		query = appapp.ApplyUserAccessScope(query, identity.ID)
 	}
 	if keyword != "" {
 		like := "%" + keyword + "%"

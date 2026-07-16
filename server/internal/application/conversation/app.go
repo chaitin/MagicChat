@@ -3,7 +3,9 @@ package conversation
 import (
 	"context"
 	"errors"
+	"strings"
 
+	appapp "app/internal/application/app"
 	"app/internal/appregistry"
 	"app/internal/store"
 
@@ -17,16 +19,16 @@ func (s *Service) CreateApp(ctx context.Context, cmd CreateAppCommand) (OpenResu
 	if err != nil {
 		return OpenResult{}, invalidRequest(err.Error(), err)
 	}
-	db := s.db
-	app, ok, err := s.findVisibleApp(db, appID, current.ID)
-	if err != nil {
-		return OpenResult{}, internalError(err)
+	if appregistry.IsAIAssistantAppID(appID) {
+		if _, err := appregistry.EnsureAIAssistantApp(s.db.WithContext(ctx), s.apps); err != nil {
+			return OpenResult{}, internalError(err)
+		}
 	}
-	if !ok {
-		return OpenResult{}, notFound("应用不存在", gorm.ErrRecordNotFound)
-	}
-	conversation, created, err := s.getOrCreateApp(db, current, app)
+	conversation, app, created, err := s.getOrCreateAccessibleAppConversation(s.db.WithContext(ctx), current, appID)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return OpenResult{}, notFound("应用不存在", err)
+		}
 		return OpenResult{}, internalError(err)
 	}
 	item := newItem(
@@ -40,45 +42,30 @@ func (s *Service) CreateApp(ctx context.Context, cmd CreateAppCommand) (OpenResu
 	return OpenResult{Conversation: item, Created: created}, nil
 }
 
-func (s *Service) OpenAppForUser(ctx context.Context, current Identity, app AppIdentity) (Reference, bool, error) {
-	conversation, created, err := s.getOrCreateApp(s.db, actorUser(current), appStoreValue(app))
+func (s *Service) OpenAppForUser(ctx context.Context, current Identity, appID string) (Reference, bool, error) {
+	conversation, _, created, err := s.getOrCreateAccessibleAppConversation(
+		s.db.WithContext(ctx), actorUser(current), strings.TrimSpace(appID),
+	)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return Reference{}, false, forbidden("应用无权联系该用户", err)
+		}
 		return Reference{}, false, err
 	}
 	return newReference(conversation), created, nil
 }
 
-func (s *Service) findVisibleApp(db *gorm.DB, appID, currentUserID string) (store.App, bool, error) {
-	if appregistry.IsAIAssistantAppID(appID) {
-		if _, err := appregistry.EnsureAIAssistantApp(db, s.apps); err != nil {
-			return store.App{}, false, err
-		}
-	}
-	var app store.App
-	err := db.Where("id = ? AND enabled = ?", appID, true).
-		Where("visibility = ? OR (visibility = ? AND creator_user_id = ?)", store.AppVisibilityPublic, store.AppVisibilityCreator, currentUserID).
-		First(&app).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return store.App{}, false, nil
-	}
-	if err != nil {
-		return store.App{}, false, err
-	}
-	return app, true, nil
-}
-
-func (s *Service) getOrCreateApp(db *gorm.DB, current store.User, app store.App) (store.Conversation, bool, error) {
-	existing, err := findAppByUser(db, app.ID, current.ID)
-	if err == nil {
-		return existing, false, nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return store.Conversation{}, false, err
-	}
+func (s *Service) getOrCreateAccessibleAppConversation(db *gorm.DB, current store.User, appID string) (store.Conversation, store.App, bool, error) {
 	now := s.now().UTC()
-	conversation := store.Conversation{ID: uuid.NewString(), Kind: store.ConversationKindApp, Name: app.Name, Avatar: app.Avatar, CreatedByUserID: current.ID, Status: store.ConversationStatusActive, PostingPolicy: store.ConversationPostingPolicyOpen, Visibility: store.ConversationVisibilityPrivate, CreatedAt: now, UpdatedAt: now}
+	var app store.App
+	var conversation store.Conversation
 	created := false
-	err = db.Transaction(func(tx *gorm.DB) error {
+	err := db.Transaction(func(tx *gorm.DB) error {
+		locked, err := appapp.LockUserAccessibleApp(tx, appID, current.ID)
+		if err != nil {
+			return err
+		}
+		app = locked
 		existing, err := findAppByUser(tx, app.ID, current.ID)
 		if err == nil {
 			conversation, created = existing, false
@@ -87,6 +74,7 @@ func (s *Service) getOrCreateApp(db *gorm.DB, current store.User, app store.App)
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
+		conversation = store.Conversation{ID: uuid.NewString(), Kind: store.ConversationKindApp, Name: app.Name, Avatar: app.Avatar, CreatedByUserID: current.ID, Status: store.ConversationStatusActive, PostingPolicy: store.ConversationPostingPolicyOpen, Visibility: store.ConversationVisibilityPrivate, CreatedAt: now, UpdatedAt: now}
 		if err := tx.Create(&conversation).Error; err != nil {
 			return err
 		}
@@ -106,12 +94,12 @@ func (s *Service) getOrCreateApp(db *gorm.DB, current store.User, app store.App)
 	if err != nil {
 		if isUniqueConstraintError(err) {
 			if existing, findErr := findAppByUser(db, app.ID, current.ID); findErr == nil {
-				return existing, false, nil
+				return existing, app, false, nil
 			}
 		}
-		return store.Conversation{}, false, err
+		return store.Conversation{}, store.App{}, false, err
 	}
-	return conversation, created, nil
+	return conversation, app, created, nil
 }
 
 func findAppByUser(db *gorm.DB, appID, userID string) (store.Conversation, error) {

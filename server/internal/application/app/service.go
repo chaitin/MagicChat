@@ -115,11 +115,18 @@ func (s *Service) GetForConnection(ctx context.Context, appID string) (App, erro
 	if err != nil {
 		return App{}, internalError(err)
 	}
+	activeCreator, err := creatorIsActive(s.db.WithContext(ctx), storedApp)
+	if err != nil {
+		return App{}, internalError(err)
+	}
+	if !activeCreator {
+		storedApp.Enabled = false
+	}
 	return s.newApp(storedApp), nil
 }
 
 func (s *Service) Create(ctx context.Context, cmd CreateCommand) (App, error) {
-	name, description, visibility, err := normalizeDetails(cmd.Name, cmd.Description, cmd.Visibility)
+	name, description, visibility, err := normalizeAdminCreatedDetails(cmd.Name, cmd.Description, cmd.Visibility)
 	if err != nil {
 		return App{}, err
 	}
@@ -140,47 +147,119 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (App, error) {
 }
 
 func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (App, error) {
-	storedApp, err := s.find(ctx, cmd.AppID)
+	appID, err := normalizeAppID(cmd.AppID)
 	if err != nil {
 		return App{}, err
 	}
-	name, description, visibility, err := normalizeDetails(cmd.Name, cmd.Description, cmd.Visibility)
-	if err != nil {
-		return App{}, err
+	if appregistry.IsAIAssistantAppID(appID) {
+		if _, err := s.ensureAIAssistant(ctx); err != nil {
+			return App{}, internalError(err)
+		}
 	}
-	if appregistry.IsAIAssistantAppID(storedApp.ID) {
-		visibility = store.AppVisibilityPublic
-	}
-	if err := s.db.WithContext(ctx).Model(&storedApp).Updates(map[string]any{
-		"description": description,
-		"name":        name,
-		"visibility":  visibility,
-		"updated_at":  s.now().UTC(),
-	}).Error; err != nil {
+	now := s.now().UTC()
+	visibilityChanged := false
+	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		storedApp, err := lockAppForUpdate(tx, appID)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return newError(CodeNotFound, "应用不存在", err)
+		}
+		if err != nil {
+			return err
+		}
+		name, description, visibility, err := normalizeAdminUpdatedDetails(
+			cmd.Name, cmd.Description, cmd.Visibility, storedApp.CreatorUserID != nil,
+		)
+		if err != nil {
+			return err
+		}
+		if appregistry.IsAIAssistantAppID(storedApp.ID) {
+			visibility = store.AppVisibilityPublic
+		}
+		visibilityChanged = storedApp.Visibility != visibility
+		if err := tx.Model(&storedApp).Updates(map[string]any{
+			"description": description,
+			"name":        name,
+			"visibility":  visibility,
+			"updated_at":  now,
+		}).Error; err != nil {
+			return err
+		}
+		if visibility != store.AppVisibilityRestricted {
+			if err := tx.Where("app_id = ?", storedApp.ID).Delete(&store.AppUserGrant{}).Error; err != nil {
+				return err
+			}
+		}
+		if !visibilityChanged || storedApp.CreatorUserID == nil {
+			return nil
+		}
+		var grantedUserIDs []string
+		if visibility == store.AppVisibilityRestricted {
+			grants, loadErr := loadAppGrantIDs(tx, []string{storedApp.ID})
+			if loadErr != nil {
+				return loadErr
+			}
+			grantedUserIDs = grants[storedApp.ID]
+		}
+		return revokeUnauthorizedAppMemberships(tx, storedApp.ID, *storedApp.CreatorUserID, visibility, grantedUserIDs, now)
+	}); err != nil {
+		if ErrorCodeOf(err) != CodeInternal {
+			return App{}, err
+		}
 		return App{}, internalError(err)
 	}
-	return s.reload(ctx, storedApp.ID)
+	if visibilityChanged && s.connections != nil {
+		s.connections.CloseApp(appID)
+	}
+	return s.reload(ctx, appID)
 }
 
 func (s *Service) SetEnabled(ctx context.Context, cmd SetEnabledCommand) (App, error) {
-	storedApp, err := s.find(ctx, cmd.AppID)
+	appID, err := normalizeAppID(cmd.AppID)
 	if err != nil {
 		return App{}, err
 	}
-	if storedApp.Enabled == cmd.Enabled {
-		return s.newApp(storedApp), nil
+	if appregistry.IsAIAssistantAppID(appID) {
+		if _, err := s.ensureAIAssistant(ctx); err != nil {
+			return App{}, internalError(err)
+		}
 	}
-	if err := s.db.WithContext(ctx).Model(&storedApp).Updates(map[string]any{
-		"enabled": cmd.Enabled, "updated_at": s.now().UTC(),
-	}).Error; err != nil {
+	changed := false
+	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		storedApp, err := lockAppForUpdate(tx, appID)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return newError(CodeNotFound, "应用不存在", err)
+		}
+		if err != nil {
+			return err
+		}
+		if cmd.Enabled {
+			active, err := creatorIsActive(tx, storedApp)
+			if err != nil {
+				return err
+			}
+			if !active {
+				return newError(CodeForbidden, "应用创建者不可用", nil)
+			}
+		}
+		if storedApp.Enabled == cmd.Enabled {
+			return nil
+		}
+		changed = true
+		return tx.Model(&storedApp).Updates(map[string]any{
+			"enabled": cmd.Enabled, "updated_at": s.now().UTC(),
+		}).Error
+	}); err != nil {
+		if ErrorCodeOf(err) != CodeInternal {
+			return App{}, err
+		}
 		return App{}, internalError(err)
 	}
-	updated, err := s.reload(ctx, storedApp.ID)
+	updated, err := s.reload(ctx, appID)
 	if err != nil {
 		return App{}, err
 	}
-	if !cmd.Enabled && s.connections != nil {
-		s.connections.CloseApp(storedApp.ID)
+	if changed && !cmd.Enabled && s.connections != nil {
+		s.connections.CloseApp(appID)
 	}
 	return updated, nil
 }
@@ -220,7 +299,9 @@ func (s *Service) Delete(ctx context.Context, appID string) error {
 	if appregistry.IsAIAssistantAppID(storedApp.ID) {
 		return newError(CodeForbidden, "茉莉不能删除", nil)
 	}
-	if err := s.db.WithContext(ctx).Delete(&store.App{}, "id = ?", storedApp.ID).Error; err != nil {
+	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return deleteStoredApp(tx, &storedApp, s.now().UTC())
+	}); err != nil {
 		return internalError(err)
 	}
 	if s.connections != nil {
@@ -234,13 +315,17 @@ func (s *Service) UploadAvatar(ctx context.Context, cmd UploadAvatarCommand) (Ap
 	if err != nil {
 		return App{}, err
 	}
-	if cmd.Size > MaxAvatarBytes {
+	return s.uploadAvatar(ctx, storedApp, cmd.Content, cmd.Size)
+}
+
+func (s *Service) uploadAvatar(ctx context.Context, storedApp store.App, contentReader io.Reader, size int64) (App, error) {
+	if size > MaxAvatarBytes {
 		return App{}, newError(CodeRequestTooLarge, "头像文件不能超过 1MiB", nil)
 	}
-	if cmd.Size == 0 || cmd.Content == nil {
+	if size == 0 || contentReader == nil {
 		return App{}, newError(CodeInvalidRequest, "头像文件不能为空", nil)
 	}
-	content, err := io.ReadAll(io.LimitReader(cmd.Content, MaxAvatarBytes+1))
+	content, err := io.ReadAll(io.LimitReader(contentReader, MaxAvatarBytes+1))
 	if err != nil {
 		return App{}, newError(CodeInvalidRequest, "读取头像失败", err)
 	}
@@ -361,7 +446,15 @@ func normalizeAppID(value string) (string, error) {
 	return id, nil
 }
 
-func normalizeDetails(rawName string, rawDescription string, rawVisibility string) (string, string, string, error) {
+func normalizeAdminCreatedDetails(rawName string, rawDescription string, rawVisibility string) (string, string, string, error) {
+	return normalizeAdminDetails(rawName, rawDescription, rawVisibility, false)
+}
+
+func normalizeAdminUpdatedDetails(rawName string, rawDescription string, rawVisibility string, userManaged bool) (string, string, string, error) {
+	return normalizeAdminDetails(rawName, rawDescription, rawVisibility, userManaged)
+}
+
+func normalizeAdminDetails(rawName string, rawDescription string, rawVisibility string, userManaged bool) (string, string, string, error) {
 	name := strings.TrimSpace(rawName)
 	if name == "" {
 		return "", "", "", newError(CodeInvalidRequest, "应用名称不能为空", nil)
@@ -369,22 +462,37 @@ func normalizeDetails(rawName string, rawDescription string, rawVisibility strin
 	if len([]rune(name)) > maxAppNameLength {
 		return "", "", "", newError(CodeInvalidRequest, "应用名称不能超过 120 个字符", nil)
 	}
-	visibility, err := normalizeVisibility(rawVisibility)
+	visibility, err := normalizeAdminVisibility(rawVisibility, userManaged)
 	if err != nil {
 		return "", "", "", err
 	}
-	return name, strings.TrimSpace(rawDescription), visibility, nil
+	description, err := normalizeDescription(rawDescription)
+	if err != nil {
+		return "", "", "", err
+	}
+	return name, description, visibility, nil
 }
 
-func normalizeVisibility(value string) (string, error) {
+func normalizeAdminVisibility(value string, userManaged bool) (string, error) {
 	switch strings.TrimSpace(value) {
 	case "", store.AppVisibilityPublic:
 		return store.AppVisibilityPublic, nil
-	case store.AppVisibilityCreator:
-		return "", newError(CodeInvalidRequest, "后台创建的应用暂不支持仅创建者可见", nil)
+	case store.AppVisibilityCreator, store.AppVisibilityRestricted:
+		if userManaged {
+			return strings.TrimSpace(value), nil
+		}
+		return "", newError(CodeInvalidRequest, "后台创建的应用只支持所有人可见", nil)
 	default:
 		return "", newError(CodeInvalidRequest, "可见范围不支持", nil)
 	}
+}
+
+func normalizeDescription(value string) (string, error) {
+	description := strings.TrimSpace(value)
+	if len([]rune(description)) > MaxDescriptionLength {
+		return "", newError(CodeInvalidRequest, "应用备注不能超过 2000 个字符", nil)
+	}
+	return description, nil
 }
 
 func sortApps(values []store.App) {

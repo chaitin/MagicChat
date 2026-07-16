@@ -53,6 +53,16 @@ func TestServiceListsVisibleAppsAndGroups(t *testing.T) {
 	creatorApp := insertContactTestApp(t, db, store.App{Name: "Creator App", Enabled: true, Visibility: store.AppVisibilityCreator, CreatorUserID: &creatorID, ConnectionSecret: "creator", CreatedAt: now, UpdatedAt: now})
 	otherID := other.ID
 	_ = insertContactTestApp(t, db, store.App{Name: "Hidden App", Enabled: true, Visibility: store.AppVisibilityCreator, CreatorUserID: &otherID, ConnectionSecret: "hidden", CreatedAt: now, UpdatedAt: now})
+	grantedApp := insertContactTestApp(t, db, store.App{Name: "Granted App", Enabled: true, Visibility: store.AppVisibilityRestricted, CreatorUserID: &otherID, ConnectionSecret: "granted", CreatedAt: now, UpdatedAt: now})
+	if err := db.Create(&store.AppUserGrant{AppID: grantedApp.ID, UserID: owner.ID, GrantedByUserID: &otherID, CreatedAt: now}).Error; err != nil {
+		t.Fatalf("create app user grant: %v", err)
+	}
+	disabledOwner := insertContactTestUser(t, db, "disabled-owner@example.com", "Disabled Owner", store.UserStatusDisabled, now)
+	disabledOwnerID := disabledOwner.ID
+	disabledOwnerApp := insertContactTestApp(t, db, store.App{
+		Name: "Unavailable Public App", Enabled: true, Visibility: store.AppVisibilityPublic,
+		CreatorUserID: &disabledOwnerID, ConnectionSecret: "unavailable-public", CreatedAt: now, UpdatedAt: now,
+	})
 
 	joined := insertContactTestGroup(t, db, owner.ID, "Joined Private", store.ConversationVisibilityPrivate, now)
 	public := insertContactTestGroup(t, db, other.ID, "Open Group", store.ConversationVisibilityPublic, now)
@@ -67,8 +77,13 @@ func TestServiceListsVisibleAppsAndGroups(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list apps: %v", err)
 	}
-	if len(apps.Apps) != 2 || apps.Apps[0].ID != creatorApp.ID || apps.Apps[1].ID != publicApp.ID || !apps.Apps[1].Online {
+	if len(apps.Apps) != 3 || apps.Apps[0].ID != creatorApp.ID || apps.Apps[1].ID != grantedApp.ID || apps.Apps[2].ID != publicApp.ID || !apps.Apps[2].Online {
 		t.Fatalf("apps = %#v", apps.Apps)
+	}
+	for _, app := range apps.Apps {
+		if app.ID == disabledOwnerApp.ID {
+			t.Fatalf("disabled owner's app leaked: %#v", apps.Apps)
+		}
 	}
 	groups, err := service.ListGroupsForIdentity(context.Background(), ListForIdentityCommand{Identity: identity})
 	if err != nil {
@@ -146,7 +161,7 @@ func openContactTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
-	if err := db.AutoMigrate(&store.User{}, &store.App{}, &store.Conversation{}, &store.ConversationMember{}); err != nil {
+	if err := db.AutoMigrate(&store.User{}, &store.App{}, &store.AppUserGrant{}, &store.Conversation{}, &store.ConversationMember{}); err != nil {
 		t.Fatalf("migrate database: %v", err)
 	}
 	return db

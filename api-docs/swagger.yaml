@@ -331,6 +331,45 @@ definitions:
       message:
         $ref: '#/definitions/client.messageResponse'
     type: object
+  client.clientAppCredentialResponse:
+    properties:
+      app:
+        $ref: '#/definitions/client.clientAppResponse'
+      connection_secret:
+        type: string
+    type: object
+  client.clientAppEnvelope:
+    properties:
+      app:
+        $ref: '#/definitions/client.clientAppResponse'
+    type: object
+  client.clientAppResponse:
+    properties:
+      avatar:
+        type: string
+      connection_status:
+        type: string
+      created_at:
+        format: date-time
+        type: string
+      description:
+        type: string
+      enabled:
+        type: boolean
+      id:
+        type: string
+      name:
+        type: string
+      updated_at:
+        format: date-time
+        type: string
+      user_ids:
+        items:
+          type: string
+        type: array
+      visibility:
+        type: string
+    type: object
   client.contactAppResponse:
     properties:
       avatar:
@@ -516,6 +555,19 @@ definitions:
     properties:
       app_id:
         example: 7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4
+        type: string
+    type: object
+  client.createClientAppRequest:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+      user_ids:
+        items:
+          type: string
+        type: array
+      visibility:
         type: string
     type: object
   client.createDirectConversationRequest:
@@ -808,6 +860,13 @@ definitions:
         type: string
       message:
         $ref: '#/definitions/client.messageResponse'
+    type: object
+  client.listClientAppsResponse:
+    properties:
+      apps:
+        items:
+          $ref: '#/definitions/client.clientAppResponse'
+        type: array
     type: object
   client.listClientContactsResponse:
     properties:
@@ -1253,6 +1312,19 @@ definitions:
       size_bytes:
         example: 123456
         type: integer
+    type: object
+  client.updateClientAppRequest:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+      user_ids:
+        items:
+          type: string
+        type: array
+      visibility:
+        type: string
     type: object
   client.updateGroupConversationAvatarResponse:
     properties:
@@ -2299,6 +2371,364 @@ paths:
       summary: 应用 WebSocket 连接
       tags:
       - 应用连接
+  /api/client/apps:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/client.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.listClientAppsResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+      security:
+      - UserSession: []
+      summary: 列出当前用户创建的应用
+      tags:
+      - 客户端应用
+    post:
+      consumes:
+      - application/json
+      description: 创建应用并仅在本次响应中返回连接密钥。
+      parameters:
+      - description: 应用配置
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/client.createClientAppRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/client.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.clientAppCredentialResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+      security:
+      - UserSession: []
+      summary: 创建用户应用
+      tags:
+      - 客户端应用
+  /api/client/apps/{app_id}:
+    delete:
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: app_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/client.successEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+      security:
+      - UserSession: []
+      summary: 删除当前用户创建的应用
+      tags:
+      - 客户端应用
+    get:
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: app_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/client.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.clientAppEnvelope'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+      security:
+      - UserSession: []
+      summary: 获取当前用户创建的应用
+      tags:
+      - 客户端应用
+    patch:
+      consumes:
+      - application/json
+      description: 更新名称、备注、可见范围或 restricted 授权用户。
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: app_id
+        required: true
+        type: string
+      - description: 应用更新配置
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/client.updateClientAppRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/client.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.clientAppEnvelope'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+      security:
+      - UserSession: []
+      summary: 更新当前用户创建的应用
+      tags:
+      - 客户端应用
+  /api/client/apps/{app_id}/avatar:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 头像必须是 256x256 WebP，最大 1MiB。
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: app_id
+        required: true
+        type: string
+      - description: 应用头像
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/client.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.clientAppEnvelope'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+      security:
+      - UserSession: []
+      summary: 上传应用头像
+      tags:
+      - 客户端应用
+  /api/client/apps/{app_id}/disable:
+    post:
+      description: 禁用应用并关闭该应用已有连接。
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: app_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/client.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.clientAppEnvelope'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+      security:
+      - UserSession: []
+      summary: 禁用应用
+      tags:
+      - 客户端应用
+  /api/client/apps/{app_id}/enable:
+    post:
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: app_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/client.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.clientAppEnvelope'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+      security:
+      - UserSession: []
+      summary: 启用应用
+      tags:
+      - 客户端应用
+  /api/client/apps/{app_id}/secret/regenerate:
+    post:
+      description: 返回新密钥并关闭该应用已有连接，旧密钥立即失效。
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: app_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/client.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.clientAppCredentialResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+      security:
+      - UserSession: []
+      summary: 重置应用连接密钥
+      tags:
+      - 客户端应用
   /api/client/auth/login:
     post:
       consumes:

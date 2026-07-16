@@ -464,8 +464,8 @@ func (s *Service) createForwardedMessagesForTarget(ctx context.Context, user sto
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&conversation, "id = ?", conversationID).Error; err != nil {
 			return err
 		}
-		if conversation.Status != store.ConversationStatusActive || conversation.PostingPolicy != store.ConversationPostingPolicyOpen {
-			return errConversationNotSendable
+		if err := ensureConversationSendable(tx, conversation); err != nil {
+			return err
 		}
 		var member store.ConversationMember
 		if err := tx.First(

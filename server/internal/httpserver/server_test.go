@@ -81,6 +81,7 @@ func migrateTestSchema(db *gorm.DB) error {
 		&store.TemporaryFile{},
 		&store.App{},
 		&store.AppConversation{},
+		&store.AppUserGrant{},
 		&store.AppEventOutbox{},
 		&store.AppEventAck{},
 		&store.AppSettings{},
@@ -1084,6 +1085,48 @@ func TestAppWebSocketRequiresValidCredentials(t *testing.T) {
 	}
 }
 
+func TestAppWebSocketRechecksCredentialsAfterRegistration(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+
+	now := time.Now().UTC()
+	app := insertTestApp(t, db, store.App{
+		Name:             "Revoked During Registration",
+		Enabled:          true,
+		Visibility:       store.AppVisibilityPublic,
+		ConnectionSecret: "registration-secret",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	})
+
+	const callbackName = "test:disable_app_after_initial_websocket_auth"
+	queryCount := 0
+	disableResult := make(chan error, 1)
+	if err := db.Callback().Query().After("gorm:query").Register(callbackName, func(tx *gorm.DB) {
+		if tx.Statement.Table != "apps" || queryCount > 0 {
+			return
+		}
+		queryCount++
+		disableResult <- db.Model(&store.App{}).Where("id = ?", app.ID).Update("enabled", false).Error
+	}); err != nil {
+		t.Fatalf("register query callback: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := db.Callback().Query().Remove(callbackName); err != nil {
+			t.Errorf("remove query callback: %v", err)
+		}
+	})
+
+	conn := dialAppWebSocket(t, server, app.ID, app.ConnectionSecret)
+	if err := <-disableResult; err != nil {
+		t.Fatalf("disable app after initial authentication: %v", err)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+	if _, _, err := conn.ReadMessage(); err == nil {
+		t.Fatal("ReadMessage() error = nil, want revoked connection to close")
+	}
+}
+
 func TestAppWebSocketTracksAdminConnectionStatus(t *testing.T) {
 	server, _ := newTestRouter(t)
 	defer server.Close()
@@ -1614,10 +1657,11 @@ func TestAppWebSocketReceivesGroupMessageOnlyWhenMentionedDirectly(t *testing.T)
 	alice := insertTestUser(t, db, "alice@example.com", "Alice", store.UserStatusActive, now)
 	bob := insertTestUser(t, db, "bob@example.com", "Bob", store.UserStatusActive, now)
 	app := insertTestApp(t, db, store.App{
+		ID:               appregistry.AIAssistantAppID,
 		Name:             "茉莉",
 		Enabled:          true,
 		Visibility:       store.AppVisibilityPublic,
-		ConnectionSecret: "assistant-secret",
+		ConnectionSecret: "test-ai-assistant-secret",
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	})
@@ -2473,10 +2517,11 @@ func TestAppWebSocketMessageSendAsUserStoresDelegatedByAndPushesDirectMessage(t 
 	alice := insertTestUser(t, db, "alice@example.com", "Alice", store.UserStatusActive, now)
 	bob := insertTestUser(t, db, "bob@example.com", "Bob", store.UserStatusActive, now)
 	app := insertTestApp(t, db, store.App{
+		ID:               appregistry.AIAssistantAppID,
 		Name:             "茉莉",
 		Enabled:          true,
 		Visibility:       store.AppVisibilityPublic,
-		ConnectionSecret: "assistant-secret",
+		ConnectionSecret: "test-ai-assistant-secret",
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	})
@@ -2602,10 +2647,11 @@ func TestAppWebSocketMessageSendAsUserRejectsSpoofedActor(t *testing.T) {
 	bob := insertTestUser(t, db, "bob@example.com", "Bob", store.UserStatusActive, now)
 	carol := insertTestUser(t, db, "carol@example.com", "Carol", store.UserStatusActive, now)
 	app := insertTestApp(t, db, store.App{
+		ID:               appregistry.AIAssistantAppID,
 		Name:             "茉莉",
 		Enabled:          true,
 		Visibility:       store.AppVisibilityPublic,
-		ConnectionSecret: "assistant-secret",
+		ConnectionSecret: "test-ai-assistant-secret",
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	})
@@ -2673,10 +2719,11 @@ func TestAppWebSocketMessageSendAsUserRejectsAuthorizationConversationMismatch(t
 	alice := insertTestUser(t, db, "alice@example.com", "Alice", store.UserStatusActive, now)
 	bob := insertTestUser(t, db, "bob@example.com", "Bob", store.UserStatusActive, now)
 	app := insertTestApp(t, db, store.App{
+		ID:               appregistry.AIAssistantAppID,
 		Name:             "茉莉",
 		Enabled:          true,
 		Visibility:       store.AppVisibilityPublic,
-		ConnectionSecret: "assistant-secret",
+		ConnectionSecret: "test-ai-assistant-secret",
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	})
@@ -2746,10 +2793,11 @@ func TestAppWebSocketGroupConversationCreateUsesTriggeringUser(t *testing.T) {
 	bob := insertTestUser(t, db, "bob@example.com", "Bob", store.UserStatusActive, now)
 	carol := insertTestUser(t, db, "carol@example.com", "Carol", store.UserStatusActive, now)
 	app := insertTestApp(t, db, store.App{
+		ID:               appregistry.AIAssistantAppID,
 		Name:             "茉莉",
 		Enabled:          true,
 		Visibility:       store.AppVisibilityPublic,
-		ConnectionSecret: "assistant-secret",
+		ConnectionSecret: "test-ai-assistant-secret",
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	})
@@ -2857,10 +2905,11 @@ func TestAppWebSocketGroupConversationMembersAddUsesTriggeringUser(t *testing.T)
 	})
 	setTestConversationMemberLastReadSeq(t, db, group.ID, alice.ID, 2)
 	app := insertTestApp(t, db, store.App{
+		ID:               appregistry.AIAssistantAppID,
 		Name:             "茉莉",
 		Enabled:          true,
 		Visibility:       store.AppVisibilityPublic,
-		ConnectionSecret: "assistant-secret",
+		ConnectionSecret: "test-ai-assistant-secret",
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	})
@@ -2978,10 +3027,11 @@ func TestAppWebSocketGroupConversationsListReturnsTriggeringUserGroups(t *testin
 		now:             now.Add(-80 * time.Minute),
 	})
 	app := insertTestApp(t, db, store.App{
+		ID:               appregistry.AIAssistantAppID,
 		Name:             "茉莉",
 		Enabled:          true,
 		Visibility:       store.AppVisibilityPublic,
-		ConnectionSecret: "assistant-secret",
+		ConnectionSecret: "test-ai-assistant-secret",
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	})
@@ -3090,10 +3140,11 @@ func TestAppWebSocketRecentConversationsListUsesTriggeringUser(t *testing.T) {
 		now:                now.Add(-80 * time.Minute),
 	})
 	app := insertTestApp(t, db, store.App{
+		ID:               appregistry.AIAssistantAppID,
 		Name:             "茉莉",
 		Enabled:          true,
 		Visibility:       store.AppVisibilityPublic,
-		ConnectionSecret: "assistant-secret",
+		ConnectionSecret: "test-ai-assistant-secret",
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	})
@@ -3249,10 +3300,11 @@ func TestAppWebSocketConversationHistoryReadSupportsConversationUserAndAppSelect
 	insertTestMessage(t, db, group.ID, alice.ID, 1, "第一条群聊", now.Add(-20*time.Minute))
 	insertTestMessage(t, db, group.ID, bob.ID, 2, "第二条群聊", now.Add(-10*time.Minute))
 	app := insertTestApp(t, db, store.App{
+		ID:               appregistry.AIAssistantAppID,
 		Name:             "茉莉",
 		Enabled:          true,
 		Visibility:       store.AppVisibilityPublic,
-		ConnectionSecret: "assistant-secret",
+		ConnectionSecret: "test-ai-assistant-secret",
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	})
@@ -3379,10 +3431,11 @@ func TestAppWebSocketMessageSendAsUserCanSendToGroupConversation(t *testing.T) {
 		now:                now,
 	})
 	app := insertTestApp(t, db, store.App{
+		ID:               appregistry.AIAssistantAppID,
 		Name:             "茉莉",
 		Enabled:          true,
 		Visibility:       store.AppVisibilityPublic,
-		ConnectionSecret: "assistant-secret",
+		ConnectionSecret: "test-ai-assistant-secret",
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	})
@@ -5450,6 +5503,18 @@ func TestListConversationMessagesKeepsReplySenderNameForDeletedApp(t *testing.T)
 	if rawAppCount != 1 {
 		t.Fatalf("raw app row count = %d, want 1", rawAppCount)
 	}
+
+	sendAfterDeleteResp, sendAfterDeleteBody := postJSON(t, server, "/api/client/conversations/"+conversationID+"/messages", map[string]any{
+		"client_message_id": "client-message-after-app-delete",
+		"body": map[string]any{
+			"type":    "text",
+			"content": "还在吗",
+		},
+	}, aliceCookie)
+	if sendAfterDeleteResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("send after delete status = %d, want 403, body = %#v", sendAfterDeleteResp.StatusCode, sendAfterDeleteBody)
+	}
+	requireError(t, sendAfterDeleteBody, "forbidden")
 
 	historyResp, historyBody := getJSON(t, server, "/api/client/conversations/"+conversationID+"/messages", aliceCookie)
 	if historyResp.StatusCode != http.StatusOK {
@@ -8528,11 +8593,12 @@ func TestCreateGroupConversationCreatesConversationAndMembers(t *testing.T) {
 	alice := insertTestUser(t, db, "alice@example.com", "Alice", store.UserStatusActive, now)
 	bob := insertTestUser(t, db, "bob@example.com", "Bob", store.UserStatusActive, now)
 	app := insertTestApp(t, db, store.App{
+		ID:               appregistry.AIAssistantAppID,
 		Name:             "茉莉",
 		Avatar:           "/assets/apps/assistant.webp",
 		Enabled:          true,
 		Visibility:       store.AppVisibilityPublic,
-		ConnectionSecret: "assistant-secret",
+		ConnectionSecret: "test-ai-assistant-secret",
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	})
@@ -9515,12 +9581,13 @@ func TestAddGroupConversationMembersCanAddApps(t *testing.T) {
 	alice := insertTestUser(t, db, "alice@example.com", "Alice", store.UserStatusActive, now)
 	bob := insertTestUser(t, db, "bob@example.com", "Bob", store.UserStatusActive, now)
 	app := insertTestApp(t, db, store.App{
+		ID:               appregistry.AIAssistantAppID,
 		Name:             "茉莉",
 		Avatar:           "/assets/apps/assistant.webp",
 		Description:      "AI 助手",
 		Enabled:          true,
 		Visibility:       store.AppVisibilityPublic,
-		ConnectionSecret: "assistant-secret",
+		ConnectionSecret: "test-ai-assistant-secret",
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	})
@@ -9618,10 +9685,11 @@ func TestRemoveGroupConversationMemberCanRemoveApp(t *testing.T) {
 	alice := insertTestUser(t, db, "alice@example.com", "Alice", store.UserStatusActive, now)
 	bob := insertTestUser(t, db, "bob@example.com", "Bob", store.UserStatusActive, now)
 	app := insertTestApp(t, db, store.App{
+		ID:               appregistry.AIAssistantAppID,
 		Name:             "茉莉",
 		Enabled:          true,
 		Visibility:       store.AppVisibilityPublic,
-		ConnectionSecret: "assistant-secret",
+		ConnectionSecret: "test-ai-assistant-secret",
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	})

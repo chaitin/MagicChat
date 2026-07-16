@@ -51,6 +51,7 @@ type Server struct {
 	clientExternalAuth  *clientapi.ExternalAuthAPI
 	apps                *appapp.Service
 	adminApps           *adminapi.AppAPI
+	clientApps          *clientapi.AppAPI
 	files               *fileapp.Service
 	clientFiles         *clientapi.FileAPI
 	contacts            *contactapp.Service
@@ -108,6 +109,7 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 		DB: db, Apps: cfg.Apps, Files: server.files, Connections: server.appConnections,
 	})
 	server.adminApps = adminapi.NewAppAPI(server.apps)
+	server.clientApps = clientapi.NewAppAPI(server.apps)
 	server.settings = settingsapp.NewService(settingsapp.Dependencies{DB: db})
 	server.adminSettings = adminapi.NewSettingsAPI(server.settings)
 	server.accounts = account.NewService(account.Dependencies{
@@ -146,7 +148,7 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 	realtimeOptions.RecordUserPong = server.recordUserPong
 	server.realtime = realtime.NewConnectionPool(realtimeOptions)
 	server.userManagement = usermanagement.NewService(usermanagement.Dependencies{
-		DB: db, Presence: server.realtime,
+		DB: db, Presence: server.realtime, AppConnections: server.appConnections,
 	})
 	server.adminUsers = adminapi.NewUserAPI(server.userManagement)
 	server.identityProviders = identityprovider.NewService(identityprovider.Dependencies{DB: db})
@@ -203,6 +205,7 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 
 	client := router.Group("/api/client", server.clientAccounts.RequireSession)
 	server.clientAccounts.RegisterProtectedRoutes(client)
+	server.clientApps.RegisterRoutes(client)
 	server.clientFiles.RegisterRoutes(client)
 	server.clientProjects.RegisterRoutes(client)
 	server.clientTasks.RegisterRoutes(client)

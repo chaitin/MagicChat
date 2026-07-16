@@ -18,8 +18,10 @@ func TestServiceCreatesListsAndManagesUsers(t *testing.T) {
 	userID := "10000000-0000-0000-0000-000000000001"
 	passwords := []string{"initial-password", "new-password"}
 	presence := &fakeUserPresence{online: map[string]bool{}}
+	appConnections := &fakeManagedAppConnections{}
 	service := NewService(Dependencies{
-		DB: db, Presence: presence, Now: func() time.Time { return now }, NewID: func() string { return userID },
+		DB: db, Presence: presence, AppConnections: appConnections,
+		Now: func() time.Time { return now }, NewID: func() string { return userID },
 		GenerateInitialPassword: func(int) (string, error) {
 			value := passwords[0]
 			passwords = passwords[1:]
@@ -46,6 +48,14 @@ func TestServiceCreatesListsAndManagesUsers(t *testing.T) {
 	}
 	if storedUser.PasswordHash != "hash:initial-password" || storedUser.Avatar != "/assets/avatars/builtin/07.webp" {
 		t.Fatalf("stored user = %#v", storedUser)
+	}
+	ownedApp := store.App{
+		ID: uuid.NewString(), Name: "Owned App", CreatorUserID: &storedUser.ID,
+		Enabled: true, Visibility: store.AppVisibilityCreator, ConnectionSecret: "owned-app-secret",
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := db.Create(&ownedApp).Error; err != nil {
+		t.Fatalf("create owned app: %v", err)
 	}
 	var personalProject store.Project
 	if err := db.First(&personalProject, "owner_user_id = ? AND is_personal = ?", userID, true).Error; err != nil {
@@ -78,6 +88,12 @@ func TestServiceCreatesListsAndManagesUsers(t *testing.T) {
 	var sessionCount int64
 	if err := db.Model(&store.UserSession{}).Where("user_id = ?", userID).Count(&sessionCount).Error; err != nil || sessionCount != 0 {
 		t.Fatalf("sessions after disable = %d, err = %v", sessionCount, err)
+	}
+	if err := db.First(&ownedApp, "id = ?", ownedApp.ID).Error; err != nil {
+		t.Fatalf("reload owned app: %v", err)
+	}
+	if ownedApp.Enabled || len(appConnections.closedAppIDs) != 1 || appConnections.closedAppIDs[0] != ownedApp.ID {
+		t.Fatalf("owned app enabled = %t, closed apps = %#v", ownedApp.Enabled, appConnections.closedAppIDs)
 	}
 
 	enabled, err := service.SetStatus(context.Background(), SetStatusCommand{UserID: userID, Status: StatusActive})
@@ -138,6 +154,15 @@ type fakeUserPresence struct {
 	closeCalls int
 }
 
+type fakeManagedAppConnections struct {
+	closedAppIDs []string
+}
+
+func (c *fakeManagedAppConnections) CloseApp(appID string) int {
+	c.closedAppIDs = append(c.closedAppIDs, appID)
+	return 1
+}
+
 func (p *fakeUserPresence) OnlineStatus(userIDs []string) map[string]bool {
 	result := make(map[string]bool, len(userIDs))
 	for _, userID := range userIDs {
@@ -166,7 +191,7 @@ func openUserManagementTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
-	if err := db.AutoMigrate(&store.User{}, &store.UserSession{}, &store.Project{}); err != nil {
+	if err := db.AutoMigrate(&store.User{}, &store.UserSession{}, &store.Project{}, &store.App{}); err != nil {
 		t.Fatalf("migrate database: %v", err)
 	}
 	return db

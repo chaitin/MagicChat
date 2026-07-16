@@ -1533,6 +1533,602 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/client/apps": {
+            "get": {
+                "security": [
+                    {
+                        "UserSession": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端应用"
+                ],
+                "summary": "列出当前用户创建的应用",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/client.successEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/client.listClientAppsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "UserSession": []
+                    }
+                ],
+                "description": "创建应用并仅在本次响应中返回连接密钥。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端应用"
+                ],
+                "summary": "创建用户应用",
+                "parameters": [
+                    {
+                        "description": "应用配置",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/client.createClientAppRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/client.successEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/client.clientAppCredentialResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/client/apps/{app_id}": {
+            "get": {
+                "security": [
+                    {
+                        "UserSession": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端应用"
+                ],
+                "summary": "获取当前用户创建的应用",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "app_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/client.successEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/client.clientAppEnvelope"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "UserSession": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端应用"
+                ],
+                "summary": "删除当前用户创建的应用",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "app_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/client.successEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "UserSession": []
+                    }
+                ],
+                "description": "更新名称、备注、可见范围或 restricted 授权用户。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端应用"
+                ],
+                "summary": "更新当前用户创建的应用",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "app_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "应用更新配置",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/client.updateClientAppRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/client.successEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/client.clientAppEnvelope"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/client/apps/{app_id}/avatar": {
+            "post": {
+                "security": [
+                    {
+                        "UserSession": []
+                    }
+                ],
+                "description": "头像必须是 256x256 WebP，最大 1MiB。",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端应用"
+                ],
+                "summary": "上传应用头像",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "app_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "应用头像",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/client.successEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/client.clientAppEnvelope"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/client/apps/{app_id}/disable": {
+            "post": {
+                "security": [
+                    {
+                        "UserSession": []
+                    }
+                ],
+                "description": "禁用应用并关闭该应用已有连接。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端应用"
+                ],
+                "summary": "禁用应用",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "app_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/client.successEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/client.clientAppEnvelope"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/client/apps/{app_id}/enable": {
+            "post": {
+                "security": [
+                    {
+                        "UserSession": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端应用"
+                ],
+                "summary": "启用应用",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "app_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/client.successEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/client.clientAppEnvelope"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/client/apps/{app_id}/secret/regenerate": {
+            "post": {
+                "security": [
+                    {
+                        "UserSession": []
+                    }
+                ],
+                "description": "返回新密钥并关闭该应用已有连接，旧密钥立即失效。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端应用"
+                ],
+                "summary": "重置应用连接密钥",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "app_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/client.successEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/client.clientAppCredentialResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
         "/api/client/auth/login": {
             "post": {
                 "description": "普通用户使用管理员创建的邮箱和密码登录。",
@@ -6005,6 +6601,65 @@ const docTemplate = `{
                 }
             }
         },
+        "client.clientAppCredentialResponse": {
+            "type": "object",
+            "properties": {
+                "app": {
+                    "$ref": "#/definitions/client.clientAppResponse"
+                },
+                "connection_secret": {
+                    "type": "string"
+                }
+            }
+        },
+        "client.clientAppEnvelope": {
+            "type": "object",
+            "properties": {
+                "app": {
+                    "$ref": "#/definitions/client.clientAppResponse"
+                }
+            }
+        },
+        "client.clientAppResponse": {
+            "type": "object",
+            "properties": {
+                "avatar": {
+                    "type": "string"
+                },
+                "connection_status": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "user_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "visibility": {
+                    "type": "string"
+                }
+            }
+        },
         "client.contactAppResponse": {
             "type": "object",
             "properties": {
@@ -6264,6 +6919,26 @@ const docTemplate = `{
                 "app_id": {
                     "type": "string",
                     "example": "7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"
+                }
+            }
+        },
+        "client.createClientAppRequest": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "user_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "visibility": {
+                    "type": "string"
                 }
             }
         },
@@ -6685,6 +7360,17 @@ const docTemplate = `{
                 },
                 "message": {
                     "$ref": "#/definitions/client.messageResponse"
+                }
+            }
+        },
+        "client.listClientAppsResponse": {
+            "type": "object",
+            "properties": {
+                "apps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/client.clientAppResponse"
+                    }
                 }
             }
         },
@@ -7348,6 +8034,26 @@ const docTemplate = `{
                 "size_bytes": {
                     "type": "integer",
                     "example": 123456
+                }
+            }
+        },
+        "client.updateClientAppRequest": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "user_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "visibility": {
+                    "type": "string"
                 }
             }
         },

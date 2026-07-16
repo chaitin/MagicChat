@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"app/internal/appregistry"
 	"app/internal/config"
 	"app/internal/realtime"
 	"app/internal/store"
@@ -213,7 +214,7 @@ func TestAppWebSocketTemporaryFilesReadURLsReturnsConversationFileURLs(t *testin
 		t.Fatalf("marshal file body: %v", err)
 	}
 	senderID := alice.ID
-	if err := db.Create(&store.Message{
+	message := store.Message{
 		ID:             uuid.NewString(),
 		ConversationID: conversationID,
 		Seq:            1,
@@ -223,7 +224,8 @@ func TestAppWebSocketTemporaryFilesReadURLsReturnsConversationFileURLs(t *testin
 		Summary:        "[文件] report.txt",
 		CreatedAt:      now,
 		UpdatedAt:      now,
-	}).Error; err != nil {
+	}
+	if err := db.Create(&message).Error; err != nil {
 		t.Fatalf("create file message: %v", err)
 	}
 
@@ -233,7 +235,9 @@ func TestAppWebSocketTemporaryFilesReadURLsReturnsConversationFileURLs(t *testin
 		ID:     "app-read-file-url",
 		Method: "temporary_files.read_urls",
 		Payload: mustMarshalPayloadForTest(t, map[string]any{
-			"file_ids": []string{temporaryFile.ID},
+			"conversation_id": conversationID,
+			"file_ids":        []string{temporaryFile.ID},
+			"message_id":      message.ID,
 		}),
 	})
 	var payload map[string]any
@@ -264,6 +268,22 @@ func TestAppWebSocketTemporaryFilesReadURLsReturnsConversationFileURLs(t *testin
 	if item["expires_at"] == "" {
 		t.Fatalf("expires_at = %#v, want non-empty", item["expires_at"])
 	}
+	if err := db.Model(&store.ConversationMember{}).Where(
+		"conversation_id = ? AND member_type = ? AND member_id = ?",
+		conversationID, store.ConversationMemberTypeApp, app.ID,
+	).Update("history_visible_from_seq", 2).Error; err != nil {
+		t.Fatalf("update app history visibility: %v", err)
+	}
+	hiddenResponse := sendRawAppRequest(t, appConn, realtime.Envelope{
+		V: realtime.ProtocolVersion, Kind: realtime.KindRequest,
+		ID: "app-read-hidden-file-url", Method: appMethodTemporaryFilesReadURLs,
+		Payload: mustMarshalPayloadForTest(t, map[string]any{
+			"conversation_id": conversationID,
+			"file_ids":        []string{temporaryFile.ID},
+			"message_id":      message.ID,
+		}),
+	})
+	requireAppErrorResponse(t, hiddenResponse, "forbidden")
 }
 
 func TestAppWebSocketTemporaryFilesReadURLsReturnsConversationImageURLs(t *testing.T) {
@@ -311,7 +331,7 @@ func TestAppWebSocketTemporaryFilesReadURLsReturnsConversationImageURLs(t *testi
 		t.Fatalf("marshal image body: %v", err)
 	}
 	senderID := alice.ID
-	if err := db.Create(&store.Message{
+	message := store.Message{
 		ID:             uuid.NewString(),
 		ConversationID: conversationID,
 		Seq:            1,
@@ -321,7 +341,8 @@ func TestAppWebSocketTemporaryFilesReadURLsReturnsConversationImageURLs(t *testi
 		Summary:        "[图片]",
 		CreatedAt:      now,
 		UpdatedAt:      now,
-	}).Error; err != nil {
+	}
+	if err := db.Create(&message).Error; err != nil {
 		t.Fatalf("create image message: %v", err)
 	}
 
@@ -331,7 +352,9 @@ func TestAppWebSocketTemporaryFilesReadURLsReturnsConversationImageURLs(t *testi
 		ID:     "app-read-image-url",
 		Method: "temporary_files.read_urls",
 		Payload: mustMarshalPayloadForTest(t, map[string]any{
-			"file_ids": []string{temporaryFile.ID},
+			"conversation_id": conversationID,
+			"file_ids":        []string{temporaryFile.ID},
+			"message_id":      message.ID,
 		}),
 	})
 	var payload map[string]any
@@ -355,7 +378,7 @@ func TestAppWebSocketTemporaryFilesReadURLsReturnsConversationImageURLs(t *testi
 	}
 }
 
-func TestAppWebSocketTemporaryFilesReadURLsReturnsUnreferencedFile(t *testing.T) {
+func TestAppWebSocketTemporaryFilesReadURLsRejectsUnreferencedFile(t *testing.T) {
 	s3Server, _ := newFakeS3Server(t)
 	defer s3Server.Close()
 
@@ -363,6 +386,7 @@ func TestAppWebSocketTemporaryFilesReadURLsReturnsUnreferencedFile(t *testing.T)
 	defer server.Close()
 
 	now := time.Date(2026, 7, 8, 11, 30, 0, 0, time.UTC)
+	alice := insertTestUser(t, db, "unreferenced@example.com", "Alice", store.UserStatusActive, now)
 	app := insertTestApp(t, db, store.App{
 		Name:             "Echo App",
 		Enabled:          true,
@@ -371,7 +395,15 @@ func TestAppWebSocketTemporaryFilesReadURLsReturnsUnreferencedFile(t *testing.T)
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	})
+	aliceCookie := loginAsUser(t, server, alice.Email)
 	appConn := dialAppWebSocket(t, server, app.ID, app.ConnectionSecret)
+	createConversationResp, createConversationBody := postJSON(t, server, "/api/client/conversations/apps", map[string]any{
+		"app_id": app.ID,
+	}, aliceCookie)
+	if createConversationResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create app conversation status = %d, want 201, body = %#v", createConversationResp.StatusCode, createConversationBody)
+	}
+	conversationID := requireSuccess(t, createConversationBody)["conversation"].(map[string]any)["id"].(string)
 
 	temporaryFile := store.TemporaryFile{
 		ID:        uuid.NewString(),
@@ -382,6 +414,15 @@ func TestAppWebSocketTemporaryFilesReadURLsReturnsUnreferencedFile(t *testing.T)
 	if err := db.Create(&temporaryFile).Error; err != nil {
 		t.Fatalf("create temporary file: %v", err)
 	}
+	message := store.Message{
+		ID: uuid.NewString(), ConversationID: conversationID, Seq: 1,
+		SenderType: store.MessageSenderTypeUser, SenderID: &alice.ID,
+		Body:    json.RawMessage(`{"type":"text","content":"no attachment"}`),
+		Summary: "no attachment", CreatedAt: now, UpdatedAt: now,
+	}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatalf("create message: %v", err)
+	}
 
 	request := realtime.Envelope{
 		V:      realtime.ProtocolVersion,
@@ -389,7 +430,9 @@ func TestAppWebSocketTemporaryFilesReadURLsReturnsUnreferencedFile(t *testing.T)
 		ID:     "app-read-unreferenced-file-url",
 		Method: "temporary_files.read_urls",
 		Payload: mustMarshalPayloadForTest(t, map[string]any{
-			"file_ids": []string{temporaryFile.ID},
+			"conversation_id": conversationID,
+			"file_ids":        []string{temporaryFile.ID},
+			"message_id":      message.ID,
 		}),
 	}
 	if err := appConn.WriteJSON(request); err != nil {
@@ -399,27 +442,39 @@ func TestAppWebSocketTemporaryFilesReadURLsReturnsUnreferencedFile(t *testing.T)
 	if response.Kind != realtime.KindResponse || response.ReplyTo != request.ID {
 		t.Fatalf("response = %#v, want matching response", response)
 	}
-	if response.OK == nil || !*response.OK {
-		t.Fatalf("response ok = %#v, want true", response.OK)
+	if response.OK == nil || *response.OK || response.Error == nil || response.Error.Code != "forbidden" {
+		t.Fatalf("response = %#v, want forbidden", response)
 	}
-	var payload map[string]any
+}
+
+func TestAIAssistantTemporaryFilesReadURLsKeepsLegacyFileIDsOnlyRequest(t *testing.T) {
+	s3Server, _ := newFakeS3Server(t)
+	defer s3Server.Close()
+
+	server, db := newTemporaryFileTestRouter(t, s3Server.URL, "assets.example.test")
+	defer server.Close()
+	now := time.Date(2026, 7, 16, 13, 0, 0, 0, time.UTC)
+	temporaryFile := store.TemporaryFile{
+		ID: uuid.NewString(), ObjectKey: "temporary-files/2026/07/16/assistant-file",
+		SizeBytes: 42, CreatedAt: now,
+	}
+	if err := db.Create(&temporaryFile).Error; err != nil {
+		t.Fatalf("create temporary file: %v", err)
+	}
+	conn := dialAppWebSocket(t, server, appregistry.AIAssistantAppID, "test-ai-assistant-secret")
+	response := sendAppRequest(t, conn, realtime.Envelope{
+		V: realtime.ProtocolVersion, Kind: realtime.KindRequest,
+		ID: "assistant-read-file-url", Method: appMethodTemporaryFilesReadURLs,
+		Payload: mustMarshalPayloadForTest(t, map[string]any{
+			"file_ids": []string{temporaryFile.ID},
+		}),
+	})
+	var payload readTemporaryFileURLsResponse
 	if err := json.Unmarshal(response.Payload, &payload); err != nil {
-		t.Fatalf("unmarshal response payload: %v", err)
+		t.Fatalf("unmarshal response: %v", err)
 	}
-	urls := payload["urls"].([]any)
-	if len(urls) != 1 {
-		t.Fatalf("url count = %d, want 1", len(urls))
-	}
-	item := urls[0].(map[string]any)
-	if item["file_id"] != temporaryFile.ID {
-		t.Fatalf("file_id = %v, want %s", item["file_id"], temporaryFile.ID)
-	}
-	readURL, err := url.Parse(item["url"].(string))
-	if err != nil {
-		t.Fatalf("parse read URL: %v", err)
-	}
-	if readURL.Path != "/mygod-temporary/"+temporaryFile.ObjectKey {
-		t.Fatalf("read URL path = %q, want temporary file path", readURL.Path)
+	if len(payload.URLs) != 1 || payload.URLs[0].FileID != temporaryFile.ID {
+		t.Fatalf("urls = %#v", payload.URLs)
 	}
 }
 
@@ -496,6 +551,7 @@ func newTemporaryFileTestRouter(t *testing.T, s3Endpoint string, assetsHostname 
 		Server:   config.ServerConfig{Addr: ":20080"},
 		Database: config.DatabaseConfig{DSN: "sqlite-test"},
 		Admin:    config.AdminConfig{Password: "admin-secret"},
+		Apps:     config.AppsConfig{AIAssistantSecret: "test-ai-assistant-secret"},
 		Storage: config.StorageConfig{
 			Provider:        "s3",
 			Endpoint:        s3Endpoint,

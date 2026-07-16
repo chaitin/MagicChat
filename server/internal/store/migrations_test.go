@@ -29,6 +29,7 @@ func TestMigrationDirectoryContainsExpectedMigrations(t *testing.T) {
 		"00014_normalize_task_reminder_time.sql",
 		"00015_partition_messages_by_year_and_conversation.sql",
 		"00016_add_temporary_file_expiration.sql",
+		"00017_add_user_managed_apps.sql",
 	}
 	if len(matches) != len(want) {
 		t.Fatalf("migration file count = %d, want %d: %v", len(matches), len(want), matches)
@@ -36,6 +37,30 @@ func TestMigrationDirectoryContainsExpectedMigrations(t *testing.T) {
 	for index, match := range matches {
 		if got := filepath.Base(match); got != want[index] {
 			t.Fatalf("migration file %d = %q, want %q", index, got, want[index])
+		}
+	}
+}
+
+func TestUserManagedAppsMigrationDefinesRestrictedAccess(t *testing.T) {
+	rawSQL, err := os.ReadFile("../../migrations/00017_add_user_managed_apps.sql")
+	if err != nil {
+		t.Fatalf("read user-managed apps migration: %v", err)
+	}
+	sql := normalizeSQL(string(rawSQL))
+	for _, required := range []string{
+		"-- +goose up",
+		"check (visibility in ('creator', 'restricted', 'public'))",
+		"create table app_user_grants",
+		"app_id uuid not null references apps(id) on delete cascade",
+		"user_id uuid not null references users(id) on delete cascade",
+		"granted_by_user_id uuid references users(id) on delete set null",
+		"primary key (app_id, user_id)",
+		"create index app_user_grants_user_id_index",
+		"-- +goose down",
+		"drop table app_user_grants",
+	} {
+		if !strings.Contains(sql, required) {
+			t.Fatalf("user-managed apps migration missing %q", required)
 		}
 	}
 }

@@ -101,6 +101,66 @@ func TestServiceDirectAndAppConversationsRemainIdempotent(t *testing.T) {
 	if err != nil || appSecond.Created || appSecond.Conversation.ID != appFirst.Conversation.ID {
 		t.Fatalf("second app = %#v, err = %v", appSecond, err)
 	}
+
+	memberID := member.ID
+	restricted := store.App{ID: uuid.NewString(), Name: "Restricted", CreatorUserID: &memberID, Enabled: true, Visibility: store.AppVisibilityRestricted, ConnectionSecret: "restricted", CreatedAt: now, UpdatedAt: now}
+	if err := db.Create(&restricted).Error; err != nil {
+		t.Fatalf("create restricted app: %v", err)
+	}
+	if err := db.Create(&store.AppUserGrant{AppID: restricted.ID, UserID: owner.ID, GrantedByUserID: &memberID, CreatedAt: now}).Error; err != nil {
+		t.Fatalf("create app user grant: %v", err)
+	}
+	if opened, err := service.CreateApp(context.Background(), CreateAppCommand{Actor: actorFromTestUser(owner), AppID: restricted.ID}); err != nil || !opened.Created {
+		t.Fatalf("open granted app = %#v, err = %v", opened, err)
+	}
+}
+
+func TestServiceOnlyAllowsPublicAppsAsGroupMembers(t *testing.T) {
+	db := openConversationTestDB(t)
+	now := time.Date(2026, 7, 16, 11, 0, 0, 0, time.UTC)
+	owner := insertConversationTestUser(t, db, "group-owner@example.com", "Owner", now)
+	ownerID := owner.ID
+	privateApp := store.App{
+		ID: uuid.NewString(), Name: "Private App", CreatorUserID: &ownerID, Enabled: true,
+		Visibility: store.AppVisibilityCreator, ConnectionSecret: "private", CreatedAt: now, UpdatedAt: now,
+	}
+	publicApp := store.App{
+		ID: uuid.NewString(), Name: "Public App", CreatorUserID: &ownerID, Enabled: true,
+		Visibility: store.AppVisibilityPublic, ConnectionSecret: "public", CreatedAt: now, UpdatedAt: now,
+	}
+	disabledOwner := insertConversationTestUser(t, db, "disabled-app-owner@example.com", "Disabled", now)
+	if err := db.Model(&store.User{}).Where("id = ?", disabledOwner.ID).Update("status", store.UserStatusDisabled).Error; err != nil {
+		t.Fatalf("disable app owner: %v", err)
+	}
+	disabledOwnerApp := store.App{
+		ID: uuid.NewString(), Name: "Disabled Owner App", CreatorUserID: &disabledOwner.ID, Enabled: true,
+		Visibility: store.AppVisibilityPublic, ConnectionSecret: "disabled-owner-public", CreatedAt: now, UpdatedAt: now,
+	}
+	if err := db.Create(&[]store.App{privateApp, publicApp, disabledOwnerApp}).Error; err != nil {
+		t.Fatalf("create apps: %v", err)
+	}
+	service := NewService(Dependencies{DB: db, Now: func() time.Time { return now }})
+	if _, err := service.CreateGroup(context.Background(), CreateGroupCommand{
+		Actor: actorFromTestUser(owner), Name: "Private app group", AppIDs: []string{privateApp.ID},
+	}); ErrorCodeOf(err) != CodeInvalidRequest {
+		t.Fatalf("private app group error = %v", err)
+	}
+	if _, err := service.CreateApp(context.Background(), CreateAppCommand{
+		Actor: actorFromTestUser(owner), AppID: disabledOwnerApp.ID,
+	}); ErrorCodeOf(err) != CodeNotFound {
+		t.Fatalf("disabled owner app conversation error = %v", err)
+	}
+	if _, err := service.CreateGroup(context.Background(), CreateGroupCommand{
+		Actor: actorFromTestUser(owner), Name: "Disabled owner app group", AppIDs: []string{disabledOwnerApp.ID},
+	}); ErrorCodeOf(err) != CodeInvalidRequest {
+		t.Fatalf("disabled owner app group error = %v", err)
+	}
+	created, err := service.CreateGroup(context.Background(), CreateGroupCommand{
+		Actor: actorFromTestUser(owner), Name: "Public app group", AppIDs: []string{publicApp.ID},
+	})
+	if err != nil || created.Conversation.MemberCount != 2 {
+		t.Fatalf("public app group = %#v, err = %v", created, err)
+	}
 }
 
 type conversationNotificationRecorder struct {
@@ -134,7 +194,7 @@ func openConversationTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("open database: %v", err)
 	}
 	if err := db.AutoMigrate(
-		&store.User{}, &store.App{}, &store.Conversation{}, &store.ConversationMember{},
+		&store.User{}, &store.App{}, &store.AppUserGrant{}, &store.Conversation{}, &store.ConversationMember{},
 		&store.DirectConversation{}, &store.AppConversation{}, &store.Message{},
 		&store.Project{}, &store.ProjectGroup{},
 	); err != nil {

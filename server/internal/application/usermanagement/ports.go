@@ -5,3 +5,7 @@ type PresencePort interface {
 	IsOnline(string) bool
 	CloseUser(string) int
 }
+
+type AppConnectionPort interface {
+	CloseApp(string) int
+}
