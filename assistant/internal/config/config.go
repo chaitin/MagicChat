@@ -138,7 +138,7 @@ func normalizeConfig(cfg Config, getenv func(string) string) (Config, error) {
 	if value := strings.TrimSpace(getenv("MYGOD_APP_ID")); value != "" {
 		cfg.AppID = value
 	}
-	if value := firstNonEmpty(getenv, "MYGOD_APP_SECRET", "MYGOD_AI_ASSISTANT_SECRET", "APP_SECRET"); value != "" {
+	if value := firstNonEmpty(getenv, "AI_ASSISTANT_SECRET", "APP_SECRET"); value != "" {
 		cfg.AppSecret = value
 	}
 	if value := strings.TrimSpace(getenv("MYGOD_WS_URL")); value != "" {

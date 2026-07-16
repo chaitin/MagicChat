@@ -9,7 +9,7 @@ import (
 func TestLoadFromEnvUsesDefaults(t *testing.T) {
 	cfg, err := LoadFromEnv(func(key string) string {
 		switch key {
-		case "MYGOD_APP_SECRET":
+		case "AI_ASSISTANT_SECRET":
 			return "secret"
 		case "MYGOD_LLM_BASE_URL":
 			return "https://api.example.com/v1"
@@ -43,7 +43,7 @@ func TestLoadFromEnvReadsExplicitValues(t *testing.T) {
 		switch key {
 		case "MYGOD_APP_ID":
 			return "app-id"
-		case "MYGOD_APP_SECRET":
+		case "AI_ASSISTANT_SECRET":
 			return "app-secret"
 		case "MYGOD_WS_URL":
 			return "wss://mygod.example.com/api/app/ws"
@@ -168,7 +168,7 @@ llm:
 
 	cfg, err := LoadFromFile(path, func(key string) string {
 		switch key {
-		case "MYGOD_APP_SECRET":
+		case "AI_ASSISTANT_SECRET":
 			return "env-secret"
 		case "MYGOD_LLM_BASE_URL":
 			return "https://env.example.com/v1"
@@ -227,10 +227,10 @@ llm:
 	}
 }
 
-func TestLoadFromEnvFallsBackToAIAssistantSecret(t *testing.T) {
+func TestLoadFromEnvReadsAIAssistantSecret(t *testing.T) {
 	cfg, err := LoadFromEnv(func(key string) string {
 		switch key {
-		case "MYGOD_AI_ASSISTANT_SECRET":
+		case "AI_ASSISTANT_SECRET":
 			return "ai-assistant-secret"
 		case "MYGOD_LLM_BASE_URL":
 			return "https://api.example.com/v1"
@@ -260,7 +260,7 @@ func TestLoadFromEnvRejectsMissingSecret(t *testing.T) {
 func TestLoadFromEnvRejectsInvalidWebSocketURL(t *testing.T) {
 	_, err := LoadFromEnv(func(key string) string {
 		switch key {
-		case "MYGOD_APP_SECRET":
+		case "AI_ASSISTANT_SECRET":
 			return "app-secret"
 		case "MYGOD_WS_URL":
 			return "https://mygod.example.com/api/app/ws"
@@ -275,7 +275,7 @@ func TestLoadFromEnvRejectsInvalidWebSocketURL(t *testing.T) {
 
 func TestLoadFromEnvRejectsMissingLLMConfig(t *testing.T) {
 	_, err := LoadFromEnv(func(key string) string {
-		if key == "MYGOD_APP_SECRET" {
+		if key == "AI_ASSISTANT_SECRET" {
 			return "app-secret"
 		}
 
@@ -289,7 +289,7 @@ func TestLoadFromEnvRejectsMissingLLMConfig(t *testing.T) {
 func TestLoadFromEnvRejectsPartialLLMConfig(t *testing.T) {
 	_, err := LoadFromEnv(func(key string) string {
 		switch key {
-		case "MYGOD_APP_SECRET":
+		case "AI_ASSISTANT_SECRET":
 			return "app-secret"
 		case "MYGOD_LLM_BASE_URL":
 			return "https://api.example.com/v1"
@@ -307,7 +307,7 @@ func TestLoadFromEnvRejectsPartialLLMConfig(t *testing.T) {
 func TestLoadFromEnvRejectsInvalidLLMBaseURL(t *testing.T) {
 	_, err := LoadFromEnv(func(key string) string {
 		switch key {
-		case "MYGOD_APP_SECRET":
+		case "AI_ASSISTANT_SECRET":
 			return "app-secret"
 		case "MYGOD_LLM_BASE_URL":
 			return "ws://api.example.com/v1"

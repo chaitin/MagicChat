@@ -168,7 +168,7 @@ func httpsOrigin(hostname string, port uint16) string {
 }
 
 func normalizeAppsConfig(cfg *AppsConfig) error {
-	if value := firstNonEmptyEnv("MYGOD_AI_ASSISTANT_SECRET"); value != "" {
+	if value := firstNonEmptyEnv("AI_ASSISTANT_SECRET"); value != "" {
 		cfg.AIAssistantSecret = value
 	}
 	cfg.AIAssistantSecret = strings.TrimSpace(cfg.AIAssistantSecret)

@@ -29,7 +29,7 @@ services:
     environment:
       CONFIG: /app/config/config.yaml
       LOG_FILE: /app/log/assistant.log
-      MYGOD_APP_SECRET: ${MYGOD_AI_ASSISTANT_SECRET:-change-me}
+      AI_ASSISTANT_SECRET: ${AI_ASSISTANT_SECRET:-change-me}
     volumes:
       - ./data/assistant/config:/app/config:ro
       - ./data/assistant/log:/app/log
@@ -47,7 +47,7 @@ services:
       CLIENT_HTTPS_PORT: ${CLIENT_HTTPS_PORT:-443}
       ADMIN_HTTPS_PORT: ${ADMIN_HTTPS_PORT:-1443}
       ASSETS_HOSTNAME: ${ASSETS_HOSTNAME:-assets.localhost}
-      MYGOD_AI_ASSISTANT_SECRET: ${MYGOD_AI_ASSISTANT_SECRET:-change-me}
+      AI_ASSISTANT_SECRET: ${AI_ASSISTANT_SECRET:-change-me}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-change-me}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-change-me}
     volumes:

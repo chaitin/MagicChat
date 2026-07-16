@@ -57,7 +57,9 @@ assert_contains "compose.yml" 'CLIENT_HTTPS_PORT: ${CLIENT_HTTPS_PORT:-443}'
 assert_contains "compose.yml" 'ADMIN_HTTPS_PORT: ${ADMIN_HTTPS_PORT:-1443}'
 assert_contains "compose.yml" 'ASSETS_HOSTNAME: ${ASSETS_HOSTNAME:-assets.localhost}'
 assert_contains "compose.yml" 'CONFIG: /app/config/config.yaml'
-assert_contains "compose.yml" 'MYGOD_APP_SECRET: ${MYGOD_AI_ASSISTANT_SECRET:-change-me}'
+assert_contains "compose.yml" 'AI_ASSISTANT_SECRET: ${AI_ASSISTANT_SECRET:-change-me}'
+assert_not_contains "compose.yml" "MYGOD_AI_ASSISTANT_SECRET"
+assert_not_contains "compose.yml" "MYGOD_APP_SECRET"
 assert_contains "compose.yml" "80:80"
 assert_contains "compose.yml" '${CLIENT_HTTPS_PORT:-443}:${CLIENT_HTTPS_PORT:-443}'
 assert_contains "compose.yml" '${ADMIN_HTTPS_PORT:-1443}:${ADMIN_HTTPS_PORT:-1443}'

@@ -71,7 +71,7 @@ admin:
 	t.Setenv("CLIENT_HTTPS_PORT", "8443")
 	t.Setenv("ADMIN_HTTPS_PORT", "9443")
 	t.Setenv("ASSETS_HOSTNAME", "assets.example.com")
-	t.Setenv("MYGOD_AI_ASSISTANT_SECRET", "env-ai-assistant-secret")
+	t.Setenv("AI_ASSISTANT_SECRET", "env-ai-assistant-secret")
 
 	cfg, err := Load()
 	if err != nil {
@@ -352,7 +352,7 @@ storage:
 
 	t.Setenv("CONFIG", path)
 	t.Setenv("PUBLIC_HOSTNAME", "chat.example.com")
-	t.Setenv("MYGOD_AI_ASSISTANT_SECRET", "test-ai-assistant-secret")
+	t.Setenv("AI_ASSISTANT_SECRET", "test-ai-assistant-secret")
 
 	_, err := Load()
 	if err == nil {
@@ -398,7 +398,7 @@ storage:
 			t.Setenv("CONFIG", path)
 			t.Setenv("PUBLIC_HOSTNAME", "chat.example.com")
 			t.Setenv("ASSETS_HOSTNAME", "assets.example.com")
-			t.Setenv("MYGOD_AI_ASSISTANT_SECRET", "test-ai-assistant-secret")
+			t.Setenv("AI_ASSISTANT_SECRET", "test-ai-assistant-secret")
 			t.Setenv(input.invalidEnv, input.invalidValue)
 
 			_, err := Load()
@@ -538,5 +538,5 @@ func setRequiredPublicEndpoints(t *testing.T) {
 
 	t.Setenv("PUBLIC_HOSTNAME", "chat.example.com")
 	t.Setenv("ASSETS_HOSTNAME", "assets.example.com")
-	t.Setenv("MYGOD_AI_ASSISTANT_SECRET", "test-ai-assistant-secret")
+	t.Setenv("AI_ASSISTANT_SECRET", "test-ai-assistant-secret")
 }
