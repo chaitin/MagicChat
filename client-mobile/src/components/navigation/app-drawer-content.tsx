@@ -1,5 +1,6 @@
 import { usePathname, useRouter, type Href } from "expo-router"
 import { Check, ChevronRight, LogOut } from "lucide-react-native"
+import { Alert } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import {
   Avatar,
@@ -8,6 +9,7 @@ import {
   ListItem,
   Paragraph,
   Separator,
+  Spinner,
   Text,
   useTheme,
   XStack,
@@ -17,6 +19,7 @@ import {
 
 import { ThemedIcon } from "@/components/icons/themed-icon"
 import { appConfig } from "@/config/app-config"
+import { ApiRequestError } from "@/data/api-client"
 import { useAuth } from "@/features/auth/auth-context"
 import { appSections } from "@/navigation/app-sections"
 
@@ -24,17 +27,26 @@ export function AppDrawerContent({ closeDrawer }: { closeDrawer: () => void }) {
   const pathname = usePathname()
   const router = useRouter()
   const theme = useTheme()
-  const { session, signOut } = useAuth()
+  const { isSigningOut, session, signOut } = useAuth()
 
   function navigateTo(href: Href) {
     closeDrawer()
     router.replace(href)
   }
 
-  function handleLogout() {
-    closeDrawer()
-    signOut()
-    router.replace("/login")
+  async function handleLogout() {
+    try {
+      await signOut()
+      closeDrawer()
+      router.replace("/init")
+    } catch (error: unknown) {
+      Alert.alert(
+        "退出登录失败",
+        error instanceof ApiRequestError
+          ? error.message
+          : "暂时无法退出登录，请稍后重试。"
+      )
+    }
   }
 
   return (
@@ -48,7 +60,7 @@ export function AppDrawerContent({ closeDrawer }: { closeDrawer: () => void }) {
       <YStack bg="$background" flex={1}>
         <YStack gap="$4" p="$4">
           <XStack gap="$3" items="center">
-            <Avatar circular size="$5" theme="blue">
+            <Avatar circular size="$5" theme="teal">
               <Avatar.Fallback>
                 <Text fontWeight="700">MC</Text>
               </Avatar.Fallback>
@@ -84,7 +96,7 @@ export function AppDrawerContent({ closeDrawer }: { closeDrawer: () => void }) {
                       <ThemedIcon icon={active ? Check : ChevronRight} />
                     }
                     onPress={() => navigateTo(item.href)}
-                    theme={active ? "blue" : undefined}
+                    theme={active ? "teal" : undefined}
                     title={item.label}
                   />
                 </YGroup.Item>
@@ -104,24 +116,27 @@ export function AppDrawerContent({ closeDrawer }: { closeDrawer: () => void }) {
             <YGroup.Item>
               <ListItem
                 icon={
-                  <Avatar circular size="$3" theme="blue">
+                  <Avatar circular size="$3" theme="teal">
                     <Avatar.Fallback>
                       <Text>演</Text>
                     </Avatar.Fallback>
                   </Avatar>
                 }
-                subTitle={session?.serverUrl ?? "未选择服务器"}
+                subTitle={session?.url ?? "未选择服务器"}
                 title="演示账号"
               />
             </YGroup.Item>
           </YGroup>
           <Button
-            icon={<ThemedIcon icon={LogOut} />}
-            onPress={handleLogout}
+            disabled={isSigningOut}
+            icon={
+              isSigningOut ? <Spinner /> : <ThemedIcon icon={LogOut} />
+            }
+            onPress={() => void handleLogout()}
             theme="red"
             variant="outlined"
           >
-            退出登录
+            {isSigningOut ? "正在退出…" : "退出登录"}
           </Button>
         </YStack>
       </YStack>

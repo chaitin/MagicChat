@@ -46,9 +46,18 @@ type ConversationsResponse = {
   conversations?: ConversationResponse[]
 }
 
+type ConversationActionResponse = {
+  conversation?: ConversationResponse
+}
+
+type ConversationRequestOptions = {
+  fetcher?: ApiFetch
+  signal?: AbortSignal
+}
+
 export async function fetchConversations(
   serverUrl: string,
-  options: { fetcher?: ApiFetch; signal?: AbortSignal } = {}
+  options: ConversationRequestOptions = {}
 ) {
   const data = await createApiClient(serverUrl, options.fetcher).request<
     ConversationsResponse
@@ -63,6 +72,72 @@ export async function fetchConversations(
   }
 
   return data.conversations.map(normalizeConversation)
+}
+
+export async function openDirectConversation(
+  serverUrl: string,
+  userId: string,
+  options: ConversationRequestOptions = {}
+) {
+  const data = await createApiClient(serverUrl, options.fetcher).request<
+    ConversationActionResponse
+  >("/api/client/conversations/direct", {
+    body: JSON.stringify({ user_id: userId }),
+    errorMessage: "创建一对一会话失败",
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+    signal: options.signal,
+  })
+
+  return normalizeConversationAction(data, "创建一对一会话响应格式不正确")
+}
+
+export async function openAppConversation(
+  serverUrl: string,
+  appId: string,
+  options: ConversationRequestOptions = {}
+) {
+  const data = await createApiClient(serverUrl, options.fetcher).request<
+    ConversationActionResponse
+  >("/api/client/conversations/apps", {
+    body: JSON.stringify({ app_id: appId }),
+    errorMessage: "创建应用会话失败",
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+    signal: options.signal,
+  })
+
+  return normalizeConversationAction(data, "创建应用会话响应格式不正确")
+}
+
+export async function joinGroupConversation(
+  serverUrl: string,
+  conversationId: string,
+  options: ConversationRequestOptions = {}
+) {
+  const data = await createApiClient(serverUrl, options.fetcher).request<
+    ConversationActionResponse
+  >(
+    `/api/client/conversations/groups/${encodeURIComponent(conversationId)}/join`,
+    {
+      errorMessage: "加入群聊失败",
+      method: "POST",
+      signal: options.signal,
+    }
+  )
+
+  return normalizeConversationAction(data, "加入群聊响应格式不正确")
+}
+
+function normalizeConversationAction(
+  data: ConversationActionResponse | undefined,
+  errorMessage: string
+) {
+  if (!data?.conversation) {
+    throw new ApiRequestError(errorMessage)
+  }
+
+  return normalizeConversation(data.conversation)
 }
 
 function normalizeConversation(

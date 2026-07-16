@@ -1,7 +1,8 @@
 import { Send } from "lucide-react-native"
 import { useState } from "react"
-import { Button, Input, Separator, Spinner, XStack, YStack } from "tamagui"
+import { Button, Separator, Spinner, XStack, YStack } from "tamagui"
 
+import { AppInput } from "@/components/forms/app-input"
 import { ThemedIcon } from "@/components/icons/themed-icon"
 
 export function MessageComposer({
@@ -24,7 +25,7 @@ export function MessageComposer({
     <YStack bg="$background">
       <Separator />
       <XStack gap="$2" items="center" p="$3">
-        <Input
+        <AppInput
           autoCapitalize="sentences"
           disabled={disabled}
           flex={1}
@@ -43,7 +44,7 @@ export function MessageComposer({
           }
           onPress={() => void handleSend()}
           size="$4"
-          theme="blue"
+          theme="teal"
         />
       </XStack>
     </YStack>

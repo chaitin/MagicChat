@@ -9,11 +9,11 @@ import type {
   ClientMessageSender,
   ClientUser,
 } from "@/data/models"
-import { queryKeys, type ServerTarget } from "@/data/query"
+import { queryKeys, type AuthenticatedTarget } from "@/data/query"
 import {
   createMessageMentionLabelResolver,
   formatClientMessageBodySummary,
-} from "@/features/conversation/conversation-message-presenter"
+} from "@/domain/messages/message-presenter"
 
 const MESSAGE_CHANNEL_ID = "messages"
 
@@ -57,7 +57,7 @@ export async function prepareMessageNotifications() {
 
 export async function showBackgroundMessageNotification(
   queryClient: QueryClient,
-  server: ServerTarget,
+  server: AuthenticatedTarget,
   message: ClientMessage
 ) {
   if (Platform.OS === "web" || !notificationsAllowed) {

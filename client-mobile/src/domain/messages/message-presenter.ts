@@ -5,7 +5,8 @@ import type {
   ClientMessageBody,
   ClientUser,
 } from "@/data/models"
-import { getContactDisplayName } from "@/features/contacts/contact-directory-model"
+import { getContactDisplayName } from "@/domain/contacts/contact-display"
+import type { EntityReference } from "@/domain/entities/entity-profile"
 
 export type MessageMentionLabelResolver = (target: {
   id: string
@@ -23,6 +24,7 @@ export type PresentedMessage = {
     summary: string
   }
   role: "me" | "other" | "system"
+  sender: EntityReference | null
   time: string
 }
 
@@ -114,6 +116,10 @@ export function buildPresentedMessages({
             }
           : undefined,
       role,
+      sender:
+        message.sender.type === "system"
+          ? null
+          : { id: message.sender.id, type: message.sender.type },
       time: formatMessageTime(message.createdAt),
     }
   })

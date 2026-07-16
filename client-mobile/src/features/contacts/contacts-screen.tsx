@@ -1,8 +1,8 @@
 import { RefreshCw, Search } from "lucide-react-native"
+import { useRouter } from "expo-router"
 import { useMemo, useState } from "react"
 import {
   Button,
-  Input,
   Paragraph,
   SizableText,
   Spinner,
@@ -11,17 +11,20 @@ import {
   YStack,
 } from "tamagui"
 
+import { AppInput } from "@/components/forms/app-input"
 import { ThemedIcon } from "@/components/icons/themed-icon"
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
 import { appConfig } from "@/config/app-config"
 import { useCachedAppInfo } from "@/data/hooks"
+import { useAuthenticatedSession } from "@/features/auth/auth-context"
 import {
   buildDirectorySections,
+  type DirectoryItem,
   type DirectoryTab,
 } from "@/features/contacts/contact-directory-model"
 import { ContactDirectoryList } from "@/features/contacts/contact-directory-list"
-import { useServers } from "@/features/servers/server-context"
 import { useClientData } from "@/providers/client-data-provider"
+import { buildEntityDetailHref } from "@/navigation/entity-details"
 
 const DIRECTORY_TABS: { label: string; value: DirectoryTab }[] = [
   { label: "联系人", value: "user" },
@@ -30,8 +33,9 @@ const DIRECTORY_TABS: { label: string; value: DirectoryTab }[] = [
 ]
 
 export function ContactsScreen() {
-  const { selectedServer } = useServers()
-  const appInfoQuery = useCachedAppInfo(selectedServer)
+  const router = useRouter()
+  const session = useAuthenticatedSession()
+  const appInfoQuery = useCachedAppInfo(session)
   const {
     contacts,
     contactsError,
@@ -75,6 +79,12 @@ export function ContactsScreen() {
     void refreshContacts().catch(() => undefined)
   }
 
+  function handleItemPress(item: DirectoryItem) {
+    router.push(
+      buildEntityDetailHref({ id: item.value.id, type: item.type })
+    )
+  }
+
   return (
     <KeyboardAwareScreen edges={[]} scrollable={false}>
       <YStack gap="$3" p="$4" pb="$3">
@@ -90,7 +100,7 @@ export function ContactsScreen() {
 
         <XStack gap="$2" items="center">
           <ThemedIcon icon={Search} size={18} />
-          <Input
+          <AppInput
             autoCapitalize="none"
             clearButtonMode="while-editing"
             flex={1}
@@ -126,8 +136,9 @@ export function ContactsScreen() {
         emptyLabel={getDirectoryTabLabel(activeTab)}
         isRefreshing={isContactsRefreshing}
         onRefresh={handleRefresh}
+        onItemPress={handleItemPress}
         sections={sections}
-        serverUrl={selectedServer.url}
+        serverUrl={session.url}
       />
     </KeyboardAwareScreen>
   )

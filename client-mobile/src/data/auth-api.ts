@@ -39,3 +39,16 @@ export async function login(
     name: user.name,
   } satisfies AuthenticatedUser
 }
+
+export async function logout(
+  serverUrl: string,
+  options: { fetcher?: ApiFetch } = {}
+) {
+  await createApiClient(serverUrl, options.fetcher).request<void>(
+    "/api/client/auth/logout",
+    {
+      errorMessage: "退出登录失败",
+      method: "POST",
+    }
+  )
+}

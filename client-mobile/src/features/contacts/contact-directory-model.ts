@@ -4,6 +4,10 @@ import type {
   ContactGroup,
   ContactUser,
 } from "@/data/models"
+import {
+  formatContactPhone,
+  getContactDisplayName,
+} from "@/domain/contacts/contact-display"
 
 export type DirectoryTab = "user" | "app" | "group"
 
@@ -101,19 +105,8 @@ export function buildDirectorySections({
     : []
 }
 
-export function getContactDisplayName(contact: {
-  name: string
-  nickname: string
-}) {
-  return contact.nickname.trim() || contact.name.trim()
-}
-
 export function getContactInitial(name: string) {
   return Array.from(name.trim())[0]?.toUpperCase() ?? "?"
-}
-
-export function formatContactPhone(phone: string) {
-  return phone.startsWith("+86") ? phone.slice(3) : phone
 }
 
 function createGroupSection(

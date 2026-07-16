@@ -18,13 +18,13 @@ import type {
   ClientMessage,
   ClientMessageList,
 } from "@/data/models"
-import { queryKeys, type ServerTarget } from "@/data/query"
+import { queryKeys, type AuthenticatedTarget } from "@/data/query"
 
 const MESSAGE_PAGE_SIZE = 20
 const MESSAGE_REFRESH_INTERVAL_MS = 5_000
 
 export function useConversationMessages(
-  server: ServerTarget,
+  server: AuthenticatedTarget,
   conversationId: string
 ) {
   const query = useInfiniteQuery<
@@ -69,7 +69,7 @@ export function useConversationMessages(
 }
 
 export function useSendConversationTextMessage(
-  server: ServerTarget,
+  server: AuthenticatedTarget,
   conversationId: string
 ) {
   const queryClient = useQueryClient()
@@ -90,7 +90,7 @@ export function useSendConversationTextMessage(
 }
 
 export function useMarkConversationRead(
-  server: ServerTarget,
+  server: AuthenticatedTarget,
   conversationId: string
 ) {
   const queryClient = useQueryClient()
@@ -98,17 +98,38 @@ export function useMarkConversationRead(
   return useMutation({
     mutationFn: (upToSeq: number) =>
       markConversationRead(server.url, conversationId, upToSeq),
+    onMutate: (upToSeq) => {
+      void queryClient.cancelQueries({
+        exact: true,
+        queryKey: queryKeys.conversations(server),
+      })
+      queryClient.setQueryData<ClientConversation[]>(
+        queryKeys.conversations(server),
+        (current) =>
+          current?.map((conversation) =>
+            conversation.id === conversationId
+              ? {
+                  ...conversation,
+                  lastReadSeq: Math.max(conversation.lastReadSeq, upToSeq),
+                  unreadCount: 0,
+                }
+              : conversation
+          )
+      )
+    },
+    onError: () => {
+      void queryClient.invalidateQueries({
+        exact: true,
+        queryKey: queryKeys.conversations(server),
+      })
+    },
     onSuccess: (result) => {
       queryClient.setQueryData<ClientConversation[]>(
         queryKeys.conversations(server),
         (current) =>
           current?.map((conversation) =>
             conversation.id === result.conversationId
-              ? {
-                  ...conversation,
-                  lastReadSeq: result.lastReadSeq,
-                  unreadCount: result.unreadCount,
-                }
+              ? mergeConversationReadResult(conversation, result)
               : conversation
           )
       )
@@ -116,8 +137,27 @@ export function useMarkConversationRead(
   })
 }
 
+function mergeConversationReadResult(
+  conversation: ClientConversation,
+  result: {
+    lastReadSeq: number
+    unreadCount: number
+  }
+) {
+  const lastReadSeq = Math.max(conversation.lastReadSeq, result.lastReadSeq)
+
+  return {
+    ...conversation,
+    lastReadSeq,
+    unreadCount:
+      lastReadSeq >= conversation.lastMessageSeq
+        ? 0
+        : Math.min(conversation.unreadCount, result.unreadCount),
+  }
+}
+
 export function useTemporaryFileUrls(
-  server: ServerTarget,
+  server: AuthenticatedTarget,
   fileIds: string[]
 ) {
   const uniqueFileIds = useMemo(

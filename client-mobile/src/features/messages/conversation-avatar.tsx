@@ -59,7 +59,7 @@ export function ConversationAvatar({
           t={-7}
           z={1}
         >
-          <SizableText color="white" size="$1">
+          <SizableText color="$white" size="$1">
             {formatUnreadCount(conversation.unreadCount)}
           </SizableText>
         </XStack>

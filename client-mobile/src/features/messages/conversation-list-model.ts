@@ -2,7 +2,7 @@ import type {
   ClientContacts,
   ClientConversation,
 } from "@/data/models"
-import { getContactDisplayName } from "@/features/contacts/contact-directory-model"
+import { getContactDisplayName } from "@/domain/contacts/contact-display"
 
 export type ConversationListItemModel = {
   conversation: ClientConversation

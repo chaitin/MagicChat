@@ -3,23 +3,24 @@ import { useRouter } from "expo-router"
 import { useMemo, useState } from "react"
 import {
   Button,
-  Input,
   Paragraph,
   Spinner,
   XStack,
   YStack,
 } from "tamagui"
 
+import { AppInput } from "@/components/forms/app-input"
 import { ThemedIcon } from "@/components/icons/themed-icon"
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
+import { useAuthenticatedSession } from "@/features/auth/auth-context"
 import { ConversationList } from "@/features/messages/conversation-list"
 import { buildConversationListItems } from "@/features/messages/conversation-list-model"
-import { useServers } from "@/features/servers/server-context"
 import { useClientData } from "@/providers/client-data-provider"
+import { buildConversationHref } from "@/navigation/conversations"
 
 export function MessagesScreen() {
   const router = useRouter()
-  const { selectedServer } = useServers()
+  const session = useAuthenticatedSession()
   const {
     contacts,
     conversations,
@@ -43,10 +44,7 @@ export function MessagesScreen() {
   }
 
   function handleConversationPress(conversationId: string) {
-    router.push({
-      params: { conversationId },
-      pathname: "/(app)/conversation/[conversationId]",
-    })
+    router.push(buildConversationHref(conversationId))
   }
 
   return (
@@ -54,7 +52,7 @@ export function MessagesScreen() {
       <YStack gap="$3" p="$4" pb="$3">
         <XStack gap="$2" items="center">
           <ThemedIcon icon={Search} size={18} />
-          <Input
+          <AppInput
             autoCapitalize="none"
             clearButtonMode="while-editing"
             flex={1}
@@ -92,7 +90,7 @@ export function MessagesScreen() {
         items={items}
         onConversationPress={handleConversationPress}
         onRefresh={handleRefresh}
-        serverUrl={selectedServer.url}
+        serverUrl={session.url}
       />
     </KeyboardAwareScreen>
   )

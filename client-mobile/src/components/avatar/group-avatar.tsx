@@ -1,5 +1,5 @@
 import { UsersRound } from "lucide-react-native"
-import { Avatar, Image, Text, YStack } from "tamagui"
+import { Avatar, Image, Text, YStack, type SizeTokens } from "tamagui"
 
 import { ThemedIcon } from "@/components/icons/themed-icon"
 import { resolveServerAssetUrl } from "@/lib/server-asset-url"
@@ -27,17 +27,22 @@ export function GroupAvatar({
   members = [],
   name,
   serverUrl,
+  size = "$4",
 }: {
   avatar: string
   members?: GroupAvatarMember[]
   name: string
   serverUrl: string
+  size?: number | SizeTokens
 }) {
   const avatarUrl = resolveServerAssetUrl(serverUrl, avatar)
   const entries = buildGroupAvatarEntries(members, serverUrl)
+  const numericSize = typeof size === "number" ? size : null
+  const fallbackIconSize = numericSize ? Math.max(18, numericSize * 0.36) : 18
+  const tileFontSize = numericSize ? Math.max(10, numericSize * 0.2) : 10
 
   return (
-    <Avatar rounded="$2" size="$4">
+    <Avatar rounded="$2" size={size}>
       {avatarUrl ? <Avatar.Image src={avatarUrl} /> : null}
       <Avatar.Fallback
         accessibilityLabel={name}
@@ -52,13 +57,14 @@ export function GroupAvatar({
                 key={`${entry.displayName}-${index}`}
                 avatarUrl={entry.avatarUrl}
                 displayName={entry.displayName}
+                fontSize={tileFontSize}
                 placement={getTilePlacement(index, entries.length)}
               />
             ))}
           </YStack>
         ) : (
           <YStack flex={1} items="center" justify="center">
-            <ThemedIcon icon={UsersRound} size={18} />
+            <ThemedIcon icon={UsersRound} size={fallbackIconSize} />
           </YStack>
         )}
       </Avatar.Fallback>
@@ -69,10 +75,12 @@ export function GroupAvatar({
 function GroupAvatarTile({
   avatarUrl,
   displayName,
+  fontSize,
   placement,
 }: {
   avatarUrl: string
   displayName: string
+  fontSize: number
   placement: TilePlacement
 }) {
   return (
@@ -92,7 +100,7 @@ function GroupAvatarTile({
       {avatarUrl ? (
         <Image height="100%" objectFit="cover" src={avatarUrl} width="100%" />
       ) : (
-        <Text fontSize={10} fontWeight="600" lineHeight={12}>
+        <Text fontSize={fontSize} fontWeight="600" lineHeight={fontSize * 1.2}>
           {getInitial(displayName)}
         </Text>
       )}

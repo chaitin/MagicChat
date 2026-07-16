@@ -2,6 +2,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  type ScrollViewProps,
   StyleSheet,
 } from "react-native"
 import {
@@ -13,6 +14,7 @@ import { YStack, type YStackProps } from "tamagui"
 type KeyboardAwareScreenProps = React.PropsWithChildren<
   YStackProps & {
     edges?: readonly Edge[]
+    keyboardShouldPersistTaps?: ScrollViewProps["keyboardShouldPersistTaps"]
     keyboardVerticalOffset?: number
     scrollable?: boolean
   }
@@ -21,6 +23,7 @@ type KeyboardAwareScreenProps = React.PropsWithChildren<
 export function KeyboardAwareScreen({
   children,
   edges,
+  keyboardShouldPersistTaps = "handled",
   keyboardVerticalOffset = 0,
   scrollable = true,
   ...contentProps
@@ -50,7 +53,7 @@ export function KeyboardAwareScreen({
             keyboardDismissMode={
               Platform.OS === "ios" ? "interactive" : "on-drag"
             }
-            keyboardShouldPersistTaps="handled"
+            keyboardShouldPersistTaps={keyboardShouldPersistTaps}
           >
             {content}
           </ScrollView>

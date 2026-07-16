@@ -5,7 +5,9 @@ import type {
   RealtimeSnapshot,
 } from "@/realtime/realtime-client"
 
-export type RealtimeContextValue = RealtimeSnapshot
+export type RealtimeContextValue = RealtimeSnapshot & {
+  activateConversation: (conversationId: string) => () => void
+}
 
 export const RealtimeContext = createContext<RealtimeContextValue | null>(null)
 
@@ -20,6 +22,7 @@ export function useRealtime(): RealtimeContextValue {
 }
 
 export const DISCONNECTED_REALTIME_SNAPSHOT: RealtimeContextValue = {
+  activateConversation: () => () => undefined,
   ready: false,
   status: "disconnected" satisfies RealtimeConnectionStatus,
 }

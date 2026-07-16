@@ -28,7 +28,7 @@ export function FeaturePlaceholder({
       <Card maxW={440} size="$5" width="100%">
         <Card.Header gap="$4">
           <XStack gap="$3" items="center">
-            <Avatar circular size="$6" theme="blue">
+            <Avatar circular size="$6" theme="teal">
               <Avatar.Fallback>
                 <ThemedIcon icon={icon} size={24} />
               </Avatar.Fallback>

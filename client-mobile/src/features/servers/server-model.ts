@@ -12,7 +12,7 @@ export const OFFICIAL_SERVER_ID = "magicchat-official"
 export const officialServer: ServerConfig = {
   id: OFFICIAL_SERVER_ID,
   isBuiltIn: true,
-  name: "MagicChat 官方服务器",
+  name: "即应官方服务器",
   url: appConfig.officialServerUrl,
 }
 

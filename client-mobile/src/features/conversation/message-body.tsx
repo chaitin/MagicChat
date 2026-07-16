@@ -30,22 +30,24 @@ import type { ClientMessageBody } from "@/data/models"
 import {
   formatClientMessageBodySummary,
   formatFileSize,
-  formatMarkdownAsPlainText,
   formatMentionTemplateText,
   formatVoiceDuration,
   type MessageMentionLabelResolver,
-} from "@/features/conversation/conversation-message-presenter"
+} from "@/domain/messages/message-presenter"
+import { MarkdownMessage } from "@/features/conversation/markdown-message"
 
 export function MessageBody({
   body,
   fileUrls,
   fileUrlsLoading,
   resolveMentionLabel,
+  serverUrl,
 }: {
   body: ClientMessageBody
   fileUrls: ReadonlyMap<string, string>
   fileUrlsLoading: boolean
   resolveMentionLabel: MessageMentionLabelResolver
+  serverUrl: string
 }) {
   if (body.type === "text") {
     return (
@@ -57,12 +59,11 @@ export function MessageBody({
 
   if (body.type === "markdown") {
     return (
-      <Paragraph selectable>
-        {formatMentionTemplateText(
-          formatMarkdownAsPlainText(body.content),
-          resolveMentionLabel
-        )}
-      </Paragraph>
+      <MarkdownMessage
+        content={body.content}
+        resolveMentionLabel={resolveMentionLabel}
+        serverUrl={serverUrl}
+      />
     )
   }
 

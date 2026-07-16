@@ -29,6 +29,13 @@ export default function AppDrawerLayout() {
           drawerLabel: "对话",
         }}
       />
+      <Drawer.Screen
+        name="entity/[entityType]/[entityId]"
+        options={{
+          drawerItemStyle: { display: "none" },
+          drawerLabel: "资料详情",
+        }}
+      />
     </Drawer>
   )
 }

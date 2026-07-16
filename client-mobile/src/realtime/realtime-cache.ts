@@ -7,7 +7,8 @@ import type {
   ClientMessage,
   ClientMessageList,
 } from "@/data/models"
-import { queryKeys, type ServerTarget } from "@/data/query"
+import { queryKeys, type AuthenticatedTarget } from "@/data/query"
+import { formatClientMessageBodySummary } from "@/domain/messages/message-presenter"
 import { realtimeEvents } from "@/realtime/realtime-protocol"
 
 type MessageInfiniteData = InfiniteData<ClientMessageList, number | null>
@@ -17,9 +18,10 @@ const MAX_CATCH_UP_PAGES = 100
 
 export async function applyRealtimeEvent(
   queryClient: QueryClient,
-  server: ServerTarget,
+  server: AuthenticatedTarget,
   event: string,
-  payload: unknown
+  payload: unknown,
+  options: { activeConversationId?: string; visible?: boolean } = {}
 ) {
   if (
     event === realtimeEvents.messageCreated ||
@@ -37,13 +39,29 @@ export async function applyRealtimeEvent(
         : updateMessage(current, message)
     )
 
-    void queryClient.invalidateQueries(
-      {
-        exact: true,
-        queryKey: queryKeys.conversations(server),
-      },
-      { cancelRefetch: false }
-    )
+    if (
+      event === realtimeEvents.messageCreated &&
+      options.visible &&
+      options.activeConversationId === message.conversationId
+    ) {
+      const conversations = queryClient.getQueryData<ClientConversation[]>(
+        queryKeys.conversations(server)
+      )
+      const hasConversation = conversations?.some(
+        (conversation) => conversation.id === message.conversationId
+      )
+
+      queryClient.setQueryData<ClientConversation[]>(
+        queryKeys.conversations(server),
+        (current) => markActiveConversationMessageRead(current, message)
+      )
+
+      if (!hasConversation) {
+        invalidateConversations(queryClient, server)
+      }
+    } else {
+      invalidateConversations(queryClient, server)
+    }
     return { message }
   }
 
@@ -91,13 +109,61 @@ export async function applyRealtimeEvent(
   return {}
 }
 
+function markActiveConversationMessageRead(
+  conversations: ClientConversation[] | undefined,
+  message: ClientMessage
+) {
+  if (!conversations) return conversations
+
+  const conversation = conversations.find(
+    (item) => item.id === message.conversationId
+  )
+  if (!conversation) return conversations
+
+  const isLatestMessage = message.seq >= conversation.lastMessageSeq
+  const updatedConversation: ClientConversation = {
+    ...conversation,
+    ...(isLatestMessage
+      ? {
+          lastMessageAt: message.createdAt,
+          lastMessageId: message.id,
+          lastMessageSeq: message.seq,
+          lastMessageSummary: formatClientMessageBodySummary(
+            message.body,
+            () => undefined
+          ),
+        }
+      : {}),
+    lastReadSeq: Math.max(conversation.lastReadSeq, message.seq),
+    unreadCount: 0,
+  }
+
+  return [
+    updatedConversation,
+    ...conversations.filter((item) => item.id !== message.conversationId),
+  ]
+}
+
+function invalidateConversations(
+  queryClient: QueryClient,
+  server: AuthenticatedTarget
+) {
+  void queryClient.invalidateQueries(
+    {
+      exact: true,
+      queryKey: queryKeys.conversations(server),
+    },
+    { cancelRefetch: false }
+  )
+}
+
 export async function synchronizeRealtimeData(
   queryClient: QueryClient,
-  server: ServerTarget
+  server: AuthenticatedTarget
 ) {
   const loadedConversationQueries =
     queryClient.getQueriesData<MessageInfiniteData>({
-      queryKey: ["server", server.id, server.url, "conversation"],
+      queryKey: [...queryKeys.authenticated(server), "conversation"],
     })
 
   await Promise.all([
@@ -128,7 +194,7 @@ export async function synchronizeRealtimeData(
 
 export async function refreshClientDataOnForeground(
   queryClient: QueryClient,
-  server: ServerTarget
+  server: AuthenticatedTarget
 ) {
   await Promise.all([
     queryClient.invalidateQueries(
@@ -145,13 +211,20 @@ export async function refreshClientDataOnForeground(
       },
       { cancelRefetch: false }
     ),
+    queryClient.invalidateQueries(
+      {
+        exact: true,
+        queryKey: queryKeys.projects(server),
+      },
+      { cancelRefetch: false }
+    ),
     synchronizeRealtimeData(queryClient, server),
   ])
 }
 
 async function catchUpConversationMessages(
   queryClient: QueryClient,
-  server: ServerTarget,
+  server: AuthenticatedTarget,
   conversationId: string,
   initialAfterSeq: number
 ) {
@@ -271,12 +344,13 @@ function getNewestMessageSeq(data: MessageInfiniteData) {
 }
 
 function getConversationIdFromMessageQueryKey(queryKey: readonly unknown[]) {
-  return queryKey.length === 6 &&
+  return queryKey.length === 8 &&
     queryKey[0] === "server" &&
-    queryKey[3] === "conversation" &&
-    typeof queryKey[4] === "string" &&
-    queryKey[5] === "messages"
-    ? queryKey[4]
+    queryKey[3] === "user" &&
+    queryKey[5] === "conversation" &&
+    typeof queryKey[6] === "string" &&
+    queryKey[7] === "messages"
+    ? queryKey[6]
     : null
 }
 

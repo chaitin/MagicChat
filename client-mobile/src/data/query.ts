@@ -1,37 +1,63 @@
-import { QueryClient, queryOptions } from "@tanstack/react-query"
+import {
+  infiniteQueryOptions,
+  QueryClient,
+  queryOptions,
+} from "@tanstack/react-query"
 
 import { fetchAppInfo } from "@/data/app-info-api"
 import { fetchContacts } from "@/data/contacts-api"
 import { fetchConversations } from "@/data/conversations-api"
 import { fetchCurrentUser } from "@/data/current-user-api"
+import type { ClientProjectPage } from "@/data/models"
+import { fetchProjects } from "@/data/projects-api"
 
 export const CLIENT_DATA_REFRESH_INTERVAL_MS = 15_000
+export const PROJECT_PAGE_SIZE = 100
 
 export type ServerTarget = {
   id: string
   url: string
 }
 
+export type AuthenticatedTarget = ServerTarget & {
+  userId: string
+}
+
+function serverQueryKey(server: ServerTarget) {
+  return ["server", server.id, server.url] as const
+}
+
+function authenticatedQueryKey(target: AuthenticatedTarget) {
+  return [...serverQueryKey(target), "user", target.userId] as const
+}
+
 export const queryKeys = {
+  server: serverQueryKey,
   appInfo: (server: ServerTarget) =>
-    ["server", server.id, server.url, "app-info"] as const,
-  contacts: (server: ServerTarget) =>
-    ["server", server.id, server.url, "contacts"] as const,
-  conversations: (server: ServerTarget) =>
-    ["server", server.id, server.url, "conversations"] as const,
-  conversationMessages: (server: ServerTarget, conversationId: string) =>
+    [...serverQueryKey(server), "app-info"] as const,
+  authenticated: authenticatedQueryKey,
+  authenticatedServer: (server: ServerTarget) =>
+    [...serverQueryKey(server), "user"] as const,
+  contacts: (target: AuthenticatedTarget) =>
+    [...authenticatedQueryKey(target), "contacts"] as const,
+  conversations: (target: AuthenticatedTarget) =>
+    [...authenticatedQueryKey(target), "conversations"] as const,
+  conversationMessages: (
+    target: AuthenticatedTarget,
+    conversationId: string
+  ) =>
     [
-      "server",
-      server.id,
-      server.url,
+      ...authenticatedQueryKey(target),
       "conversation",
       conversationId,
       "messages",
     ] as const,
-  currentUser: (server: ServerTarget) =>
-    ["server", server.id, server.url, "current-user"] as const,
-  temporaryFileUrls: (server: ServerTarget, fileIds: string[]) =>
-    ["server", server.id, server.url, "temporary-file-urls", fileIds] as const,
+  currentUser: (target: AuthenticatedTarget) =>
+    [...authenticatedQueryKey(target), "current-user"] as const,
+  projects: (target: AuthenticatedTarget) =>
+    [...authenticatedQueryKey(target), "projects"] as const,
+  temporaryFileUrls: (target: AuthenticatedTarget, fileIds: string[]) =>
+    [...authenticatedQueryKey(target), "temporary-file-urls", fileIds] as const,
 }
 
 export function createClientQueryClient() {
@@ -54,25 +80,44 @@ export function appInfoQueryOptions(server: ServerTarget) {
   })
 }
 
-export function contactsQueryOptions(server: ServerTarget) {
+export function contactsQueryOptions(target: AuthenticatedTarget) {
   return queryOptions({
-    queryFn: ({ signal }) => fetchContacts(server.url, { signal }),
-    queryKey: queryKeys.contacts(server),
+    queryFn: ({ signal }) => fetchContacts(target.url, { signal }),
+    queryKey: queryKeys.contacts(target),
     refetchInterval: CLIENT_DATA_REFRESH_INTERVAL_MS,
   })
 }
 
-export function currentUserQueryOptions(server: ServerTarget) {
+export function currentUserQueryOptions(target: AuthenticatedTarget) {
   return queryOptions({
-    queryFn: ({ signal }) => fetchCurrentUser(server.url, { signal }),
-    queryKey: queryKeys.currentUser(server),
+    queryFn: ({ signal }) => fetchCurrentUser(target.url, { signal }),
+    queryKey: queryKeys.currentUser(target),
   })
 }
 
-export function conversationsQueryOptions(server: ServerTarget) {
+export function conversationsQueryOptions(target: AuthenticatedTarget) {
   return queryOptions({
-    queryFn: ({ signal }) => fetchConversations(server.url, { signal }),
-    queryKey: queryKeys.conversations(server),
+    queryFn: ({ signal }) => fetchConversations(target.url, { signal }),
+    queryKey: queryKeys.conversations(target),
+    refetchInterval: CLIENT_DATA_REFRESH_INTERVAL_MS,
+  })
+}
+
+export function projectsQueryOptions(target: AuthenticatedTarget) {
+  return infiniteQueryOptions({
+    getNextPageParam: (lastPage: ClientProjectPage) =>
+      lastPage.nextCursor ?? undefined,
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam, signal }) =>
+      fetchProjects(
+        target.url,
+        {
+          cursor: pageParam ?? undefined,
+          limit: PROJECT_PAGE_SIZE,
+        },
+        { signal }
+      ),
+    queryKey: queryKeys.projects(target),
     refetchInterval: CLIENT_DATA_REFRESH_INTERVAL_MS,
   })
 }

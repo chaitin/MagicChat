@@ -6,9 +6,9 @@ import {
 } from "react-native"
 import { ListItem, Paragraph, Separator, XStack, YStack } from "tamagui"
 
+import { getContactDisplayName } from "@/domain/contacts/contact-display"
 import { ContactDirectoryAvatar } from "@/features/contacts/contact-directory-avatar"
 import {
-  getContactDisplayName,
   type DirectoryItem,
   type DirectorySection,
 } from "@/features/contacts/contact-directory-model"
@@ -17,12 +17,14 @@ export function ContactDirectoryList({
   emptyLabel,
   isRefreshing,
   onRefresh,
+  onItemPress,
   sections,
   serverUrl,
 }: {
   emptyLabel: string
   isRefreshing: boolean
   onRefresh: () => void
+  onItemPress: (item: DirectoryItem) => void
   sections: DirectorySection[]
   serverUrl: string
 }) {
@@ -48,7 +50,11 @@ export function ContactDirectoryList({
         <RefreshControl onRefresh={onRefresh} refreshing={isRefreshing} />
       }
       renderItem={(itemInfo) => (
-        <DirectoryListItem itemInfo={itemInfo} serverUrl={serverUrl} />
+        <DirectoryListItem
+          itemInfo={itemInfo}
+          onPress={() => onItemPress(itemInfo.item)}
+          serverUrl={serverUrl}
+        />
       )}
       renderSectionHeader={({ section }) =>
         section.title ? <DirectorySectionHeader section={section} /> : null
@@ -81,9 +87,11 @@ function DirectorySectionHeader({ section }: { section: DirectorySection }) {
 
 function DirectoryListItem({
   itemInfo,
+  onPress,
   serverUrl,
 }: {
   itemInfo: SectionListRenderItemInfo<DirectoryItem, DirectorySection>
+  onPress: () => void
   serverUrl: string
 }) {
   const { item } = itemInfo
@@ -102,6 +110,7 @@ function DirectoryListItem({
             type="user"
           />
         }
+        onPress={onPress}
         size="$5"
         subTitle={item.value.email}
         title={displayName}
@@ -121,6 +130,7 @@ function DirectoryListItem({
             type="app"
           />
         }
+        onPress={onPress}
         size="$5"
         subTitle={item.value.description || "智能应用"}
         title={item.value.name}
@@ -139,6 +149,7 @@ function DirectoryListItem({
           type="group"
         />
       }
+      onPress={onPress}
       size="$5"
       subTitle={`${item.value.memberCount} 人 · ${
         item.value.joined ? "已加入" : "公开群组"

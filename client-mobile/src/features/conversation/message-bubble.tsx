@@ -1,40 +1,67 @@
-import { Avatar, Card, Paragraph, SizableText, XStack, YStack } from "tamagui"
+import {
+  Avatar,
+  Button,
+  Card,
+  Paragraph,
+  SizableText,
+  XStack,
+  YStack,
+} from "tamagui"
 
+import type { EntityReference } from "@/domain/entities/entity-profile"
 import { MessageBody } from "@/features/conversation/message-body"
 import {
   formatClientMessageBodySummary,
   type MessageMentionLabelResolver,
   type PresentedMessage,
-} from "@/features/conversation/conversation-message-presenter"
+} from "@/domain/messages/message-presenter"
 import { resolveServerAssetUrl } from "@/lib/server-asset-url"
 
 export function MessageBubble({
   fileUrls,
   fileUrlsLoading,
   message,
+  onAvatarPress,
   resolveMentionLabel,
   serverUrl,
 }: {
   fileUrls: ReadonlyMap<string, string>
   fileUrlsLoading: boolean
   message: PresentedMessage
+  onAvatarPress: (sender: EntityReference) => void
   resolveMentionLabel: MessageMentionLabelResolver
   serverUrl: string
 }) {
   if (message.role === "system") {
     return (
       <XStack justify="center" px="$5">
-        <Card maxW="85%" p="$2">
+        <XStack bg="$backgroundPress" maxW="85%" p="$2" px="$3" rounded="$10">
           <SizableText color="$color10" size="$2" text="center">
             {formatClientMessageBodySummary(message.body, resolveMentionLabel)}
           </SizableText>
-        </Card>
+        </XStack>
       </XStack>
     )
   }
 
   const fromMe = message.role === "me"
-  const avatar = (
+  const sender = message.sender
+  const avatar = sender ? (
+    <Button
+      aria-label={`查看${fromMe ? "我的" : message.author}资料`}
+      chromeless
+      height="$3"
+      onPress={() => onAvatarPress(sender)}
+      p={0}
+      width="$3"
+    >
+      <MessageAvatar
+        avatar={message.avatar}
+        name={fromMe ? "我" : message.author}
+        serverUrl={serverUrl}
+      />
+    </Button>
+  ) : (
     <MessageAvatar
       avatar={message.avatar}
       name={fromMe ? "我" : message.author}
@@ -43,12 +70,17 @@ export function MessageBubble({
   )
 
   return (
-    <XStack gap="$2" justify={fromMe ? "flex-end" : "flex-start"} px="$4">
+    <XStack
+      gap="$2"
+      items="flex-start"
+      justify={fromMe ? "flex-end" : "flex-start"}
+      px="$3"
+    >
       {!fromMe ? avatar : null}
       <YStack
         gap="$1"
         items={fromMe ? "flex-end" : "flex-start"}
-        maxW="78%"
+        maxW="82%"
       >
         <XStack gap="$2" items="center">
           <SizableText color="$color10" numberOfLines={1} size="$2">
@@ -61,7 +93,17 @@ export function MessageBubble({
           ) : null}
         </XStack>
 
-        <Card p="$3" theme={fromMe ? "blue" : undefined}>
+        <Card
+          bg={fromMe ? "$teal3" : "$backgroundPress"}
+          borderColor={fromMe ? "$teal6" : "$borderColor"}
+          rounded="$5"
+          borderTopLeftRadius={fromMe ? "$5" : "$1"}
+          borderTopRightRadius={fromMe ? "$1" : "$5"}
+          borderWidth={1}
+          maxW="100%"
+          overflow="hidden"
+          p="$3"
+        >
           {message.replyTo ? (
             <YStack borderColor="$borderColor" borderLeftWidth={2} mb="$2" pl="$2">
               <SizableText fontWeight="600" numberOfLines={1} size="$2">
@@ -77,6 +119,7 @@ export function MessageBubble({
             fileUrls={fileUrls}
             fileUrlsLoading={fileUrlsLoading}
             resolveMentionLabel={resolveMentionLabel}
+            serverUrl={serverUrl}
           />
         </Card>
 
@@ -103,7 +146,7 @@ function MessageAvatar({
   const avatarUrl = resolveServerAssetUrl(serverUrl, avatar)
 
   return (
-    <Avatar rounded="$2" size="$3">
+    <Avatar rounded="$2" size="$3" theme={name === "我" ? "teal" : undefined}>
       {avatarUrl ? <Avatar.Image src={avatarUrl} /> : null}
       <Avatar.Fallback bg="$backgroundFocus" items="center" justify="center">
         <SizableText fontWeight="600" size="$2">

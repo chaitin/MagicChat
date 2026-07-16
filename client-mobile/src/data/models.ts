@@ -67,6 +67,21 @@ export type ClientContacts = {
   users: ContactUser[]
 }
 
+export type ClientProjectSummary = {
+  avatar: string
+  description: string
+  id: string
+  isPersonal: boolean
+  name: string
+  updatedAt: string
+}
+
+export type ClientProjectPage = {
+  nextCursor: string | null
+  personalProject: ClientProjectSummary
+  projects: ClientProjectSummary[]
+}
+
 export type ClientConversationProject = {
   avatar: string
   description: string

@@ -1,12 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AppState, Platform, type AppStateStatus } from "react-native"
 
 import { isUnauthorizedError } from "@/data/api-client"
 import { fetchCurrentUser } from "@/data/current-user-api"
-import type { ServerTarget } from "@/data/query"
+import type { AuthenticatedTarget } from "@/data/query"
 import { useAuth } from "@/features/auth/auth-context"
-import { useServers } from "@/features/servers/server-context"
 import {
   prepareMessageNotifications,
   showBackgroundMessageNotification,
@@ -29,32 +28,43 @@ import { realtimeEvents } from "@/realtime/realtime-protocol"
 
 export function RealtimeProvider({ children }: React.PropsWithChildren) {
   const queryClient = useQueryClient()
-  const { isAuthenticated, signOut } = useAuth()
-  const { isHydrated, selectedServer } = useServers()
+  const { invalidateSession, session } = useAuth()
   const [snapshot, setSnapshot] = useState<RealtimeSnapshot>(
     DISCONNECTED_REALTIME_SNAPSHOT
   )
-  const server = useMemo<ServerTarget>(
-    () => ({ id: selectedServer.id, url: selectedServer.url }),
-    [selectedServer.id, selectedServer.url]
+  const activeConversationIdRef = useRef("")
+  const activateConversation = useCallback((conversationId: string) => {
+    activeConversationIdRef.current = conversationId
+
+    return () => {
+      if (activeConversationIdRef.current === conversationId) {
+        activeConversationIdRef.current = ""
+      }
+    }
+  }, [])
+  const server = useMemo<AuthenticatedTarget | null>(
+    () =>
+      session
+        ? { id: session.id, url: session.url, userId: session.userId }
+        : null,
+    [session]
   )
   const realtimeEnabled =
-    isAuthenticated &&
-    isHydrated &&
-    canConnectFromCurrentPlatform(server.url)
+    server !== null && canConnectFromCurrentPlatform(server.url)
 
   useEffect(() => {
-    if (!realtimeEnabled) {
+    if (!realtimeEnabled || !server) {
       return
     }
 
+    const activeServer = server
     let isActive = true
     let synchronization = Promise.resolve()
     let currentAppState = AppState.currentState
     const client = new RealtimeClient({
       authCheck: async () => {
         try {
-          await fetchCurrentUser(server.url)
+          await fetchCurrentUser(activeServer.url)
           return true
         } catch (error: unknown) {
           if (isUnauthorizedError(error)) {
@@ -63,8 +73,10 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
           throw error
         }
       },
-      onUnauthorized: signOut,
-      url: buildRealtimeWebSocketUrl(server.url),
+      onUnauthorized: () => {
+        void invalidateSession()
+      },
+      url: buildRealtimeWebSocketUrl(activeServer.url),
     })
 
     const unsubscribeSnapshot = client.subscribe(() => {
@@ -75,12 +87,15 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
     const unsubscribeEvents = client.subscribeEvent((event, payload) => {
       if (event === realtimeEvents.systemReady) {
         enqueueSynchronization(() =>
-          synchronizeRealtimeData(queryClient, server)
+          synchronizeRealtimeData(queryClient, activeServer)
         )
         return
       }
 
-      void applyRealtimeEvent(queryClient, server, event, payload)
+      void applyRealtimeEvent(queryClient, activeServer, event, payload, {
+        activeConversationId: activeConversationIdRef.current,
+        visible: currentAppState === "active",
+      })
         .then(({ message }) => {
           if (
             event === realtimeEvents.messageCreated &&
@@ -89,7 +104,7 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
           ) {
             void showBackgroundMessageNotification(
               queryClient,
-              server,
+              activeServer,
               message
             ).catch(() => undefined)
           }
@@ -106,7 +121,7 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
 
     function handleRealtimeDataError(error: unknown) {
       if (isActive && isUnauthorizedError(error)) {
-        signOut()
+        void invalidateSession()
       }
     }
 
@@ -118,7 +133,7 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
         client.connect()
         void prepareMessageNotifications().catch(() => undefined)
         enqueueSynchronization(() =>
-          refreshClientDataOnForeground(queryClient, server)
+          refreshClientDataOnForeground(queryClient, activeServer)
         )
       }
     }
@@ -134,20 +149,28 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
 
     return () => {
       isActive = false
+      activeConversationIdRef.current = ""
       appStateSubscription.remove()
       unsubscribeEvents()
       unsubscribeSnapshot()
       client.disconnect()
     }
-  }, [queryClient, realtimeEnabled, server, signOut])
+  }, [invalidateSession, queryClient, realtimeEnabled, server])
 
   const value = useMemo(() => {
     if (!realtimeEnabled) {
-      return DISCONNECTED_REALTIME_SNAPSHOT
+      return {
+        ...DISCONNECTED_REALTIME_SNAPSHOT,
+        activateConversation,
+      }
     }
 
-    return { ready: snapshot.ready, status: snapshot.status }
-  }, [realtimeEnabled, snapshot.ready, snapshot.status])
+    return {
+      activateConversation,
+      ready: snapshot.ready,
+      status: snapshot.status,
+    }
+  }, [activateConversation, realtimeEnabled, snapshot.ready, snapshot.status])
 
   return (
     <RealtimeContext.Provider value={value}>

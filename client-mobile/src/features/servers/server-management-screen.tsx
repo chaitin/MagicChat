@@ -1,18 +1,19 @@
 import { useRouter } from "expo-router"
-import { Fragment, useState } from "react"
+import { Plus } from "lucide-react-native"
+import { useRef, useState } from "react"
+import { ScrollView, StyleSheet } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import {
   AlertDialog,
-  Button,
-  Paragraph,
-  ScrollView,
-  Separator,
+  Card,
   XStack,
-  YGroup,
   YStack,
 } from "tamagui"
 
+import { AppButton } from "@/components/forms/app-button"
+import { ThemedIcon } from "@/components/icons/themed-icon"
 import { PageHeader } from "@/components/navigation/page-header"
+import { useAuth } from "@/features/auth/auth-context"
 import { AddServerDialog } from "@/features/servers/add-server-dialog"
 import { useServers } from "@/features/servers/server-context"
 import { ServerListItem } from "@/features/servers/server-list-item"
@@ -20,9 +21,39 @@ import type { ServerConfig } from "@/features/servers/server-model"
 
 export function ServerManagementScreen() {
   const router = useRouter()
+  const { invalidateSession, session } = useAuth()
   const { removeServer, selectedServer, selectServer, servers } = useServers()
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [serverToDelete, setServerToDelete] = useState<ServerConfig | null>(null)
+  const closeOpenSwipeableRef = useRef<(() => void) | null>(null)
+
+  function closeOpenSwipeable() {
+    closeOpenSwipeableRef.current?.()
+    closeOpenSwipeableRef.current = null
+  }
+
+  function handleSwipeableOpen(close: () => void) {
+    if (closeOpenSwipeableRef.current !== close) {
+      closeOpenSwipeableRef.current?.()
+      closeOpenSwipeableRef.current = close
+    }
+  }
+
+  function handleSwipeableClose(close: () => void) {
+    if (closeOpenSwipeableRef.current === close) {
+      closeOpenSwipeableRef.current = null
+    }
+  }
+
+  function handleOpenAddDialog() {
+    closeOpenSwipeable()
+    setIsAddDialogOpen(true)
+  }
+
+  function handleRequestDelete(server: ServerConfig) {
+    closeOpenSwipeable()
+    setServerToDelete(server)
+  }
 
   function returnToLogin() {
     if (router.canGoBack()) {
@@ -33,59 +64,70 @@ export function ServerManagementScreen() {
     router.replace("/login")
   }
 
-  function handleSelect(server: ServerConfig) {
+  async function handleSelect(server: ServerConfig) {
+    closeOpenSwipeable()
+    await invalidateSession()
     selectServer(server.id)
     router.replace("/init")
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!serverToDelete) {
       return
     }
 
+    const deletesSessionServer = session?.id === serverToDelete.id
+    if (deletesSessionServer) {
+      await invalidateSession()
+    }
+
     removeServer(serverToDelete.id)
     setServerToDelete(null)
+
+    if (deletesSessionServer) {
+      router.replace("/init")
+    }
   }
 
   return (
     <YStack bg="$background" flex={1}>
       <PageHeader
-        actionLabel="添加"
-        onActionPress={() => setIsAddDialogOpen(true)}
+        actionIcon={<ThemedIcon icon={Plus} size={22} />}
+        actionLabel="添加服务器"
+        compactTitle
+        onActionPress={handleOpenAddDialog}
         onBackPress={returnToLogin}
+        subtleButtonPress
         title="服务器管理"
       />
 
-      <SafeAreaView edges={["bottom"]} style={{ flex: 1 }}>
-        <ScrollView bg="$background">
-          <YStack gap="$2" p="$4">
-            <Paragraph color="$color10" px="$2" size="$2">
-              服务器
-            </Paragraph>
+      <SafeAreaView edges={["bottom"]} style={styles.fill}>
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <YStack
+            grow={1}
+            items="center"
+            onPress={closeOpenSwipeable}
+            px="$4"
+            py="$4"
+          >
+            <Card maxW={440} size="$5" width="100%">
+              <YStack gap="$3" p="$3">
+                <YStack gap="$3">
+                  {servers.map((server) => (
+                    <ServerListItem
+                      isSelected={server.id === selectedServer.id}
+                      key={server.id}
+                      onDelete={() => handleRequestDelete(server)}
+                      onSelect={() => void handleSelect(server)}
+                      onSwipeableClose={handleSwipeableClose}
+                      onSwipeableOpen={handleSwipeableOpen}
+                      server={server}
+                    />
+                  ))}
+                </YStack>
 
-            <YGroup
-              borderColor="$borderColor"
-              borderWidth={1}
-              overflow="hidden"
-              rounded="$4"
-              size="$5"
-            >
-              {servers.map((server, index) => (
-                <Fragment key={server.id}>
-                  <ServerListItem
-                    isSelected={server.id === selectedServer.id}
-                    onDelete={() => setServerToDelete(server)}
-                    onSelect={() => handleSelect(server)}
-                    server={server}
-                  />
-                  {index < servers.length - 1 ? <Separator /> : null}
-                </Fragment>
-              ))}
-            </YGroup>
-
-            <Paragraph color="$color10" px="$2" size="$2">
-              点击一项即可切换。向左滑动自定义服务器可以删除。
-            </Paragraph>
+              </YStack>
+            </Card>
           </YStack>
         </ScrollView>
       </SafeAreaView>
@@ -106,19 +148,29 @@ export function ServerManagementScreen() {
         <AlertDialog.Portal>
           <AlertDialog.Overlay bg="$shadow6" opacity={0.5} />
           <AlertDialog.Content bordered elevate gap="$4" maxW={440} width="90%">
-            <AlertDialog.Title>删除服务器</AlertDialog.Title>
-            <AlertDialog.Description>
+            <AlertDialog.Title fontSize="$5" lineHeight="$6">
+              删除服务器
+            </AlertDialog.Title>
+            <AlertDialog.Description color="$gray9">
               确定删除“{serverToDelete?.name}”吗？此操作无法撤销。
             </AlertDialog.Description>
-            <XStack gap="$3" justify="flex-end">
-              <AlertDialog.Cancel asChild>
-                <Button variant="outlined">取消</Button>
-              </AlertDialog.Cancel>
-              <AlertDialog.Action asChild>
-                <Button onPress={handleDelete} theme="red">
-                  删除
-                </Button>
-              </AlertDialog.Action>
+            <XStack gap="$3" width="100%">
+              <AppButton
+                accessibilityLabel="取消删除服务器"
+                grow={1}
+                onPress={() => setServerToDelete(null)}
+                theme="gray"
+              >
+                取消
+              </AppButton>
+              <AppButton
+                accessibilityLabel="确认删除服务器"
+                grow={1}
+                onPress={() => void handleDelete()}
+                theme="red"
+              >
+                删除
+              </AppButton>
             </XStack>
           </AlertDialog.Content>
         </AlertDialog.Portal>
@@ -126,3 +178,12 @@ export function ServerManagementScreen() {
     </YStack>
   )
 }
+
+const styles = StyleSheet.create({
+  fill: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+})
