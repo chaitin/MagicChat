@@ -1,6 +1,6 @@
 name: mygod
 
-# Use IMAGE_REGISTRY=ghcr.1ms.run/chaitin/mygod when the GHCR mirror is needed.
+# Project images are pulled through the GHCR mirror by default.
 services:
   postgres:
     container_name: mygod-postgres
@@ -19,22 +19,9 @@ services:
       retries: 10
       start_period: 10s
 
-  rustfs:
-    container_name: mygod-rustfs
-    image: rustfs/rustfs:latest
-    restart: unless-stopped
-    command: ["/data"]
-    environment:
-      RUSTFS_ADDRESS: ":9000"
-      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-mygod}
-      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-change-me}
-      RUSTFS_CONSOLE_ENABLE: "true"
-    volumes:
-      - ./data/rustfs/data:/data
-
   assistant:
     container_name: assistant
-    image: ${IMAGE_REGISTRY:-ghcr.io/chaitin/mygod}/assistant:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.1ms.run/chaitin/magicchat}/assistant:${IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
       server:
@@ -49,21 +36,20 @@ services:
 
   server:
     container_name: mygod-server
-    image: ${IMAGE_REGISTRY:-ghcr.io/chaitin/mygod}/server:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.1ms.run/chaitin/magicchat}/server:${IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
-      rustfs:
-        condition: service_started
     environment:
       CONFIG: /app/config/config.yaml
-      CLIENT_HOSTNAME: ${CLIENT_HOSTNAME:-client.localhost}
-      ADMIN_HOSTNAME: ${ADMIN_HOSTNAME:-admin.localhost}
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-localhost}
+      CLIENT_HTTPS_PORT: ${CLIENT_HTTPS_PORT:-443}
+      ADMIN_HTTPS_PORT: ${ADMIN_HTTPS_PORT:-1443}
       ASSETS_HOSTNAME: ${ASSETS_HOSTNAME:-assets.localhost}
       MYGOD_AI_ASSISTANT_SECRET: ${MYGOD_AI_ASSISTANT_SECRET:-change-me}
-      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-mygod}
-      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-change-me}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-change-me}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-change-me}
     volumes:
       - ./data/server/config:/app/config:ro
       - ./data/server/log:/app/log
@@ -76,25 +62,24 @@ services:
 
   nginx:
     container_name: mygod-nginx
-    image: ${IMAGE_REGISTRY:-ghcr.io/chaitin/mygod}/nginx:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.1ms.run/chaitin/magicchat}/nginx:${IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
       server:
         condition: service_healthy
-      rustfs:
-        condition: service_started
     environment:
-      CLIENT_HOSTNAME: ${CLIENT_HOSTNAME:-client.localhost}
-      ADMIN_HOSTNAME: ${ADMIN_HOSTNAME:-admin.localhost}
-      ASSETS_HOSTNAME: ${ASSETS_HOSTNAME:-assets.localhost}
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-localhost}
+      CLIENT_HTTPS_PORT: ${CLIENT_HTTPS_PORT:-443}
+      ADMIN_HTTPS_PORT: ${ADMIN_HTTPS_PORT:-1443}
     ports:
       - "80:80"
-      - "443:443"
+      - "${CLIENT_HTTPS_PORT:-443}:${CLIENT_HTTPS_PORT:-443}"
+      - "${ADMIN_HTTPS_PORT:-1443}:${ADMIN_HTTPS_PORT:-1443}"
     volumes:
       - ./data/nginx/certs:/etc/nginx/certs:ro
       - ./data/nginx/log:/var/log/nginx
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://127.0.0.1/nginx-healthz >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://127.0.0.1:$${CLIENT_HTTPS_PORT}/nginx-healthz >/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10

@@ -12,8 +12,8 @@ import (
 )
 
 type IdentityProviderAPI struct {
-	providers      identityprovider.AdminService
-	clientHostname string
+	providers    identityprovider.AdminService
+	clientOrigin string
 }
 
 type thirdPartyProviderRequest struct {
@@ -51,8 +51,8 @@ type thirdPartyProviderEnvelope struct {
 	Provider thirdPartyProviderResponse `json:"provider"`
 }
 
-func NewIdentityProviderAPI(providers identityprovider.AdminService, clientHostname string) *IdentityProviderAPI {
-	return &IdentityProviderAPI{providers: providers, clientHostname: clientHostname}
+func NewIdentityProviderAPI(providers identityprovider.AdminService, clientOrigin string) *IdentityProviderAPI {
+	return &IdentityProviderAPI{providers: providers, clientOrigin: strings.TrimRight(strings.TrimSpace(clientOrigin), "/")}
 }
 
 func (a *IdentityProviderAPI) RegisterRoutes(group *echo.Group) {
@@ -255,7 +255,7 @@ func (a *IdentityProviderAPI) newProviderResponses(values []identityprovider.Pro
 func (a *IdentityProviderAPI) newProviderResponse(value identityprovider.Provider) thirdPartyProviderResponse {
 	return thirdPartyProviderResponse{
 		ID: value.ID, Name: value.Name, Key: value.Key,
-		CallbackURL: "https://" + strings.TrimSpace(a.clientHostname) + "/api/client/auth/third-party/" + url.PathEscape(value.Key) + "/callback",
+		CallbackURL: a.clientOrigin + "/api/client/auth/third-party/" + url.PathEscape(value.Key) + "/callback",
 		Type:        value.Type, Enabled: value.Enabled, ClientID: value.ClientID, ClientSecret: value.ClientSecret,
 		Scopes: value.Scopes, Config: value.Config, SortOrder: value.SortOrder,
 	}

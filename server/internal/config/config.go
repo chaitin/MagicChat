@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -17,9 +19,18 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Addr           string `yaml:"addr"`
-	ClientHostname string `yaml:"-"`
-	AdminHostname  string `yaml:"-"`
+	Addr            string `yaml:"addr"`
+	PublicHostname  string `yaml:"-"`
+	ClientHTTPSPort uint16 `yaml:"-"`
+	AdminHTTPSPort  uint16 `yaml:"-"`
+}
+
+func (c ServerConfig) ClientOrigin() string {
+	return httpsOrigin(c.PublicHostname, c.ClientHTTPSPort)
+}
+
+func (c ServerConfig) AdminOrigin() string {
+	return httpsOrigin(c.PublicHostname, c.AdminHTTPSPort)
 }
 
 type DatabaseConfig struct {
@@ -84,7 +95,7 @@ func Load() (Config, error) {
 	if strings.TrimSpace(cfg.Admin.Password) == "" {
 		return Config{}, fmt.Errorf("admin.password is required")
 	}
-	if err := normalizePublicHostnames(&cfg); err != nil {
+	if err := normalizePublicEndpoints(&cfg); err != nil {
 		return Config{}, err
 	}
 	if err := normalizeAppsConfig(&cfg.Apps); err != nil {
@@ -97,20 +108,30 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
-func normalizePublicHostnames(cfg *Config) error {
-	cfg.Server.ClientHostname = strings.TrimSpace(firstNonEmptyEnv("CLIENT_HOSTNAME"))
-	cfg.Server.AdminHostname = strings.TrimSpace(firstNonEmptyEnv("ADMIN_HOSTNAME"))
+func normalizePublicEndpoints(cfg *Config) error {
+	cfg.Server.PublicHostname = strings.TrimSpace(firstNonEmptyEnv("PUBLIC_HOSTNAME"))
 	cfg.Storage.AssetsHostname = strings.TrimSpace(firstNonEmptyEnv("ASSETS_HOSTNAME"))
 
-	if err := validateHostnameEnv("CLIENT_HOSTNAME", cfg.Server.ClientHostname); err != nil {
-		return err
-	}
-	if err := validateHostnameEnv("ADMIN_HOSTNAME", cfg.Server.AdminHostname); err != nil {
+	if err := validateHostnameEnv("PUBLIC_HOSTNAME", cfg.Server.PublicHostname); err != nil {
 		return err
 	}
 	if err := validateHostnameEnv("ASSETS_HOSTNAME", cfg.Storage.AssetsHostname); err != nil {
 		return err
 	}
+
+	clientPort, err := httpsPortFromEnv("CLIENT_HTTPS_PORT", 443)
+	if err != nil {
+		return err
+	}
+	adminPort, err := httpsPortFromEnv("ADMIN_HTTPS_PORT", 1443)
+	if err != nil {
+		return err
+	}
+	if clientPort == adminPort {
+		return fmt.Errorf("CLIENT_HTTPS_PORT and ADMIN_HTTPS_PORT must be different")
+	}
+	cfg.Server.ClientHTTPSPort = clientPort
+	cfg.Server.AdminHTTPSPort = adminPort
 
 	return nil
 }
@@ -119,11 +140,31 @@ func validateHostnameEnv(name string, value string) error {
 	if value == "" {
 		return fmt.Errorf("%s is required", name)
 	}
-	if strings.Contains(value, "://") || strings.ContainsAny(value, "/?#") {
-		return fmt.Errorf("%s must be a hostname without scheme or path", name)
+	if strings.Contains(value, "://") || strings.ContainsAny(value, "/?#:\t\r\n ") {
+		return fmt.Errorf("%s must be a hostname without scheme, port, or path", name)
 	}
 
 	return nil
+}
+
+func httpsPortFromEnv(name string, defaultPort uint16) (uint16, error) {
+	value := strings.TrimSpace(firstNonEmptyEnv(name))
+	if value == "" {
+		return defaultPort, nil
+	}
+	port, err := strconv.ParseUint(value, 10, 16)
+	if err != nil || port == 0 {
+		return 0, fmt.Errorf("%s must be an integer between 1 and 65535", name)
+	}
+	return uint16(port), nil
+}
+
+func httpsOrigin(hostname string, port uint16) string {
+	host := hostname
+	if port != 443 {
+		host = net.JoinHostPort(hostname, strconv.FormatUint(uint64(port), 10))
+	}
+	return "https://" + host
 }
 
 func normalizeAppsConfig(cfg *AppsConfig) error {

@@ -52,9 +52,10 @@ func newTestRouterWithRealtimeOptions(t *testing.T, options realtime.Options) (*
 
 	router := NewRouterWithRealtimeOptions(db, config.Config{
 		Server: config.ServerConfig{
-			Addr:           ":20080",
-			ClientHostname: "client.example.test",
-			AdminHostname:  "admin.example.test",
+			Addr:            ":20080",
+			PublicHostname:  "chat.example.test",
+			ClientHTTPSPort: 443,
+			AdminHTTPSPort:  1443,
 		},
 		Database: config.DatabaseConfig{DSN: "sqlite-test"},
 		Admin:    config.AdminConfig{Password: "admin-secret"},
@@ -4534,9 +4535,10 @@ func TestCreateConversationTextMessageDoesNotLogRecordNotFoundForFreshClientMess
 
 	router := NewRouterWithRealtimeOptions(db, config.Config{
 		Server: config.ServerConfig{
-			Addr:           ":20080",
-			ClientHostname: "client.example.test",
-			AdminHostname:  "admin.example.test",
+			Addr:            ":20080",
+			PublicHostname:  "chat.example.test",
+			ClientHTTPSPort: 443,
+			AdminHTTPSPort:  1443,
 		},
 		Database: config.DatabaseConfig{DSN: "sqlite-test"},
 		Admin:    config.AdminConfig{Password: "admin-secret"},
@@ -7928,7 +7930,7 @@ func TestAdminCanManageThirdPartyLoginProviders(t *testing.T) {
 	if createdProvider["client_secret"] != "client-secret" {
 		t.Fatalf("created client_secret = %#v, want client-secret", createdProvider["client_secret"])
 	}
-	if createdProvider["callback_url"] != "https://client.example.test/api/client/auth/third-party/sso/callback" {
+	if createdProvider["callback_url"] != "https://chat.example.test/api/client/auth/third-party/sso/callback" {
 		t.Fatalf("created callback_url = %#v, want client callback url", createdProvider["callback_url"])
 	}
 	if createdProvider["type"] != "oidc" {
@@ -7961,7 +7963,7 @@ func TestAdminCanManageThirdPartyLoginProviders(t *testing.T) {
 	if listedProvider["client_secret"] != "client-secret" {
 		t.Fatalf("listed client_secret = %#v, want client-secret", listedProvider["client_secret"])
 	}
-	if listedProvider["callback_url"] != "https://client.example.test/api/client/auth/third-party/sso/callback" {
+	if listedProvider["callback_url"] != "https://chat.example.test/api/client/auth/third-party/sso/callback" {
 		t.Fatalf("listed callback_url = %#v, want client callback url", listedProvider["callback_url"])
 	}
 

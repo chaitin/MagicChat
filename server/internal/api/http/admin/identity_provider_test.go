@@ -21,7 +21,7 @@ func TestIdentityProviderAPIRoutesUseApplicationService(t *testing.T) {
 	}
 	service := &identityProviderServiceStub{provider: provider, providers: []identityprovider.Provider{provider}}
 	router := echo.New()
-	NewIdentityProviderAPI(service, "client.example.com").RegisterRoutes(router.Group("/api/admin"))
+	NewIdentityProviderAPI(service, "https://chat.example.com:8443").RegisterRoutes(router.Group("/api/admin"))
 
 	response := performIdentityProviderRequest(router, http.MethodGet, "/api/admin/third-party/providers", nil)
 	if response.Code != http.StatusOK {
@@ -35,7 +35,7 @@ func TestIdentityProviderAPIRoutesUseApplicationService(t *testing.T) {
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil || len(payload.Data.Providers) != 1 ||
-		payload.Data.Providers[0].CallbackURL != "https://client.example.com/api/client/auth/third-party/enterprise%2Fsso/callback" {
+		payload.Data.Providers[0].CallbackURL != "https://chat.example.com:8443/api/client/auth/third-party/enterprise%2Fsso/callback" {
 		t.Fatalf("list response = %s, err = %v", response.Body.String(), err)
 	}
 

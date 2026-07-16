@@ -30,4 +30,4 @@ COPY deploy/nginx/templates /etc/nginx/templates
 COPY --from=client-build /src/client-web/dist /usr/share/nginx/client
 COPY --from=admin-build /src/admin-web/dist /usr/share/nginx/admin
 
-EXPOSE 80 443
+EXPOSE 80 443 1443

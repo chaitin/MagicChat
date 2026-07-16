@@ -12,15 +12,15 @@ apps:
 
 storage:
   provider: "s3"
-  endpoint: "http://rustfs:9000"
+  endpoint: "https://s3.example.com"
   region: "us-east-1"
   access_key_id: ""
   secret_access_key: ""
   force_path_style: true
   buckets:
-    public: "mygod-public"
-    private: "mygod-private"
-    temporary: "mygod-temporary"
+    public: "magicchat-public"
+    private: "magicchat-private"
+    temporary: "magicchat-temporary"
   lifecycle:
     temporary_expire_days: 180
     abort_multipart_days: 7
