@@ -45,12 +45,12 @@ func (s *Store) PutTemporary(ctx context.Context, objectKey string, content io.R
 	return client.PutTemporaryObject(ctx, objectKey, content, sizeBytes, contentType)
 }
 
-func (s *Store) PresignTemporaryReadURL(ctx context.Context, objectKey string) (string, time.Time, error) {
+func (s *Store) PresignTemporaryReadURL(ctx context.Context, objectKey string, ttl time.Duration) (string, time.Time, error) {
 	client, err := s.client(ctx)
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	return client.PresignTemporaryReadURL(ctx, objectKey)
+	return client.PresignTemporaryReadURL(ctx, objectKey, ttl)
 }
 
 func (s *Store) client(ctx context.Context) (*objectstore.Client, error) {

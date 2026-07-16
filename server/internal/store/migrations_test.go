@@ -28,6 +28,7 @@ func TestMigrationDirectoryContainsExpectedMigrations(t *testing.T) {
 		"00013_add_task_reminders.sql",
 		"00014_normalize_task_reminder_time.sql",
 		"00015_partition_messages_by_year_and_conversation.sql",
+		"00016_add_temporary_file_expiration.sql",
 	}
 	if len(matches) != len(want) {
 		t.Fatalf("migration file count = %d, want %d: %v", len(matches), len(want), matches)
@@ -498,6 +499,33 @@ func TestMessagePartitionMigrationDefinesRegistryAndYearHashPartitions(t *testin
 	} {
 		if strings.Contains(sql, removed) {
 			t.Fatalf("message partition migration still contains removed archive behavior %q", removed)
+		}
+	}
+}
+
+func TestTemporaryFileExpirationMigrationDefinesTieredRetention(t *testing.T) {
+	rawSQL, err := os.ReadFile("../../migrations/00016_add_temporary_file_expiration.sql")
+	if err != nil {
+		t.Fatalf("read temporary file expiration migration: %v", err)
+	}
+	sql := normalizeSQL(string(rawSQL))
+
+	for _, required := range []string{
+		"-- +goose up",
+		"alter table temporary_files add column expires_at timestamptz",
+		"update temporary_files set expires_at = created_at + case",
+		"when size_bytes > 10485760 then interval '30 days'",
+		"else interval '180 days'",
+		"alter column expires_at set not null",
+		"constraint temporary_files_expires_at_check check (expires_at > created_at)",
+		"create index temporary_files_expires_at_index on temporary_files (expires_at)",
+		"-- +goose down",
+		"drop index temporary_files_expires_at_index",
+		"drop constraint temporary_files_expires_at_check",
+		"drop column expires_at",
+	} {
+		if !strings.Contains(sql, required) {
+			t.Fatalf("temporary file expiration migration missing %q", required)
 		}
 	}
 }

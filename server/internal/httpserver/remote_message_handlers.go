@@ -44,7 +44,7 @@ var validateRemoteMessageFetchURL = validateLinkFetchURL
 var remoteMessageFetchHTTPClient = newRemoteMessageFetchHTTPClient()
 
 func (s *Server) createRemoteImageMessageBody(ctx context.Context, rawURL string) (json.RawMessage, error) {
-	remoteFile, err := downloadRemoteMessageFile(ctx, rawURL, maxTemporaryFileUploadBytes)
+	remoteFile, err := downloadRemoteMessageFile(ctx, rawURL, maxRemoteMessageFileBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func (s *Server) createRemoteFileMessageBody(ctx context.Context, rawURL string,
 	if err != nil {
 		return nil, "", newAppRequestFailure("invalid_request", err.Error())
 	}
-	remoteFile, err := downloadRemoteMessageFile(ctx, rawURL, maxTemporaryFileUploadBytes)
+	remoteFile, err := downloadRemoteMessageFile(ctx, rawURL, maxRemoteMessageFileBytes)
 	if err != nil {
 		return nil, "", err
 	}

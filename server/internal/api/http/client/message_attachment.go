@@ -66,7 +66,7 @@ type voiceMessageBody struct {
 // createFile godoc
 //
 // @Summary 发送文件消息
-// @Description 普通用户上传文件并发送为会话文件消息。文件写入 temporary bucket，消息 body 保存 file_id、文件名和文件大小。
+// @Description 普通用户上传最大 200MiB 的文件并发送为会话文件消息。文件写入 temporary bucket，消息 body 保存 file_id、文件名和文件大小。
 // @Tags 客户端消息
 // @Accept multipart/form-data
 // @Produce json
@@ -91,21 +91,21 @@ func (a *MessageAPI) createFile(c echo.Context) error {
 	if err != nil {
 		return writeFailure(c, http.StatusBadRequest, string(messageapp.CodeInvalidRequest), err.Error())
 	}
+	c.Request().Body = http.MaxBytesReader(c.Response().Writer, c.Request().Body, fileapp.MaxTemporaryUploadRequestBytes)
 	clientMessageID := c.FormValue("client_message_id")
 	replyToMessageID := c.FormValue("reply_to_message_id")
 	if handled, err := a.prepareAttachmentUpload(c, current.ID, conversationID, clientMessageID, replyToMessageID); handled || err != nil {
 		return err
 	}
-	c.Request().Body = http.MaxBytesReader(c.Response().Writer, c.Request().Body, fileapp.MaxTemporaryUploadBytes)
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
 		if isRequestBodyTooLarge(err) {
-			return writeFailure(c, http.StatusRequestEntityTooLarge, string(messageapp.CodeRequestTooLarge), "文件不能超过 20MiB")
+			return writeFailure(c, http.StatusRequestEntityTooLarge, string(messageapp.CodeRequestTooLarge), "文件不能超过 200MiB")
 		}
 		return writeFailure(c, http.StatusBadRequest, string(messageapp.CodeInvalidRequest), "请选择要发送的文件")
 	}
 	if fileHeader.Size > fileapp.MaxTemporaryUploadBytes {
-		return writeFailure(c, http.StatusRequestEntityTooLarge, string(messageapp.CodeRequestTooLarge), "文件不能超过 20MiB")
+		return writeFailure(c, http.StatusRequestEntityTooLarge, string(messageapp.CodeRequestTooLarge), "文件不能超过 200MiB")
 	}
 	if fileHeader.Size <= 0 {
 		return writeFailure(c, http.StatusBadRequest, string(messageapp.CodeInvalidRequest), "文件不能为空")

@@ -50,7 +50,7 @@ func (a *FileAPI) RegisterRoutes(group *echo.Group) {
 // createTemporaryFile godoc
 //
 // @Summary 上传临时文件
-// @Description 普通用户上传临时文件。文件会写入 temporary bucket，成功后返回临时文件 ID。
+// @Description 普通用户上传临时文件，最大 200MiB。大于 10MiB 的文件保留 30 天，其余文件保留 180 天，统一写入 temporary bucket。
 // @Tags 客户端文件
 // @Accept multipart/form-data
 // @Produce json
@@ -63,16 +63,16 @@ func (a *FileAPI) RegisterRoutes(group *echo.Group) {
 // @Security UserSession
 // @Router /api/client/temporary-files [post]
 func (a *FileAPI) createTemporaryFile(c echo.Context) error {
-	c.Request().Body = http.MaxBytesReader(c.Response().Writer, c.Request().Body, fileapp.MaxTemporaryUploadBytes)
+	c.Request().Body = http.MaxBytesReader(c.Response().Writer, c.Request().Body, fileapp.MaxTemporaryUploadRequestBytes)
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
 		if isRequestBodyTooLarge(err) {
-			return writeFailure(c, http.StatusRequestEntityTooLarge, string(fileapp.CodeRequestTooLarge), "文件不能超过 20MiB")
+			return writeFailure(c, http.StatusRequestEntityTooLarge, string(fileapp.CodeRequestTooLarge), "文件不能超过 200MiB")
 		}
 		return writeFailure(c, http.StatusBadRequest, string(fileapp.CodeInvalidRequest), "请选择要上传的文件")
 	}
 	if fileHeader.Size > fileapp.MaxTemporaryUploadBytes {
-		return writeFailure(c, http.StatusRequestEntityTooLarge, string(fileapp.CodeRequestTooLarge), "文件不能超过 20MiB")
+		return writeFailure(c, http.StatusRequestEntityTooLarge, string(fileapp.CodeRequestTooLarge), "文件不能超过 200MiB")
 	}
 	if fileHeader.Size < 0 {
 		return writeFailure(c, http.StatusBadRequest, string(fileapp.CodeInvalidRequest), "文件大小错误")
@@ -98,7 +98,7 @@ func (a *FileAPI) createTemporaryFile(c echo.Context) error {
 // readTemporaryFileURLs godoc
 //
 // @Summary 批量申请临时文件访问地址
-// @Description 普通用户按临时文件 ID 批量申请 24 小时有效的访问地址。
+// @Description 普通用户按临时文件 ID 批量申请最长 24 小时、且不超过文件剩余寿命的访问地址。
 // @Tags 客户端文件
 // @Accept json
 // @Produce json

@@ -7,7 +7,7 @@ import (
 	fileapp "app/internal/application/file"
 )
 
-const maxTemporaryFileUploadBytes = fileapp.MaxTemporaryUploadBytes
+const maxRemoteMessageFileBytes = 20 * 1024 * 1024
 
 type temporaryFileReadURLResponse struct {
 	ExpiresAt time.Time `json:"expires_at" format:"date-time"`

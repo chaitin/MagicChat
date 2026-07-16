@@ -37,7 +37,7 @@ func (c *Client) PutTemporaryObject(ctx context.Context, key string, body io.Rea
 	return err
 }
 
-func (c *Client) PresignTemporaryReadURL(ctx context.Context, key string) (string, time.Time, error) {
+func (c *Client) PresignTemporaryReadURL(ctx context.Context, key string, ttl time.Duration) (string, time.Time, error) {
 	key = strings.TrimSpace(key)
 	if key == "" {
 		return "", time.Time{}, errors.New("temporary object key is required")
@@ -45,13 +45,19 @@ func (c *Client) PresignTemporaryReadURL(ctx context.Context, key string) (strin
 	if strings.TrimSpace(c.cfg.AssetsHostname) == "" {
 		return "", time.Time{}, errors.New("assets hostname is required")
 	}
+	if ttl <= 0 {
+		return "", time.Time{}, errors.New("temporary read URL TTL must be positive")
+	}
+	if ttl > TemporaryReadURLTTL {
+		ttl = TemporaryReadURLTTL
+	}
 
-	expiresAt := time.Now().UTC().Add(TemporaryReadURLTTL)
+	expiresAt := time.Now().UTC().Add(ttl)
 	request, err := c.presign.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(c.cfg.Buckets.Temporary),
 		Key:    aws.String(key),
 	}, func(options *s3.PresignOptions) {
-		options.Expires = TemporaryReadURLTTL
+		options.Expires = ttl
 	})
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("presign temporary object: %w", err)

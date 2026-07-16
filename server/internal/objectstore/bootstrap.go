@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	fileapp "app/internal/application/file"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -16,6 +18,11 @@ import (
 )
 
 const bootstrapRetryInterval = 2 * time.Second
+
+const (
+	temporaryLifecycleRuleID      = "expire-temporary-assets"
+	largeTemporaryLifecycleRuleID = "expire-large-temporary-assets"
+)
 
 type publicReadPolicy struct {
 	Version   string                `json:"Version"`
@@ -161,36 +168,109 @@ func (c *Client) ensureBucketCORS(ctx context.Context, bucket string) error {
 }
 
 func (c *Client) ensureTemporaryLifecycle(ctx context.Context, bucket string) error {
-	_, err := c.s3.GetBucketLifecycleConfiguration(ctx, &s3.GetBucketLifecycleConfigurationInput{
+	output, err := c.s3.GetBucketLifecycleConfiguration(ctx, &s3.GetBucketLifecycleConfigurationInput{
 		Bucket: aws.String(bucket),
 	})
-	if err == nil {
-		return nil
+	if err == nil && output != nil {
+		if temporaryLifecycleConfigured(
+			output.Rules,
+			c.cfg.Lifecycle.TemporaryExpireDays,
+			c.cfg.Lifecycle.AbortMultipartDays,
+		) {
+			return nil
+		}
 	}
-	if !isAPIErrorCode(err, "NoSuchLifecycleConfiguration", "NoSuchLifecycle", "NotFound", "404") {
+	if err != nil && !isAPIErrorCode(err, "NoSuchLifecycleConfiguration", "NoSuchLifecycle", "NotFound", "404") {
 		return err
 	}
+	var existing []types.LifecycleRule
+	if output != nil {
+		existing = output.Rules
+	}
+	rules := mergeTemporaryLifecycleRules(
+		existing,
+		c.cfg.Lifecycle.TemporaryExpireDays,
+		c.cfg.Lifecycle.AbortMultipartDays,
+	)
 
 	_, err = c.s3.PutBucketLifecycleConfiguration(ctx, &s3.PutBucketLifecycleConfigurationInput{
 		Bucket: aws.String(bucket),
 		LifecycleConfiguration: &types.BucketLifecycleConfiguration{
-			Rules: []types.LifecycleRule{
-				{
-					AbortIncompleteMultipartUpload: &types.AbortIncompleteMultipartUpload{
-						DaysAfterInitiation: aws.Int32(c.cfg.Lifecycle.AbortMultipartDays),
-					},
-					Expiration: &types.LifecycleExpiration{
-						Days: aws.Int32(c.cfg.Lifecycle.TemporaryExpireDays),
-					},
-					Filter: &types.LifecycleRuleFilter{},
-					ID:     aws.String("expire-temporary-assets"),
-					Status: types.ExpirationStatusEnabled,
-				},
-			},
+			Rules: rules,
 		},
 	})
 
 	return err
+}
+
+func mergeTemporaryLifecycleRules(existing []types.LifecycleRule, standardExpireDays, abortMultipartDays int32) []types.LifecycleRule {
+	rules := make([]types.LifecycleRule, 0, len(existing)+2)
+	for _, rule := range existing {
+		id := strings.TrimSpace(aws.ToString(rule.ID))
+		if id == temporaryLifecycleRuleID || id == largeTemporaryLifecycleRuleID {
+			continue
+		}
+		rules = append(rules, rule)
+	}
+	return append(rules, temporaryLifecycleRules(standardExpireDays, abortMultipartDays)...)
+}
+
+func temporaryLifecycleRules(standardExpireDays, abortMultipartDays int32) []types.LifecycleRule {
+	return []types.LifecycleRule{
+		{
+			AbortIncompleteMultipartUpload: &types.AbortIncompleteMultipartUpload{
+				DaysAfterInitiation: aws.Int32(abortMultipartDays),
+			},
+			Expiration: &types.LifecycleExpiration{Days: aws.Int32(standardExpireDays)},
+			Filter:     &types.LifecycleRuleFilter{Prefix: aws.String(fileapp.TemporaryObjectPrefix)},
+			ID:         aws.String(temporaryLifecycleRuleID),
+			Status:     types.ExpirationStatusEnabled,
+		},
+		{
+			Expiration: &types.LifecycleExpiration{Days: aws.Int32(fileapp.LargeTemporaryExpireDays)},
+			Filter:     &types.LifecycleRuleFilter{Prefix: aws.String(fileapp.TemporaryLargeObjectPrefix)},
+			ID:         aws.String(largeTemporaryLifecycleRuleID),
+			Status:     types.ExpirationStatusEnabled,
+		},
+	}
+}
+
+func temporaryLifecycleConfigured(rules []types.LifecycleRule, standardExpireDays, abortMultipartDays int32) bool {
+	matched := map[string]bool{}
+	for _, rule := range rules {
+		id := strings.TrimSpace(aws.ToString(rule.ID))
+		switch id {
+		case temporaryLifecycleRuleID:
+			if matched[id] || !temporaryLifecycleRuleMatches(
+				rule, fileapp.TemporaryObjectPrefix, standardExpireDays, abortMultipartDays,
+			) {
+				return false
+			}
+			matched[id] = true
+		case largeTemporaryLifecycleRuleID:
+			if matched[id] || !temporaryLifecycleRuleMatches(
+				rule, fileapp.TemporaryLargeObjectPrefix, fileapp.LargeTemporaryExpireDays, 0,
+			) {
+				return false
+			}
+			matched[id] = true
+		}
+	}
+	return matched[temporaryLifecycleRuleID] && matched[largeTemporaryLifecycleRuleID]
+}
+
+func temporaryLifecycleRuleMatches(rule types.LifecycleRule, prefix string, expireDays, abortDays int32) bool {
+	if rule.Status != types.ExpirationStatusEnabled || rule.Expiration == nil || aws.ToInt32(rule.Expiration.Days) != expireDays {
+		return false
+	}
+	if rule.Filter == nil || aws.ToString(rule.Filter.Prefix) != prefix {
+		return false
+	}
+	if abortDays == 0 {
+		return rule.AbortIncompleteMultipartUpload == nil
+	}
+	return rule.AbortIncompleteMultipartUpload != nil &&
+		aws.ToInt32(rule.AbortIncompleteMultipartUpload.DaysAfterInitiation) == abortDays
 }
 
 func buildPublicReadPolicy(bucket string) (string, error) {

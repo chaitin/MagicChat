@@ -79,6 +79,9 @@ func (s *Service) UploadTemporary(ctx context.Context, cmd UploadTemporaryComman
 	if cmd.Content == nil || cmd.SizeBytes < 0 {
 		return TemporaryFile{}, newError(CodeInvalidRequest, "临时文件参数错误", nil)
 	}
+	if cmd.SizeBytes > MaxTemporaryUploadBytes {
+		return TemporaryFile{}, newError(CodeRequestTooLarge, "临时文件不能超过 200MiB", nil)
+	}
 	if s.storage == nil {
 		return TemporaryFile{}, newError(CodeStorageUnavailable, "临时文件存储未配置", nil)
 	}
@@ -86,21 +89,24 @@ func (s *Service) UploadTemporary(ctx context.Context, cmd UploadTemporaryComman
 		return TemporaryFile{}, newError(CodeInternal, "保存临时文件失败", errors.New("database is not configured"))
 	}
 
-	now := s.now().UTC()
+	keyTime := s.now().UTC()
 	fileID := s.newID()
 	if _, err := uuid.Parse(fileID); err != nil {
 		return TemporaryFile{}, newError(CodeInternal, "生成临时文件 ID 失败", err)
 	}
-	objectKey := buildTemporaryObjectKey(now, fileID)
+	objectKey := buildTemporaryObjectKey(keyTime, fileID, cmd.SizeBytes)
 	if err := s.storage.PutTemporary(ctx, objectKey, cmd.Content, cmd.SizeBytes, normalizeContentType(cmd.ContentType)); err != nil {
 		return TemporaryFile{}, newError(CodeInternal, "上传临时文件失败", err)
 	}
+	now := s.now().UTC()
+	expiresAt := now.AddDate(0, 0, s.temporaryRetentionDays(cmd.SizeBytes))
 
 	stored := store.TemporaryFile{
 		ID:        fileID,
 		ObjectKey: objectKey,
 		SizeBytes: cmd.SizeBytes,
 		CreatedAt: now,
+		ExpiresAt: expiresAt,
 	}
 	if err := s.db.WithContext(ctx).Create(&stored).Error; err != nil {
 		return TemporaryFile{}, newError(CodeInternal, "保存临时文件失败", err)
@@ -134,9 +140,15 @@ func (s *Service) ResolveTemporaryURLs(ctx context.Context, rawFileIDs []string)
 		filesByID[value.ID] = value
 	}
 	result := make([]ResolvedTemporaryURL, 0, len(fileIDs))
+	now := s.now().UTC()
 	for _, fileID := range fileIDs {
 		value := filesByID[fileID]
-		url, expiresAt, err := s.storage.PresignTemporaryReadURL(ctx, value.ObjectKey)
+		remaining := s.temporaryFileExpiresAt(value).Sub(now)
+		if remaining <= 0 {
+			return nil, newError(CodeNotFound, "临时文件不存在", gorm.ErrRecordNotFound)
+		}
+		urlTTL := min(remaining, 24*time.Hour)
+		url, expiresAt, err := s.storage.PresignTemporaryReadURL(ctx, value.ObjectKey, urlTTL)
 		if err != nil {
 			return nil, newError(CodeInternal, "生成临时文件访问地址失败", err)
 		}
@@ -175,7 +187,21 @@ func (s *Service) loadAvailableTemporaryFiles(ctx context.Context, fileIDs []str
 }
 
 func (s *Service) isTemporaryFileExpired(value store.TemporaryFile, now time.Time) bool {
-	return !value.CreatedAt.AddDate(0, 0, int(s.temporaryExpireDays)).After(now)
+	return !s.temporaryFileExpiresAt(value).After(now)
+}
+
+func (s *Service) temporaryFileExpiresAt(value store.TemporaryFile) time.Time {
+	if !value.ExpiresAt.IsZero() {
+		return value.ExpiresAt.UTC()
+	}
+	return value.CreatedAt.UTC().AddDate(0, 0, s.temporaryRetentionDays(value.SizeBytes))
+}
+
+func (s *Service) temporaryRetentionDays(sizeBytes int64) int {
+	if isLargeTemporaryFile(sizeBytes) {
+		return LargeTemporaryExpireDays
+	}
+	return int(s.temporaryExpireDays)
 }
 
 func normalizeTemporaryFileIDs(rawFileIDs []string) ([]string, error) {
@@ -203,8 +229,16 @@ func normalizeTemporaryFileIDs(rawFileIDs []string) ([]string, error) {
 	return fileIDs, nil
 }
 
-func buildTemporaryObjectKey(now time.Time, fileID string) string {
-	return fmt.Sprintf("temporary-files/%s/%s", now.UTC().Format("2006/01/02"), fileID)
+func buildTemporaryObjectKey(now time.Time, fileID string, sizeBytes int64) string {
+	prefix := TemporaryStandardObjectPrefix
+	if isLargeTemporaryFile(sizeBytes) {
+		prefix = TemporaryLargeObjectPrefix
+	}
+	return fmt.Sprintf("%s%s/%s", prefix, now.UTC().Format("2006/01/02"), fileID)
+}
+
+func isLargeTemporaryFile(sizeBytes int64) bool {
+	return sizeBytes > LargeTemporaryFileThreshold
 }
 
 func normalizeContentType(value string) string {
@@ -220,6 +254,7 @@ func newTemporaryFile(value store.TemporaryFile) TemporaryFile {
 		ObjectKey: value.ObjectKey,
 		SizeBytes: value.SizeBytes,
 		CreatedAt: value.CreatedAt,
+		ExpiresAt: value.ExpiresAt,
 	}
 }
 

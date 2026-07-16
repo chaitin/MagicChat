@@ -2803,7 +2803,8 @@ paths:
     post:
       consumes:
       - multipart/form-data
-      description: 普通用户上传文件并发送为会话文件消息。文件写入 temporary bucket，消息 body 保存 file_id、文件名和文件大小。
+      description: 普通用户上传最大 200MiB 的文件并发送为会话文件消息。文件写入 temporary bucket，消息 body 保存
+        file_id、文件名和文件大小。
       parameters:
       - description: 会话 ID
         in: path
@@ -4640,7 +4641,8 @@ paths:
     post:
       consumes:
       - multipart/form-data
-      description: 普通用户上传临时文件。文件会写入 temporary bucket，成功后返回临时文件 ID。
+      description: 普通用户上传临时文件，最大 200MiB。大于 10MiB 的文件保留 30 天，其余文件保留 180 天，统一写入 temporary
+        bucket。
       parameters:
       - description: 临时文件
         in: formData
@@ -4717,7 +4719,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 普通用户按临时文件 ID 批量申请 24 小时有效的访问地址。
+      description: 普通用户按临时文件 ID 批量申请最长 24 小时、且不超过文件剩余寿命的访问地址。
       parameters:
       - description: 临时文件 ID 列表
         in: body

@@ -260,6 +260,7 @@ type TemporaryFile struct {
 	ObjectKey string    `gorm:"not null;uniqueIndex"`
 	SizeBytes int64     `gorm:"not null;check:size_bytes >= 0"`
 	CreatedAt time.Time `gorm:"not null"`
+	ExpiresAt time.Time `gorm:"not null;index"`
 }
 
 func (TemporaryFile) TableName() string {

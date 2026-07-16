@@ -7,9 +7,15 @@ import (
 )
 
 const (
-	DefaultTemporaryExpireDays = 180
-	MaxResolveBatchSize        = 100
-	MaxTemporaryUploadBytes    = 20 * 1024 * 1024
+	DefaultTemporaryExpireDays     = 180
+	LargeTemporaryExpireDays       = 30
+	LargeTemporaryFileThreshold    = 10 * 1024 * 1024
+	MaxResolveBatchSize            = 100
+	MaxTemporaryUploadBytes        = 200 * 1024 * 1024
+	MaxTemporaryUploadRequestBytes = MaxTemporaryUploadBytes + 1024*1024
+	TemporaryObjectPrefix          = "temporary-files/"
+	TemporaryStandardObjectPrefix  = TemporaryObjectPrefix + "standard/"
+	TemporaryLargeObjectPrefix     = TemporaryObjectPrefix + "large/"
 )
 
 type TemporaryFile struct {
@@ -17,6 +23,7 @@ type TemporaryFile struct {
 	ObjectKey string
 	SizeBytes int64
 	CreatedAt time.Time
+	ExpiresAt time.Time
 }
 
 type PublicFile struct {
@@ -48,7 +55,7 @@ type UploadTemporaryCommand struct {
 type BlobStorage interface {
 	PutPublic(context.Context, string, io.Reader, int64, string) (string, error)
 	PutTemporary(context.Context, string, io.Reader, int64, string) error
-	PresignTemporaryReadURL(context.Context, string) (string, time.Time, error)
+	PresignTemporaryReadURL(context.Context, string, time.Duration) (string, time.Time, error)
 }
 
 type PublicUploader interface {
