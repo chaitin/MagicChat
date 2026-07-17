@@ -35,6 +35,7 @@ type PublicFile struct {
 
 type ResolvedTemporaryURL struct {
 	FileID    string
+	SizeBytes int64
 	URL       string
 	ExpiresAt time.Time
 }

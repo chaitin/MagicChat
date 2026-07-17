@@ -45,6 +45,7 @@ import { Button } from "@/components/ui/button"
 import { ClientLoadingPage } from "@/components/client-loading-page"
 import { useConversationActions } from "@/hooks/use-conversation-actions"
 import { useConversationSenders } from "@/hooks/use-conversation-senders"
+import { useAppInfo } from "@/lib/app-info-context"
 
 type BootstrapState = "loading" | "ready" | "error"
 
@@ -53,6 +54,7 @@ const refreshIntervalMs = 15_000
 
 export function ClientDataProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
+  const { setAuthenticated } = useAppInfo()
   const [bootstrapError, setBootstrapError] =
     useState<ClientDataRequestError | null>(null)
   const [bootstrapState, setBootstrapState] =
@@ -85,6 +87,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
   const [projectsRefreshing, setProjectsRefreshing] = useState(false)
   const conversationMessageStatesRef = useRef(conversationMessageStates)
   const conversationsRef = useRef(conversations)
+  const mountedRef = useRef(true)
   const loadingConversationIdsRef = useRef<Set<string>>(new Set())
   const syncingAfterConversationIdsRef = useRef<Set<string>>(new Set())
 
@@ -96,6 +99,14 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     conversationsRef.current = conversations
   }, [conversations])
 
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
   const handleError = useCallback(
     (error: unknown, fallbackMessage: string) => {
       const requestError =
@@ -104,6 +115,11 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
           : new ClientDataRequestError(fallbackMessage)
 
       if (requestError.status === 401 || requestError.code === "unauthorized") {
+        if (!mountedRef.current) {
+          return requestError
+        }
+
+        setAuthenticated(false)
         setConversations([])
         setConversationMessageStates({})
         setContactApps([])
@@ -117,7 +133,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
 
       return requestError
     },
-    [navigate]
+    [navigate, setAuthenticated]
   )
 
   const refreshMe = useCallback(async () => {

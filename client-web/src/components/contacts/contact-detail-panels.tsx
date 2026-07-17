@@ -10,6 +10,10 @@ import {
 } from "lucide-react"
 
 import { GroupAvatar } from "@/components/group-avatar"
+import {
+  UserProfilePopoverLink,
+  type UserProfile,
+} from "@/components/user-profile-popover"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import type {
@@ -24,12 +28,22 @@ const CONTACT_DETAIL_PANEL_CLASS = "mt-30 w-full max-w-sm"
 
 export function AppDetailPanel({
   app,
+  developer,
+  editingProfile = false,
+  onEditProfile,
   onStartConversation,
+  onViewAccessInfo,
   startingConversation,
+  viewingAccessInfo = false,
 }: {
   app: ContactApp
+  developer?: UserProfile
+  editingProfile?: boolean
+  onEditProfile?: () => void
   onStartConversation: () => void
+  onViewAccessInfo?: () => void
   startingConversation: boolean
+  viewingAccessInfo?: boolean
 }) {
   return (
     <div
@@ -69,23 +83,60 @@ export function AppDetailPanel({
             label="类型"
             value="应用"
           />
+          {developer && (
+            <ContactDetailRow
+              icon={<UserRound className="size-4 text-muted-foreground" />}
+              label="开发者"
+              value={<UserProfilePopoverLink profile={developer} />}
+            />
+          )}
           <ContactDetailRow
             icon={<UserRound className="size-4 text-muted-foreground" />}
             label="状态"
             value={app.online ? "在线" : "离线"}
           />
         </div>
-        <Button
-          className="w-full"
-          disabled={startingConversation}
-          onClick={onStartConversation}
-          type="button"
-        >
-          {startingConversation && (
-            <Loader2Icon aria-hidden="true" className="animate-spin" />
+        <div className="grid gap-2">
+          <Button
+            className="w-full"
+            disabled={startingConversation}
+            onClick={onStartConversation}
+            type="button"
+          >
+            {startingConversation && (
+              <Loader2Icon aria-hidden="true" className="animate-spin" />
+            )}
+            发消息
+          </Button>
+          {onViewAccessInfo && onEditProfile && (
+            <div className="grid gap-2">
+              <Button
+                className="w-full"
+                disabled={viewingAccessInfo}
+                onClick={onViewAccessInfo}
+                type="button"
+                variant="secondary"
+              >
+                {viewingAccessInfo ? (
+                  <Loader2Icon aria-hidden="true" className="animate-spin" />
+                ) : null}
+                查看接入信息
+              </Button>
+              <Button
+                className="w-full"
+                disabled={editingProfile}
+                onClick={onEditProfile}
+                type="button"
+                variant="secondary"
+              >
+                {editingProfile ? (
+                  <Loader2Icon aria-hidden="true" className="animate-spin" />
+                ) : null}
+                修改资料
+              </Button>
+            </div>
           )}
-          发消息
-        </Button>
+        </div>
       </div>
     </div>
   )
@@ -244,9 +295,9 @@ function ContactDetailRow({
 }: {
   icon: ReactNode
   label: string
-  value: string
+  value: ReactNode
 }) {
-  const hasValue = Boolean(value.trim())
+  const hasValue = typeof value !== "string" || Boolean(value.trim())
   const displayValue = hasValue ? value : "未设置"
 
   return (

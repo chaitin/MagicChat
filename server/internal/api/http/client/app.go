@@ -146,7 +146,7 @@ func (a *AppAPI) create(c echo.Context) error {
 // @Tags 客户端应用
 // @Produce json
 // @Param app_id path string true "应用 ID"
-// @Success 200 {object} successEnvelope{data=clientAppEnvelope}
+// @Success 200 {object} successEnvelope{data=clientAppCredentialResponse}
 // @Failure 401 {object} errorEnvelope
 // @Failure 404 {object} errorEnvelope
 // @Failure 500 {object} errorEnvelope
@@ -163,7 +163,9 @@ func (a *AppAPI) get(c echo.Context) error {
 	if err != nil {
 		return writeClientAppError(c, err)
 	}
-	return writeSuccess(c, http.StatusOK, clientAppEnvelope{App: newClientAppResponse(value)})
+	return writeSuccess(c, http.StatusOK, clientAppCredentialResponse{
+		App: newClientAppResponse(value), ConnectionSecret: value.ConnectionSecret,
+	})
 }
 
 // update godoc

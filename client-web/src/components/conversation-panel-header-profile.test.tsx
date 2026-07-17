@@ -55,6 +55,11 @@ describe("ConversationPanel header profile", () => {
 
   it("opens the application profile from an app conversation header", async () => {
     const user = userEvent.setup()
+    const developer = createMember({
+      email: "developer@example.com",
+      id: "user-2",
+      name: "应用开发者",
+    })
     const appMember = createMember({
       avatar: "/assets/apps/assistant.webp",
       email: "",
@@ -74,11 +79,20 @@ describe("ConversationPanel header profile", () => {
       contactApps: [
         {
           avatar: appMember.avatar,
+          creatorUserId: developer.id,
           description: "企业智能助手",
           id: appMember.id,
           name: appMember.name,
           online: true,
           type: "app",
+        },
+      ],
+      contacts: [
+        {
+          ...developer,
+          lastOnlineAt: null,
+          online: true,
+          type: "user",
         },
       ],
     })
@@ -89,6 +103,15 @@ describe("ConversationPanel header profile", () => {
     const profile = screen.getByRole("dialog")
     expect(within(profile).getByText("类型")).toBeInTheDocument()
     expect(within(profile).getByText("应用")).toBeInTheDocument()
+    expect(within(profile).getByText("开发者")).toBeInTheDocument()
+    const developerLink = within(profile).getByRole("button", {
+      name: "应用开发者资料",
+    })
+    expect(developerLink).toHaveClass("hover:text-sky-500")
+
+    await user.click(developerLink)
+    expect(await screen.findByText("用户资料")).toBeInTheDocument()
+    expect(screen.getByText("developer@example.com")).toBeInTheDocument()
   })
 
   it("opens the group profile and previews its composite avatar", async () => {

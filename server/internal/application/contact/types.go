@@ -32,12 +32,13 @@ type User struct {
 }
 
 type App struct {
-	Avatar      string
-	Description string
-	ID          string
-	Name        string
-	Online      bool
-	Type        string
+	Avatar        string
+	CreatorUserID *string
+	Description   string
+	ID            string
+	Name          string
+	Online        bool
+	Type          string
 }
 
 type GroupAvatarMember struct {

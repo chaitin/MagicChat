@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from "react"
 import {
+  Blocks,
   Bot,
   ChevronRight,
   Loader2Icon,
@@ -19,6 +20,8 @@ import type {
   DirectoryTab,
 } from "@/components/contacts/contact-directory"
 import { directoryItemKey } from "@/components/contacts/contact-directory"
+import { AppCredentialsDialog } from "@/components/contacts/app-credentials-dialog"
+import { CreateAppDialog } from "@/components/contacts/create-app-dialog"
 import { GroupAvatar } from "@/components/group-avatar"
 import {
   Avatar,
@@ -48,12 +51,14 @@ import type {
   ContactGroup,
   ContactUser,
 } from "@/lib/client-data-api"
+import type { ClientAppCredentials } from "@/lib/client-api/apps"
 import { cn } from "@/lib/utils"
 
 export function ContactDirectorySidebar({
   activeKeyword,
   activeSelection,
   activeTab,
+  appGrantUsers,
   apps,
   contacts,
   contactsRefreshing,
@@ -72,6 +77,7 @@ export function ContactDirectorySidebar({
   activeKeyword: string
   activeSelection: DirectorySelection | null
   activeTab: DirectoryTab
+  appGrantUsers: ContactUser[]
   apps: ContactApp[]
   contacts: ContactUser[]
   contactsRefreshing: boolean
@@ -87,7 +93,20 @@ export function ContactDirectorySidebar({
   onStartGroupConversation: (group: ContactGroup) => void
   openingDirectoryItemKey: string
 }) {
+  const [createAppDialogOpen, setCreateAppDialogOpen] = useState(false)
+  const [createdAppCredentials, setCreatedAppCredentials] =
+    useState<ClientAppCredentials | null>(null)
   const activeTabLabel = getDirectoryTabLabel(activeTab)
+  const normalizedCurrentUserId = currentUserId.toLowerCase()
+  const builtInApps = apps.filter((app) => app.creatorUserId === null)
+  const ownedApps = apps.filter(
+    (app) => app.creatorUserId?.toLowerCase() === normalizedCurrentUserId
+  )
+  const otherApps = apps.filter(
+    (app) =>
+      app.creatorUserId !== null &&
+      app.creatorUserId.toLowerCase() !== normalizedCurrentUserId
+  )
   const joinedGroups = groups.filter((group) => group.joined)
   const publicGroups = groups.filter((group) => group.visibility === "public")
 
@@ -179,25 +198,64 @@ export function ContactDirectorySidebar({
           value="app"
         >
           <div className="flex flex-col gap-2">
-            <DirectoryList ariaLabel="应用列表">
-              {apps.map((app) => (
-                <AppListItem
-                  key={app.id}
-                  app={app}
-                  selected={isDirectorySelection(
-                    activeSelection,
-                    "app",
-                    app.id
-                  )}
-                  onSelect={() => onSelect({ id: app.id, type: "app" })}
-                  onStartConversation={() => onStartAppConversation(app)}
-                  startingConversation={
-                    openingDirectoryItemKey === directoryItemKey("app", app.id)
-                  }
-                />
-              ))}
-              {apps.length === 0 && <DirectoryEmptyState label="应用" />}
-            </DirectoryList>
+            <DirectorySectionCollapsible
+              count={builtInApps.length}
+              defaultOpen={builtInApps.length > 0}
+              forceOpen={Boolean(activeKeyword.trim())}
+              title="内置应用"
+            >
+              <AppDirectoryList
+                activeSelection={activeSelection}
+                apps={builtInApps}
+                ariaLabel="内置应用列表"
+                onSelect={onSelect}
+                onStartAppConversation={onStartAppConversation}
+                openingDirectoryItemKey={openingDirectoryItemKey}
+              />
+            </DirectorySectionCollapsible>
+
+            <DirectorySectionCollapsible
+              count={ownedApps.length}
+              defaultOpen={ownedApps.length > 0}
+              forceOpen={Boolean(activeKeyword.trim())}
+              title="我的应用"
+            >
+              <AppDirectoryList
+                activeSelection={activeSelection}
+                apps={ownedApps}
+                ariaLabel="我的应用列表"
+                onSelect={onSelect}
+                onStartAppConversation={onStartAppConversation}
+                openingDirectoryItemKey={openingDirectoryItemKey}
+              />
+              <div className="px-2 pb-2">
+                <Button
+                  className="w-full"
+                  onClick={() => setCreateAppDialogOpen(true)}
+                  type="button"
+                  variant="secondary"
+                >
+                  <Blocks />
+                  创建应用
+                </Button>
+              </div>
+            </DirectorySectionCollapsible>
+
+            <DirectorySectionCollapsible
+              count={otherApps.length}
+              defaultOpen={otherApps.length > 0}
+              forceOpen={Boolean(activeKeyword.trim())}
+              title="其他应用"
+            >
+              <AppDirectoryList
+                activeSelection={activeSelection}
+                apps={otherApps}
+                ariaLabel="其他应用列表"
+                onSelect={onSelect}
+                onStartAppConversation={onStartAppConversation}
+                openingDirectoryItemKey={openingDirectoryItemKey}
+              />
+            </DirectorySectionCollapsible>
           </div>
         </TabsContent>
         <TabsContent
@@ -239,6 +297,29 @@ export function ContactDirectorySidebar({
           </div>
         </TabsContent>
       </Tabs>
+      <CreateAppDialog
+        currentUserId={currentUserId}
+        onCreated={(credentials) => {
+          setCreatedAppCredentials(credentials)
+          onRefresh()
+        }}
+        onOpenChange={setCreateAppDialogOpen}
+        open={createAppDialogOpen}
+        users={appGrantUsers}
+      />
+      <AppCredentialsDialog
+        credentials={createdAppCredentials}
+        onCredentialsChange={(credentials) => {
+          setCreatedAppCredentials(credentials)
+          onRefresh()
+        }}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCreatedAppCredentials(null)
+          }
+        }}
+        open={createdAppCredentials !== null}
+      />
     </Sidebar>
   )
 }
@@ -353,6 +434,40 @@ function GroupDirectoryList({
         />
       ))}
       {groups.length === 0 && <DirectoryEmptyState label={ariaLabel} />}
+    </DirectoryList>
+  )
+}
+
+function AppDirectoryList({
+  activeSelection,
+  apps,
+  ariaLabel,
+  onSelect,
+  onStartAppConversation,
+  openingDirectoryItemKey,
+}: {
+  activeSelection: DirectorySelection | null
+  apps: ContactApp[]
+  ariaLabel: string
+  onSelect: (selection: DirectorySelection) => void
+  onStartAppConversation: (app: ContactApp) => void
+  openingDirectoryItemKey: string
+}) {
+  return (
+    <DirectoryList ariaLabel={ariaLabel}>
+      {apps.map((app) => (
+        <AppListItem
+          key={app.id}
+          app={app}
+          selected={isDirectorySelection(activeSelection, "app", app.id)}
+          onSelect={() => onSelect({ id: app.id, type: "app" })}
+          onStartConversation={() => onStartAppConversation(app)}
+          startingConversation={
+            openingDirectoryItemKey === directoryItemKey("app", app.id)
+          }
+        />
+      ))}
+      {apps.length === 0 && <DirectoryEmptyState label={ariaLabel} />}
     </DirectoryList>
   )
 }

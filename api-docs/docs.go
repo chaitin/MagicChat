@@ -1853,7 +1853,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/client.clientAppEnvelope"
+                                            "$ref": "#/definitions/client.clientAppCredentialResponse"
                                         }
                                     }
                                 }
@@ -7047,6 +7047,9 @@ const docTemplate = `{
                     "type": "string",
                     "example": "/assets/apps/assistant.webp"
                 },
+                "creator_user_id": {
+                    "type": "string"
+                },
                 "description": {
                     "type": "string",
                     "example": "AI 助手"
@@ -8433,6 +8436,10 @@ const docTemplate = `{
                 "file_id": {
                     "type": "string",
                     "example": "7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"
+                },
+                "size_bytes": {
+                    "type": "integer",
+                    "example": 123456
                 },
                 "url": {
                     "type": "string"

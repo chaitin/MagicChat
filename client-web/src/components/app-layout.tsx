@@ -47,6 +47,7 @@ import {
 } from "@/lib/client-data-api"
 import type { ClientUser } from "@/lib/client-data-api"
 import { useClientData } from "@/lib/client-data-context"
+import { useAppInfo } from "@/lib/app-info-context"
 import { cn } from "@/lib/utils"
 
 const navItems = [
@@ -128,6 +129,7 @@ function UserAvatarMenu({
   user: ClientUser
 }) {
   const navigate = useNavigate()
+  const { setAuthenticated } = useAppInfo()
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const [logoutPending, setLogoutPending] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
@@ -139,6 +141,7 @@ function UserAvatarMenu({
 
     try {
       await clientLogout()
+      setAuthenticated(false)
       navigate("/login", { replace: true })
     } catch (error) {
       toast.error(getLogoutErrorMessage(error))

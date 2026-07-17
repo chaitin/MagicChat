@@ -15,7 +15,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func TestAppAPIMapsOwnedApplicationManagementAndHidesStoredSecrets(t *testing.T) {
+func TestAppAPIMapsOwnedApplicationManagementAndOnlyReturnsStoredSecretFromOwnedDetail(t *testing.T) {
 	now := time.Date(2026, 7, 16, 10, 0, 0, 0, time.UTC)
 	service := &fakeClientAppService{value: appapp.App{
 		ID: "app-1", Name: "分析应用", Description: "分析消息", Enabled: true,
@@ -54,8 +54,8 @@ func TestAppAPIMapsOwnedApplicationManagementAndHidesStoredSecrets(t *testing.T)
 	if get.Code != http.StatusOK || service.get != (appapp.OwnedAppCommand{AccountID: "owner-1", AppID: "app-1"}) {
 		t.Fatalf("get status = %d, command = %#v, body = %s", get.Code, service.get, get.Body.String())
 	}
-	if strings.Contains(get.Body.String(), "stored-secret-must-not-leak") || strings.Contains(get.Body.String(), "connection_secret") {
-		t.Fatalf("get leaked secret: %s", get.Body.String())
+	if !strings.Contains(get.Body.String(), `"connection_secret":"stored-secret-must-not-leak"`) {
+		t.Fatalf("get credential response = %s", get.Body.String())
 	}
 
 	update := serveClientAppRequest(router, http.MethodPatch, "/api/client/apps/app-1", `{

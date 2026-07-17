@@ -13,6 +13,13 @@ export default defineConfig({
     allowedHosts: ["maosite.cc"],
     port: 20070,
     proxy: {
+      "/api/app/ws": {
+        changeOrigin: true,
+        rewriteWsOrigin: true,
+        secure: false,
+        target: clientApiProxyTarget,
+        ws: true,
+      },
       "/api/client/ws": {
         changeOrigin: true,
         rewriteWsOrigin: true,

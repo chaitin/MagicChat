@@ -23,13 +23,37 @@ type UserProfilePopoverProps = {
   userId: string | null
 }
 
-type UserProfile = {
+export type UserProfile = {
   avatar: string
   email: string
   id: string
   name: string
   nickname: string
   phone: string
+}
+
+export function UserProfilePopoverLink({
+  profile,
+  triggerClassName,
+}: {
+  profile: UserProfile
+  triggerClassName?: string
+}) {
+  const displayName = getUserDisplayName(profile)
+
+  return (
+    <UserProfilePopover
+      fallbackProfile={profile}
+      triggerAriaLabel={`${displayName}资料`}
+      triggerClassName={cn(
+        "max-w-full truncate transition-colors hover:text-sky-500 focus-visible:text-sky-500 data-[state=open]:text-sky-500",
+        triggerClassName
+      )}
+      userId={profile.id}
+    >
+      <span className="truncate">{displayName}</span>
+    </UserProfilePopover>
+  )
 }
 
 export function UserProfilePopover({

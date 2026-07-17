@@ -152,7 +152,12 @@ func (s *Service) ResolveTemporaryURLs(ctx context.Context, rawFileIDs []string)
 		if err != nil {
 			return nil, newError(CodeInternal, "生成临时文件访问地址失败", err)
 		}
-		result = append(result, ResolvedTemporaryURL{FileID: fileID, URL: url, ExpiresAt: expiresAt})
+		result = append(result, ResolvedTemporaryURL{
+			FileID:    fileID,
+			SizeBytes: value.SizeBytes,
+			URL:       url,
+			ExpiresAt: expiresAt,
+		})
 	}
 	return result, nil
 }

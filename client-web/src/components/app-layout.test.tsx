@@ -1,9 +1,13 @@
 import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { MemoryRouter } from "react-router"
+import { useState } from "react"
+import { MemoryRouter, Route, Routes } from "react-router"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { AppLayout } from "@/components/app-layout"
+import { LoginPage } from "@/pages/login-page"
+import { defaultAppInfo } from "@/lib/app-info"
+import { AppInfoContext } from "@/lib/app-info-context"
 
 const mocks = vi.hoisted(() => ({
   clientData: {
@@ -28,6 +32,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 beforeEach(() => {
+  vi.clearAllMocks()
   mocks.clientData.conversations = []
 })
 
@@ -121,4 +126,47 @@ describe("AppLayout", () => {
       within(settingsDialog).queryByLabelText("昵称")
     ).not.toBeInTheDocument()
   })
+
+  it("stays on the login page after logout", async () => {
+    const user = userEvent.setup()
+    mocks.clientLogout.mockResolvedValue(undefined)
+
+    render(<LogoutFlow />)
+
+    await user.click(screen.getByRole("button", { name: "用户菜单" }))
+    await user.click(screen.getByRole("menuitem", { name: "退出登录" }))
+
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "确认退出登录",
+    })
+    await user.click(within(dialog).getByRole("button", { name: "退出登录" }))
+
+    expect(
+      await screen.findByRole("heading", { name: "即应 智能协作平台" })
+    ).toBeInTheDocument()
+    expect(screen.queryByTestId("init-page")).not.toBeInTheDocument()
+    expect(mocks.clientLogout).toHaveBeenCalledTimes(1)
+  })
 })
+
+function LogoutFlow() {
+  const [authenticated, setAuthenticated] = useState(true)
+
+  return (
+    <AppInfoContext.Provider
+      value={{
+        ...defaultAppInfo,
+        authenticated,
+        setAuthenticated,
+      }}
+    >
+      <MemoryRouter initialEntries={["/chat"]}>
+        <Routes>
+          <Route element={<AppLayout />} path="/chat" />
+          <Route element={<LoginPage />} path="/login" />
+          <Route element={<div data-testid="init-page" />} path="/init" />
+        </Routes>
+      </MemoryRouter>
+    </AppInfoContext.Provider>
+  )
+}

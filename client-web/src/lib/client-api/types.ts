@@ -61,6 +61,7 @@ export type ListClientContactsResponse = {
 
 export type ContactAppResponse = {
   avatar?: string
+  creator_user_id?: string | null
   description?: string
   id?: string
   name?: string
@@ -458,6 +459,7 @@ export type ContactUser = {
 
 export type ContactApp = {
   avatar: string
+  creatorUserId: string | null
   description: string
   id: string
   name: string

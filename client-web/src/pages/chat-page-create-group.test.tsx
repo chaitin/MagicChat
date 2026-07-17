@@ -177,6 +177,7 @@ function createClientDataValue(
     contactApps: [
       {
         avatar: "/assets/apps/assistant.webp",
+        creatorUserId: null,
         description: "AI 助手",
         id: "app-1",
         name: "茉莉",

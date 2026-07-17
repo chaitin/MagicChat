@@ -45,6 +45,13 @@ func TestClientCanManageOwnedAppAndRestrictedVisibility(t *testing.T) {
 	if _, ok := listed[0].(map[string]any)["connection_secret"]; ok {
 		t.Fatalf("list leaked connection secret: %#v", listed[0])
 	}
+	getResp, getBody := getJSON(t, server, "/api/client/apps/"+appID, ownerCookie)
+	if getResp.StatusCode != http.StatusOK {
+		t.Fatalf("get status = %d, body = %#v", getResp.StatusCode, getBody)
+	}
+	if got := requireSuccess(t, getBody)["connection_secret"]; got != firstSecret {
+		t.Fatalf("get connection secret = %#v, want %q", got, firstSecret)
+	}
 
 	otherGetResp, _ := getJSON(t, server, "/api/client/apps/"+appID, grantedCookie)
 	if otherGetResp.StatusCode != http.StatusNotFound {

@@ -22,6 +22,7 @@ func TestFileAPIRoutesUseFileService(t *testing.T) {
 		uploaded: fileapp.TemporaryFile{ID: "7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4", SizeBytes: 5, CreatedAt: now},
 		resolved: []fileapp.ResolvedTemporaryURL{{
 			FileID:    "7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4",
+			SizeBytes: 23,
 			URL:       "https://assets.example.test/temporary/file",
 			ExpiresAt: now.Add(24 * time.Hour),
 		}},
@@ -67,6 +68,9 @@ func TestFileAPIRoutesUseFileService(t *testing.T) {
 	urls := payload["data"].(map[string]any)["urls"].([]any)
 	if urls[0].(map[string]any)["url"] != service.resolved[0].URL {
 		t.Fatalf("read URLs response = %#v", payload)
+	}
+	if urls[0].(map[string]any)["size_bytes"] != float64(service.resolved[0].SizeBytes) {
+		t.Fatalf("read URLs size = %#v", payload)
 	}
 
 	request = httptest.NewRequest(http.MethodGet, "/api/client/temporary-files/7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4/content", nil)

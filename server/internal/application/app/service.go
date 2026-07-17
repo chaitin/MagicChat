@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -23,10 +22,14 @@ import (
 )
 
 const (
-	appSecretBytes    = 32
-	maxAppNameLength  = 120
-	avatarContentType = "image/webp"
-	avatarSize        = 256
+	appSecretLength   = 32
+	appSecretAlphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+	// 252 is the largest multiple of len(appSecretAlphabet) below 256.
+	// Rejecting larger bytes avoids modulo bias when selecting characters.
+	appSecretByteLimit = 252
+	maxAppNameLength   = 120
+	avatarContentType  = "image/webp"
+	avatarSize         = 256
 )
 
 type Dependencies struct {
@@ -511,11 +514,35 @@ func sortApps(values []store.App) {
 }
 
 func randomSecret() (string, error) {
-	value := make([]byte, appSecretBytes)
-	if _, err := rand.Read(value); err != nil {
-		return "", err
+	for {
+		secret := make([]byte, appSecretLength)
+		randomBytes := make([]byte, appSecretLength)
+		written := 0
+		hasLowercase := false
+		hasDigit := false
+
+		for written < len(secret) {
+			if _, err := rand.Read(randomBytes); err != nil {
+				return "", err
+			}
+			for _, value := range randomBytes {
+				if value >= appSecretByteLimit {
+					continue
+				}
+				character := appSecretAlphabet[int(value)%len(appSecretAlphabet)]
+				secret[written] = character
+				written++
+				hasLowercase = hasLowercase || character >= 'a' && character <= 'z'
+				hasDigit = hasDigit || character >= '0' && character <= '9'
+				if written == len(secret) {
+					break
+				}
+			}
+		}
+		if hasLowercase && hasDigit {
+			return string(secret), nil
+		}
 	}
-	return base64.RawURLEncoding.EncodeToString(value), nil
 }
 
 var _ AdminService = (*Service)(nil)

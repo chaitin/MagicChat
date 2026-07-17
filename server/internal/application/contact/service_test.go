@@ -80,6 +80,11 @@ func TestServiceListsVisibleAppsAndGroups(t *testing.T) {
 	if len(apps.Apps) != 3 || apps.Apps[0].ID != creatorApp.ID || apps.Apps[1].ID != grantedApp.ID || apps.Apps[2].ID != publicApp.ID || !apps.Apps[2].Online {
 		t.Fatalf("apps = %#v", apps.Apps)
 	}
+	if apps.Apps[0].CreatorUserID == nil || *apps.Apps[0].CreatorUserID != owner.ID ||
+		apps.Apps[1].CreatorUserID == nil || *apps.Apps[1].CreatorUserID != other.ID ||
+		apps.Apps[2].CreatorUserID != nil {
+		t.Fatalf("app creators = %#v", apps.Apps)
+	}
 	for _, app := range apps.Apps {
 		if app.ID == disabledOwnerApp.ID {
 			t.Fatalf("disabled owner's app leaked: %#v", apps.Apps)

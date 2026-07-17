@@ -7,7 +7,7 @@
 ## 1. 接入流程
 
 1. 用户登录即应，在自己的用户会话下调用应用管理 API 创建应用。
-2. 保存创建响应中的 `app.id` 和 `connection_secret`。密钥不会出现在后续列表或详情响应中。
+2. 保存创建响应中的 `app.id` 和 `connection_secret`。创建者也可以通过应用详情接口再次查看当前密钥。
 3. 使用 App ID 和连接密钥连接 `/api/app/ws`。
 4. 处理 Server 推送的 `message.created`，完成持久化或业务处理后调用 `events.ack`。
 5. 通过允许的 RPC 读取应用所在会话的历史、以应用身份发消息，或获取消息所引用的临时文件 URL。
@@ -73,7 +73,7 @@ Content-Type: application/json
 }
 ```
 
-`connection_secret` 只通过创建和重置密钥接口返回。调用方应立即保存到密钥管理系统，禁止写入源码、日志、客户端安装包或公开仓库。
+`connection_secret` 是由数字和小写英文字母组成的 32 位随机密钥，会通过创建、创建者详情和重置密钥接口返回。调用方应妥善保存到密钥管理系统，禁止写入源码、日志、客户端安装包或公开仓库。
 
 ### 2.3 管理接口
 
@@ -81,7 +81,7 @@ Content-Type: application/json
 | --- | --- | --- |
 | `GET` | `/api/client/apps` | 列出当前用户创建的应用，不返回密钥。 |
 | `POST` | `/api/client/apps` | 创建应用，并返回新密钥。 |
-| `GET` | `/api/client/apps/:app_id` | 获取应用详情，不返回密钥。 |
+| `GET` | `/api/client/apps/:app_id` | 获取应用详情和当前连接密钥，仅创建者可调用。 |
 | `PATCH` | `/api/client/apps/:app_id` | 更新名称、备注、可见范围或授权用户。只修改请求中出现的字段。 |
 | `DELETE` | `/api/client/apps/:app_id` | 删除应用并断开连接。 |
 | `POST` | `/api/client/apps/:app_id/avatar` | 上传头像。使用 multipart 字段 `file`，必须是 256×256 WebP，最大 1 MiB。 |

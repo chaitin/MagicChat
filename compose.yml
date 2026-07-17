@@ -1,9 +1,9 @@
-name: mygod
+name: magic-chat
 
 # Project images are pulled through the GHCR mirror by default.
 services:
   postgres:
-    container_name: mygod-postgres
+    container_name: magic-chat-postgres
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
@@ -20,7 +20,7 @@ services:
       start_period: 10s
 
   assistant:
-    container_name: assistant
+    container_name: magic-chat-assistant
     image: ${IMAGE_REGISTRY:-ghcr.1ms.run/chaitin/magicchat}/assistant:${IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
@@ -40,7 +40,7 @@ services:
       - ./data/assistant/log:/app/log
 
   server:
-    container_name: mygod-server
+    container_name: magic-chat-server
     image: ${IMAGE_REGISTRY:-ghcr.1ms.run/chaitin/magicchat}/server:${IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:

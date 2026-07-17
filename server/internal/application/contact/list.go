@@ -102,7 +102,7 @@ func (s *Service) listApps(db *gorm.DB, identity Identity, keyword string) ([]Ap
 	for _, value := range values {
 		online := s.appPresence != nil && s.appPresence.IsOnline(value.ID)
 		result = append(result, App{
-			Avatar: value.Avatar, Description: value.Description, ID: value.ID,
+			Avatar: value.Avatar, CreatorUserID: value.CreatorUserID, Description: value.Description, ID: value.ID,
 			Name: value.Name, Online: online, Type: ContactTypeApp,
 		})
 	}

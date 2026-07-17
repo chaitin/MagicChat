@@ -72,6 +72,7 @@ describe("client data API", () => {
             apps: [
               {
                 avatar: "/assets/apps/assistant.webp",
+                creator_user_id: null,
                 description: "专属 AI 助理",
                 id: "app-1",
                 name: "茉莉",
@@ -126,6 +127,7 @@ describe("client data API", () => {
       apps: [
         {
           avatar: "/assets/apps/assistant.webp",
+          creatorUserId: null,
           description: "专属 AI 助理",
           id: "app-1",
           name: "茉莉",

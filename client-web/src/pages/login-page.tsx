@@ -18,6 +18,7 @@ export function LoginPage() {
     authenticated,
     emailCodeLoginEnabled,
     organizationName,
+    setAuthenticated,
     thirdPartyProviders,
   } = useAppInfo()
   const navigate = useNavigate()
@@ -34,6 +35,7 @@ export function LoginPage() {
     password: string
   }) {
     await clientLogin(credentials)
+    setAuthenticated(true)
     navigate("/init", { replace: true })
   }
 
@@ -42,6 +44,7 @@ export function LoginPage() {
     email: string
   }) {
     await clientEmailCodeLogin(credentials)
+    setAuthenticated(true)
     navigate("/init", { replace: true })
   }
 

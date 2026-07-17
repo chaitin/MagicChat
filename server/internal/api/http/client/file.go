@@ -30,6 +30,7 @@ type readTemporaryFileURLsRequest struct {
 type temporaryFileReadURLResponse struct {
 	ExpiresAt time.Time `json:"expires_at" format:"date-time"`
 	FileID    string    `json:"file_id" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
+	SizeBytes int64     `json:"size_bytes" example:"123456"`
 	URL       string    `json:"url"`
 }
 
@@ -152,6 +153,7 @@ func newTemporaryFileReadURLResponses(values []fileapp.ResolvedTemporaryURL) []t
 	for _, value := range values {
 		result = append(result, temporaryFileReadURLResponse{
 			FileID:    value.FileID,
+			SizeBytes: value.SizeBytes,
 			URL:       value.URL,
 			ExpiresAt: value.ExpiresAt,
 		})

@@ -19,6 +19,38 @@ import (
 	"gorm.io/gorm"
 )
 
+func TestRandomSecretUsesThirtyTwoLowercaseAlphanumericCharacters(t *testing.T) {
+	seen := make(map[string]struct{}, 100)
+	for range 100 {
+		secret, err := randomSecret()
+		if err != nil {
+			t.Fatalf("generate random secret: %v", err)
+		}
+		if len(secret) != appSecretLength {
+			t.Fatalf("secret length = %d, want %d: %q", len(secret), appSecretLength, secret)
+		}
+		hasLowercase := false
+		hasDigit := false
+		for _, character := range secret {
+			switch {
+			case character >= 'a' && character <= 'z':
+				hasLowercase = true
+			case character >= '0' && character <= '9':
+				hasDigit = true
+			default:
+				t.Fatalf("secret contains unsupported character %q: %q", character, secret)
+			}
+		}
+		if !hasLowercase || !hasDigit {
+			t.Fatalf("secret must contain lowercase letters and digits: %q", secret)
+		}
+		if _, exists := seen[secret]; exists {
+			t.Fatalf("generated duplicate secret: %q", secret)
+		}
+		seen[secret] = struct{}{}
+	}
+}
+
 func TestServiceManagesAppsAndConnectionLifecycle(t *testing.T) {
 	db := openAppTestDB(t)
 	now := time.Date(2026, 7, 15, 10, 0, 0, 0, time.UTC)

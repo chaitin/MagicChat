@@ -15,6 +15,7 @@ import {
   type RealtimeContextValue,
 } from "@/lib/realtime-context"
 import { ClientLoadingPage } from "@/components/client-loading-page"
+import { useAppInfo } from "@/lib/app-info-context"
 
 export function ClientRealtimeProvider({
   children,
@@ -24,12 +25,14 @@ export function ClientRealtimeProvider({
   client?: RealtimeClient
 }) {
   const navigate = useNavigate()
+  const { setAuthenticated } = useAppInfo()
   const [client] = useState(
     () =>
       providedClient ??
       new RealtimeClient({
         authCheck: checkClientSession,
         onUnauthorized: () => {
+          setAuthenticated(false)
           navigate("/login", { replace: true })
         },
       })
@@ -103,7 +106,12 @@ export function ClientRealtimeProvider({
       subscribeRealtimeEvent,
       status: snapshot.status,
     }),
-    [sendRealtimeRequest, snapshot.ready, snapshot.status, subscribeRealtimeEvent]
+    [
+      sendRealtimeRequest,
+      snapshot.ready,
+      snapshot.status,
+      subscribeRealtimeEvent,
+    ]
   )
 
   const ready = snapshot.ready || hasReadyOnce

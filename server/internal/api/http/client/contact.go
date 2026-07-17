@@ -14,12 +14,13 @@ type ContactAPI struct {
 }
 
 type contactAppResponse struct {
-	Avatar      string `json:"avatar" example:"/assets/apps/assistant.webp"`
-	Description string `json:"description" example:"AI 助手"`
-	ID          string `json:"id" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
-	Name        string `json:"name" example:"茉莉"`
-	Online      bool   `json:"online" example:"false"`
-	Type        string `json:"type" example:"app"`
+	Avatar        string  `json:"avatar" example:"/assets/apps/assistant.webp"`
+	CreatorUserID *string `json:"creator_user_id"`
+	Description   string  `json:"description" example:"AI 助手"`
+	ID            string  `json:"id" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
+	Name          string  `json:"name" example:"茉莉"`
+	Online        bool    `json:"online" example:"false"`
+	Type          string  `json:"type" example:"app"`
 }
 
 type contactGroupResponse struct {
@@ -122,7 +123,7 @@ func newContactAppsResponse(values []contactapp.App) []contactAppResponse {
 	result := make([]contactAppResponse, 0, len(values))
 	for _, value := range values {
 		result = append(result, contactAppResponse{
-			Avatar: value.Avatar, Description: value.Description, ID: value.ID,
+			Avatar: value.Avatar, CreatorUserID: value.CreatorUserID, Description: value.Description, ID: value.ID,
 			Name: value.Name, Online: value.Online, Type: value.Type,
 		})
 	}

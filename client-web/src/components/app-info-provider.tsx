@@ -1,10 +1,23 @@
-import { useEffect, useState, type ReactNode } from "react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react"
 
 import { defaultAppInfo, getClientInfo, type AppInfo } from "@/lib/app-info"
 import { AppInfoContext } from "@/lib/app-info-context"
 
 export function AppInfoProvider({ children }: { children: ReactNode }) {
   const [appInfo, setAppInfo] = useState<AppInfo>(defaultAppInfo)
+  const [authenticatedOverride, setAuthenticatedOverride] = useState<
+    boolean | null
+  >(null)
+
+  const setAuthenticated = useCallback((authenticated: boolean) => {
+    setAuthenticatedOverride(authenticated)
+  }, [])
 
   useEffect(() => {
     let ignore = false
@@ -30,9 +43,16 @@ export function AppInfoProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const value = useMemo(
+    () => ({
+      ...appInfo,
+      authenticated: authenticatedOverride ?? appInfo.authenticated,
+      setAuthenticated,
+    }),
+    [appInfo, authenticatedOverride, setAuthenticated]
+  )
+
   return (
-    <AppInfoContext.Provider value={appInfo}>
-      {children}
-    </AppInfoContext.Provider>
+    <AppInfoContext.Provider value={value}>{children}</AppInfoContext.Provider>
   )
 }

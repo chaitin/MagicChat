@@ -47,12 +47,15 @@ assert_file ".dockerignore"
 
 assert_contains "compose.yml" "ghcr.1ms.run"
 assert_contains "compose.yml" "ghcr.1ms.run/chaitin/magicchat"
+assert_contains "compose.yml" "name: magic-chat"
 assert_contains "compose.yml" "assistant:"
-assert_contains "compose.yml" "container_name: mygod-postgres"
-assert_contains "compose.yml" "container_name: assistant"
-assert_contains "compose.yml" "container_name: mygod-server"
+assert_contains "compose.yml" "container_name: magic-chat-postgres"
+assert_contains "compose.yml" "container_name: magic-chat-assistant"
+assert_contains "compose.yml" "container_name: magic-chat-server"
 assert_contains "compose.yml" "caddy:"
 assert_contains "compose.yml" "container_name: magic-chat-caddy"
+assert_not_contains "compose.yml" "name: mygod"
+assert_not_contains "compose.yml" "container_name: mygod-"
 assert_contains "compose.yml" 'POSTGRES_DB: ${POSTGRES_DB:-magic-chat}'
 assert_contains "compose.yml" 'POSTGRES_USER: ${POSTGRES_USER:-magic-chat}'
 assert_contains "compose.yml" '${IMAGE_REGISTRY:-ghcr.1ms.run/chaitin/magicchat}/assistant:${IMAGE_TAG:-latest}'

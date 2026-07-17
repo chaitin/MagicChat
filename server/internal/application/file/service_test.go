@@ -62,7 +62,7 @@ func TestServiceUploadsTemporaryFileAndResolvesURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve temporary URL: %v", err)
 	}
-	if resolved.FileID != fileID || resolved.URL != "https://assets.example.test/temporary/"+value.ObjectKey {
+	if resolved.FileID != fileID || resolved.SizeBytes != value.SizeBytes || resolved.URL != "https://assets.example.test/temporary/"+value.ObjectKey {
 		t.Fatalf("resolved URL = %#v", resolved)
 	}
 	if storage.presignTTL != 24*time.Hour {

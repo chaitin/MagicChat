@@ -29,6 +29,7 @@ describe("ClientBrandMetadata", () => {
           emailCodeLoginEnabled: false,
           oidcProviders: [],
           organizationName: "长亭科技",
+          setAuthenticated: () => undefined,
           thirdPartyProviders: [],
         }}
       >

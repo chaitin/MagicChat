@@ -16,9 +16,10 @@ import (
 
 func TestContactAPIListsUnifiedContacts(t *testing.T) {
 	lastOnlineAt := time.Date(2026, 7, 15, 9, 0, 0, 0, time.UTC)
+	creatorUserID := "creator-id"
 	stub := &contactServiceStub{
 		listResult: contactapp.ListResult{
-			Apps:   []contactapp.App{{ID: "app-id", Name: "App", Type: contactapp.ContactTypeApp}},
+			Apps:   []contactapp.App{{ID: "app-id", Name: "App", CreatorUserID: &creatorUserID, Type: contactapp.ContactTypeApp}},
 			Groups: []contactapp.Group{{ID: "group-id", Name: "Group", Type: contactapp.ContactTypeGroup}},
 			Users:  []contactapp.User{{ID: "user-id", Name: "User", Type: contactapp.ContactTypeUser, LastOnlineAt: &lastOnlineAt}},
 		},
@@ -48,6 +49,9 @@ func TestContactAPIListsUnifiedContacts(t *testing.T) {
 	}
 	if !response.Success || len(response.Data.Apps) != 1 || len(response.Data.Groups) != 1 || len(response.Data.Users) != 1 {
 		t.Fatalf("response = %#v", response)
+	}
+	if response.Data.Apps[0].CreatorUserID == nil || *response.Data.Apps[0].CreatorUserID != creatorUserID {
+		t.Fatalf("app = %#v", response.Data.Apps[0])
 	}
 	if response.Data.Users[0].LastOnlineAt == nil || *response.Data.Users[0].LastOnlineAt != lastOnlineAt.Format(time.RFC3339) {
 		t.Fatalf("user = %#v", response.Data.Users[0])

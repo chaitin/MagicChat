@@ -6,6 +6,10 @@ import { toast } from "sonner"
 import { useClientData } from "@/lib/client-data-context"
 import { cn } from "@/lib/utils"
 import { AvatarPreviewDialog } from "@/components/avatar-preview-dialog"
+import {
+  UserProfilePopoverLink,
+  type UserProfile,
+} from "@/components/user-profile-popover"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -24,6 +28,7 @@ type AppProfilePopoverProps = {
 
 type AppProfile = {
   avatar: string
+  creatorUserId?: string | null
   description: string
   id: string
   name: string
@@ -37,7 +42,7 @@ export function AppProfilePopover({
   triggerAriaLabel,
   triggerClassName,
 }: AppProfilePopoverProps) {
-  const { contactApps, openAppConversation } = useClientData()
+  const { contactApps, contacts, me, openAppConversation } = useClientData()
   const navigate = useNavigate()
   const [open, setOpen] = React.useState(false)
   const [avatarPreviewOpen, setAvatarPreviewOpen] = React.useState(false)
@@ -52,6 +57,7 @@ export function AppProfilePopover({
   }
 
   const profile = app
+  const developer = resolveDeveloper(profile.creatorUserId, me, contacts)
 
   async function handleStartConversation() {
     if (openingConversation) {
@@ -133,6 +139,13 @@ export function AppProfilePopover({
                 label="类型"
                 value="应用"
               />
+              {developer && (
+                <AppProfileRow
+                  icon={<UserRound className="size-4 text-muted-foreground" />}
+                  label="开发者"
+                  value={<UserProfilePopoverLink profile={developer} />}
+                />
+              )}
               <AppProfileRow
                 icon={<UserRound className="size-4 text-muted-foreground" />}
                 label="状态"
@@ -176,6 +189,27 @@ export function AppProfilePopover({
   )
 }
 
+function resolveDeveloper(
+  creatorUserId: string | null | undefined,
+  me: UserProfile,
+  contacts: UserProfile[]
+) {
+  if (!creatorUserId) {
+    return null
+  }
+
+  const normalizedCreatorId = creatorUserId.toLowerCase()
+  if (me.id.toLowerCase() === normalizedCreatorId) {
+    return me
+  }
+
+  return (
+    contacts.find(
+      (contact) => contact.id.toLowerCase() === normalizedCreatorId
+    ) ?? null
+  )
+}
+
 function resolveAppProfile(
   appId: string | null,
   apps: AppProfile[],
@@ -198,7 +232,7 @@ function AppProfileRow({
 }: {
   icon: React.ReactNode
   label: string
-  value: string
+  value: React.ReactNode
 }) {
   return (
     <div className="flex items-center gap-3 border-b py-2 last:border-b-0">
