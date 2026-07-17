@@ -251,7 +251,7 @@ func (o *OAuth) fetchGitHubPrimaryEmail(ctx context.Context, endpoint, accessTok
 
 func usesPKCE(providerType string) bool {
 	switch providerType {
-	case identityprovider.TypeOIDC, identityprovider.TypeGoogle, identityprovider.TypeFeishu:
+	case identityprovider.TypeGoogle, identityprovider.TypeFeishu:
 		return true
 	default:
 		return false
