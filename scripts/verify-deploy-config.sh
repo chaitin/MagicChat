@@ -100,6 +100,7 @@ assert_not_contains "compose.yml" "./data/server/config:/app/config:ro"
 assert_contains "compose.yml" "./data/server/log:/app/log"
 assert_contains "compose.yml" "./data/caddy/data:/data"
 assert_contains "compose.yml" "./data/caddy/config:/config"
+assert_contains "compose.yml" "./data/caddy/logs:/var/log/caddy"
 assert_contains "compose.yml" 'CLIENT_HTTPS_PORT: ${CLIENT_HTTPS_PORT:-443}'
 assert_contains "compose.yml" 'driver: json-file'
 assert_contains "compose.yml" 'max-size: "10m"'
@@ -177,7 +178,13 @@ assert_contains "deploy/caddy/Caddyfile" "root * /srv/client"
 assert_contains "deploy/caddy/Caddyfile" "root * /srv/admin"
 assert_contains "deploy/caddy/Caddyfile" "try_files {path} /index.html"
 assert_contains "deploy/caddy/Caddyfile" "encode zstd gzip"
-assert_contains "deploy/caddy/Caddyfile" "output stdout"
+assert_contains "deploy/caddy/Caddyfile" "output file /var/log/caddy/caddy.log"
+assert_contains "deploy/caddy/Caddyfile" "output file /var/log/caddy/client-access.log"
+assert_contains "deploy/caddy/Caddyfile" "output file /var/log/caddy/admin-access.log"
+assert_contains "deploy/caddy/Caddyfile" "roll_size 10MiB"
+assert_contains "deploy/caddy/Caddyfile" "roll_keep 5"
+assert_contains "deploy/caddy/Caddyfile" "roll_keep_for 720h"
+assert_not_contains "deploy/caddy/Caddyfile" "output stdout"
 assert_contains "deploy/caddy/Caddyfile" "tls /etc/caddy/bootstrap/tls.crt /etc/caddy/bootstrap/tls.key"
 assert_not_contains "deploy/caddy/Caddyfile" '${ADMIN_HTTPS_PORT}'
 assert_not_contains "deploy/caddy/Caddyfile" "mygod"
