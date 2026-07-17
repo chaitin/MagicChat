@@ -1,18 +1,7 @@
-import { RefreshCw, Search } from "lucide-react-native"
 import { useRouter } from "expo-router"
 import { useMemo, useState } from "react"
-import {
-  Button,
-  Paragraph,
-  SizableText,
-  Spinner,
-  Tabs,
-  XStack,
-  YStack,
-} from "tamagui"
+import { SizableText, Tabs, YStack } from "tamagui"
 
-import { AppInput } from "@/components/forms/app-input"
-import { ThemedIcon } from "@/components/icons/themed-icon"
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
 import { appConfig } from "@/config/app-config"
 import { useCachedAppInfo } from "@/data/hooks"
@@ -43,12 +32,6 @@ export function ContactsScreen() {
     refreshContacts,
   } = useClientData()
   const [activeTab, setActiveTab] = useState<DirectoryTab>("user")
-  const [keywords, setKeywords] = useState<Record<DirectoryTab, string>>({
-    app: "",
-    group: "",
-    user: "",
-  })
-  const activeKeyword = keywords[activeTab]
   const organizationName =
     appInfoQuery.data?.organizationName ?? appConfig.organizationName
   const sections = useMemo(
@@ -56,23 +39,17 @@ export function ContactsScreen() {
       buildDirectorySections({
         activeTab,
         contacts,
-        keyword: activeKeyword,
+        currentUserId: session.userId,
+        keyword: "",
         organizationName,
       }),
-    [activeKeyword, activeTab, contacts, organizationName]
+    [activeTab, contacts, organizationName, session.userId]
   )
 
   function handleTabChange(value: string) {
     if (value === "user" || value === "app" || value === "group") {
       setActiveTab(value)
     }
-  }
-
-  function handleKeywordChange(value: string) {
-    setKeywords((current) => ({
-      ...current,
-      [activeTab]: value,
-    }))
   }
 
   function handleRefresh() {
@@ -86,59 +63,31 @@ export function ContactsScreen() {
   }
 
   return (
-    <KeyboardAwareScreen edges={[]} scrollable={false}>
-      <YStack gap="$3" p="$4" pb="$3">
-        <Tabs onValueChange={handleTabChange} value={activeTab}>
+    <KeyboardAwareScreen
+      contentBackground="$color1"
+      edges={[]}
+      scrollable={false}
+    >
+      <YStack gap="$3" px="$4" py="$3">
+        <Tabs onValueChange={handleTabChange} size="$3" value={activeTab}>
           <Tabs.List width="100%">
             {DIRECTORY_TABS.map((tab) => (
               <Tabs.Tab flex={1} key={tab.value} value={tab.value}>
-                <SizableText>{tab.label}</SizableText>
+                <SizableText size="$3">{tab.label}</SizableText>
               </Tabs.Tab>
             ))}
           </Tabs.List>
         </Tabs>
-
-        <XStack gap="$2" items="center">
-          <ThemedIcon icon={Search} size={18} />
-          <AppInput
-            autoCapitalize="none"
-            clearButtonMode="while-editing"
-            flex={1}
-            onChangeText={handleKeywordChange}
-            placeholder={`搜索${getDirectoryTabLabel(activeTab)}`}
-            returnKeyType="search"
-            value={activeKeyword}
-          />
-          <Button
-            accessibilityLabel="刷新通讯录"
-            circular
-            disabled={isContactsRefreshing}
-            icon={
-              isContactsRefreshing ? (
-                <Spinner />
-              ) : (
-                <ThemedIcon icon={RefreshCw} />
-              )
-            }
-            onPress={handleRefresh}
-            size="$4"
-          />
-        </XStack>
-
-        {contactsError ? (
-          <Paragraph color="$red10" size="$2">
-            {contactsError.message}
-          </Paragraph>
-        ) : null}
       </YStack>
 
       <ContactDirectoryList
+        errorMessage={contactsError?.message}
         emptyLabel={getDirectoryTabLabel(activeTab)}
         isRefreshing={isContactsRefreshing}
         onRefresh={handleRefresh}
         onItemPress={handleItemPress}
         sections={sections}
-        serverUrl={session.url}
+        server={session}
       />
     </KeyboardAwareScreen>
   )

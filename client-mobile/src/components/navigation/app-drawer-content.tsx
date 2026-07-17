@@ -4,30 +4,48 @@ import { Alert } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import {
   Avatar,
-  Button,
-  H4,
+  Image,
   ListItem,
   Paragraph,
-  Separator,
+  SizableText,
   Spinner,
   Text,
+  Theme,
   useTheme,
   XStack,
-  YGroup,
   YStack,
 } from "tamagui"
 
+import { CachedAvatarImage } from "@/components/avatar/cached-avatar-image"
+import { AppButton } from "@/components/forms/app-button"
 import { ThemedIcon } from "@/components/icons/themed-icon"
+import { AppListItem } from "@/components/lists/app-list-item"
 import { appConfig } from "@/config/app-config"
 import { ApiRequestError } from "@/data/api-client"
-import { useAuth } from "@/features/auth/auth-context"
+import { useCachedAppInfo } from "@/data/hooks"
+import {
+  useAuth,
+  useAuthenticatedSession,
+} from "@/features/auth/auth-context"
 import { appSections } from "@/navigation/app-sections"
+import { useClientData } from "@/providers/client-data-provider"
 
 export function AppDrawerContent({ closeDrawer }: { closeDrawer: () => void }) {
   const pathname = usePathname()
   const router = useRouter()
   const theme = useTheme()
-  const { isSigningOut, session, signOut } = useAuth()
+  const session = useAuthenticatedSession()
+  const appInfoQuery = useCachedAppInfo(session)
+  const { currentUser } = useClientData()
+  const { isSigningOut, signOut } = useAuth()
+  const appName = appInfoQuery.data?.appName ?? appConfig.name
+  const organizationName =
+    appInfoQuery.data?.organizationName ?? appConfig.organizationName
+  const currentUserName =
+    currentUser?.nickname.trim() ||
+    currentUser?.name.trim() ||
+    currentUser?.email ||
+    "当前账号"
 
   function navigateTo(href: Href) {
     closeDrawer()
@@ -58,76 +76,74 @@ export function AppDrawerContent({ closeDrawer }: { closeDrawer: () => void }) {
       }}
     >
       <YStack bg="$background" flex={1}>
-        <YStack gap="$4" p="$4">
+        <YStack px="$4" py="$4">
           <XStack gap="$3" items="center">
-            <Avatar circular size="$5" theme="teal">
-              <Avatar.Fallback>
-                <Text fontWeight="700">MC</Text>
-              </Avatar.Fallback>
-            </Avatar>
-            <YStack flex={1}>
-              <H4>{appConfig.name}</H4>
+            <Image
+              alt={`${appName} Logo`}
+              borderRadius={10}
+              height="$5"
+              src={require("../../../assets/images/icon.png")}
+              width="$5"
+            />
+            <YStack flex={1} gap="$1">
+              <SizableText fontWeight="600" numberOfLines={1} size="$4">
+                {appName}
+              </SizableText>
               <Paragraph color="$color10" size="$2">
-                AI 工作空间
+                {organizationName} 的工作空间
               </Paragraph>
             </YStack>
           </XStack>
-          <Separator />
         </YStack>
 
-        <YStack flex={1} gap="$3" px="$4">
-          <Paragraph color="$color10" size="$2">
+        <YStack flex={1} gap="$2" px="$4" pt="$2">
+          <Paragraph color="$color10" px="$1" size="$2">
             工作台
           </Paragraph>
-          <YGroup
-            borderColor="$borderColor"
-            borderWidth={1}
-            rounded="$4"
-            size="$4"
-          >
-            {appSections.map((item) => {
-              const active = pathname.endsWith(`/${item.routeName}`)
+          {appSections.map((item) => {
+            const active = pathname.endsWith(`/${item.routeName}`)
 
-              return (
-                <YGroup.Item key={item.routeName}>
-                  <ListItem
-                    icon={<ThemedIcon icon={item.icon} />}
-                    iconAfter={
-                      <ThemedIcon icon={active ? Check : ChevronRight} />
-                    }
-                    onPress={() => navigateTo(item.href)}
-                    theme={active ? "teal" : undefined}
-                    title={item.label}
-                  />
-                </YGroup.Item>
-              )
-            })}
-          </YGroup>
+            return (
+              <Theme key={item.routeName} name={active ? "teal" : "gray"}>
+                <AppListItem
+                  accessibilityLabel={`打开${item.label}`}
+                  bg={active ? "$color2" : undefined}
+                  borderColor={active ? "$color10" : "$color7"}
+                  icon={<ThemedIcon icon={item.icon} />}
+                  iconAfter={
+                    <ThemedIcon icon={active ? Check : ChevronRight} />
+                  }
+                  onPress={() => navigateTo(item.href)}
+                  size="$4"
+                  title={item.label}
+                />
+              </Theme>
+            )
+          })}
         </YStack>
 
         <YStack gap="$3" p="$4">
-          <Separator />
-          <YGroup
-            borderColor="$borderColor"
-            borderWidth={1}
-            rounded="$4"
-            size="$4"
-          >
-            <YGroup.Item>
-              <ListItem
-                icon={
-                  <Avatar circular size="$3" theme="teal">
-                    <Avatar.Fallback>
-                      <Text>演</Text>
-                    </Avatar.Fallback>
-                  </Avatar>
-                }
-                subTitle={session?.url ?? "未选择服务器"}
-                title="演示账号"
-              />
-            </YGroup.Item>
-          </YGroup>
-          <Button
+          <Theme name="gray">
+            <ListItem
+              borderColor="$color7"
+              icon={
+                <Avatar circular size="$3">
+                  <CachedAvatarImage
+                    avatar={currentUser?.avatar ?? ""}
+                    server={session}
+                  />
+                  <Avatar.Fallback>
+                    <Text>{Array.from(currentUserName)[0] ?? "即"}</Text>
+                  </Avatar.Fallback>
+                </Avatar>
+              }
+              subTitle={currentUser?.email ?? session.url}
+              title={currentUserName}
+              variant="outlined"
+            />
+          </Theme>
+          <AppButton
+            accessibilityLabel="退出登录"
             disabled={isSigningOut}
             icon={
               isSigningOut ? <Spinner /> : <ThemedIcon icon={LogOut} />
@@ -135,9 +151,10 @@ export function AppDrawerContent({ closeDrawer }: { closeDrawer: () => void }) {
             onPress={() => void handleLogout()}
             theme="red"
             variant="outlined"
+            width="100%"
           >
             {isSigningOut ? "正在退出…" : "退出登录"}
-          </Button>
+          </AppButton>
         </YStack>
       </YStack>
     </SafeAreaView>

@@ -17,6 +17,7 @@ import type { ServerConfig } from "@/features/servers/server-model"
 export function ServerListItem({
   isSelected,
   onDelete,
+  onRequestActions,
   onSelect,
   onSwipeableClose,
   onSwipeableOpen,
@@ -24,6 +25,7 @@ export function ServerListItem({
 }: {
   isSelected: boolean
   onDelete: () => void
+  onRequestActions: () => void
   onSelect: () => void
   onSwipeableClose: (close: () => void) => void
   onSwipeableOpen: (close: () => void) => void
@@ -52,7 +54,7 @@ export function ServerListItem({
 
     didLongPressRef.current = true
     closeSwipeable()
-    onDelete()
+    onRequestActions()
   }
 
   const content = (

@@ -2,20 +2,19 @@ import { Bot } from "lucide-react-native"
 import { Avatar, SizableText, Text, XStack, YStack } from "tamagui"
 
 import { GroupAvatar } from "@/components/avatar/group-avatar"
+import { CachedAvatarImage } from "@/components/avatar/cached-avatar-image"
 import { ThemedIcon } from "@/components/icons/themed-icon"
 import type { ClientConversation } from "@/data/models"
+import type { ServerTarget } from "@/data/query"
 import { formatUnreadCount } from "@/features/messages/conversation-list-model"
-import { resolveServerAssetUrl } from "@/lib/server-asset-url"
 
 export function ConversationAvatar({
   conversation,
-  serverUrl,
+  server,
 }: {
   conversation: ClientConversation
-  serverUrl: string
+  server: ServerTarget
 }) {
-  const avatarUrl = resolveServerAssetUrl(serverUrl, conversation.avatar)
-
   return (
     <YStack height="$4" width="$4">
       {conversation.type === "group" ? (
@@ -23,11 +22,11 @@ export function ConversationAvatar({
           avatar={conversation.avatar}
           members={conversation.members}
           name={conversation.name}
-          serverUrl={serverUrl}
+          server={server}
         />
       ) : (
         <Avatar rounded="$2" size="$4">
-          {avatarUrl ? <Avatar.Image src={avatarUrl} /> : null}
+          <CachedAvatarImage avatar={conversation.avatar} server={server} />
           <Avatar.Fallback
             bg="$backgroundFocus"
             items="center"

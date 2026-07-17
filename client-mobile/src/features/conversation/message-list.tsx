@@ -7,8 +7,10 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native"
-import { Button, Paragraph, Spinner, XStack, YStack } from "tamagui"
+import { Button, Spinner, useTheme, XStack, YStack } from "tamagui"
 
+import { ContentState } from "@/components/feedback/content-state"
+import { AppButton } from "@/components/forms/app-button"
 import { ThemedIcon } from "@/components/icons/themed-icon"
 import { MessageBubble } from "@/features/conversation/message-bubble"
 import type { EntityReference } from "@/domain/entities/entity-profile"
@@ -16,12 +18,12 @@ import type {
   MessageMentionLabelResolver,
   PresentedMessage,
 } from "@/domain/messages/message-presenter"
+import type { ServerTarget } from "@/data/query"
+import type { ResourceLoadState } from "@/data/resources"
 
 export function MessageList({
   conversationId,
   error,
-  fileUrls,
-  fileUrlsLoading,
   hasOlder,
   isFetchingOlder,
   isLoading,
@@ -30,13 +32,14 @@ export function MessageList({
   onAvatarPress,
   onLoadOlder,
   onRefresh,
+  onResourceError,
+  onResourcePress,
   resolveMentionLabel,
-  serverUrl,
+  resourceStates,
+  server,
 }: {
   conversationId: string
   error: Error | null
-  fileUrls: ReadonlyMap<string, string>
-  fileUrlsLoading: boolean
   hasOlder: boolean
   isFetchingOlder: boolean
   isLoading: boolean
@@ -45,9 +48,13 @@ export function MessageList({
   onAvatarPress: (sender: EntityReference) => void
   onLoadOlder: () => void
   onRefresh: () => void
+  onResourceError: (fileId: string) => void
+  onResourcePress: (fileId: string) => void
   resolveMentionLabel: MessageMentionLabelResolver
-  serverUrl: string
+  resourceStates: ReadonlyMap<string, ResourceLoadState>
+  server: ServerTarget
 }) {
+  const theme = useTheme()
   const listRef = useRef<FlatList<PresentedMessage>>(null)
   const nearBottomRef = useRef(true)
   const initializedMessagesRef = useRef(false)
@@ -127,34 +134,29 @@ export function MessageList({
   }
 
   if (isLoading) {
-    return (
-      <YStack flex={1} gap="$2" items="center" justify="center">
-        <Spinner />
-        <Paragraph color="$color10">正在加载消息</Paragraph>
-      </YStack>
-    )
+    return <ContentState loading message="正在加载消息" />
   }
 
   if (error && messages.length === 0) {
     return (
-      <YStack flex={1} gap="$3" items="center" justify="center" p="$6">
-        <Paragraph color="$color10" text="center">
-          {error.message}
-        </Paragraph>
-        <Button onPress={onRefresh} variant="outlined">
-          重试
-        </Button>
-      </YStack>
+      <ContentState message={error.message} tone="error">
+        <YStack maxW={240} width="100%">
+          <AppButton
+            accessibilityLabel="重新加载消息"
+            onPress={onRefresh}
+            theme="gray"
+            variant="outlined"
+            width="100%"
+          >
+            重试
+          </AppButton>
+        </YStack>
+      </ContentState>
     )
   }
 
   if (messages.length === 0) {
-    return (
-      <YStack flex={1} gap="$1" items="center" justify="center" p="$6">
-        <Paragraph fontWeight="600">暂无消息</Paragraph>
-        <Paragraph color="$color10">发送第一条消息开始对话</Paragraph>
-      </YStack>
-    )
+    return <ContentState message="暂无消息，发送第一条消息开始对话" />
   }
 
   return (
@@ -192,16 +194,22 @@ export function MessageList({
         onEndReachedThreshold={0.2}
         onScroll={handleScroll}
         refreshControl={
-          <RefreshControl onRefresh={onRefresh} refreshing={isRefreshing} />
+          <RefreshControl
+            colors={[String(theme.color10.val)]}
+            onRefresh={onRefresh}
+            refreshing={isRefreshing}
+            tintColor={String(theme.color10.val)}
+          />
         }
         renderItem={({ item }) => (
           <MessageBubble
-            fileUrls={fileUrls}
-            fileUrlsLoading={fileUrlsLoading}
             message={item}
             onAvatarPress={onAvatarPress}
+            onResourceError={onResourceError}
+            onResourcePress={onResourcePress}
             resolveMentionLabel={resolveMentionLabel}
-            serverUrl={serverUrl}
+            resourceStates={resourceStates}
+            server={server}
           />
         )}
         scrollEventThrottle={16}

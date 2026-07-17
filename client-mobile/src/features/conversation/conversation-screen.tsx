@@ -1,8 +1,9 @@
 import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Alert, AppState } from "react-native"
-import { Button, Paragraph, Spinner, YStack } from "tamagui"
+import { Button, YStack } from "tamagui"
 
+import { ContentState } from "@/components/feedback/content-state"
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
 import { PageHeader } from "@/components/navigation/page-header"
 import { ApiRequestError, isUnauthorizedError } from "@/data/api-client"
@@ -10,15 +11,18 @@ import {
   useConversationMessages,
   useMarkConversationRead,
   useSendConversationTextMessage,
-  useTemporaryFileUrls,
 } from "@/data/message-hooks"
+import {
+  openResourceExternally,
+  useMessageResources,
+} from "@/data/resources"
 import {
   getConversationEntityReference,
   type EntityReference,
 } from "@/domain/entities/entity-profile"
 import {
   buildPresentedMessages,
-  collectMessageFileIds,
+  collectMessageResources,
   createMessageMentionLabelResolver,
   type MessageMentionLabelResolver,
 } from "@/domain/messages/message-presenter"
@@ -68,18 +72,11 @@ export function ConversationScreen() {
   const readStateConversationId = useRef("")
   const confirmedReadSeq = useRef(0)
   const requestedReadSeq = useRef(0)
-  const fileIds = useMemo(
-    () => collectMessageFileIds(messagesQuery.messages),
+  const messageResources = useMemo(
+    () => collectMessageResources(messagesQuery.messages),
     [messagesQuery.messages]
   )
-  const fileUrlsQuery = useTemporaryFileUrls(session, fileIds)
-  const fileUrls = useMemo(
-    () =>
-      new Map(
-        (fileUrlsQuery.data ?? []).map((item) => [item.fileId, item.url] as const)
-      ),
-    [fileUrlsQuery.data]
-  )
+  const resources = useMessageResources(session, messageResources)
   const resolveMentionLabel = useMemo(
     () =>
       conversation && currentUser
@@ -222,6 +219,18 @@ export function ConversationScreen() {
     router.push(buildEntityDetailHref(sender))
   }
 
+  async function handleResourcePress(fileId: string) {
+    try {
+      const resource = await resources.ensure(fileId)
+      await openResourceExternally(resource)
+    } catch (error: unknown) {
+      Alert.alert(
+        "无法打开文件",
+        error instanceof Error ? error.message : "文件下载失败，请重试。"
+      )
+    }
+  }
+
   return (
     <YStack bg="$background" flex={1}>
       <PageHeader
@@ -239,7 +248,7 @@ export function ConversationScreen() {
             >
               <ConversationHeaderAvatar
                 conversation={conversation}
-                serverUrl={session.url}
+                server={session}
               />
             </Button>
           ) : undefined
@@ -248,21 +257,14 @@ export function ConversationScreen() {
 
       <KeyboardAwareScreen edges={["bottom"]} scrollable={false}>
         {!conversation ? (
-          <YStack flex={1} items="center" justify="center" p="$6">
-            <Paragraph color="$color10">该会话不存在或已被移除</Paragraph>
-          </YStack>
+          <ContentState message="该会话不存在或已被移除" />
         ) : !currentUser ? (
-          <YStack flex={1} gap="$2" items="center" justify="center">
-            <Spinner />
-            <Paragraph color="$color10">正在加载用户信息</Paragraph>
-          </YStack>
+          <ContentState loading message="正在加载用户信息" />
         ) : (
           <>
             <MessageList
               conversationId={conversation.id}
               error={messagesQuery.error}
-              fileUrls={fileUrls}
-              fileUrlsLoading={fileUrlsQuery.isLoading}
               hasOlder={messagesQuery.hasOlder}
               isFetchingOlder={messagesQuery.isFetchingOlder}
               isLoading={messagesQuery.isLoading}
@@ -271,8 +273,13 @@ export function ConversationScreen() {
               onAvatarPress={handleAvatarPress}
               onLoadOlder={handleLoadOlder}
               onRefresh={handleRefresh}
+              onResourceError={(fileId) =>
+                void resources.reload(fileId).catch(() => undefined)
+              }
+              onResourcePress={(fileId) => void handleResourcePress(fileId)}
               resolveMentionLabel={resolveMentionLabel}
-              serverUrl={session.url}
+              resourceStates={resources.states}
+              server={session}
             />
             <MessageComposer
               disabled={sendMutation.isPending}

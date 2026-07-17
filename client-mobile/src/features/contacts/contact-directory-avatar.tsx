@@ -5,27 +5,26 @@ import {
   GroupAvatar,
   type GroupAvatarMember,
 } from "@/components/avatar/group-avatar"
+import { CachedAvatarImage } from "@/components/avatar/cached-avatar-image"
 import { ThemedIcon } from "@/components/icons/themed-icon"
+import type { ServerTarget } from "@/data/query"
 import { getContactInitial } from "@/features/contacts/contact-directory-model"
-import { resolveServerAssetUrl } from "@/lib/server-asset-url"
 
 export function ContactDirectoryAvatar({
   avatar,
   members,
   name,
   online,
-  serverUrl,
+  server,
   type,
 }: {
   avatar: string
   members?: GroupAvatarMember[]
   name: string
   online?: boolean
-  serverUrl: string
+  server: ServerTarget
   type: "user" | "app" | "group"
 }) {
-  const avatarUrl = resolveServerAssetUrl(serverUrl, avatar)
-
   return (
     <YStack height="$4" width="$4">
       {type === "group" ? (
@@ -33,11 +32,11 @@ export function ContactDirectoryAvatar({
           avatar={avatar}
           members={members}
           name={name}
-          serverUrl={serverUrl}
+          server={server}
         />
       ) : (
         <Avatar rounded="$2" size="$4">
-          {avatarUrl ? <Avatar.Image src={avatarUrl} /> : null}
+          <CachedAvatarImage avatar={avatar} server={server} />
           <Avatar.Fallback
             bg="$backgroundFocus"
             items="center"

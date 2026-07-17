@@ -7,7 +7,6 @@ import type {
   ClientMessageReplyTo,
   ClientSystemEventMessageBody,
   ClientSystemEventUserRef,
-  TemporaryFileReadUrl,
 } from "@/data/models"
 
 const MAX_FORWARD_BUNDLE_DEPTH = 5
@@ -91,19 +90,6 @@ export function normalizeClientMessagePage(value: unknown): ClientMessagePage {
     newestSeq,
     oldestSeq,
   }
-}
-
-export function normalizeTemporaryFileReadUrl(value: unknown): TemporaryFileReadUrl {
-  const item = asRecord(value)
-  const expiresAt = asString(item?.expires_at)
-  const fileId = asString(item?.file_id)
-  const url = asString(item?.url)
-
-  if (!item || !expiresAt || !fileId || !url) {
-    throw new ApiRequestError("文件访问地址响应格式不正确")
-  }
-
-  return { expiresAt, fileId, url }
 }
 
 function normalizeMessageBodyOrUnsupported(value: unknown): ClientMessageBody {

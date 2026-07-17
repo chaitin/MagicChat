@@ -2,14 +2,12 @@ import {
   type InfiniteData,
   useInfiniteQuery,
   useMutation,
-  useQuery,
   useQueryClient,
 } from "@tanstack/react-query"
 import { useMemo } from "react"
 
 import {
   fetchConversationMessages,
-  fetchTemporaryFileReadUrls,
   markConversationRead,
   sendConversationTextMessage,
 } from "@/data/messages-api"
@@ -154,24 +152,6 @@ function mergeConversationReadResult(
         ? 0
         : Math.min(conversation.unreadCount, result.unreadCount),
   }
-}
-
-export function useTemporaryFileUrls(
-  server: AuthenticatedTarget,
-  fileIds: string[]
-) {
-  const uniqueFileIds = useMemo(
-    () => Array.from(new Set(fileIds)).sort(),
-    [fileIds]
-  )
-
-  return useQuery({
-    enabled: uniqueFileIds.length > 0,
-    queryFn: ({ signal }) =>
-      fetchTemporaryFileReadUrls(server.url, uniqueFileIds, { signal }),
-    queryKey: queryKeys.temporaryFileUrls(server, uniqueFileIds),
-    staleTime: 5 * 60 * 1_000,
-  })
 }
 
 function mergeMessages(messages: ClientMessage[]) {

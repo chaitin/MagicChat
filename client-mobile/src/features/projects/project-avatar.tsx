@@ -2,18 +2,19 @@ import { BriefcaseBusiness } from "lucide-react-native"
 import { Avatar, Text } from "tamagui"
 
 import { ThemedIcon } from "@/components/icons/themed-icon"
+import { CachedAvatarImage } from "@/components/avatar/cached-avatar-image"
 import type { ClientProjectSummary, ClientUser } from "@/data/models"
+import type { ServerTarget } from "@/data/query"
 import { getContactDisplayName } from "@/domain/contacts/contact-display"
-import { resolveServerAssetUrl } from "@/lib/server-asset-url"
 
 export function ProjectAvatar({
   currentUser,
   project,
-  serverUrl,
+  server,
 }: {
   currentUser: ClientUser | null
   project: ClientProjectSummary
-  serverUrl: string
+  server: ServerTarget
 }) {
   const displayName = project.isPersonal
     ? currentUser
@@ -21,12 +22,11 @@ export function ProjectAvatar({
       : project.name
     : project.name
   const avatar = project.isPersonal ? currentUser?.avatar : project.avatar
-  const avatarUrl = resolveServerAssetUrl(serverUrl, avatar ?? "")
 
   return (
-    <Avatar rounded="$2" size="$4" theme={project.isPersonal ? "teal" : "yellow"}>
-      {avatarUrl ? <Avatar.Image src={avatarUrl} /> : null}
-      <Avatar.Fallback items="center" justify="center">
+    <Avatar rounded="$2" size="$4">
+      <CachedAvatarImage avatar={avatar ?? ""} server={server} />
+      <Avatar.Fallback bg="$backgroundPress" items="center" justify="center">
         {project.isPersonal ? (
           <Text fontWeight="600">{getInitial(displayName)}</Text>
         ) : (

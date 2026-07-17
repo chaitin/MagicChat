@@ -36,6 +36,13 @@ export default function AppDrawerLayout() {
           drawerLabel: "资料详情",
         }}
       />
+      <Drawer.Screen
+        name="search"
+        options={{
+          drawerItemStyle: { display: "none" },
+          drawerLabel: "搜索",
+        }}
+      />
     </Drawer>
   )
 }

@@ -1,8 +1,12 @@
 import { UsersRound } from "lucide-react-native"
-import { Avatar, Image, Text, YStack, type SizeTokens } from "tamagui"
+import { Avatar, Text, YStack, type SizeTokens } from "tamagui"
 
+import {
+  CachedAvatarImage,
+  CachedAvatarTileImage,
+} from "@/components/avatar/cached-avatar-image"
 import { ThemedIcon } from "@/components/icons/themed-icon"
-import { resolveServerAssetUrl } from "@/lib/server-asset-url"
+import type { ServerTarget } from "@/data/query"
 
 export type GroupAvatarMember = {
   avatar: string
@@ -26,24 +30,23 @@ export function GroupAvatar({
   avatar,
   members = [],
   name,
-  serverUrl,
+  server,
   size = "$4",
 }: {
   avatar: string
   members?: GroupAvatarMember[]
   name: string
-  serverUrl: string
+  server: ServerTarget
   size?: number | SizeTokens
 }) {
-  const avatarUrl = resolveServerAssetUrl(serverUrl, avatar)
-  const entries = buildGroupAvatarEntries(members, serverUrl)
+  const entries = buildGroupAvatarEntries(members)
   const numericSize = typeof size === "number" ? size : null
   const fallbackIconSize = numericSize ? Math.max(18, numericSize * 0.36) : 18
   const tileFontSize = numericSize ? Math.max(10, numericSize * 0.2) : 10
 
   return (
     <Avatar rounded="$2" size={size}>
-      {avatarUrl ? <Avatar.Image src={avatarUrl} /> : null}
+      <CachedAvatarImage avatar={avatar} server={server} />
       <Avatar.Fallback
         accessibilityLabel={name}
         bg="$backgroundFocus"
@@ -55,10 +58,11 @@ export function GroupAvatar({
             {entries.map((entry, index) => (
               <GroupAvatarTile
                 key={`${entry.displayName}-${index}`}
-                avatarUrl={entry.avatarUrl}
+                avatar={entry.avatar}
                 displayName={entry.displayName}
                 fontSize={tileFontSize}
                 placement={getTilePlacement(index, entries.length)}
+                server={server}
               />
             ))}
           </YStack>
@@ -73,15 +77,17 @@ export function GroupAvatar({
 }
 
 function GroupAvatarTile({
-  avatarUrl,
+  avatar,
   displayName,
   fontSize,
   placement,
+  server,
 }: {
-  avatarUrl: string
+  avatar: string
   displayName: string
   fontSize: number
   placement: TilePlacement
+  server: ServerTarget
 }) {
   return (
     <YStack
@@ -97,21 +103,19 @@ function GroupAvatarTile({
       t={placement.top}
       width="50%"
     >
-      {avatarUrl ? (
-        <Image height="100%" objectFit="cover" src={avatarUrl} width="100%" />
-      ) : (
-        <Text fontSize={fontSize} fontWeight="600" lineHeight={fontSize * 1.2}>
-          {getInitial(displayName)}
-        </Text>
-      )}
+      <Text fontSize={fontSize} fontWeight="600" lineHeight={fontSize * 1.2}>
+        {getInitial(displayName)}
+      </Text>
+      {avatar ? (
+        <YStack b={0} l={0} position="absolute" r={0} t={0}>
+          <CachedAvatarTileImage avatar={avatar} server={server} />
+        </YStack>
+      ) : null}
     </YStack>
   )
 }
 
-function buildGroupAvatarEntries(
-  members: GroupAvatarMember[],
-  serverUrl: string
-) {
+function buildGroupAvatarEntries(members: GroupAvatarMember[]) {
   return members
     .map((member, index) => ({ index, member }))
     .sort((left, right) => {
@@ -121,7 +125,7 @@ function buildGroupAvatarEntries(
     })
     .slice(0, 4)
     .map(({ member }) => ({
-      avatarUrl: resolveServerAssetUrl(serverUrl, member.avatar),
+      avatar: member.avatar,
       displayName: member.nickname.trim() || member.name.trim(),
     }))
 }

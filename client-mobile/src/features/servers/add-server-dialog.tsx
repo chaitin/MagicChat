@@ -13,27 +13,43 @@ import {
 import { AppButton } from "@/components/forms/app-button"
 import { AppInput } from "@/components/forms/app-input"
 import { useServers } from "@/features/servers/server-context"
-import { isValidServerUrl } from "@/features/servers/server-model"
+import {
+  isValidServerUrl,
+  type ServerConfig,
+} from "@/features/servers/server-model"
 
 const SERVER_NAME_INPUT_ID = "new-server-name"
 const SERVER_URL_INPUT_ID = "new-server-url"
 
-export function AddServerDialog({
-  onOpenChange,
-  open,
-}: {
+type AddServerDialogProps = {
   onOpenChange: (open: boolean) => void
+  onSaved?: (server: ServerConfig, previousServer: ServerConfig | null) => void
   open: boolean
-}) {
-  const { addServer } = useServers()
+  server?: ServerConfig | null
+}
+
+export function AddServerDialog(props: AddServerDialogProps) {
+  if (!props.open) return null
+
+  return <OpenServerDialog {...props} server={props.server ?? null} />
+}
+
+function OpenServerDialog({
+  onOpenChange,
+  onSaved,
+  open,
+  server,
+}: AddServerDialogProps & { server: ServerConfig | null }) {
+  const { addServer, updateServer } = useServers()
   const theme = useTheme()
   const accentColor = theme.color10.val as ColorTokens
   const urlInputRef = useRef<TamaguiElement>(null)
-  const [name, setName] = useState("")
-  const [url, setUrl] = useState("")
+  const [name, setName] = useState(server?.name ?? "")
+  const [url, setUrl] = useState(server?.url ?? "")
   const [errorMessage, setErrorMessage] = useState("")
   const [keyboardHeight, setKeyboardHeight] = useState(0)
-  const canAdd = name.trim().length > 0 && isValidServerUrl(url)
+  const canSave = name.trim().length > 0 && isValidServerUrl(url)
+  const isEditing = Boolean(server)
 
   useEffect(() => {
     if (!open) {
@@ -82,13 +98,15 @@ export function AddServerDialog({
     onOpenChange(nextOpen)
   }
 
-  function handleAdd() {
-    if (!canAdd) {
+  function handleSave() {
+    if (!canSave) {
       setErrorMessage("请填写服务器名称和有效的 HTTP 或 HTTPS 地址")
       return
     }
 
-    const result = addServer(name, url)
+    const result = server
+      ? updateServer(server.id, name, url)
+      : addServer(name, url)
 
     if (result.status === "duplicate") {
       setErrorMessage("该服务器地址已经存在")
@@ -100,6 +118,14 @@ export function AddServerDialog({
       return
     }
 
+    if (result.status === "not-found") {
+      setErrorMessage("该服务器已不存在，请关闭后重试")
+      return
+    }
+
+    if (!("server" in result)) return
+
+    onSaved?.(result.server, server)
     closeDialog()
   }
 
@@ -120,11 +146,13 @@ export function AddServerDialog({
         />
         <Dialog.Content bordered elevate gap="$4" maxW={440} width="90%">
           <Dialog.Title fontSize="$5" lineHeight="$6">
-            添加服务器
+            {isEditing ? "修改服务器" : "添加服务器"}
           </Dialog.Title>
           <VisuallyHidden>
             <Dialog.Description>
-              添加一个可供即应登录使用的服务器。
+              {isEditing
+                ? "修改服务器名称和地址。"
+                : "添加一个可供即应登录使用的服务器。"}
             </Dialog.Description>
           </VisuallyHidden>
 
@@ -157,7 +185,7 @@ export function AddServerDialog({
               setUrl(value)
               setErrorMessage("")
             }}
-            onSubmitEditing={handleAdd}
+            onSubmitEditing={handleSave}
             placeholder="https://example.com"
             placeholderTextColor="$gray9"
             ref={urlInputRef}
@@ -174,7 +202,7 @@ export function AddServerDialog({
 
           <XStack gap="$3" width="100%">
             <AppButton
-              accessibilityLabel="取消添加服务器"
+              accessibilityLabel={isEditing ? "取消修改服务器" : "取消添加服务器"}
               grow={1}
               onPress={closeDialog}
               theme="gray"
@@ -182,12 +210,12 @@ export function AddServerDialog({
               取消
             </AppButton>
             <AppButton
-              accessibilityLabel="添加服务器"
+              accessibilityLabel={isEditing ? "保存服务器" : "添加服务器"}
               grow={1}
-              onPress={handleAdd}
+              onPress={handleSave}
               theme="accent"
             >
-              添加
+              {isEditing ? "保存" : "添加"}
             </AppButton>
           </XStack>
         </Dialog.Content>

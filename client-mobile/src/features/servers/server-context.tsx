@@ -8,6 +8,7 @@ import {
   useState,
 } from "react"
 
+import { removeServerResourceCache } from "@/data/resources"
 import {
   isValidServerUrl,
   normalizeServerUrl,
@@ -15,6 +16,7 @@ import {
   officialServer,
   type ServerConfig,
 } from "@/features/servers/server-model"
+
 const SERVER_STORAGE_KEY = "@magicchat/servers/v1"
 
 type PersistedServerState = {
@@ -26,6 +28,10 @@ type AddServerResult =
   | { server: ServerConfig; status: "added" }
   | { status: "duplicate" | "invalid" }
 
+type UpdateServerResult =
+  | { server: ServerConfig; status: "updated" }
+  | { status: "duplicate" | "invalid" | "not-found" }
+
 type ServerContextValue = {
   addServer: (name: string, url: string) => AddServerResult
   isHydrated: boolean
@@ -33,6 +39,7 @@ type ServerContextValue = {
   selectedServer: ServerConfig
   selectServer: (id: string) => void
   servers: ServerConfig[]
+  updateServer: (id: string, name: string, url: string) => UpdateServerResult
 }
 
 const ServerContext = createContext<ServerContextValue | null>(null)
@@ -133,18 +140,68 @@ export function ServerProvider({ children }: React.PropsWithChildren) {
     [servers]
   )
 
-  const removeServer = useCallback((id: string) => {
-    if (id === OFFICIAL_SERVER_ID) {
-      return
-    }
+  const removeServer = useCallback(
+    (id: string) => {
+      if (id === OFFICIAL_SERVER_ID) {
+        return
+      }
 
-    setCustomServers((current) =>
-      current.filter((server) => server.id !== id)
-    )
-    setSelectedServerId((current) =>
-      current === id ? OFFICIAL_SERVER_ID : current
-    )
-  }, [])
+      const server = servers.find((candidate) => candidate.id === id)
+      if (server) void removeServerResourceCache(server)
+
+      setCustomServers((current) =>
+        current.filter((candidate) => candidate.id !== id)
+      )
+      setSelectedServerId((current) =>
+        current === id ? OFFICIAL_SERVER_ID : current
+      )
+    },
+    [servers]
+  )
+
+  const updateServer = useCallback(
+    (id: string, name: string, url: string): UpdateServerResult => {
+      const normalizedName = name.trim()
+      const existingServer = servers.find(
+        (server) => server.id === id && !server.isBuiltIn
+      )
+
+      if (!existingServer) {
+        return { status: "not-found" }
+      }
+
+      if (!normalizedName || !isValidServerUrl(url)) {
+        return { status: "invalid" }
+      }
+
+      const normalizedUrl = normalizeServerUrl(url)
+      const isDuplicate = servers.some(
+        (server) =>
+          server.id !== id && normalizeServerUrl(server.url) === normalizedUrl
+      )
+
+      if (isDuplicate) {
+        return { status: "duplicate" }
+      }
+
+      const server: ServerConfig = {
+        ...existingServer,
+        name: normalizedName,
+        url: normalizedUrl,
+      }
+
+      setCustomServers((current) =>
+        current.map((candidate) => (candidate.id === id ? server : candidate))
+      )
+
+      if (existingServer.url !== server.url) {
+        void removeServerResourceCache(existingServer)
+      }
+
+      return { server, status: "updated" }
+    },
+    [servers]
+  )
 
   const value = useMemo(
     () => ({
@@ -154,6 +211,7 @@ export function ServerProvider({ children }: React.PropsWithChildren) {
       selectedServer,
       selectServer,
       servers,
+      updateServer,
     }),
     [
       addServer,
@@ -162,6 +220,7 @@ export function ServerProvider({ children }: React.PropsWithChildren) {
       selectedServer,
       selectServer,
       servers,
+      updateServer,
     ]
   )
 

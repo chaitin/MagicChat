@@ -8,29 +8,33 @@ import {
   YStack,
 } from "tamagui"
 
+import { CachedAvatarImage } from "@/components/avatar/cached-avatar-image"
 import type { EntityReference } from "@/domain/entities/entity-profile"
+import type { ServerTarget } from "@/data/query"
+import type { ResourceLoadState } from "@/data/resources"
 import { MessageBody } from "@/features/conversation/message-body"
 import {
   formatClientMessageBodySummary,
   type MessageMentionLabelResolver,
   type PresentedMessage,
 } from "@/domain/messages/message-presenter"
-import { resolveServerAssetUrl } from "@/lib/server-asset-url"
 
 export function MessageBubble({
-  fileUrls,
-  fileUrlsLoading,
   message,
   onAvatarPress,
+  onResourceError,
+  onResourcePress,
   resolveMentionLabel,
-  serverUrl,
+  resourceStates,
+  server,
 }: {
-  fileUrls: ReadonlyMap<string, string>
-  fileUrlsLoading: boolean
   message: PresentedMessage
   onAvatarPress: (sender: EntityReference) => void
+  onResourceError: (fileId: string) => void
+  onResourcePress: (fileId: string) => void
   resolveMentionLabel: MessageMentionLabelResolver
-  serverUrl: string
+  resourceStates: ReadonlyMap<string, ResourceLoadState>
+  server: ServerTarget
 }) {
   if (message.role === "system") {
     return (
@@ -58,14 +62,14 @@ export function MessageBubble({
       <MessageAvatar
         avatar={message.avatar}
         name={fromMe ? "我" : message.author}
-        serverUrl={serverUrl}
+        server={server}
       />
     </Button>
   ) : (
     <MessageAvatar
       avatar={message.avatar}
       name={fromMe ? "我" : message.author}
-      serverUrl={serverUrl}
+      server={server}
     />
   )
 
@@ -116,10 +120,11 @@ export function MessageBubble({
           ) : null}
           <MessageBody
             body={message.body}
-            fileUrls={fileUrls}
-            fileUrlsLoading={fileUrlsLoading}
+            onResourceError={onResourceError}
+            onResourcePress={onResourcePress}
             resolveMentionLabel={resolveMentionLabel}
-            serverUrl={serverUrl}
+            resourceStates={resourceStates}
+            serverUrl={server.url}
           />
         </Card>
 
@@ -137,17 +142,15 @@ export function MessageBubble({
 function MessageAvatar({
   avatar,
   name,
-  serverUrl,
+  server,
 }: {
   avatar: string
   name: string
-  serverUrl: string
+  server: ServerTarget
 }) {
-  const avatarUrl = resolveServerAssetUrl(serverUrl, avatar)
-
   return (
     <Avatar rounded="$2" size="$3" theme={name === "我" ? "teal" : undefined}>
-      {avatarUrl ? <Avatar.Image src={avatarUrl} /> : null}
+      <CachedAvatarImage avatar={avatar} server={server} />
       <Avatar.Fallback bg="$backgroundFocus" items="center" justify="center">
         <SizableText fontWeight="600" size="$2">
           {Array.from(name.trim())[0]?.toUpperCase() ?? "?"}

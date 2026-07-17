@@ -56,8 +56,8 @@ export const queryKeys = {
     [...authenticatedQueryKey(target), "current-user"] as const,
   projects: (target: AuthenticatedTarget) =>
     [...authenticatedQueryKey(target), "projects"] as const,
-  temporaryFileUrls: (target: AuthenticatedTarget, fileIds: string[]) =>
-    [...authenticatedQueryKey(target), "temporary-file-urls", fileIds] as const,
+  avatarResource: (server: ServerTarget, sourceUrl: string) =>
+    [...serverQueryKey(server), "resource", "avatar", sourceUrl] as const,
 }
 
 export function createClientQueryClient() {

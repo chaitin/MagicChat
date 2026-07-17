@@ -24,15 +24,18 @@ export function MessageComposer({
   return (
     <YStack bg="$background">
       <Separator />
-      <XStack gap="$2" items="center" p="$3">
+      <XStack gap="$2" items="center" px="$4" py="$3">
         <AppInput
           autoCapitalize="sentences"
+          color="$gray12"
           disabled={disabled}
           flex={1}
           onChangeText={setContent}
           onSubmitEditing={() => void handleSend()}
           placeholder="输入消息"
+          placeholderTextColor="$gray9"
           returnKeyType="send"
+          size="$4"
           value={content}
         />
         <Button
@@ -44,7 +47,7 @@ export function MessageComposer({
           }
           onPress={() => void handleSend()}
           size="$4"
-          theme="teal"
+          theme="accent"
         />
       </XStack>
     </YStack>

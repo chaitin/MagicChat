@@ -5,6 +5,7 @@ import type {
   ClientMessageBody,
   ClientUser,
 } from "@/data/models"
+import type { AttachmentResourceReference } from "@/data/resources"
 import { getContactDisplayName } from "@/domain/contacts/contact-display"
 import type { EntityReference } from "@/domain/entities/entity-profile"
 
@@ -240,14 +241,16 @@ export function formatClientMessageBodySummary(
   return "系统消息"
 }
 
-export function collectMessageFileIds(messages: ClientMessage[]) {
-  const fileIds = new Set<string>()
+export function collectMessageResources(messages: ClientMessage[]) {
+  const resources = new Map<string, AttachmentResourceReference>()
 
   for (const message of messages) {
-    collectBodyFileIds(message.body, fileIds)
+    collectBodyResources(message.body, resources)
   }
 
-  return Array.from(fileIds)
+  return Array.from(resources.values()).sort((left, right) =>
+    left.fileId.localeCompare(right.fileId)
+  )
 }
 
 export function formatMarkdownAsPlainText(content: string) {
@@ -282,11 +285,35 @@ export function formatVoiceDuration(durationMs: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
 }
 
-function collectBodyFileIds(body: ClientMessageBody, fileIds: Set<string>) {
-  if (body.type === "file" || body.type === "image" || body.type === "voice") {
-    fileIds.add(body.fileId)
-  } else if (body.type === "forward_bundle") {
-    for (const item of body.items) collectBodyFileIds(item.body, fileIds)
+function collectBodyResources(
+  body: ClientMessageBody,
+  resources: Map<string, AttachmentResourceReference>
+) {
+  if (body.type === "file") {
+    resources.set(body.fileId, {
+      expectedSizeBytes: body.sizeBytes,
+      fileId: body.fileId,
+      fileName: body.name,
+      kind: "file",
+      type: "attachment",
+    })
+  } else if (body.type === "image") {
+    resources.set(body.fileId, {
+      fileId: body.fileId,
+      fileName: "image.webp",
+      kind: "image",
+      mimeType: "image/webp",
+      type: "attachment",
+    })
+  } else if (body.type === "voice") {
+    resources.set(body.fileId, {
+      expectedSizeBytes: body.sizeBytes,
+      fileId: body.fileId,
+      fileName: "voice.webm",
+      kind: "voice",
+      mimeType: body.contentType,
+      type: "attachment",
+    })
   }
 }
 

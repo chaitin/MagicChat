@@ -26,7 +26,7 @@ export function EntityDetailFields({ profile }: { profile: EntityProfile }) {
 
   return (
     <YGroup
-      borderColor="$borderColor"
+      borderColor="$gray8"
       borderWidth={1}
       rounded="$4"
       size="$5"

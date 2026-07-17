@@ -13,6 +13,7 @@ import { YStack, type YStackProps } from "tamagui"
 
 type KeyboardAwareScreenProps = React.PropsWithChildren<
   YStackProps & {
+    contentBackground?: YStackProps["bg"]
     edges?: readonly Edge[]
     keyboardShouldPersistTaps?: ScrollViewProps["keyboardShouldPersistTaps"]
     keyboardVerticalOffset?: number
@@ -22,6 +23,7 @@ type KeyboardAwareScreenProps = React.PropsWithChildren<
 
 export function KeyboardAwareScreen({
   children,
+  contentBackground = "$background",
   edges,
   keyboardShouldPersistTaps = "handled",
   keyboardVerticalOffset = 0,
@@ -31,7 +33,7 @@ export function KeyboardAwareScreen({
   const content = (
     <YStack
       {...contentProps}
-      bg="$background"
+      bg={contentBackground}
       grow={1}
       minH={0}
       shrink={scrollable ? 0 : 1}

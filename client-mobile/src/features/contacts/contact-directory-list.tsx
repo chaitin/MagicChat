@@ -4,8 +4,17 @@ import {
   StyleSheet,
   type SectionListRenderItemInfo,
 } from "react-native"
-import { ListItem, Paragraph, Separator, XStack, YStack } from "tamagui"
+import {
+  ListItem,
+  Paragraph,
+  useTheme,
+  XStack,
+} from "tamagui"
 
+import { ContentState } from "@/components/feedback/content-state"
+import { InlineError } from "@/components/feedback/inline-error"
+import { ListItemContent } from "@/components/lists/list-item-content"
+import type { ServerTarget } from "@/data/query"
 import { getContactDisplayName } from "@/domain/contacts/contact-display"
 import { ContactDirectoryAvatar } from "@/features/contacts/contact-directory-avatar"
 import {
@@ -15,19 +24,23 @@ import {
 
 export function ContactDirectoryList({
   emptyLabel,
+  errorMessage,
   isRefreshing,
   onRefresh,
   onItemPress,
   sections,
-  serverUrl,
+  server,
 }: {
   emptyLabel: string
+  errorMessage?: string
   isRefreshing: boolean
   onRefresh: () => void
   onItemPress: (item: DirectoryItem) => void
   sections: DirectorySection[]
-  serverUrl: string
+  server: ServerTarget
 }) {
+  const theme = useTheme()
+
   return (
     <SectionList<DirectoryItem, DirectorySection>
       contentContainerStyle={
@@ -35,25 +48,26 @@ export function ContactDirectoryList({
           ? [styles.content, styles.emptyContent]
           : styles.content
       }
-      ItemSeparatorComponent={() => <Separator />}
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
       keyExtractor={(item) => item.key}
       ListEmptyComponent={
-        <YStack flex={1} items="center" justify="center" p="$8">
-          <Paragraph color="$color10" text="center">
-            没有匹配的{emptyLabel}
-          </Paragraph>
-        </YStack>
+        <ContentState message={`没有匹配的${emptyLabel}`} />
       }
+      ListHeaderComponent={<InlineError message={errorMessage} />}
       refreshControl={
-        <RefreshControl onRefresh={onRefresh} refreshing={isRefreshing} />
+        <RefreshControl
+          colors={[String(theme.color10.val)]}
+          onRefresh={onRefresh}
+          refreshing={isRefreshing}
+          tintColor={String(theme.color10.val)}
+        />
       }
       renderItem={(itemInfo) => (
         <DirectoryListItem
           itemInfo={itemInfo}
           onPress={() => onItemPress(itemInfo.item)}
-          serverUrl={serverUrl}
+          server={server}
         />
       )}
       renderSectionHeader={({ section }) =>
@@ -70,15 +84,17 @@ export function ContactDirectoryList({
 function DirectorySectionHeader({ section }: { section: DirectorySection }) {
   return (
     <XStack
-      bg="$background"
+      bg="transparent"
       items="center"
       justify="space-between"
       pb="$2"
       pt="$4"
       px="$4"
     >
-      <Paragraph fontWeight="600">{section.title}</Paragraph>
-      <Paragraph bg="$backgroundPress" px="$2" rounded="$10" size="$1">
+      <Paragraph color="$color10" size="$2">
+        {section.title}
+      </Paragraph>
+      <Paragraph bg="$color2" color="$color10" px="$2" rounded="$10" size="$1">
         {section.count}
       </Paragraph>
     </XStack>
@@ -88,11 +104,11 @@ function DirectorySectionHeader({ section }: { section: DirectorySection }) {
 function DirectoryListItem({
   itemInfo,
   onPress,
-  serverUrl,
+  server,
 }: {
   itemInfo: SectionListRenderItemInfo<DirectoryItem, DirectorySection>
   onPress: () => void
-  serverUrl: string
+  server: ServerTarget
 }) {
   const { item } = itemInfo
 
@@ -101,19 +117,25 @@ function DirectoryListItem({
 
     return (
       <ListItem
+        accessibilityLabel={`查看联系人 ${displayName}`}
+        bg="transparent"
         icon={
           <ContactDirectoryAvatar
             avatar={item.value.avatar}
             name={displayName}
             online={item.value.online}
-            serverUrl={serverUrl}
+            server={server}
             type="user"
           />
         }
         onPress={onPress}
-        size="$5"
-        subTitle={item.value.email}
-        title={displayName}
+        size="$4"
+        title={
+          <ListItemContent
+            subtitle={item.value.email}
+            title={displayName}
+          />
+        }
       />
     )
   }
@@ -121,40 +143,52 @@ function DirectoryListItem({
   if (item.type === "app") {
     return (
       <ListItem
+        accessibilityLabel={`查看应用 ${item.value.name}`}
+        bg="transparent"
         icon={
           <ContactDirectoryAvatar
             avatar={item.value.avatar}
             name={item.value.name}
             online={item.value.online}
-            serverUrl={serverUrl}
+            server={server}
             type="app"
           />
         }
         onPress={onPress}
-        size="$5"
-        subTitle={item.value.description || "智能应用"}
-        title={item.value.name}
+        size="$4"
+        title={
+          <ListItemContent
+            subtitle={item.value.description || "智能应用"}
+            title={item.value.name}
+          />
+        }
       />
     )
   }
 
   return (
     <ListItem
+      accessibilityLabel={`查看群组 ${item.value.name}`}
+      bg="transparent"
       icon={
         <ContactDirectoryAvatar
           avatar={item.value.avatar}
           members={item.value.avatarMembers}
           name={item.value.name}
-          serverUrl={serverUrl}
+          server={server}
           type="group"
         />
       }
       onPress={onPress}
-      size="$5"
-      subTitle={`${item.value.memberCount} 人 · ${
-        item.value.joined ? "已加入" : "公开群组"
-      }`}
-      title={item.value.name}
+      size="$4"
+      title={
+        <ListItemContent
+          subtitle={`${item.value.memberCount} 人 · ${
+            item.value.joined ? "已加入" : "公开群组"
+          }`}
+          title={item.value.name}
+        />
+      }
     />
   )
 }

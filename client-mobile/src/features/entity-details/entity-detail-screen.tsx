@@ -1,11 +1,13 @@
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useMemo } from "react"
 import { Alert } from "react-native"
-import { Card, H4, Paragraph, ScrollView, Spinner, XStack, YStack } from "tamagui"
+import { Card, Paragraph, ScrollView, XStack, YStack } from "tamagui"
 
+import { ContentState } from "@/components/feedback/content-state"
 import { PageHeader } from "@/components/navigation/page-header"
 import { ApiRequestError } from "@/data/api-client"
 import { useOpenEntityConversation } from "@/data/conversation-hooks"
+import type { ServerTarget } from "@/data/query"
 import {
   isEntityType,
   resolveEntityProfile,
@@ -74,24 +76,17 @@ export function EntityDetailScreen() {
       />
 
       {!isReady && entityType ? (
-        <YStack flex={1} gap="$2" items="center" justify="center">
-          <Spinner />
-          <Paragraph color="$color10">正在加载资料</Paragraph>
-        </YStack>
+        <ContentState loading message="正在加载资料" />
       ) : profile ? (
         <EntityProfileContent
           currentUserId={currentUser?.id ?? null}
           isActionPending={openConversationMutation.isPending}
           onActionPress={() => void handlePrimaryAction()}
           profile={profile}
-          serverUrl={session.url}
+          server={session}
         />
       ) : (
-        <YStack flex={1} items="center" justify="center" p="$6">
-          <Paragraph color="$color10" text="center">
-            资料不存在或已不可访问
-          </Paragraph>
-        </YStack>
+        <ContentState message="资料不存在或已不可访问" />
       )}
     </YStack>
   )
@@ -102,23 +97,30 @@ function EntityProfileContent({
   isActionPending,
   onActionPress,
   profile,
-  serverUrl,
+  server,
 }: {
   currentUserId: string | null
   isActionPending: boolean
   onActionPress: () => void
   profile: EntityProfile
-  serverUrl: string
+  server: ServerTarget
 }) {
   return (
     <ScrollView>
-      <YStack gap="$4" p="$4">
-        <Card borderColor="$borderColor" borderWidth={1} p="$5">
+      <YStack gap="$4" maxW={440} p="$4" self="center" width="100%">
+        <Card size="$5">
           <XStack gap="$4" items="center">
-            <EntityDetailAvatar profile={profile} serverUrl={serverUrl} />
+            <EntityDetailAvatar profile={profile} server={server} />
             <YStack flex={1} gap="$1">
-              <H4 numberOfLines={2}>{profile.displayName}</H4>
-              <Paragraph color="$color10" numberOfLines={3}>
+              <Paragraph
+                fontSize="$5"
+                fontWeight="600"
+                lineHeight="$6"
+                numberOfLines={2}
+              >
+                {profile.displayName}
+              </Paragraph>
+              <Paragraph color="$color10" numberOfLines={3} size="$3">
                 {getProfileDescription(profile)}
               </Paragraph>
             </YStack>

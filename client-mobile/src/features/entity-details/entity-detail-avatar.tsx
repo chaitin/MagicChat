@@ -2,18 +2,19 @@ import { Bot } from "lucide-react-native"
 import { Avatar, SizableText } from "tamagui"
 
 import { GroupAvatar } from "@/components/avatar/group-avatar"
+import { CachedAvatarImage } from "@/components/avatar/cached-avatar-image"
 import { ThemedIcon } from "@/components/icons/themed-icon"
+import type { ServerTarget } from "@/data/query"
 import type { EntityProfile } from "@/domain/entities/entity-profile"
-import { resolveServerAssetUrl } from "@/lib/server-asset-url"
 
 const PROFILE_AVATAR_SIZE = 88
 
 export function EntityDetailAvatar({
   profile,
-  serverUrl,
+  server,
 }: {
   profile: EntityProfile
-  serverUrl: string
+  server: ServerTarget
 }) {
   if (profile.type === "group") {
     return (
@@ -21,17 +22,15 @@ export function EntityDetailAvatar({
         avatar={profile.avatar}
         members={profile.avatarMembers}
         name={profile.displayName}
-        serverUrl={serverUrl}
+        server={server}
         size={PROFILE_AVATAR_SIZE}
       />
     )
   }
 
-  const avatarUrl = resolveServerAssetUrl(serverUrl, profile.avatar)
-
   return (
     <Avatar rounded="$3" size={PROFILE_AVATAR_SIZE}>
-      {avatarUrl ? <Avatar.Image src={avatarUrl} /> : null}
+      <CachedAvatarImage avatar={profile.avatar} server={server} />
       <Avatar.Fallback
         bg="$backgroundFocus"
         items="center"

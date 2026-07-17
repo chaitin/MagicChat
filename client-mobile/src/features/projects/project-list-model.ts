@@ -3,7 +3,6 @@ import type { ClientProjectSummary } from "@/data/models"
 export type ProjectListSection = {
   data: ClientProjectSummary[]
   key: "personal" | "collaboration"
-  title?: string
 }
 
 export function buildProjectListSections({
@@ -32,7 +31,6 @@ export function buildProjectListSections({
     sections.push({
       data: visibleProjects,
       key: "collaboration",
-      title: "协作项目",
     })
   }
 

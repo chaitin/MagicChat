@@ -1,76 +1,25 @@
 import { ArrowLeft } from "lucide-react-native"
 import type { ReactNode } from "react"
-import { Platform, Pressable } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import {
   Button,
   type GetProps,
   H5,
-  Separator,
   SizableText,
   XStack,
   YStack,
 } from "tamagui"
 
 import { ThemedIcon } from "@/components/icons/themed-icon"
-
-type HeaderButtonProps = {
-  accessibilityLabel: string
-  children?: ReactNode
-  circular?: boolean
-  icon?: GetProps<typeof Button>["icon"]
-  onPress: () => void
-  subtlePress: boolean
-}
-
-function HeaderButton({
-  accessibilityLabel,
-  children,
-  circular = false,
-  icon,
-  onPress,
-  subtlePress,
-}: HeaderButtonProps) {
-  const button = (pressed = false) => (
-    <Button
-      accessible={Platform.OS === "web"}
-      aria-label={accessibilityLabel}
-      chromeless
-      circular={circular}
-      forceStyle={pressed ? "press" : undefined}
-      icon={icon}
-      onPress={Platform.OS === "web" ? onPress : undefined}
-      pointerEvents={Platform.OS === "web" ? "auto" : "none"}
-      pressStyle={subtlePress ? { background: "$color1" } : undefined}
-      size="$4"
-    >
-      {children}
-    </Button>
-  )
-
-  if (Platform.OS === "web") {
-    return button()
-  }
-
-  return (
-    <Pressable
-      accessibilityLabel={accessibilityLabel}
-      accessibilityRole="button"
-      onPress={onPress}
-      pressRetentionOffset={0}
-    >
-      {({ pressed }) => button(pressed)}
-    </Pressable>
-  )
-}
+import { HeaderButton } from "@/components/navigation/header-button"
 
 export function PageHeader({
   actionIcon,
   actionLabel,
-  compactTitle = false,
+  compactTitle = true,
   onActionPress,
   onBackPress,
-  subtleButtonPress = false,
+  subtleButtonPress = true,
   title,
   titleLeading,
 }: {
@@ -125,7 +74,6 @@ export function PageHeader({
           ) : null}
         </XStack>
       </XStack>
-      <Separator />
     </YStack>
   )
 }

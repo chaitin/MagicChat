@@ -31,11 +31,13 @@ const contactNameCollator = new Intl.Collator("zh-CN-u-co-pinyin", {
 export function buildDirectorySections({
   activeTab,
   contacts,
+  currentUserId,
   keyword,
   organizationName,
 }: {
   activeTab: DirectoryTab
   contacts: ClientContacts
+  currentUserId: string
   keyword: string
   organizationName: string
 }): DirectorySection[] {
@@ -46,18 +48,23 @@ export function buildDirectorySections({
       matchesKeyword([app.name, app.description], normalizedKeyword)
     )
 
-    return apps.length > 0
-      ? [
-          {
-            count: apps.length,
-            data: apps.map((app) => ({
-              key: `app:${app.id}`,
-              type: "app",
-              value: app,
-            })),
-          },
-        ]
-      : []
+    const normalizedCurrentUserId = currentUserId.toLocaleLowerCase()
+    const builtInApps = apps.filter((app) => app.creatorUserId === null)
+    const ownedApps = apps.filter(
+      (app) =>
+        app.creatorUserId?.toLocaleLowerCase() === normalizedCurrentUserId
+    )
+    const otherApps = apps.filter(
+      (app) =>
+        app.creatorUserId !== null &&
+        app.creatorUserId.toLocaleLowerCase() !== normalizedCurrentUserId
+    )
+
+    return [
+      createAppSection("内置应用", "built-in", builtInApps),
+      createAppSection("我的应用", "owned", ownedApps),
+      createAppSection("其他应用", "other", otherApps),
+    ].filter((section) => section.data.length > 0)
   }
 
   if (activeTab === "group") {
@@ -107,6 +114,22 @@ export function buildDirectorySections({
 
 export function getContactInitial(name: string) {
   return Array.from(name.trim())[0]?.toUpperCase() ?? "?"
+}
+
+function createAppSection(
+  title: string,
+  sectionKey: string,
+  apps: ContactApp[]
+): DirectorySection {
+  return {
+    count: apps.length,
+    data: apps.map((app) => ({
+      key: `app:${sectionKey}:${app.id}`,
+      type: "app",
+      value: app,
+    })),
+    title,
+  }
 }
 
 function createGroupSection(

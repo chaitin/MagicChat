@@ -20,6 +20,7 @@ type ContactUserResponse = {
 
 type ContactAppResponse = {
   avatar?: string
+  creator_user_id?: string | null
   description?: string
   id?: string
   name?: string
@@ -96,12 +97,17 @@ function normalizeContactUser(contact: ContactUserResponse): ContactUser {
 }
 
 function normalizeContactApp(app: ContactAppResponse): ContactApp {
-  if (!app.id || !app.name) {
+  if (
+    !app.id ||
+    !app.name ||
+    (app.creator_user_id !== null && typeof app.creator_user_id !== "string")
+  ) {
     throw new ApiRequestError("通讯录响应格式不正确")
   }
 
   return {
     avatar: app.avatar ?? "",
+    creatorUserId: app.creator_user_id,
     description: app.description ?? "",
     id: app.id,
     name: app.name,

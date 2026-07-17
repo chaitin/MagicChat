@@ -36,6 +36,7 @@ export type ContactUser = {
 
 export type ContactApp = {
   avatar: string
+  creatorUserId: string | null
   description: string
   id: string
   name: string
@@ -288,10 +289,4 @@ export type ClientMessagePage = {
 export type ClientMessageList = {
   messages: ClientMessage[]
   page: ClientMessagePage
-}
-
-export type TemporaryFileReadUrl = {
-  expiresAt: string
-  fileId: string
-  url: string
 }

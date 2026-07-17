@@ -1,16 +1,6 @@
-import { RefreshCw, Search } from "lucide-react-native"
 import { useRouter } from "expo-router"
-import { useMemo, useState } from "react"
-import {
-  Button,
-  Paragraph,
-  Spinner,
-  XStack,
-  YStack,
-} from "tamagui"
+import { useMemo } from "react"
 
-import { AppInput } from "@/components/forms/app-input"
-import { ThemedIcon } from "@/components/icons/themed-icon"
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
 import { useAuthenticatedSession } from "@/features/auth/auth-context"
 import { ConversationList } from "@/features/messages/conversation-list"
@@ -28,15 +18,14 @@ export function MessagesScreen() {
     isConversationsRefreshing,
     refreshConversations,
   } = useClientData()
-  const [keyword, setKeyword] = useState("")
   const items = useMemo(
     () =>
       buildConversationListItems({
         contacts,
         conversations,
-        keyword,
+        keyword: "",
       }),
-    [contacts, conversations, keyword]
+    [contacts, conversations]
   )
 
   function handleRefresh() {
@@ -48,49 +37,19 @@ export function MessagesScreen() {
   }
 
   return (
-    <KeyboardAwareScreen edges={[]} scrollable={false}>
-      <YStack gap="$3" p="$4" pb="$3">
-        <XStack gap="$2" items="center">
-          <ThemedIcon icon={Search} size={18} />
-          <AppInput
-            autoCapitalize="none"
-            clearButtonMode="while-editing"
-            flex={1}
-            onChangeText={setKeyword}
-            placeholder="搜索会话"
-            returnKeyType="search"
-            value={keyword}
-          />
-          <Button
-            accessibilityLabel="刷新会话"
-            circular
-            disabled={isConversationsRefreshing}
-            icon={
-              isConversationsRefreshing ? (
-                <Spinner />
-              ) : (
-                <ThemedIcon icon={RefreshCw} />
-              )
-            }
-            onPress={handleRefresh}
-            size="$4"
-          />
-        </XStack>
-
-        {conversationsError ? (
-          <Paragraph color="$red10" size="$2">
-            {conversationsError.message}
-          </Paragraph>
-        ) : null}
-      </YStack>
-
+    <KeyboardAwareScreen
+      contentBackground="$color1"
+      edges={[]}
+      scrollable={false}
+    >
       <ConversationList
-        hasKeyword={keyword.trim().length > 0}
+        errorMessage={conversationsError?.message}
+        hasKeyword={false}
         isRefreshing={isConversationsRefreshing}
         items={items}
         onConversationPress={handleConversationPress}
         onRefresh={handleRefresh}
-        serverUrl={session.url}
+        server={session}
       />
     </KeyboardAwareScreen>
   )

@@ -1,6 +1,7 @@
 import { MessageCircle, UserPlus } from "lucide-react-native"
-import { Button, Spinner } from "tamagui"
+import { Spinner } from "tamagui"
 
+import { AppButton } from "@/components/forms/app-button"
 import { ThemedIcon } from "@/components/icons/themed-icon"
 import type { EntityProfile } from "@/domain/entities/entity-profile"
 
@@ -22,7 +23,8 @@ export function EntityDetailAction({
   const joiningGroup = profile.type === "group" && !profile.joined
 
   return (
-    <Button
+    <AppButton
+      accessibilityLabel={joiningGroup ? "加入群聊" : "发消息"}
       disabled={isPending}
       icon={
         isPending ? (
@@ -32,10 +34,11 @@ export function EntityDetailAction({
         )
       }
       onPress={onPress}
-      size="$5"
+      size="$4"
+      theme="accent"
       width="100%"
     >
       {joiningGroup ? "加入群聊" : "发消息"}
-    </Button>
+    </AppButton>
   )
 }

@@ -1,31 +1,32 @@
 import { FlatList, RefreshControl, StyleSheet } from "react-native"
-import {
-  ListItem,
-  Paragraph,
-  Separator,
-  SizableText,
-  XStack,
-  YStack,
-} from "tamagui"
+import { ListItem, SizableText, useTheme } from "tamagui"
 
+import { ContentState } from "@/components/feedback/content-state"
+import { InlineError } from "@/components/feedback/inline-error"
+import { ListItemContent } from "@/components/lists/list-item-content"
+import type { ServerTarget } from "@/data/query"
 import { ConversationAvatar } from "@/features/messages/conversation-avatar"
 import type { ConversationListItemModel } from "@/features/messages/conversation-list-model"
 
 export function ConversationList({
+  errorMessage,
   hasKeyword,
   isRefreshing,
   items,
   onConversationPress,
   onRefresh,
-  serverUrl,
+  server,
 }: {
+  errorMessage?: string
   hasKeyword: boolean
   isRefreshing: boolean
   items: ConversationListItemModel[]
   onConversationPress: (conversationId: string) => void
   onRefresh: () => void
-  serverUrl: string
+  server: ServerTarget
 }) {
+  const theme = useTheme()
+
   return (
     <FlatList
       contentContainerStyle={
@@ -34,25 +35,26 @@ export function ConversationList({
           : styles.content
       }
       data={items}
-      ItemSeparatorComponent={() => <Separator />}
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
       keyExtractor={(item) => item.conversation.id}
       ListEmptyComponent={
-        <YStack flex={1} items="center" justify="center" p="$8">
-          <Paragraph color="$color10" text="center">
-            {hasKeyword ? "没有匹配的会话" : "暂无会话"}
-          </Paragraph>
-        </YStack>
+        <ContentState message={hasKeyword ? "没有匹配的会话" : "暂无会话"} />
       }
+      ListHeaderComponent={<InlineError message={errorMessage} />}
       refreshControl={
-        <RefreshControl onRefresh={onRefresh} refreshing={isRefreshing} />
+        <RefreshControl
+          colors={[String(theme.color10.val)]}
+          onRefresh={onRefresh}
+          refreshing={isRefreshing}
+          tintColor={String(theme.color10.val)}
+        />
       }
       renderItem={({ item }) => (
         <ConversationListItem
           item={item}
           onPress={() => onConversationPress(item.conversation.id)}
-          serverUrl={serverUrl}
+          server={server}
         />
       )}
       showsVerticalScrollIndicator={false}
@@ -64,49 +66,36 @@ export function ConversationList({
 function ConversationListItem({
   item,
   onPress,
-  serverUrl,
+  server,
 }: {
   item: ConversationListItemModel
   onPress: () => void
-  serverUrl: string
+  server: ServerTarget
 }) {
   const { conversation } = item
 
   return (
     <ListItem
+      accessibilityLabel={`打开会话 ${conversation.name}`}
+      bg="transparent"
       icon={
-        <ConversationAvatar conversation={conversation} serverUrl={serverUrl} />
+        <ConversationAvatar conversation={conversation} server={server} />
       }
       onPress={onPress}
-      size="$5"
-      subTitle={
-        <XStack gap="$1" items="center" maxW="100%">
-          {item.hasUnreadMention ? (
-            <SizableText color="$red10" fontWeight="600" size="$2">
-              [有人 @ 我]
-            </SizableText>
-          ) : null}
-          <SizableText
-            color="$color10"
-            flex={1}
-            numberOfLines={1}
-            size="$2"
-          >
-            {item.description}
-          </SizableText>
-        </XStack>
-      }
+      size="$4"
       title={
-        <XStack gap="$2" items="center" maxW="100%">
-          <SizableText flex={1} fontWeight="500" numberOfLines={1}>
-            {conversation.name}
-          </SizableText>
-          {item.lastMessageTime ? (
-            <SizableText color="$color10" size="$2">
-              {item.lastMessageTime}
-            </SizableText>
-          ) : null}
-        </XStack>
+        <ListItemContent
+          meta={item.lastMessageTime}
+          subtitle={item.description}
+          subtitleLeading={
+            item.hasUnreadMention ? (
+              <SizableText color="$red10" fontWeight="600" size="$2">
+                [有人 @ 我]
+              </SizableText>
+            ) : undefined
+          }
+          title={conversation.name}
+        />
       }
     />
   )

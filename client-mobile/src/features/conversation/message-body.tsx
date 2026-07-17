@@ -11,7 +11,7 @@ import {
   MessagesSquare,
   Play,
 } from "lucide-react-native"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Alert, Linking } from "react-native"
 import {
   Button,
@@ -27,6 +27,7 @@ import {
 
 import { ThemedIcon } from "@/components/icons/themed-icon"
 import type { ClientMessageBody } from "@/data/models"
+import type { ResourceLoadState } from "@/data/resources"
 import {
   formatClientMessageBodySummary,
   formatFileSize,
@@ -38,17 +39,21 @@ import { MarkdownMessage } from "@/features/conversation/markdown-message"
 
 export function MessageBody({
   body,
-  fileUrls,
-  fileUrlsLoading,
+  onResourceError,
+  onResourcePress,
   resolveMentionLabel,
+  resourceStates,
   serverUrl,
 }: {
   body: ClientMessageBody
-  fileUrls: ReadonlyMap<string, string>
-  fileUrlsLoading: boolean
+  onResourceError: (fileId: string) => void
+  onResourcePress: (fileId: string) => void
   resolveMentionLabel: MessageMentionLabelResolver
+  resourceStates: ReadonlyMap<string, ResourceLoadState>
   serverUrl: string
 }) {
+  const retriedImageIds = useRef(new Set<string>())
+
   if (body.type === "text") {
     return (
       <Paragraph selectable>
@@ -110,7 +115,8 @@ export function MessageBody({
   }
 
   if (body.type === "file") {
-    const url = fileUrls.get(body.fileId)
+    const state = resourceStates.get(body.fileId)
+    const isLoading = state?.status === "loading"
     return (
       <XStack gap="$3" items="center" minW={220}>
         <ThemedIcon icon={FileText} size={24} />
@@ -126,15 +132,15 @@ export function MessageBody({
           accessibilityLabel={`打开文件 ${body.name}`}
           chromeless
           circular
-          disabled={!url}
+          disabled={isLoading}
           icon={
-            fileUrlsLoading && !url ? (
+            isLoading ? (
               <Spinner />
             ) : (
               <ThemedIcon icon={Download} size={18} />
             )
           }
-          onPress={url ? () => void openExternalUrl(url) : undefined}
+          onPress={() => onResourcePress(body.fileId)}
           size="$3"
         />
       </XStack>
@@ -142,12 +148,29 @@ export function MessageBody({
   }
 
   if (body.type === "image") {
-    const url = fileUrls.get(body.fileId)
-    if (!url) {
+    const state = resourceStates.get(body.fileId)
+    const resource = state?.resource
+    if (!resource) {
       return (
-        <XStack gap="$2" items="center" minW={160} p="$2">
-          {fileUrlsLoading ? <Spinner /> : <ThemedIcon icon={ImageIcon} />}
-          <SizableText color="$color10">图片暂时无法加载</SizableText>
+        <XStack
+          gap="$2"
+          items="center"
+          minW={160}
+          onPress={
+            state?.status === "error"
+              ? () => onResourcePress(body.fileId)
+              : undefined
+          }
+          p="$2"
+        >
+          {state?.status === "loading" ? (
+            <Spinner />
+          ) : (
+            <ThemedIcon icon={ImageIcon} />
+          )}
+          <SizableText color="$color10">
+            {state?.status === "error" ? "图片加载失败，点击重试" : "正在加载图片"}
+          </SizableText>
         </XStack>
       )
     }
@@ -158,16 +181,22 @@ export function MessageBody({
         accessibilityLabel="查看图片"
         height={size.height}
         objectFit="cover"
-        onPress={() => void openExternalUrl(url)}
+        onError={() => {
+          if (retriedImageIds.current.has(body.fileId)) return
+          retriedImageIds.current.add(body.fileId)
+          onResourceError(body.fileId)
+        }}
+        onPress={() => onResourcePress(body.fileId)}
         rounded="$3"
-        src={url}
+        src={resource.uri}
         width={size.width}
       />
     )
   }
 
   if (body.type === "voice") {
-    const url = fileUrls.get(body.fileId)
+    const state = resourceStates.get(body.fileId)
+    const isLoading = state?.status === "loading"
     return (
       <YStack gap="$2" minW={220}>
         <XStack gap="$3" items="center">
@@ -179,15 +208,15 @@ export function MessageBody({
             accessibilityLabel="播放语音"
             chromeless
             circular
-            disabled={!url}
+            disabled={isLoading}
             icon={
-              fileUrlsLoading && !url ? (
+              isLoading ? (
                 <Spinner />
               ) : (
                 <ThemedIcon icon={Play} size={18} />
               )
             }
-            onPress={url ? () => void openExternalUrl(url) : undefined}
+            onPress={() => onResourcePress(body.fileId)}
             size="$3"
           />
         </XStack>

@@ -6,6 +6,8 @@ import { SafeAreaView } from "react-native-safe-area-context"
 import {
   AlertDialog,
   Card,
+  Dialog,
+  VisuallyHidden,
   XStack,
   YStack,
 } from "tamagui"
@@ -24,6 +26,9 @@ export function ServerManagementScreen() {
   const { invalidateSession, session } = useAuth()
   const { removeServer, selectedServer, selectServer, servers } = useServers()
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [serverForActions, setServerForActions] =
+    useState<ServerConfig | null>(null)
+  const [serverToEdit, setServerToEdit] = useState<ServerConfig | null>(null)
   const [serverToDelete, setServerToDelete] = useState<ServerConfig | null>(null)
   const closeOpenSwipeableRef = useRef<(() => void) | null>(null)
 
@@ -47,12 +52,46 @@ export function ServerManagementScreen() {
 
   function handleOpenAddDialog() {
     closeOpenSwipeable()
+    setServerToEdit(null)
     setIsAddDialogOpen(true)
+  }
+
+  function handleRequestActions(server: ServerConfig) {
+    closeOpenSwipeable()
+    setServerForActions(server)
+  }
+
+  function handleRequestEdit() {
+    if (!serverForActions) return
+
+    setServerToEdit(serverForActions)
+    setServerForActions(null)
   }
 
   function handleRequestDelete(server: ServerConfig) {
     closeOpenSwipeable()
+    setServerForActions(null)
     setServerToDelete(server)
+  }
+
+  function handleServerDialogOpenChange(open: boolean) {
+    if (open) return
+
+    setIsAddDialogOpen(false)
+    setServerToEdit(null)
+  }
+
+  function handleServerSaved(
+    server: ServerConfig,
+    previousServer: ServerConfig | null
+  ) {
+    if (
+      previousServer &&
+      previousServer.url !== server.url &&
+      session?.id === server.id
+    ) {
+      void invalidateSession().then(() => router.replace("/init"))
+    }
   }
 
   function returnToLogin() {
@@ -118,6 +157,7 @@ export function ServerManagementScreen() {
                       isSelected={server.id === selectedServer.id}
                       key={server.id}
                       onDelete={() => handleRequestDelete(server)}
+                      onRequestActions={() => handleRequestActions(server)}
                       onSelect={() => void handleSelect(server)}
                       onSwipeableClose={handleSwipeableClose}
                       onSwipeableOpen={handleSwipeableOpen}
@@ -133,9 +173,53 @@ export function ServerManagementScreen() {
       </SafeAreaView>
 
       <AddServerDialog
-        onOpenChange={setIsAddDialogOpen}
-        open={isAddDialogOpen}
+        onOpenChange={handleServerDialogOpenChange}
+        onSaved={handleServerSaved}
+        open={isAddDialogOpen || serverToEdit !== null}
+        server={serverToEdit}
       />
+
+      <Dialog
+        modal
+        onOpenChange={(open) => {
+          if (!open) setServerForActions(null)
+        }}
+        open={serverForActions !== null}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay bg="$shadow6" opacity={0.5} />
+          <Dialog.Content bordered elevate gap="$4" maxW={440} width="90%">
+            <Dialog.Title fontSize="$5" lineHeight="$6">
+              服务器操作
+            </Dialog.Title>
+            <VisuallyHidden>
+              <Dialog.Description>
+                修改或删除“{serverForActions?.name}”。
+              </Dialog.Description>
+            </VisuallyHidden>
+            <YStack gap="$3" width="100%">
+              <AppButton
+                accessibilityLabel={`修改${serverForActions?.name ?? "服务器"}`}
+                onPress={handleRequestEdit}
+                theme="gray"
+                width="100%"
+              >
+                修改
+              </AppButton>
+              <AppButton
+                accessibilityLabel={`删除${serverForActions?.name ?? "服务器"}`}
+                onPress={() => {
+                  if (serverForActions) handleRequestDelete(serverForActions)
+                }}
+                theme="red"
+                width="100%"
+              >
+                删除
+              </AppButton>
+            </YStack>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog>
 
       <AlertDialog
         onOpenChange={(open) => {
