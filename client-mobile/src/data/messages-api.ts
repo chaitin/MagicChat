@@ -1,9 +1,12 @@
+import { File } from "expo-file-system"
+
 import { ApiRequestError, createApiClient, type ApiFetch } from "@/data/api-client"
 import {
   normalizeClientMessage,
   normalizeClientMessagePage,
 } from "@/data/message-normalizer"
 import type { ClientMessageList } from "@/data/models"
+import type { ClientMessageUpload } from "@/data/message-upload"
 
 type ApiOptions = {
   fetcher?: ApiFetch
@@ -68,6 +71,71 @@ export async function sendConversationTextMessage(
   return normalizeClientMessage(data.message)
 }
 
+export function sendConversationFileMessage(
+  serverUrl: string,
+  conversationId: string,
+  input: { clientMessageId: string; file: ClientMessageUpload },
+  options: ApiOptions = {}
+) {
+  return sendConversationUploadMessage(
+    serverUrl,
+    conversationId,
+    {
+      clientMessageId: input.clientMessageId,
+      fieldName: "file",
+      path: "files",
+      upload: input.file,
+    },
+    "发送文件失败",
+    options
+  )
+}
+
+export function sendConversationImageMessage(
+  serverUrl: string,
+  conversationId: string,
+  input: { clientMessageId: string; image: ClientMessageUpload },
+  options: ApiOptions = {}
+) {
+  return sendConversationUploadMessage(
+    serverUrl,
+    conversationId,
+    {
+      clientMessageId: input.clientMessageId,
+      fieldName: "image",
+      path: "images",
+      upload: input.image,
+    },
+    "发送图片失败",
+    options
+  )
+}
+
+export function sendConversationVoiceMessage(
+  serverUrl: string,
+  conversationId: string,
+  input: {
+    clientMessageId: string
+    durationMS: number
+    voice: ClientMessageUpload
+  },
+  options: ApiOptions = {}
+) {
+  return sendConversationUploadMessage(
+    serverUrl,
+    conversationId,
+    {
+      clientMessageId: input.clientMessageId,
+      extraFields: { duration_ms: String(input.durationMS) },
+      fieldName: "voice",
+      path: "voices",
+      upload: input.voice,
+    },
+    "发送语音失败",
+    options
+  )
+}
+
 export async function markConversationRead(
   serverUrl: string,
   conversationId: string,
@@ -99,4 +167,46 @@ export async function markConversationRead(
     lastReadSeq: data.last_read_seq,
     unreadCount: data.unread_count,
   }
+}
+
+async function sendConversationUploadMessage(
+  serverUrl: string,
+  conversationId: string,
+  input: {
+    clientMessageId: string
+    extraFields?: Record<string, string>
+    fieldName: "file" | "image" | "voice"
+    path: "files" | "images" | "voices"
+    upload: ClientMessageUpload
+  },
+  errorMessage: string,
+  options: ApiOptions
+) {
+  const formData = new FormData()
+  const file = new File(input.upload.uri)
+
+  formData.set("client_message_id", input.clientMessageId)
+  for (const [name, value] of Object.entries(input.extraFields ?? {})) {
+    formData.set(name, value)
+  }
+  formData.set(input.fieldName, file, input.upload.name)
+
+  const data = await createApiClient(serverUrl, options.fetcher).request<{
+    message?: unknown
+  }>(
+    `/api/client/conversations/${encodeURIComponent(conversationId)}/messages/${input.path}`,
+    {
+      body: formData,
+      errorMessage,
+      method: "POST",
+      signal: options.signal,
+      timeoutMs: 120_000,
+    }
+  )
+
+  if (!data?.message) {
+    throw new ApiRequestError(`${errorMessage}：响应格式不正确`)
+  }
+
+  return normalizeClientMessage(data.message)
 }

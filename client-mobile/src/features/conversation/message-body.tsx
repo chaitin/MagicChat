@@ -1,5 +1,4 @@
 import {
-  AudioLines,
   BarChart3,
   ChevronDown,
   ChevronUp,
@@ -9,7 +8,6 @@ import {
   ImageIcon,
   Link as LinkIcon,
   MessagesSquare,
-  Play,
 } from "lucide-react-native"
 import { useRef, useState } from "react"
 import { Alert, Linking } from "react-native"
@@ -28,26 +26,33 @@ import {
 import { ThemedIcon } from "@/components/icons/themed-icon"
 import type { ClientMessageBody } from "@/data/models"
 import type { ResourceLoadState } from "@/data/resources"
+import type { EntityReference } from "@/domain/entities/entity-profile"
 import {
   formatClientMessageBodySummary,
   formatFileSize,
-  formatMentionTemplateText,
-  formatVoiceDuration,
   type MessageMentionLabelResolver,
 } from "@/domain/messages/message-presenter"
 import { MarkdownMessage } from "@/features/conversation/markdown-message"
+import { MessageMentionText } from "@/features/conversation/message-mention-text"
+import { VoiceMessagePlayer } from "@/features/conversation/voice-message-player"
 
 export function MessageBody({
   body,
+  currentUserId,
+  onMentionPress,
   onResourceError,
   onResourcePress,
+  onVoiceResourcePress,
   resolveMentionLabel,
   resourceStates,
   serverUrl,
 }: {
   body: ClientMessageBody
+  currentUserId: string
+  onMentionPress: (target: EntityReference) => void
   onResourceError: (fileId: string) => void
   onResourcePress: (fileId: string) => void
+  onVoiceResourcePress: (fileId: string) => void
   resolveMentionLabel: MessageMentionLabelResolver
   resourceStates: ReadonlyMap<string, ResourceLoadState>
   serverUrl: string
@@ -57,7 +62,12 @@ export function MessageBody({
   if (body.type === "text") {
     return (
       <Paragraph selectable>
-        {formatMentionTemplateText(body.content, resolveMentionLabel)}
+        <MessageMentionText
+          content={body.content}
+          currentUserId={currentUserId}
+          onMentionPress={onMentionPress}
+          resolveMentionLabel={resolveMentionLabel}
+        />
       </Paragraph>
     )
   }
@@ -66,6 +76,8 @@ export function MessageBody({
     return (
       <MarkdownMessage
         content={body.content}
+        currentUserId={currentUserId}
+        onMentionPress={onMentionPress}
         resolveMentionLabel={resolveMentionLabel}
         serverUrl={serverUrl}
       />
@@ -196,36 +208,15 @@ export function MessageBody({
 
   if (body.type === "voice") {
     const state = resourceStates.get(body.fileId)
-    const isLoading = state?.status === "loading"
     return (
-      <YStack gap="$2" minW={220}>
-        <XStack gap="$3" items="center">
-          <ThemedIcon icon={AudioLines} size={22} />
-          <SizableText flex={1}>
-            语音 {formatVoiceDuration(body.durationMS)}
-          </SizableText>
-          <Button
-            accessibilityLabel="播放语音"
-            chromeless
-            circular
-            disabled={isLoading}
-            icon={
-              isLoading ? (
-                <Spinner />
-              ) : (
-                <ThemedIcon icon={Play} size={18} />
-              )
-            }
-            onPress={() => onResourcePress(body.fileId)}
-            size="$3"
-          />
-        </XStack>
-        {body.transcript ? (
-          <Paragraph color="$color10" size="$2">
-            {body.transcript}
-          </Paragraph>
-        ) : null}
-      </YStack>
+      <VoiceMessagePlayer
+        durationMS={body.durationMS}
+        fileId={body.fileId}
+        onResourceError={onResourceError}
+        onResourceRequest={onVoiceResourcePress}
+        state={state}
+        transcript={body.transcript}
+      />
     )
   }
 

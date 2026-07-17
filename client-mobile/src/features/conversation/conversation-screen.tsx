@@ -1,23 +1,33 @@
 import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Alert, AppState } from "react-native"
-import { Button, YStack } from "tamagui"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { YStack } from "tamagui"
 
 import { ContentState } from "@/components/feedback/content-state"
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
-import { PageHeader } from "@/components/navigation/page-header"
+import {
+  PAGE_HEADER_HEIGHT,
+  PageHeader,
+} from "@/components/navigation/page-header"
 import { ApiRequestError, isUnauthorizedError } from "@/data/api-client"
 import {
   useConversationMessages,
   useMarkConversationRead,
+  useSendConversationFileMessage,
+  useSendConversationImageMessage,
   useSendConversationTextMessage,
+  useSendConversationVoiceMessage,
 } from "@/data/message-hooks"
+import type {
+  PreparedClientMessageUpload,
+  PreparedClientVoiceMessage,
+} from "@/data/message-upload"
 import {
   openResourceExternally,
   useMessageResources,
 } from "@/data/resources"
 import {
-  getConversationEntityReference,
   type EntityReference,
 } from "@/domain/entities/entity-profile"
 import {
@@ -26,9 +36,12 @@ import {
   createMessageMentionLabelResolver,
   type MessageMentionLabelResolver,
 } from "@/domain/messages/message-presenter"
-import { ConversationHeaderAvatar } from "@/features/conversation/conversation-header-avatar"
-import { MessageComposer } from "@/features/conversation/message-composer"
+import {
+  MessageComposer,
+  type MessageComposerHandle,
+} from "@/features/conversation/message-composer"
 import { MessageList } from "@/features/conversation/message-list"
+import { createMentionCandidates } from "@/features/conversation/mention-model"
 import {
   useAuth,
   useAuthenticatedSession,
@@ -46,6 +59,7 @@ export function ConversationScreen() {
     : (params.conversationId ?? "")
   const router = useRouter()
   const isFocused = useIsFocused()
+  const insets = useSafeAreaInsets()
   const { invalidateSession } = useAuth()
   const { activateConversation } = useRealtime()
   const session = useAuthenticatedSession()
@@ -53,18 +67,39 @@ export function ConversationScreen() {
     () => AppState.currentState === "active"
   )
   const appIsActiveRef = useRef(appIsActive)
+  const composerRef = useRef<MessageComposerHandle>(null)
   const { contacts, conversations, currentUser, currentUserError, isReady } =
     useClientData()
   const conversation = conversations.find((item) => item.id === conversationId)
-  const conversationEntityReference =
-    conversation && currentUser
-      ? getConversationEntityReference(conversation, currentUser.id)
-      : null
+  const mentionCandidates = useMemo(
+    () =>
+      conversation?.type === "group"
+        ? createMentionCandidates(conversation.members ?? [])
+        : [],
+    [conversation]
+  )
   const messagesQuery = useConversationMessages(session, conversationId)
-  const sendMutation = useSendConversationTextMessage(
+  const sendTextMutation = useSendConversationTextMessage(
     session,
     conversationId
   )
+  const sendFileMutation = useSendConversationFileMessage(
+    session,
+    conversationId
+  )
+  const sendImageMutation = useSendConversationImageMessage(
+    session,
+    conversationId
+  )
+  const sendVoiceMutation = useSendConversationVoiceMessage(
+    session,
+    conversationId
+  )
+  const isSending =
+    sendTextMutation.isPending ||
+    sendFileMutation.isPending ||
+    sendImageMutation.isPending ||
+    sendVoiceMutation.isPending
   const { mutateAsync: markRead } = useMarkConversationRead(
     session,
     conversationId
@@ -192,7 +227,7 @@ export function ConversationScreen() {
 
   async function handleSend(content: string) {
     try {
-      await sendMutation.mutateAsync({
+      await sendTextMutation.mutateAsync({
         clientMessageId: createClientMessageId(),
         content,
       })
@@ -201,6 +236,50 @@ export function ConversationScreen() {
       Alert.alert(
         "发送失败",
         error instanceof ApiRequestError ? error.message : "消息发送失败，请重试。"
+      )
+      return false
+    }
+  }
+
+  async function handleSendUpload(selection: PreparedClientMessageUpload) {
+    try {
+      if (selection.kind === "image") {
+        await sendImageMutation.mutateAsync({
+          clientMessageId: createClientMessageId(),
+          image: selection.upload,
+        })
+      } else {
+        await sendFileMutation.mutateAsync({
+          clientMessageId: createClientMessageId(),
+          file: selection.upload,
+        })
+      }
+      return true
+    } catch (error: unknown) {
+      Alert.alert(
+        selection.kind === "image" ? "图片发送失败" : "文件发送失败",
+        error instanceof ApiRequestError
+          ? error.message
+          : "消息发送失败，请重试。"
+      )
+      return false
+    }
+  }
+
+  async function handleSendVoice(recording: PreparedClientVoiceMessage) {
+    try {
+      await sendVoiceMutation.mutateAsync({
+        clientMessageId: createClientMessageId(),
+        durationMS: recording.durationMS,
+        voice: recording.upload,
+      })
+      return true
+    } catch (error: unknown) {
+      Alert.alert(
+        "语音发送失败",
+        error instanceof ApiRequestError
+          ? error.message
+          : "消息发送失败，请重试。"
       )
       return false
     }
@@ -219,6 +298,22 @@ export function ConversationScreen() {
     router.push(buildEntityDetailHref(sender))
   }
 
+  function handleAvatarLongPress(sender: EntityReference) {
+    if (conversation?.type !== "group" || sender.type === "group") return
+
+    const label = resolveMentionLabel({
+      id: sender.id,
+      type: sender.type,
+    })?.trim()
+    if (!label) return
+
+    composerRef.current?.insertMention({
+      id: sender.id,
+      label,
+      targetType: sender.type,
+    })
+  }
+
   async function handleResourcePress(fileId: string) {
     try {
       const resource = await resources.ensure(fileId)
@@ -231,31 +326,30 @@ export function ConversationScreen() {
     }
   }
 
+  async function handleVoiceResourcePress(fileId: string) {
+    try {
+      await resources.ensure(fileId)
+    } catch (error: unknown) {
+      Alert.alert(
+        "无法播放语音",
+        error instanceof Error ? error.message : "语音下载失败，请重试。"
+      )
+    }
+  }
+
   return (
     <YStack bg="$background" flex={1}>
       <PageHeader
         onBackPress={() => router.back()}
         title={conversation?.name ?? "对话"}
-        titleLeading={
-          conversation && conversationEntityReference ? (
-            <Button
-              aria-label={`查看${conversation.name}资料`}
-              chromeless
-              height="$3"
-              onPress={() => handleAvatarPress(conversationEntityReference)}
-              p={0}
-              width="$3"
-            >
-              <ConversationHeaderAvatar
-                conversation={conversation}
-                server={session}
-              />
-            </Button>
-          ) : undefined
-        }
       />
 
-      <KeyboardAwareScreen edges={["bottom"]} scrollable={false}>
+      <KeyboardAwareScreen
+        contentBackground="$color1"
+        edges={["bottom"]}
+        keyboardVerticalOffset={insets.top + PAGE_HEADER_HEIGHT}
+        scrollable={false}
+      >
         {!conversation ? (
           <ContentState message="该会话不存在或已被移除" />
         ) : !currentUser ? (
@@ -264,26 +358,44 @@ export function ConversationScreen() {
           <>
             <MessageList
               conversationId={conversation.id}
+              currentUserId={currentUser.id}
               error={messagesQuery.error}
               hasOlder={messagesQuery.hasOlder}
               isFetchingOlder={messagesQuery.isFetchingOlder}
               isLoading={messagesQuery.isLoading}
               isRefreshing={messagesQuery.isRefreshing}
               messages={presentedMessages}
+              onAvatarLongPress={
+                conversation.type === "group"
+                  ? handleAvatarLongPress
+                  : undefined
+              }
               onAvatarPress={handleAvatarPress}
+              onContentTouch={() =>
+                composerRef.current?.dismissAccessory()
+              }
               onLoadOlder={handleLoadOlder}
               onRefresh={handleRefresh}
               onResourceError={(fileId) =>
                 void resources.reload(fileId).catch(() => undefined)
               }
               onResourcePress={(fileId) => void handleResourcePress(fileId)}
+              onVoiceResourcePress={(fileId) =>
+                void handleVoiceResourcePress(fileId)
+              }
+              onMentionPress={handleAvatarPress}
               resolveMentionLabel={resolveMentionLabel}
               resourceStates={resources.states}
               server={session}
             />
             <MessageComposer
-              disabled={sendMutation.isPending}
+              disabled={isSending}
+              mentionCandidates={mentionCandidates}
               onSend={handleSend}
+              onSendUpload={handleSendUpload}
+              onSendVoice={handleSendVoice}
+              ref={composerRef}
+              server={session}
             />
           </>
         )}

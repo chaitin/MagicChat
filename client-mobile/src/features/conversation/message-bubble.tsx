@@ -1,3 +1,4 @@
+import { useRef } from "react"
 import {
   Avatar,
   Button,
@@ -20,22 +21,32 @@ import {
 } from "@/domain/messages/message-presenter"
 
 export function MessageBubble({
+  currentUserId,
   message,
+  onAvatarLongPress,
   onAvatarPress,
+  onMentionPress,
   onResourceError,
   onResourcePress,
+  onVoiceResourcePress,
   resolveMentionLabel,
   resourceStates,
   server,
 }: {
+  currentUserId: string
   message: PresentedMessage
+  onAvatarLongPress?: (sender: EntityReference) => void
   onAvatarPress: (sender: EntityReference) => void
+  onMentionPress: (target: EntityReference) => void
   onResourceError: (fileId: string) => void
   onResourcePress: (fileId: string) => void
+  onVoiceResourcePress: (fileId: string) => void
   resolveMentionLabel: MessageMentionLabelResolver
   resourceStates: ReadonlyMap<string, ResourceLoadState>
   server: ServerTarget
 }) {
+  const didLongPressAvatarRef = useRef(false)
+
   if (message.role === "system") {
     return (
       <XStack justify="center" px="$5">
@@ -55,7 +66,24 @@ export function MessageBubble({
       aria-label={`查看${fromMe ? "我的" : message.author}资料`}
       chromeless
       height="$3"
-      onPress={() => onAvatarPress(sender)}
+      onLongPress={
+        onAvatarLongPress
+          ? () => {
+              didLongPressAvatarRef.current = true
+              onAvatarLongPress(sender)
+            }
+          : undefined
+      }
+      onPress={() => {
+        if (didLongPressAvatarRef.current) {
+          didLongPressAvatarRef.current = false
+          return
+        }
+        onAvatarPress(sender)
+      }}
+      onPressIn={() => {
+        didLongPressAvatarRef.current = false
+      }}
       p={0}
       width="$3"
     >
@@ -98,12 +126,11 @@ export function MessageBubble({
         </XStack>
 
         <Card
-          bg={fromMe ? "$teal3" : "$backgroundPress"}
-          borderColor={fromMe ? "$teal6" : "$borderColor"}
+          bg={fromMe ? "$teal3" : "$background"}
           rounded="$5"
           borderTopLeftRadius={fromMe ? "$5" : "$1"}
           borderTopRightRadius={fromMe ? "$1" : "$5"}
-          borderWidth={1}
+          borderWidth={0}
           maxW="100%"
           overflow="hidden"
           p="$3"
@@ -120,8 +147,11 @@ export function MessageBubble({
           ) : null}
           <MessageBody
             body={message.body}
+            currentUserId={currentUserId}
+            onMentionPress={onMentionPress}
             onResourceError={onResourceError}
             onResourcePress={onResourcePress}
+            onVoiceResourcePress={onVoiceResourcePress}
             resolveMentionLabel={resolveMentionLabel}
             resourceStates={resourceStates}
             serverUrl={server.url}

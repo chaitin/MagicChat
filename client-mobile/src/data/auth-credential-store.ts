@@ -50,7 +50,7 @@ export async function saveLoginCredentials(
   }
 
   const storedCredentials: StoredLoginCredentials = {
-    account: credentials.account,
+    account: credentials.account.trim(),
     password: credentials.password,
     serverId: server.id,
     serverUrl: server.url,
@@ -61,6 +61,20 @@ export async function saveLoginCredentials(
     JSON.stringify(storedCredentials),
     secureStoreOptions
   )
+}
+
+export async function saveLoginAccount(server: ServerTarget, account: string) {
+  const normalizedAccount = account.trim()
+  const existingCredentials = await loadLoginCredentials(server)
+  const password =
+    existingCredentials?.account === normalizedAccount
+      ? existingCredentials.password
+      : ""
+
+  await saveLoginCredentials(server, {
+    account: normalizedAccount,
+    password,
+  })
 }
 
 function createCredentialKey(server: ServerTarget) {

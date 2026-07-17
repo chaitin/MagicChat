@@ -256,7 +256,6 @@ function UnscheduledCalendarTasks({
   return (
     <Collapsible
       className="overflow-hidden rounded-md border bg-background shadow-xs"
-      defaultOpen
     >
       <CollapsibleTrigger asChild>
         <Button

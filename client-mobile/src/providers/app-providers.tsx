@@ -3,9 +3,13 @@ import { useEffect, useState } from "react"
 import { AppState, useColorScheme } from "react-native"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
 import { SafeAreaProvider } from "react-native-safe-area-context"
-import { TamaguiProvider, YStack } from "tamagui"
+import { TamaguiProvider, ToastProvider, YStack } from "tamagui"
 
 import { tamaguiConfig } from "../../tamagui.config"
+import {
+  AppToastViewport,
+  CurrentAppToast,
+} from "@/components/feedback/app-toast"
 import { resolveAppTheme } from "@/config/app-theme"
 import { createClientQueryClient } from "@/data/query"
 import { AuthProvider } from "@/features/auth/auth-context"
@@ -34,15 +38,19 @@ export function AppProviders({ children }: React.PropsWithChildren) {
             config={tamaguiConfig}
             defaultTheme={theme.tamaguiTheme}
           >
-            <YStack bg="$background" flex={1}>
-              <ServerProvider>
-                <AuthProvider>
-                  <ClientDataProvider>
-                    <RealtimeProvider>{children}</RealtimeProvider>
-                  </ClientDataProvider>
-                </AuthProvider>
-              </ServerProvider>
-            </YStack>
+            <ToastProvider duration={3000} label="通知">
+              <YStack bg="$background" flex={1}>
+                <ServerProvider>
+                  <AuthProvider>
+                    <ClientDataProvider>
+                      <RealtimeProvider>{children}</RealtimeProvider>
+                    </ClientDataProvider>
+                  </AuthProvider>
+                </ServerProvider>
+              </YStack>
+              <CurrentAppToast />
+              <AppToastViewport />
+            </ToastProvider>
           </TamaguiProvider>
         </SafeAreaProvider>
       </GestureHandlerRootView>

@@ -36,6 +36,14 @@
       "expo-router",
       "expo-notifications",
       [
+        "expo-image-picker",
+        {
+          "cameraPermission": "允许即应使用相机拍摄并发送图片",
+          "microphonePermission": false,
+          "photosPermission": "允许即应从相册选择并发送图片"
+        }
+      ],
+      [
         "expo-navigation-bar",
         {
           "enforceContrast": false
@@ -50,7 +58,14 @@
         }
       ],
       "expo-secure-store",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": false,
+          "microphonePermission": "允许即应使用麦克风录制并发送语音消息"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

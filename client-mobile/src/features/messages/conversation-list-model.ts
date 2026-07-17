@@ -3,6 +3,10 @@ import type {
   ClientConversation,
 } from "@/data/models"
 import { getContactDisplayName } from "@/domain/contacts/contact-display"
+import {
+  formatMentionTemplateText,
+  type MessageMentionLabelResolver,
+} from "@/domain/messages/message-mentions"
 
 export type ConversationListItemModel = {
   conversation: ClientConversation
@@ -10,11 +14,6 @@ export type ConversationListItemModel = {
   hasUnreadMention: boolean
   lastMessageTime: string
 }
-
-type MentionTargetType = "all" | "app" | "user"
-
-const mentionTokenPattern =
-  /\{\(@(?:(user)\/(all)|(user|app)\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}))\)\}/g
 
 export function buildConversationListItems({
   contacts,
@@ -115,31 +114,14 @@ function formatConversationDescription(
     return "暂无消息"
   }
 
-  return summary.replace(
-    mentionTokenPattern,
-    (
-      _token,
-      _allType: string | undefined,
-      allId: string | undefined,
-      targetType: MentionTargetType | undefined,
-      targetId: string | undefined
-    ) => {
-      if (allId === "all") {
-        return "@所有人"
-      }
+  const resolveMentionLabel: MessageMentionLabelResolver = ({ id, type }) => {
+    if (type === "all") return undefined
+    return type === "app"
+      ? labels.appLabels.get(id.toLowerCase())
+      : labels.userLabels.get(id.toLowerCase())
+  }
 
-      if (!targetType || !targetId) {
-        return _token
-      }
-
-      const label =
-        targetType === "app"
-          ? labels.appLabels.get(targetId.toLowerCase())
-          : labels.userLabels.get(targetId.toLowerCase())
-
-      return label ? `@${label}` : targetType === "app" ? "@应用" : "@用户"
-    }
-  )
+  return formatMentionTemplateText(summary, resolveMentionLabel)
 }
 
 function formatActivityTime(activityAt: string | null, now: Date) {

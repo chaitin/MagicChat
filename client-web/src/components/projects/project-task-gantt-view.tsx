@@ -78,7 +78,6 @@ export function ProjectTaskGanttView({
           {unscheduledTasks.length > 0 && (
             <Collapsible
               className="shrink-0 overflow-hidden rounded-md border bg-background shadow-xs"
-              defaultOpen
             >
               <CollapsibleTrigger asChild>
                 <Button

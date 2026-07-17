@@ -13,6 +13,8 @@ import {
 import { ThemedIcon } from "@/components/icons/themed-icon"
 import { HeaderButton } from "@/components/navigation/header-button"
 
+export const PAGE_HEADER_HEIGHT = 56
+
 export function PageHeader({
   actionIcon,
   actionLabel,
@@ -36,7 +38,7 @@ export function PageHeader({
 
   return (
     <YStack bg="$background" pt={insets.top}>
-      <XStack height={56} items="center" px="$2">
+      <XStack height={PAGE_HEADER_HEIGHT} items="center" px="$2">
         <XStack width={72}>
           <HeaderButton
             accessibilityLabel="返回"

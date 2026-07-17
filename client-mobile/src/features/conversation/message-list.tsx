@@ -23,6 +23,7 @@ import type { ResourceLoadState } from "@/data/resources"
 
 export function MessageList({
   conversationId,
+  currentUserId,
   error,
   hasOlder,
   isFetchingOlder,
@@ -30,26 +31,35 @@ export function MessageList({
   isRefreshing,
   messages,
   onAvatarPress,
+  onAvatarLongPress,
+  onContentTouch,
   onLoadOlder,
   onRefresh,
   onResourceError,
   onResourcePress,
+  onVoiceResourcePress,
+  onMentionPress,
   resolveMentionLabel,
   resourceStates,
   server,
 }: {
   conversationId: string
+  currentUserId: string
   error: Error | null
   hasOlder: boolean
   isFetchingOlder: boolean
   isLoading: boolean
   isRefreshing: boolean
   messages: PresentedMessage[]
+  onAvatarLongPress?: (sender: EntityReference) => void
   onAvatarPress: (sender: EntityReference) => void
+  onContentTouch: () => void
   onLoadOlder: () => void
   onRefresh: () => void
   onResourceError: (fileId: string) => void
   onResourcePress: (fileId: string) => void
+  onVoiceResourcePress: (fileId: string) => void
+  onMentionPress: (target: EntityReference) => void
   resolveMentionLabel: MessageMentionLabelResolver
   resourceStates: ReadonlyMap<string, ResourceLoadState>
   server: ServerTarget
@@ -193,6 +203,7 @@ export function MessageList({
         onEndReached={hasOlder && !isFetchingOlder ? onLoadOlder : undefined}
         onEndReachedThreshold={0.2}
         onScroll={handleScroll}
+        onTouchStart={onContentTouch}
         refreshControl={
           <RefreshControl
             colors={[String(theme.color10.val)]}
@@ -203,10 +214,14 @@ export function MessageList({
         }
         renderItem={({ item }) => (
           <MessageBubble
+            currentUserId={currentUserId}
             message={item}
+            onAvatarLongPress={onAvatarLongPress}
             onAvatarPress={onAvatarPress}
+            onMentionPress={onMentionPress}
             onResourceError={onResourceError}
             onResourcePress={onResourcePress}
+            onVoiceResourcePress={onVoiceResourcePress}
             resolveMentionLabel={resolveMentionLabel}
             resourceStates={resourceStates}
             server={server}

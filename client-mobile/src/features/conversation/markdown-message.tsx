@@ -11,14 +11,20 @@ import {
   YStack,
 } from "tamagui"
 
-import {
-  formatMentionTemplateText,
-  type MessageMentionLabelResolver,
-} from "@/domain/messages/message-presenter"
+import type { EntityReference } from "@/domain/entities/entity-profile"
+import type { MessageMentionLabelResolver } from "@/domain/messages/message-presenter"
+import { MessageMentionText } from "@/features/conversation/message-mention-text"
 
 type MarkdownNode = {
   children: MarkdownNode[]
   token: Token
+}
+
+type MarkdownRenderContext = {
+  currentUserId: string
+  onMentionPress: (target: EntityReference) => void
+  resolveMentionLabel: MessageMentionLabelResolver
+  serverUrl: string
 }
 
 const markdownParser = new MarkdownIt({
@@ -30,10 +36,14 @@ const markdownParser = new MarkdownIt({
 
 export function MarkdownMessage({
   content,
+  currentUserId,
+  onMentionPress,
   resolveMentionLabel,
   serverUrl,
 }: {
   content: string
+  currentUserId: string
+  onMentionPress: (target: EntityReference) => void
   resolveMentionLabel: MessageMentionLabelResolver
   serverUrl: string
 }) {
@@ -48,14 +58,26 @@ export function MarkdownMessage({
   if (nodes.length === 0) {
     return (
       <Paragraph selectable>
-        {formatMentionTemplateText(content, resolveMentionLabel)}
+        <MessageMentionText
+          content={content}
+          currentUserId={currentUserId}
+          onMentionPress={onMentionPress}
+          resolveMentionLabel={resolveMentionLabel}
+        />
       </Paragraph>
     )
   }
 
+  const context: MarkdownRenderContext = {
+    currentUserId,
+    onMentionPress,
+    resolveMentionLabel,
+    serverUrl,
+  }
+
   return (
-    <YStack gap="$3" maxW="100%">
-      {renderBlockNodes(nodes, resolveMentionLabel, serverUrl)}
+    <YStack gap="$2" maxW="100%">
+      {renderBlockNodes(nodes, context)}
     </YStack>
   )
 }
@@ -85,15 +107,13 @@ function buildTokenTree(tokens: Token[]) {
 
 function renderBlockNodes(
   nodes: MarkdownNode[],
-  resolveMentionLabel: MessageMentionLabelResolver,
-  serverUrl: string
+  context: MarkdownRenderContext
 ) {
   return nodes.map((node, index) =>
     renderBlockNode(
       node,
       `${node.token.type}:${node.token.map?.[0] ?? index}:${index}`,
-      resolveMentionLabel,
-      serverUrl
+      context
     )
   )
 }
@@ -101,13 +121,12 @@ function renderBlockNodes(
 function renderBlockNode(
   node: MarkdownNode,
   key: string,
-  resolveMentionLabel: MessageMentionLabelResolver,
-  serverUrl: string
+  context: MarkdownRenderContext
 ): ReactNode {
   const { token } = node
 
   if (token.type === "paragraph_open") {
-    return renderParagraph(node, key, resolveMentionLabel, serverUrl)
+    return renderParagraph(node, key, context)
   }
 
   if (token.type === "heading_open") {
@@ -119,7 +138,7 @@ function renderBlockNode(
         lineHeight={getHeadingLineHeight(level)}
         size={getHeadingSize(level)}
       >
-        {renderNodeInlineContent(node, resolveMentionLabel, serverUrl)}
+        {renderNodeInlineContent(node, context)}
       </SizableText>
     )
   }
@@ -129,15 +148,14 @@ function renderBlockNode(
       node,
       key,
       token.type === "ordered_list_open",
-      resolveMentionLabel,
-      serverUrl
+      context
     )
   }
 
   if (token.type === "list_item_open") {
     return (
       <YStack flex={1} gap="$2" key={key}>
-        {renderBlockNodes(node.children, resolveMentionLabel, serverUrl)}
+        {renderBlockNodes(node.children, context)}
       </YStack>
     )
   }
@@ -153,7 +171,7 @@ function renderBlockNode(
         p="$2"
         pl="$3"
       >
-        {renderBlockNodes(node.children, resolveMentionLabel, serverUrl)}
+        {renderBlockNodes(node.children, context)}
       </YStack>
     )
   }
@@ -171,8 +189,7 @@ function renderBlockNode(
       <MarkdownTable
         key={key}
         node={node}
-        resolveMentionLabel={resolveMentionLabel}
-        serverUrl={serverUrl}
+        context={context}
       />
     )
   }
@@ -182,8 +199,7 @@ function renderBlockNode(
       <Paragraph key={key} selectable>
         {renderInlineTokens(
           token.children ?? [],
-          resolveMentionLabel,
-          serverUrl
+          context
         )}
       </Paragraph>
     )
@@ -192,14 +208,19 @@ function renderBlockNode(
   if (node.children.length > 0) {
     return (
       <YStack gap="$2" key={key}>
-        {renderBlockNodes(node.children, resolveMentionLabel, serverUrl)}
+        {renderBlockNodes(node.children, context)}
       </YStack>
     )
   }
 
   return token.content ? (
     <Paragraph key={key} selectable>
-      {formatMentionTemplateText(token.content, resolveMentionLabel)}
+      <MessageMentionText
+        content={token.content}
+        currentUserId={context.currentUserId}
+        onMentionPress={context.onMentionPress}
+        resolveMentionLabel={context.resolveMentionLabel}
+      />
     </Paragraph>
   ) : null
 }
@@ -207,8 +228,7 @@ function renderBlockNode(
 function renderParagraph(
   node: MarkdownNode,
   key: string,
-  resolveMentionLabel: MessageMentionLabelResolver,
-  serverUrl: string
+  context: MarkdownRenderContext
 ) {
   const inlineToken = node.children.find((child) => child.token.type === "inline")
     ?.token
@@ -225,13 +245,13 @@ function renderParagraph(
     <YStack gap="$2" key={key}>
       {hasText || imageTokens.length === 0 ? (
         <Paragraph lineHeight={22} selectable>
-          {renderInlineTokens(inlineTokens, resolveMentionLabel, serverUrl)}
+          {renderInlineTokens(inlineTokens, context)}
         </Paragraph>
       ) : null}
       {imageTokens.map((token, index) => (
         <MarkdownImage
           key={`${key}:image:${token.attrGet("src") ?? index}`}
-          serverUrl={serverUrl}
+          serverUrl={context.serverUrl}
           token={token}
         />
       ))}
@@ -243,8 +263,7 @@ function renderList(
   node: MarkdownNode,
   key: string,
   ordered: boolean,
-  resolveMentionLabel: MessageMentionLabelResolver,
-  serverUrl: string
+  context: MarkdownRenderContext
 ) {
   const items = node.children.filter(
     (child) => child.token.type === "list_item_open"
@@ -259,7 +278,7 @@ function renderList(
             {ordered ? `${start + index}.` : "•"}
           </SizableText>
           <YStack flex={1} gap="$2">
-            {renderBlockNodes(item.children, resolveMentionLabel, serverUrl)}
+            {renderBlockNodes(item.children, context)}
           </YStack>
         </XStack>
       ))}
@@ -294,13 +313,11 @@ function MarkdownCodeBlock({ token }: { token: Token }) {
 }
 
 function MarkdownTable({
+  context,
   node,
-  resolveMentionLabel,
-  serverUrl,
 }: {
+  context: MarkdownRenderContext
   node: MarkdownNode
-  resolveMentionLabel: MessageMentionLabelResolver
-  serverUrl: string
 }) {
   const rows = collectNodes(node, "tr_open")
 
@@ -332,8 +349,7 @@ function MarkdownTable({
                   >
                     {renderNodeInlineContent(
                       cell,
-                      resolveMentionLabel,
-                      serverUrl
+                      context
                     )}
                   </SizableText>
                 </YStack>
@@ -369,30 +385,26 @@ function MarkdownImage({ serverUrl, token }: { serverUrl: string; token: Token }
 
 function renderNodeInlineContent(
   node: MarkdownNode,
-  resolveMentionLabel: MessageMentionLabelResolver,
-  serverUrl: string
+  context: MarkdownRenderContext
 ) {
   const inlineToken = node.children.find((child) => child.token.type === "inline")
     ?.token
 
   return renderInlineTokens(
     inlineToken?.children ?? [],
-    resolveMentionLabel,
-    serverUrl
+    context
   )
 }
 
 function renderInlineTokens(
   tokens: Token[],
-  resolveMentionLabel: MessageMentionLabelResolver,
-  serverUrl: string
+  context: MarkdownRenderContext
 ) {
   return buildTokenTree(tokens).map((node, index) =>
     renderInlineNode(
       node,
       `${node.token.type}:${index}`,
-      resolveMentionLabel,
-      serverUrl
+      context
     )
   )
 }
@@ -400,29 +412,32 @@ function renderInlineTokens(
 function renderInlineNode(
   node: MarkdownNode,
   key: string,
-  resolveMentionLabel: MessageMentionLabelResolver,
-  serverUrl: string
+  context: MarkdownRenderContext
 ): ReactNode {
   const { token } = node
   const children = node.children.map((child, index) =>
     renderInlineNode(
       child,
       `${key}:${child.token.type}:${index}`,
-      resolveMentionLabel,
-      serverUrl
+      context
     )
   )
 
   if (token.type === "text") {
     return (
-      <SizableText key={key}>
-        {formatTaskMarker(
-          formatMentionTemplateText(token.content, resolveMentionLabel)
-        )}
-      </SizableText>
+      <MessageMentionText
+        content={formatTaskMarker(token.content)}
+        currentUserId={context.currentUserId}
+        key={key}
+        onMentionPress={context.onMentionPress}
+        resolveMentionLabel={context.resolveMentionLabel}
+      />
     )
   }
-  if (token.type === "softbreak" || token.type === "hardbreak") {
+  if (token.type === "softbreak") {
+    return " "
+  }
+  if (token.type === "hardbreak") {
     return "\n"
   }
   if (token.type === "code_inline") {
@@ -460,7 +475,10 @@ function renderInlineNode(
     )
   }
   if (token.type === "link_open") {
-    const url = resolveMarkdownUrl(token.attrGet("href") ?? "", serverUrl)
+    const url = resolveMarkdownUrl(
+      token.attrGet("href") ?? "",
+      context.serverUrl
+    )
     return (
       <SizableText
         color="$teal10"
@@ -481,9 +499,13 @@ function renderInlineNode(
   }
 
   return token.content ? (
-    <SizableText key={key}>
-      {formatMentionTemplateText(token.content, resolveMentionLabel)}
-    </SizableText>
+    <MessageMentionText
+      content={token.content}
+      currentUserId={context.currentUserId}
+      key={key}
+      onMentionPress={context.onMentionPress}
+      resolveMentionLabel={context.resolveMentionLabel}
+    />
   ) : null
 }
 

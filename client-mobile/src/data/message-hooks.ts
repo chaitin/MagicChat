@@ -9,13 +9,17 @@ import { useMemo } from "react"
 import {
   fetchConversationMessages,
   markConversationRead,
+  sendConversationFileMessage,
+  sendConversationImageMessage,
   sendConversationTextMessage,
+  sendConversationVoiceMessage,
 } from "@/data/messages-api"
 import type {
   ClientConversation,
   ClientMessage,
   ClientMessageList,
 } from "@/data/models"
+import type { ClientMessageUpload } from "@/data/message-upload"
 import { queryKeys, type AuthenticatedTarget } from "@/data/query"
 
 const MESSAGE_PAGE_SIZE = 20
@@ -70,11 +74,62 @@ export function useSendConversationTextMessage(
   server: AuthenticatedTarget,
   conversationId: string
 ) {
+  return useSendConversationMessageMutation(
+    server,
+    conversationId,
+    (input: { clientMessageId: string; content: string }) =>
+      sendConversationTextMessage(server.url, conversationId, input)
+  )
+}
+
+export function useSendConversationFileMessage(
+  server: AuthenticatedTarget,
+  conversationId: string
+) {
+  return useSendConversationMessageMutation(
+    server,
+    conversationId,
+    (input: { clientMessageId: string; file: ClientMessageUpload }) =>
+      sendConversationFileMessage(server.url, conversationId, input)
+  )
+}
+
+export function useSendConversationImageMessage(
+  server: AuthenticatedTarget,
+  conversationId: string
+) {
+  return useSendConversationMessageMutation(
+    server,
+    conversationId,
+    (input: { clientMessageId: string; image: ClientMessageUpload }) =>
+      sendConversationImageMessage(server.url, conversationId, input)
+  )
+}
+
+export function useSendConversationVoiceMessage(
+  server: AuthenticatedTarget,
+  conversationId: string
+) {
+  return useSendConversationMessageMutation(
+    server,
+    conversationId,
+    (input: {
+      clientMessageId: string
+      durationMS: number
+      voice: ClientMessageUpload
+    }) => sendConversationVoiceMessage(server.url, conversationId, input)
+  )
+}
+
+function useSendConversationMessageMutation<TInput>(
+  server: AuthenticatedTarget,
+  conversationId: string,
+  sendMessage: (input: TInput) => Promise<ClientMessage>
+) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (input: { clientMessageId: string; content: string }) =>
-      sendConversationTextMessage(server.url, conversationId, input),
+    mutationFn: sendMessage,
     onSuccess: (message) => {
       queryClient.setQueryData<InfiniteData<ClientMessageList, number | null>>(
         queryKeys.conversationMessages(server, conversationId),

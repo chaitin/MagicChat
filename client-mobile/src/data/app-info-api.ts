@@ -8,7 +8,9 @@ import type { AppInfo } from "@/data/models"
 type AppInfoResponse = {
   app_name?: string
   authenticated?: boolean
+  email_code_login_enabled?: boolean
   organization_name?: string
+  password_login_enabled?: boolean
 }
 
 export async function fetchAppInfo(
@@ -32,6 +34,8 @@ export async function fetchAppInfo(
   return {
     appName,
     authenticated: data?.authenticated === true,
+    emailCodeLoginEnabled: data?.email_code_login_enabled === true,
     organizationName,
+    passwordLoginEnabled: data?.password_login_enabled !== false,
   } satisfies AppInfo
 }

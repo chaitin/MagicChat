@@ -1,7 +1,9 @@
 export type AppInfo = {
   appName: string
   authenticated: boolean
+  emailCodeLoginEnabled: boolean
   organizationName: string
+  passwordLoginEnabled: boolean
 }
 
 export type AuthenticatedUser = {

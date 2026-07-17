@@ -8,5 +8,8 @@ minimumReleaseAgeExclude:
   - expo-constants@57.0.5
   - expo-notifications@57.0.5
   - expo-secure-store@57.0.1
+  - expo-image-manipulator@57.0.5
+  - expo-image-picker@57.0.5
 patchedDependencies:
   '@tamagui/radio-group@2.4.5': patches/@tamagui__radio-group@2.4.5.patch
+  'expo-audio@57.0.2': patches/expo-audio@57.0.2.patch

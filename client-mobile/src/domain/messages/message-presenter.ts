@@ -8,11 +8,15 @@ import type {
 import type { AttachmentResourceReference } from "@/data/resources"
 import { getContactDisplayName } from "@/domain/contacts/contact-display"
 import type { EntityReference } from "@/domain/entities/entity-profile"
+import {
+  formatMentionTemplateText,
+  type MessageMentionLabelResolver,
+} from "@/domain/messages/message-mentions"
 
-export type MessageMentionLabelResolver = (target: {
-  id: string
-  type: "all" | "app" | "user"
-}) => string | undefined
+export {
+  formatMentionTemplateText,
+  type MessageMentionLabelResolver,
+} from "@/domain/messages/message-mentions"
 
 export type PresentedMessage = {
   author: string
@@ -29,8 +33,6 @@ export type PresentedMessage = {
   time: string
 }
 
-const mentionTokenPattern =
-  /\{\(@(?:(user)\/(all)|(user|app)\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}))\)\}/g
 const messageTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
   hour: "2-digit",
   hour12: false,
@@ -159,27 +161,6 @@ export function createMessageMentionLabelResolver({
     if (type === "all") return "所有人"
     return (type === "app" ? appLabels : userLabels).get(id.toLowerCase())
   }
-}
-
-export function formatMentionTemplateText(
-  content: string,
-  resolveLabel: MessageMentionLabelResolver
-) {
-  return content.replace(
-    mentionTokenPattern,
-    (
-      token,
-      _allType: string | undefined,
-      allId: string | undefined,
-      targetType: "app" | "user" | undefined,
-      targetId: string | undefined
-    ) => {
-      if (allId === "all") return "@所有人"
-      if (!targetType || !targetId) return token
-      const label = resolveLabel({ id: targetId, type: targetType })?.trim()
-      return label ? `@${label}` : targetType === "app" ? "@应用" : "@用户"
-    }
-  )
 }
 
 export function formatClientMessageBodySummary(

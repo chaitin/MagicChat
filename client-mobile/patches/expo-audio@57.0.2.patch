@@ -1,0 +1,59 @@
+diff --git a/android/src/main/java/expo/modules/audio/AudioRecords.kt b/android/src/main/java/expo/modules/audio/AudioRecords.kt
+--- a/android/src/main/java/expo/modules/audio/AudioRecords.kt
++++ b/android/src/main/java/expo/modules/audio/AudioRecords.kt
+@@ -94,4 +94,5 @@ enum class AndroidAudioEncoder(val value: String) : Enumerable {
+   AMR_WB("amr_wb"),
+   AAC("aac"),
+   HE_AAC("he_aac"),
+-  AAC_ELD("aac_eld");
++  AAC_ELD("aac_eld"),
++  OPUS("opus");
+@@ -103,5 +104,10 @@ enum class AndroidAudioEncoder(val value: String) : Enumerable {
+     AAC -> MediaRecorder.AudioEncoder.AAC
+     HE_AAC -> MediaRecorder.AudioEncoder.HE_AAC
+     AAC_ELD -> MediaRecorder.AudioEncoder.AAC_ELD
++    OPUS -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
++      MediaRecorder.AudioEncoder.OPUS
++    } else {
++      MediaRecorder.AudioEncoder.DEFAULT
++    }
+   }
+ }
+diff --git a/build/Audio.types.d.ts b/build/Audio.types.d.ts
+--- a/build/Audio.types.d.ts
++++ b/build/Audio.types.d.ts
+@@ -306,7 +306,7 @@ export type AndroidOutputFormat = 'default' | '3gp' | 'mpeg4' | 'amrnb' | 'amr
+  *
+  * @platform android
+  */
+-export type AndroidAudioEncoder = 'default' | 'amr_nb' | 'amr_wb' | 'aac' | 'he_aac' | 'aac_eld';
++export type AndroidAudioEncoder = 'default' | 'amr_nb' | 'amr_wb' | 'aac' | 'he_aac' | 'aac_eld' | 'opus';
+ /**
+  * Bit rate strategies for audio encoding.
+  *
+diff --git a/expo-module.config.json b/expo-module.config.json
+--- a/expo-module.config.json
++++ b/expo-module.config.json
+@@ -4,12 +4,6 @@
+     "modules": ["AudioModule"]
+   },
+   "android": {
+-    "modules": ["expo.modules.audio.AudioModule"],
+-    "publication": {
+-      "groupId": "expo.modules.audio",
+-      "artifactId": "expo.modules.audio",
+-      "version": "57.0.2",
+-      "repository": "local-maven-repo"
+-    }
++    "modules": ["expo.modules.audio.AudioModule"]
+   }
+ }
+diff --git a/src/Audio.types.ts b/src/Audio.types.ts
+--- a/src/Audio.types.ts
++++ b/src/Audio.types.ts
+@@ -331,4 +331,4 @@ export type AndroidOutputFormat =
+  *
+  * @platform android
+  */
+-export type AndroidAudioEncoder = 'default' | 'amr_nb' | 'amr_wb' | 'aac' | 'he_aac' | 'aac_eld';
++export type AndroidAudioEncoder = 'default' | 'amr_nb' | 'amr_wb' | 'aac' | 'he_aac' | 'aac_eld' | 'opus';

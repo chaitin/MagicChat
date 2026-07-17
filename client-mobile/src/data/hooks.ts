@@ -1,6 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
-import { login } from "@/data/auth-api"
+import {
+  login,
+  loginWithEmailCode,
+  requestEmailLoginCode,
+} from "@/data/auth-api"
 import {
   appInfoQueryOptions,
   queryKeys,
@@ -26,5 +30,26 @@ export function useLoginMutation(server: ServerTarget) {
         queryKey: queryKeys.appInfo(server),
         refetchType: "none",
       }),
+  })
+}
+
+export function useEmailCodeLoginMutation(server: ServerTarget) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: { code: string; email: string }) =>
+      loginWithEmailCode(server.url, input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        exact: true,
+        queryKey: queryKeys.appInfo(server),
+        refetchType: "none",
+      }),
+  })
+}
+
+export function useRequestEmailCodeMutation(server: ServerTarget) {
+  return useMutation({
+    mutationFn: (email: string) => requestEmailLoginCode(server.url, email),
   })
 }
