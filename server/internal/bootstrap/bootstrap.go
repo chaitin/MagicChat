@@ -53,7 +53,7 @@ func bootstrapApps(db *gorm.DB, cfg config.Config) error {
 }
 
 func bootstrapStorage(ctx context.Context, cfg config.StorageConfig) error {
-	if cfg.Provider == "" {
+	if cfg.Provider == "" || !cfg.BootstrapEnabled {
 		return nil
 	}
 

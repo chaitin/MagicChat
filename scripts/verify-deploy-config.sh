@@ -54,6 +54,7 @@ assert_contains "compose.yml" 'AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-change-me
 assert_contains "compose.yml" 'AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-change-me}'
 assert_contains "compose.yml" 'AWS_ENDPOINT_URL_S3: ${AWS_ENDPOINT_URL_S3:-https://s3.example.com}'
 assert_contains "compose.yml" 'AWS_REGION: ${AWS_REGION:-us-east-1}'
+assert_contains "compose.yml" 'S3_BOOTSTRAP_ENABLED: ${S3_BOOTSTRAP_ENABLED:-false}'
 assert_contains "compose.yml" 'POSTGRES_HOST: ${POSTGRES_HOST:-postgres}'
 assert_contains "compose.yml" 'ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me}'
 assert_contains "compose.yml" 'PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-localhost}'
@@ -122,6 +123,7 @@ assert_contains ".env.example" "POSTGRES_HOST=postgres"
 assert_contains ".env.example" "ADMIN_PASSWORD=change-me"
 assert_contains ".env.example" "AWS_ENDPOINT_URL_S3=https://s3.example.com"
 assert_contains ".env.example" "AWS_REGION=us-east-1"
+assert_contains ".env.example" "S3_BOOTSTRAP_ENABLED=false"
 assert_contains ".env.example" "S3_FORCE_PATH_STYLE=false"
 assert_contains ".env.example" "PUBLIC_ASSETS_BUCKET=magicchat-public"
 assert_contains ".env.example" "PRIVATE_ASSETS_BUCKET=magicchat-private"

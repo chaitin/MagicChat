@@ -44,15 +44,16 @@ type AppsConfig struct {
 }
 
 type StorageConfig struct {
-	Provider        string
-	Endpoint        string
-	Region          string
-	AccessKeyID     string
-	SecretAccessKey string
-	ForcePathStyle  bool
-	Buckets         StorageBucketsConfig
-	Lifecycle       StorageLifecycleConfig
-	AssetHostnames  StorageAssetHostnamesConfig
+	Provider         string
+	Endpoint         string
+	Region           string
+	AccessKeyID      string
+	SecretAccessKey  string
+	BootstrapEnabled bool
+	ForcePathStyle   bool
+	Buckets          StorageBucketsConfig
+	Lifecycle        StorageLifecycleConfig
+	AssetHostnames   StorageAssetHostnamesConfig
 }
 
 type StorageAssetHostnamesConfig struct {
@@ -174,6 +175,9 @@ func loadStorageConfig() (StorageConfig, error) {
 		return StorageConfig{}, err
 	}
 	if cfg.SecretAccessKey, err = requiredEnv("AWS_SECRET_ACCESS_KEY"); err != nil {
+		return StorageConfig{}, err
+	}
+	if cfg.BootstrapEnabled, err = boolFromEnv("S3_BOOTSTRAP_ENABLED", false); err != nil {
 		return StorageConfig{}, err
 	}
 	if cfg.ForcePathStyle, err = boolFromEnv("S3_FORCE_PATH_STYLE", false); err != nil {

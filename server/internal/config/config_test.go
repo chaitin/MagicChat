@@ -17,6 +17,7 @@ func TestLoadReadsEnvironmentConfiguration(t *testing.T) {
 	t.Setenv("POSTGRES_PASSWORD", "p@ss:word")
 	t.Setenv("AWS_ENDPOINT_URL_S3", "https://s3.example.com/")
 	t.Setenv("AWS_REGION", "ap-guangzhou")
+	t.Setenv("S3_BOOTSTRAP_ENABLED", "true")
 	t.Setenv("S3_FORCE_PATH_STYLE", "true")
 	t.Setenv("TEMPORARY_ASSETS_EXPIRE_DAYS", "90")
 	t.Setenv("S3_ABORT_MULTIPART_DAYS", "5")
@@ -58,6 +59,9 @@ func TestLoadReadsEnvironmentConfiguration(t *testing.T) {
 	if !cfg.Storage.ForcePathStyle {
 		t.Fatal("Storage.ForcePathStyle = false, want true")
 	}
+	if !cfg.Storage.BootstrapEnabled {
+		t.Fatal("Storage.BootstrapEnabled = false, want true")
+	}
 	if cfg.Storage.Buckets.Public != "magicchat-public" || cfg.Storage.Buckets.Private != "magicchat-private" || cfg.Storage.Buckets.Temporary != "magicchat-temporary" {
 		t.Fatalf("Storage.Buckets = %#v", cfg.Storage.Buckets)
 	}
@@ -74,6 +78,7 @@ func TestLoadUsesEnvironmentDefaults(t *testing.T) {
 	t.Setenv("CLIENT_HTTPS_PORT", "")
 	t.Setenv("ADMIN_HTTPS_PORT", "")
 	t.Setenv("POSTGRES_HOST", "")
+	t.Setenv("S3_BOOTSTRAP_ENABLED", "")
 	t.Setenv("S3_FORCE_PATH_STYLE", "")
 	t.Setenv("TEMPORARY_ASSETS_EXPIRE_DAYS", "")
 	t.Setenv("S3_ABORT_MULTIPART_DAYS", "")
@@ -94,6 +99,9 @@ func TestLoadUsesEnvironmentDefaults(t *testing.T) {
 	}
 	if cfg.Storage.ForcePathStyle {
 		t.Fatal("Storage.ForcePathStyle = true, want false")
+	}
+	if cfg.Storage.BootstrapEnabled {
+		t.Fatal("Storage.BootstrapEnabled = true, want false")
 	}
 	if cfg.Storage.Lifecycle.TemporaryExpireDays != 180 || cfg.Storage.Lifecycle.AbortMultipartDays != 7 {
 		t.Fatalf("Storage.Lifecycle = %#v", cfg.Storage.Lifecycle)
@@ -146,6 +154,7 @@ func TestLoadRejectsInvalidEnvironment(t *testing.T) {
 		{name: "client port zero", envName: "CLIENT_HTTPS_PORT", envValue: "0", errorText: "CLIENT_HTTPS_PORT"},
 		{name: "admin port oversized", envName: "ADMIN_HTTPS_PORT", envValue: "65536", errorText: "ADMIN_HTTPS_PORT"},
 		{name: "endpoint scheme", envName: "AWS_ENDPOINT_URL_S3", envValue: "ftp://s3.example.com", errorText: "AWS_ENDPOINT_URL_S3"},
+		{name: "bootstrap enabled", envName: "S3_BOOTSTRAP_ENABLED", envValue: "sometimes", errorText: "S3_BOOTSTRAP_ENABLED"},
 		{name: "path style", envName: "S3_FORCE_PATH_STYLE", envValue: "sometimes", errorText: "S3_FORCE_PATH_STYLE"},
 		{name: "temporary expiration", envName: "TEMPORARY_ASSETS_EXPIRE_DAYS", envValue: "0", errorText: "TEMPORARY_ASSETS_EXPIRE_DAYS"},
 		{name: "multipart expiration", envName: "S3_ABORT_MULTIPART_DAYS", envValue: "abc", errorText: "S3_ABORT_MULTIPART_DAYS"},
@@ -195,6 +204,7 @@ func setRequiredEnvironment(t *testing.T) {
 		"PUBLIC_ASSETS_BUCKET":         "magicchat-public",
 		"PRIVATE_ASSETS_BUCKET":        "magicchat-private",
 		"TEMPORARY_ASSETS_BUCKET":      "magicchat-temporary",
+		"S3_BOOTSTRAP_ENABLED":         "false",
 		"S3_FORCE_PATH_STYLE":          "false",
 		"TEMPORARY_ASSETS_EXPIRE_DAYS": "180",
 		"S3_ABORT_MULTIPART_DAYS":      "7",
