@@ -77,7 +77,7 @@ func (s *Service) List(ctx context.Context) ([]App, error) {
 	}
 
 	var storedApps []store.App
-	if err := s.db.WithContext(ctx).Find(&storedApps).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("CreatorUser").Find(&storedApps).Error; err != nil {
 		return nil, internalError(err)
 	}
 	sortApps(storedApps)
@@ -369,7 +369,7 @@ func (s *Service) find(ctx context.Context, appID string) (store.App, error) {
 		return store.App{}, err
 	}
 	var storedApp store.App
-	err = s.db.WithContext(ctx).First(&storedApp, "id = ?", id).Error
+	err = s.db.WithContext(ctx).Preload("CreatorUser").First(&storedApp, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		if appregistry.IsAIAssistantAppID(id) {
 			storedApp, err = s.ensureAIAssistant(ctx)
@@ -396,7 +396,7 @@ func (s *Service) reload(ctx context.Context, appID string) (App, error) {
 
 func (s *Service) reloadStored(ctx context.Context, appID string) (store.App, error) {
 	var storedApp store.App
-	if err := s.db.WithContext(ctx).First(&storedApp, "id = ?", appID).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("CreatorUser").First(&storedApp, "id = ?", appID).Error; err != nil {
 		return store.App{}, internalError(err)
 	}
 	return storedApp, nil
@@ -413,7 +413,7 @@ func (s *Service) newApp(storedApp store.App) App {
 	} else if s.connections != nil && s.connections.IsOnline(storedApp.ID) {
 		status = ConnectionStatusOnline
 	}
-	return App{
+	result := App{
 		Avatar: storedApp.Avatar, ConnectionSecret: storedApp.ConnectionSecret,
 		ConnectionStatus: status, CreatedAt: storedApp.CreatedAt,
 		CreatorUserID: storedApp.CreatorUserID, Description: storedApp.Description,
@@ -421,6 +421,14 @@ func (s *Service) newApp(storedApp store.App) App {
 		System: appregistry.IsAIAssistantAppID(storedApp.ID), UpdatedAt: storedApp.UpdatedAt,
 		Visibility: storedApp.Visibility,
 	}
+	if storedApp.CreatorUser != nil {
+		result.Creator = &Creator{
+			Avatar: storedApp.CreatorUser.Avatar, Email: storedApp.CreatorUser.Email,
+			ID: storedApp.CreatorUser.ID, Name: storedApp.CreatorUser.Name,
+			Nickname: storedApp.CreatorUser.Nickname,
+		}
+	}
+	return result
 }
 
 func (s *Service) generateUniqueSecret(ctx context.Context) (string, error) {

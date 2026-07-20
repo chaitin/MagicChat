@@ -6523,6 +6523,26 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "admin.adminAppCreatorResponse": {
+            "type": "object",
+            "properties": {
+                "avatar": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "nickname": {
+                    "type": "string"
+                }
+            }
+        },
         "admin.adminAppEnvelope": {
             "type": "object",
             "properties": {
@@ -6560,6 +6580,9 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string",
                     "format": "date-time"
+                },
+                "creator": {
+                    "$ref": "#/definitions/admin.adminAppCreatorResponse"
                 },
                 "creator_user_id": {
                     "type": "string"

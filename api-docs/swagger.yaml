@@ -1,5 +1,18 @@
 basePath: /
 definitions:
+  admin.adminAppCreatorResponse:
+    properties:
+      avatar:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      nickname:
+        type: string
+    type: object
   admin.adminAppEnvelope:
     properties:
       app:
@@ -25,6 +38,8 @@ definitions:
       created_at:
         format: date-time
         type: string
+      creator:
+        $ref: '#/definitions/admin.adminAppCreatorResponse'
       creator_user_id:
         type: string
       description:

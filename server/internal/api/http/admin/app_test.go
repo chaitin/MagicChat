@@ -17,10 +17,15 @@ import (
 )
 
 func TestAppAPIRoutesUseApplicationService(t *testing.T) {
+	creatorID := "20000000-0000-0000-0000-000000000001"
 	value := appapp.App{
 		ID: "10000000-0000-0000-0000-000000000001", Name: "知识库助手", Enabled: true,
 		Visibility: appapp.VisibilityPublic, ConnectionSecret: "secret",
 		ConnectionStatus: appapp.ConnectionStatusOffline, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+		CreatorUserID: &creatorID, Creator: &appapp.Creator{
+			ID: creatorID, Name: "张三", Nickname: "小张", Email: "zhangsan@example.com",
+			Avatar: "/assets/avatars/builtin/02.webp",
+		},
 	}
 	service := &fakeAdminAppService{value: value}
 	router := echo.New()
@@ -29,6 +34,17 @@ func TestAppAPIRoutesUseApplicationService(t *testing.T) {
 	response := performAdminAppRequest(router, http.MethodGet, "/api/admin/apps", nil, "")
 	if response.Code != http.StatusOK || service.listCalls != 1 {
 		t.Fatalf("list status = %d, calls = %d, body = %s", response.Code, service.listCalls, response.Body.String())
+	}
+	var listPayload struct {
+		Data struct {
+			Apps []adminAppResponse `json:"apps"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &listPayload); err != nil ||
+		len(listPayload.Data.Apps) != 1 || listPayload.Data.Apps[0].Creator == nil ||
+		listPayload.Data.Apps[0].Creator.ID != creatorID ||
+		listPayload.Data.Apps[0].Creator.Email != "zhangsan@example.com" {
+		t.Fatalf("list response = %s, err = %v", response.Body.String(), err)
 	}
 
 	response = performAdminAppRequest(router, http.MethodPost, "/api/admin/apps", bytes.NewBufferString(`{"name":"知识库助手","description":"回答问题","visibility":"public"}`), echo.MIMEApplicationJSON)

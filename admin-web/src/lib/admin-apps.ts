@@ -23,6 +23,7 @@ type AdminAppResponse = {
   connection_secret?: string
   connection_status?: string
   created_at?: string
+  creator?: AdminAppCreatorResponse | null
   creator_user_id?: null | string
   description?: string
   enabled?: boolean
@@ -33,14 +34,31 @@ type AdminAppResponse = {
   visibility?: string
 }
 
+type AdminAppCreatorResponse = {
+  avatar?: string
+  email?: string
+  id?: string
+  name?: string
+  nickname?: string
+}
+
 export type AdminAppConnectionStatus = "disabled" | "offline" | "online"
 export type AdminAppVisibility = "creator" | "restricted" | "public"
+
+export type AdminAppCreator = {
+  avatar: string
+  email: string
+  id: string
+  name: string
+  nickname: string
+}
 
 export type AdminApp = {
   avatar: string
   connectionSecret: string
   connectionStatus: AdminAppConnectionStatus
   createdAt: string
+  creator: AdminAppCreator | null
   creatorUserId: null | string
   description: string
   enabled: boolean
@@ -306,11 +324,14 @@ function normalizeAdminApp(app: AdminAppResponse | undefined): AdminApp {
     throw new AdminAppsRequestError("应用创建者响应格式不正确")
   }
 
+  const creator = normalizeAdminAppCreator(app.creator)
+
   return {
     avatar: app.avatar,
     connectionSecret: app.connection_secret,
     connectionStatus: app.connection_status,
     createdAt: app.created_at,
+    creator,
     creatorUserId: app.creator_user_id ?? null,
     description: app.description,
     enabled: app.enabled,
@@ -319,6 +340,31 @@ function normalizeAdminApp(app: AdminAppResponse | undefined): AdminApp {
     system: app.system,
     updatedAt: app.updated_at,
     visibility: app.visibility,
+  }
+}
+
+function normalizeAdminAppCreator(
+  creator: AdminAppCreatorResponse | null | undefined
+): AdminAppCreator | null {
+  if (creator === null || creator === undefined) {
+    return null
+  }
+  if (
+    typeof creator.avatar !== "string" ||
+    typeof creator.email !== "string" ||
+    typeof creator.id !== "string" ||
+    typeof creator.name !== "string" ||
+    typeof creator.nickname !== "string"
+  ) {
+    throw new AdminAppsRequestError("应用创建者响应格式不正确")
+  }
+
+  return {
+    avatar: creator.avatar,
+    email: creator.email,
+    id: creator.id,
+    name: creator.name,
+    nickname: creator.nickname,
   }
 }
 

@@ -22,19 +22,28 @@ type adminAppRequest struct {
 	Visibility  string `json:"visibility"`
 }
 
+type adminAppCreatorResponse struct {
+	Avatar   string `json:"avatar"`
+	Email    string `json:"email"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Nickname string `json:"nickname"`
+}
+
 type adminAppResponse struct {
-	Avatar           string    `json:"avatar"`
-	ConnectionSecret string    `json:"connection_secret"`
-	ConnectionStatus string    `json:"connection_status"`
-	CreatedAt        time.Time `json:"created_at" format:"date-time"`
-	CreatorUserID    *string   `json:"creator_user_id"`
-	Description      string    `json:"description"`
-	Enabled          bool      `json:"enabled"`
-	ID               string    `json:"id"`
-	Name             string    `json:"name"`
-	System           bool      `json:"system"`
-	UpdatedAt        time.Time `json:"updated_at" format:"date-time"`
-	Visibility       string    `json:"visibility"`
+	Avatar           string                   `json:"avatar"`
+	ConnectionSecret string                   `json:"connection_secret"`
+	ConnectionStatus string                   `json:"connection_status"`
+	CreatedAt        time.Time                `json:"created_at" format:"date-time"`
+	Creator          *adminAppCreatorResponse `json:"creator"`
+	CreatorUserID    *string                  `json:"creator_user_id"`
+	Description      string                   `json:"description"`
+	Enabled          bool                     `json:"enabled"`
+	ID               string                   `json:"id"`
+	Name             string                   `json:"name"`
+	System           bool                     `json:"system"`
+	UpdatedAt        time.Time                `json:"updated_at" format:"date-time"`
+	Visibility       string                   `json:"visibility"`
 }
 
 type listAdminAppsResponse struct {
@@ -272,13 +281,20 @@ func (a *AppAPI) setEnabled(c echo.Context, enabled bool) error {
 }
 
 func newAdminAppResponse(value appapp.App) adminAppResponse {
-	return adminAppResponse{
+	response := adminAppResponse{
 		Avatar: value.Avatar, ConnectionSecret: value.ConnectionSecret,
 		ConnectionStatus: value.ConnectionStatus, CreatedAt: value.CreatedAt,
 		CreatorUserID: value.CreatorUserID, Description: value.Description,
 		Enabled: value.Enabled, ID: value.ID, Name: value.Name, System: value.System,
 		UpdatedAt: value.UpdatedAt, Visibility: value.Visibility,
 	}
+	if value.Creator != nil {
+		response.Creator = &adminAppCreatorResponse{
+			Avatar: value.Creator.Avatar, Email: value.Creator.Email, ID: value.Creator.ID,
+			Name: value.Creator.Name, Nickname: value.Creator.Nickname,
+		}
+	}
+	return response
 }
 
 func writeAppError(c echo.Context, err error) error {

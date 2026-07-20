@@ -156,6 +156,56 @@ func TestServiceManagesAppsAndConnectionLifecycle(t *testing.T) {
 	}
 }
 
+func TestServiceListAndGetIncludeAppCreator(t *testing.T) {
+	db := openAppTestDB(t)
+	now := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
+	owner := store.User{
+		ID: uuid.NewString(), Email: "owner@example.com", Name: "应用所有者",
+		Nickname: "小明", Avatar: "/assets/avatars/builtin/02.webp",
+		PasswordHash: "hash", Status: store.UserStatusActive, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := db.Create(&owner).Error; err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	ownerID := owner.ID
+	storedApp := store.App{
+		ID: uuid.NewString(), Name: "用户应用", CreatorUserID: &ownerID, Enabled: true,
+		Visibility: store.AppVisibilityCreator, ConnectionSecret: "user-app-secret",
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := db.Create(&storedApp).Error; err != nil {
+		t.Fatalf("create app: %v", err)
+	}
+	service := NewService(Dependencies{
+		DB: db, Apps: config.AppsConfig{AIAssistantSecret: "configured-ai-secret"},
+	})
+
+	apps, err := service.List(context.Background())
+	if err != nil {
+		t.Fatalf("list apps: %v", err)
+	}
+	var listed App
+	for _, value := range apps {
+		if value.ID == storedApp.ID {
+			listed = value
+			break
+		}
+	}
+	if listed.Creator == nil || listed.Creator.ID != owner.ID ||
+		listed.Creator.Name != owner.Name || listed.Creator.Nickname != owner.Nickname ||
+		listed.Creator.Email != owner.Email || listed.Creator.Avatar != owner.Avatar {
+		t.Fatalf("listed creator = %#v", listed.Creator)
+	}
+
+	got, err := service.Get(context.Background(), storedApp.ID)
+	if err != nil {
+		t.Fatalf("get app: %v", err)
+	}
+	if got.Creator == nil || got.Creator.ID != owner.ID {
+		t.Fatalf("got creator = %#v", got.Creator)
+	}
+}
+
 func TestServiceValidatesAppManagementInput(t *testing.T) {
 	service := NewService(Dependencies{
 		DB: openAppTestDB(t), Apps: config.AppsConfig{AIAssistantSecret: "configured-ai-secret"},

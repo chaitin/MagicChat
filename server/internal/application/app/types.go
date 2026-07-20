@@ -25,6 +25,7 @@ type App struct {
 	ConnectionSecret string
 	ConnectionStatus string
 	CreatedAt        time.Time
+	Creator          *Creator
 	CreatorUserID    *string
 	Description      string
 	Enabled          bool
@@ -34,6 +35,14 @@ type App struct {
 	UpdatedAt        time.Time
 	Visibility       string
 	GrantedUserIDs   []string
+}
+
+type Creator struct {
+	Avatar   string
+	Email    string
+	ID       string
+	Name     string
+	Nickname string
 }
 
 type OwnedAppCommand struct {

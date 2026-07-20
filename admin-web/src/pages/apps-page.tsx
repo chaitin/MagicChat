@@ -268,6 +268,11 @@ export default function AppsPage() {
                     <TableHead className={getAdminAppColumnClassName("name")}>
                       名称
                     </TableHead>
+                    <TableHead
+                      className={getAdminAppColumnClassName("creator")}
+                    >
+                      创建者
+                    </TableHead>
                     <TableHead className={getAdminAppColumnClassName("status")}>
                       状态
                     </TableHead>
@@ -286,7 +291,7 @@ export default function AppsPage() {
                 <TableBody>
                   {apps.length === 0 ? (
                     <TableRow>
-                      <TableCell className="h-24 text-center" colSpan={4}>
+                      <TableCell className="h-24 text-center" colSpan={5}>
                         {isLoading ? "加载中" : "暂无应用"}
                       </TableCell>
                     </TableRow>
@@ -315,6 +320,11 @@ export default function AppsPage() {
                               </div>
                             </div>
                           </div>
+                        </TableCell>
+                        <TableCell
+                          className={getAdminAppColumnClassName("creator")}
+                        >
+                          <AdminAppCreator app={app} />
                         </TableCell>
                         <TableCell
                           className={getAdminAppColumnClassName("status")}
@@ -827,6 +837,38 @@ function AdminAppAvatar({ app }: { app: AdminApp }) {
   )
 }
 
+function AdminAppCreator({ app }: { app: AdminApp }) {
+  if (app.system) {
+    return <span className="font-medium">系统</span>
+  }
+
+  if (app.creator === null) {
+    return <span className="font-medium">管理员</span>
+  }
+
+  const displayName =
+    app.creator.nickname.trim() || app.creator.name.trim() || app.creator.email
+
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <Avatar size="sm">
+        {app.creator.avatar ? (
+          <AvatarImage alt={`${displayName} 头像`} src={app.creator.avatar} />
+        ) : null}
+        <AvatarFallback>{getAdminAppInitial(displayName)}</AvatarFallback>
+      </Avatar>
+      <div className="min-w-0">
+        <div className="truncate font-medium">{displayName}</div>
+        {displayName !== app.creator.email && (
+          <div className="truncate text-xs text-muted-foreground">
+            {app.creator.email}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function createDefaultAdminAppForm(): AdminAppForm {
   return {
     avatar: "",
@@ -922,11 +964,13 @@ export function getAdminAppsTableClassName() {
 }
 
 export function getAdminAppColumnClassName(
-  column: "actions" | "name" | "status" | "visibility"
+  column: "actions" | "creator" | "name" | "status" | "visibility"
 ) {
   switch (column) {
     case "name":
       return "w-[30%] min-w-0"
+    case "creator":
+      return "w-[28%] min-w-0"
     case "status":
       return "w-24"
     case "visibility":
