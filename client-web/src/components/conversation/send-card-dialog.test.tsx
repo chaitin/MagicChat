@@ -7,6 +7,8 @@ import { SendCardDialog } from "@/components/conversation/send-card-dialog"
 import type { ClientCardMessageBody } from "@/lib/client-data-api"
 
 const mocks = vi.hoisted(() => ({
+  longConversationName:
+    "这是一个特别特别长并且必须在对话框中截断的会话名称".repeat(4),
   conversations: [
     {
       avatar: "",
@@ -40,6 +42,22 @@ const mocks = vi.hoisted(() => ({
       unreadCount: 0,
       visibility: "private",
     },
+    {
+      avatar: "",
+      createdAt: "2026-07-14T08:00:00Z",
+      id: "conversation-3",
+      lastMessageAt: null,
+      lastMessageId: null,
+      lastMessageSeq: 0,
+      lastMessageSummary: "",
+      lastMentionedSeq: 0,
+      lastReadSeq: 0,
+      memberCount: 2,
+      name: "这是一个特别特别长并且必须在对话框中截断的会话名称".repeat(4),
+      type: "direct",
+      unreadCount: 0,
+      visibility: "private",
+    },
   ],
   sendConversationCard: vi.fn(),
 }))
@@ -69,6 +87,13 @@ describe("SendCardDialog", () => {
 
     const sendButton = screen.getByRole("button", { name: "发送" })
     expect(sendButton).toBeDisabled()
+    expect(screen.getByRole("radiogroup", { name: "目标会话" })).toHaveClass(
+      "grid-cols-[minmax(0,1fr)]"
+    )
+    expect(screen.getByText(mocks.longConversationName)).toHaveClass(
+      "min-w-0",
+      "truncate"
+    )
 
     await user.click(screen.getByRole("radio", { name: "设计群" }))
     await user.click(screen.getByRole("radio", { name: "Alice" }))

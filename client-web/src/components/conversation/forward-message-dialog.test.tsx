@@ -36,7 +36,6 @@ describe("ForwardMessageDialog", () => {
           createConversation("conversation-1", "当前群聊", "group"),
           createConversation("conversation-2", "智能助手", "app"),
         ]}
-        currentConversationId="conversation-1"
         messageCount={2}
         onComplete={onComplete}
         onForward={onForward}
@@ -45,7 +44,7 @@ describe("ForwardMessageDialog", () => {
       />
     )
 
-    expect(screen.getByText("当前会话")).toBeInTheDocument()
+    expect(screen.queryByText("当前会话")).not.toBeInTheDocument()
     await user.click(screen.getByRole("checkbox", { name: "当前群聊" }))
     await user.click(screen.getByRole("checkbox", { name: "智能助手" }))
     await user.click(screen.getByRole("button", { name: "转发（2）" }))
@@ -100,7 +99,6 @@ describe("ForwardMessageDialog", () => {
           createConversation("conversation-1", "会话一", "group"),
           createConversation("conversation-2", "会话二", "direct"),
         ]}
-        currentConversationId="conversation-1"
         messageCount={2}
         onComplete={onComplete}
         onForward={onForward}
@@ -139,7 +137,6 @@ describe("ForwardMessageDialog", () => {
         conversations={[
           createConversation("conversation-1", "当前群聊", "group"),
         ]}
-        currentConversationId="conversation-1"
         messageCount={1}
         onComplete={vi.fn()}
         onForward={onForward}

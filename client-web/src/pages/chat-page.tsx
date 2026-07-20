@@ -738,7 +738,6 @@ export function ChatPage() {
       {forwardOperation && (
         <ForwardMessageDialog
           conversations={conversations}
-          currentConversationId={forwardOperation.sourceConversationId}
           messageCount={forwardOperation.messageIds.length}
           onComplete={messageSelection.cancel}
           onForward={submitForwardOperation}

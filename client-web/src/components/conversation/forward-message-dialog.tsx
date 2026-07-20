@@ -36,7 +36,6 @@ const maxForwardTargets = 20
 
 export function ForwardMessageDialog({
   conversations,
-  currentConversationId,
   messageCount,
   onComplete,
   onForward,
@@ -44,7 +43,6 @@ export function ForwardMessageDialog({
   open,
 }: {
   conversations: ClientConversation[]
-  currentConversationId: string
   messageCount: number
   onComplete: () => void
   onForward: (
@@ -217,11 +215,6 @@ export function ForwardMessageDialog({
                           <Badge className="shrink-0" variant="secondary">
                             {conversationTypeLabel(conversation.type)}
                           </Badge>
-                          {conversation.id === currentConversationId && (
-                            <span className="shrink-0 text-xs font-normal text-muted-foreground">
-                              当前会话
-                            </span>
-                          )}
                         </ItemTitle>
                         {(error || sent) && (
                           <ItemDescription

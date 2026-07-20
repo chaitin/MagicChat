@@ -122,7 +122,7 @@ export function SendCardDialog({
           <div className="h-80 overflow-y-auto rounded-md border">
             <RadioGroup
               aria-label="目标会话"
-              className="gap-1 p-2"
+              className="grid-cols-[minmax(0,1fr)] gap-1 p-2"
               disabled={submitting}
               onValueChange={setSelectedConversationId}
               value={selectedConversationId}
@@ -135,7 +135,7 @@ export function SendCardDialog({
                   <Item
                     asChild
                     className={cn(
-                      "cursor-pointer px-2 py-1.5 hover:bg-muted",
+                      "min-w-0 cursor-pointer px-2 py-1.5 hover:bg-muted",
                       selected && "bg-primary/10"
                     )}
                     key={conversation.id}
@@ -148,8 +148,10 @@ export function SendCardDialog({
                         />
                       </ItemMedia>
                       <ItemContent className="min-w-0">
-                        <ItemTitle className="max-w-full">
-                          <span className="truncate">{conversation.name}</span>
+                        <ItemTitle className="max-w-full min-w-0">
+                          <span className="min-w-0 truncate">
+                            {conversation.name}
+                          </span>
                           <Badge className="shrink-0" variant="secondary">
                             {conversationTypeLabel(conversation.type)}
                           </Badge>
