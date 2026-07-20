@@ -1,111 +1,31 @@
-# 第三方应用接入开发指南
+# 第三方应用开发指南
 
-本文面向“即应”的第三方应用开发者，介绍如何创建应用、建立 WebSocket 连接、接收消息并调用允许的应用 RPC。
+## 1. 总体介绍
 
-第三方应用的权限由 Server 强制限制。应用密钥不能调用联系人、项目、任务、建群、代用户发送消息或其他茉莉专属 RPC；修改客户端代码或请求参数无法绕过这些限制。
+第三方应用通过 WebSocket 接入即应。应用使用独立的应用身份接收事件和调用 RPC，不会继承创建者的用户权限，也不能伪装成用户。
 
-## 1. 接入流程
+开始开发前，需要从即应的“应用接入信息”中取得：
 
-1. 用户登录即应，在自己的用户会话下调用应用管理 API 创建应用。
-2. 保存创建响应中的 `app.id` 和 `connection_secret`。创建者也可以通过应用详情接口再次查看当前密钥。
-3. 使用 App ID 和连接密钥连接 `/api/app/ws`。
-4. 处理 Server 推送的 `message.created`，完成持久化或业务处理后调用 `events.ack`。
-5. 通过允许的 RPC 读取应用所在会话的历史、以应用身份发消息，或获取消息所引用的临时文件 URL。
+- App ID
+- 连接密钥
+- WebSocket 地址
 
-应用被禁用、删除、重置密钥或收缩授权范围时，Server 会主动关闭该应用已有的 WebSocket 连接。应用创建者账号被管理员禁用时，其创建的应用也会同时停用并断开连接。
+应用应运行在自己的服务端。不要把连接密钥放入浏览器、移动端、客户端安装包或公开仓库。
 
-## 2. 创建和管理应用
+基本工作流程：
 
-应用管理 API 位于 `/api/client/apps`，使用当前登录用户的即应 Session Cookie 鉴权。只有创建者可以查看和管理自己的应用。
+1. 使用 App ID 和连接密钥建立 WebSocket 连接。
+2. 接收 Server 推送的 `message.created` 等可靠事件。
+3. 根据需要读取会话历史或其他资源。
+4. 调用 `message.send` 等 RPC 完成业务操作。
+5. 业务处理完成后调用 `events.ack` 确认事件。
+6. 断线重连后继续处理 Server 重放的未确认事件。
 
-### 2.1 可见范围
+普通应用只能访问自己有权使用的用户、会话、话题和文件。联系人目录、项目、任务、代用户发送消息、`runas` 和 `entity_card` 等能力不对普通应用开放。
 
-| `visibility` | 含义 |
-| --- | --- |
-| `creator` | 仅创建者可发现、打开或被应用主动联系。创建时不传 `visibility` 也使用此值。 |
-| `restricted` | 创建者和 `user_ids` 中的指定用户可访问。创建者是隐式授权，不需要写入 `user_ids`。 |
-| `public` | 所有有效用户均可发现、打开或被应用主动联系。 |
+## 2. 协议介绍
 
-单个 restricted 应用最多可指定 500 名有效用户。非 restricted 应用会忽略并清空授权用户列表。
-
-每个用户最多创建 20 个应用。应用名称最多 120 个字符，备注最多 2000 个字符；创建和更新接口的 JSON 请求体最大为 64 KiB。
-
-应用主动向用户发送消息时也会执行同一套可见范围检查。只有 public 应用可以作为应用成员被用户加入群聊；creator 或 restricted 应用不会因进入群聊而绕过用户授权。
-
-当应用从 public 收缩为 creator 或 restricted，或从 restricted 移除授权用户时，Server 会立即关闭应用连接，并撤销不再授权的既有会话访问：相关应用单聊会变为只读，应用会退出已有群聊，未投递的相关事件也会被清理。应用是群主时，会先把群主转给群内用户管理员；没有用户管理员时转给最早加入的有效用户；没有有效用户时解散群聊。之后重新授权不会恢复此前已撤销的会话历史或群成员关系。
-
-### 2.2 创建应用
-
-```http
-POST /api/client/apps
-Content-Type: application/json
-
-{
-  "name": "报表机器人",
-  "description": "接收消息并生成业务报表",
-  "visibility": "restricted",
-  "user_ids": [
-    "7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"
-  ]
-}
-```
-
-成功响应为 `201 Created`：
-
-```json
-{
-  "success": true,
-  "data": {
-    "app": {
-      "id": "6b98ad5c-4e32-4f2a-95be-f0a229a9e91b",
-      "name": "报表机器人",
-      "description": "接收消息并生成业务报表",
-      "avatar": "",
-      "enabled": true,
-      "visibility": "restricted",
-      "user_ids": ["7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"],
-      "connection_status": "offline",
-      "created_at": "2026-07-16T06:00:00Z",
-      "updated_at": "2026-07-16T06:00:00Z"
-    },
-    "connection_secret": "保存这个密钥"
-  }
-}
-```
-
-`connection_secret` 是由数字和小写英文字母组成的 32 位随机密钥，会通过创建、创建者详情和重置密钥接口返回。调用方应妥善保存到密钥管理系统，禁止写入源码、日志、客户端安装包或公开仓库。
-
-### 2.3 管理接口
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| `GET` | `/api/client/apps` | 列出当前用户创建的应用，不返回密钥。 |
-| `POST` | `/api/client/apps` | 创建应用，并返回新密钥。 |
-| `GET` | `/api/client/apps/:app_id` | 获取应用详情和当前连接密钥，仅创建者可调用。 |
-| `PATCH` | `/api/client/apps/:app_id` | 更新名称、备注、可见范围或授权用户。只修改请求中出现的字段。 |
-| `DELETE` | `/api/client/apps/:app_id` | 删除应用并断开连接。 |
-| `POST` | `/api/client/apps/:app_id/avatar` | 上传头像。使用 multipart 字段 `file`，必须是 256×256 WebP，最大 1 MiB。 |
-| `POST` | `/api/client/apps/:app_id/enable` | 启用应用。 |
-| `POST` | `/api/client/apps/:app_id/disable` | 禁用应用并断开连接。 |
-| `POST` | `/api/client/apps/:app_id/secret/regenerate` | 生成并返回新密钥，旧密钥立即失效，已有连接被关闭。 |
-
-更新 restricted 授权用户的示例：
-
-```http
-PATCH /api/client/apps/6b98ad5c-4e32-4f2a-95be-f0a229a9e91b
-Content-Type: application/json
-
-{
-  "name": "新版报表机器人",
-  "visibility": "restricted",
-  "user_ids": [
-    "7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4",
-    "4e4dd332-2e18-4fc6-b48c-b060890e1ebc"
-  ]
-}
-```
-
-## 3. 建立 WebSocket 连接
+### 2.1 建立连接
 
 连接地址：
 
@@ -113,43 +33,56 @@ Content-Type: application/json
 wss://<server-host>/api/app/ws
 ```
 
-握手请求必须携带：
+握手 Header：
 
 ```http
-X-MagicChat-App-ID: 6b98ad5c-4e32-4f2a-95be-f0a229a9e91b
-Authorization: Bearer <connection_secret>
+X-MagicChat-App-ID: <App ID>
+Authorization: Bearer <连接密钥>
 ```
 
-握手错误：
+Node.js 示例：
+
+```js
+import WebSocket from "ws";
+
+const ws = new WebSocket(process.env.MAGICCHAT_APP_WS_URL, {
+  headers: {
+    "X-MagicChat-App-ID": process.env.MAGICCHAT_APP_ID,
+    Authorization: `Bearer ${process.env.MAGICCHAT_APP_SECRET}`,
+  },
+});
+```
+
+连接约束：
+
+- Server 每 30 秒发送 Ping，60 秒内未收到 Pong 会关闭连接。
+- 单条入站或出站 WebSocket 消息最大为 1 MiB。
+- 同一个 App ID 可以同时建立多个连接。
+- 应用被禁用、删除、重置密钥或收缩授权范围时，已有连接可能被主动关闭。
+
+握手失败状态：
 
 | HTTP 状态 | 含义 |
 | --- | --- |
 | `400` | App ID 格式错误。 |
-| `401` | 应用不存在、密钥错误或密钥已重置。 |
+| `401` | 应用不存在或连接密钥错误。 |
 | `403` | 应用已禁用。 |
 
-Server 每 30 秒发送 WebSocket Ping，60 秒内未收到 Pong 会关闭连接。常用 WebSocket 库会自动回复 Pong；如果使用自定义协议栈，必须自行处理 Ping/Pong。单个入站或出站 WebSocket 消息上限为 1 MiB。
+### 2.2 Envelope
 
-同一 App ID 可以同时建立多个连接。事件会广播到全部在线连接，因此各实例必须按 `cursor` 做幂等处理；任意实例 ACK 后，该 ACK 对整个应用生效。
+当前协议版本为 `1`。应用发出 `request`，Server 返回 `response`，Server 主动推送使用 `event`。
 
-## 4. Envelope 协议
-
-当前协议版本为 `1`。应用发出的每条业务消息都必须是 `request`：
+请求：
 
 ```json
 {
   "v": 1,
   "kind": "request",
-  "id": "req-018f7e00-1",
+  "id": "req-1",
   "method": "conversation.messages.list",
   "payload": {}
 }
 ```
-
-`id` 由应用生成，在同一个 App 下应保持唯一。Server 会短期缓存相同请求 ID 的响应，以便网络重试时避免重复执行：
-
-- 相同 `id`、方法和 payload 会返回第一次执行的响应。
-- 相同 `id` 携带不同内容会返回 `request_id_conflict`。
 
 成功响应：
 
@@ -158,7 +91,7 @@ Server 每 30 秒发送 WebSocket Ping，60 秒内未收到 Pong 会关闭连接
   "v": 1,
   "kind": "response",
   "id": "server-response-id",
-  "reply_to": "req-018f7e00-1",
+  "reply_to": "req-1",
   "ok": true,
   "payload": {}
 }
@@ -171,7 +104,7 @@ Server 每 30 秒发送 WebSocket Ping，60 秒内未收到 Pong 会关闭连接
   "v": 1,
   "kind": "response",
   "id": "server-response-id",
-  "reply_to": "req-018f7e00-1",
+  "reply_to": "req-1",
   "ok": false,
   "error": {
     "code": "forbidden",
@@ -180,40 +113,56 @@ Server 每 30 秒发送 WebSocket Ping，60 秒内未收到 Pong 会关闭连接
 }
 ```
 
-常见错误码包括 `invalid_request`、`forbidden`、`not_found`、`internal_error`、`unsupported_version`、`request_id_conflict` 和 `response_too_large`。
-
-## 5. 权限边界
-
-普通第三方应用具有以下能力：
-
-- 接收自身参与会话产生的 `message.created`。
-- 调用 `conversation.messages.list` 读取自身所在会话的可见历史。
-- 调用 `message.send` 以应用身份发送消息。
-- 调用 `users.get` 和 `apps.get` 查询有权访问的用户或应用基本信息。
-- 调用 `conversations.list` 列出应用自身参与的会话。
-- 创建自己担任群主的群聊，并按群角色管理名称、成员、管理员和群生命周期。
-- 调用 `temporary_files.read_urls` 获取有权访问的消息所引用的临时文件 URL。
-- 调用 `events.ack` 确认已持久处理的事件。
-
-第三方应用调用未公开的 App RPC 会得到 `forbidden`。尤其禁止：
-
-- `runas` 和 `message.send_as_user`。
-- 联系人目录和任意用户会话历史。
-- 项目、任务和其他业务数据 RPC。
-- 发送 `entity_card` 消息。
-- 仅凭一个临时文件 ID 换取下载 URL。
-
-茉莉和普通应用共用应用身份下的会话与群管理 RPC。茉莉还保留由真实用户消息授权的 `runas`、代用户发消息和代用户管理业务数据等内部 RPC；这些委托权限不会授予普通应用。
-
-## 6. 接收 `message.created`
-
-事件格式：
+事件：
 
 ```json
 {
   "v": 1,
   "kind": "event",
-  "id": "event-envelope-id",
+  "id": "event-id",
+  "cursor": 1287,
+  "event": "message.created",
+  "payload": {}
+}
+```
+
+应用应使用 `reply_to` 将响应关联到本地请求，不能假设响应顺序与请求顺序一致。
+
+### 2.3 请求 ID 与幂等
+
+请求 `id` 由应用生成，在同一个 App 下应保持唯一。Server 会短期缓存请求结果：
+
+- 相同请求 ID、方法和 payload 会返回第一次执行的响应。
+- 相同请求 ID 携带不同内容会返回 `request_id_conflict`。
+- 同一次业务操作超时重试时应复用原请求 ID。
+- 不同业务操作必须使用不同请求 ID。
+
+例如发送 5 条消息时必须调用 5 次 `message.send`，并使用 5 个不同的请求 ID。
+
+### 2.4 常见错误
+
+| 错误码 | 处理建议 |
+| --- | --- |
+| `invalid_request` | 参数错误，修正后再调用。 |
+| `forbidden` | 当前应用无权操作，不要原样重试。 |
+| `not_found` | 目标不存在或无权查看。 |
+| `conflict` | 状态已变化，重新读取后再决定是否重试。 |
+| `internal_error` | 使用指数退避进行有限重试。 |
+| `unsupported_version` | 升级协议实现。 |
+| `request_id_conflict` | 请求 ID 被用于不同内容。 |
+| `response_too_large` | 减小 `limit` 或缩小请求范围。 |
+
+## 3. 如何接收消息
+
+### 3.1 `message.created`
+
+用户向应用所在会话发送消息后，Server 推送：
+
+```json
+{
+  "v": 1,
+  "kind": "event",
+  "id": "event-id",
   "cursor": 1287,
   "event": "message.created",
   "payload": {
@@ -223,305 +172,321 @@ Server 每 30 秒发送 WebSocket Ping，60 秒内未收到 Pong 会关闭连接
       "type": "app"
     },
     "sender": {
-      "id": "7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4",
+      "id": "用户 ID",
       "type": "user",
       "name": "Alice",
       "nickname": "Alice",
       "email": "alice@example.com"
     },
     "message": {
-      "id": "25347bdd-c500-4108-929b-423ca4d1067a",
+      "id": "消息 ID",
       "seq": 42,
       "body": {"type": "text", "content": "请生成本周报表"},
       "summary": "请生成本周报表",
-      "created_at": "2026-07-16T06:05:00Z"
+      "created_at": "2026-07-20T06:05:00Z"
     }
   }
 }
 ```
 
-应用一对一会话中的用户消息会推送给该应用。群聊沿用现有消息规则：应用是群成员且被消息直接 `@` 时才收到事件；普通群消息和 `@all` 不会推送给应用。
+推送规则：
 
-事件先写入 Server outbox，再发送到在线连接。未 ACK 的事件会在重连时按 cursor 升序重放，每页最多 100 条。推荐处理顺序：
+- 应用单聊：用户消息会推送给会话中的应用。
+- 群聊：只有消息明确 `@` 当前应用时才推送；普通消息和 `@all` 不会推送。
+- 话题：话题内的用户消息会推送给仍参与该话题的应用。
 
-1. 按 `(app_id, cursor)` 去重。
-2. 将事件和业务结果持久化。
-3. 持久化成功后调用 `events.ack`。
+话题消息的 `conversation` 还包含父会话和来源消息位置：
 
-不要在业务处理完成前 ACK。
+```json
+{
+  "id": "话题会话 ID",
+  "name": "发布计划",
+  "type": "topic",
+  "parent": {
+    "id": "父会话 ID",
+    "name": "产品讨论组",
+    "type": "group"
+  },
+  "source_message": {
+    "id": "来源消息 ID",
+    "seq": 42
+  }
+}
+```
 
-## 7. `events.ack`
+### 3.2 `topic.closed`
+
+应用参与的话题被关闭后，Server 推送：
 
 ```json
 {
   "v": 1,
-  "kind": "request",
-  "id": "ack-1287",
-  "method": "events.ack",
+  "kind": "event",
+  "id": "event-id",
+  "cursor": 1288,
+  "event": "topic.closed",
   "payload": {
-    "cursor": 1287
+    "archived": true,
+    "conversation_id": "话题会话 ID",
+    "parent_conversation_id": "父会话 ID",
+    "source_message_id": "来源消息 ID"
   }
 }
 ```
 
-成功 payload：
+收到后应停止向该话题发送新消息，并结束与该话题关联的本地任务或 Session。
 
-```json
-{"cursor": 1287}
+### 3.3 可靠投递与 ACK
+
+`message.created` 和 `topic.closed` 会先写入 Server outbox。未确认事件会在重连后按 cursor 升序重放。
+
+推荐处理顺序：
+
+1. 按 `(app_id, cursor)` 检查是否已处理。
+2. 执行业务逻辑并持久化结果。
+3. 完成所有 RPC 调用。
+4. 调用 `events.ack` 确认 cursor。
+
+ACK 某个 cursor 会同时确认不大于它的所有事件。因此某个事件处理失败后，不要继续 ACK 更大的 cursor。
+
+同一个 App ID 的所有在线连接都会收到事件；任意连接 ACK 后会影响整个应用。多实例部署必须使用共享存储去重。
+
+最小处理示例：
+
+```js
+ws.on("message", (raw) => {
+  const envelope = JSON.parse(raw.toString());
+
+  if (envelope.kind === "response") {
+    resolvePendingRequest(envelope.reply_to, envelope);
+    return;
+  }
+
+  if (envelope.kind === "event") {
+    enqueueSerially(async () => {
+      await handleEvent(envelope);
+      await request("events.ack", { cursor: envelope.cursor });
+    });
+  }
+});
 ```
 
-ACK 某个 cursor 会确认并清理该应用不大于此 cursor 的事件。重复 ACK 已确认的旧 cursor 是幂等的。
+`resolvePendingRequest`、`enqueueSerially` 和 `request` 由应用自行实现；关键是按 cursor 串行处理，并在业务成功后 ACK。
 
-## 8. `conversation.messages.list`
+## 4. 如何发起调用
 
-应用只能读取自己仍是有效成员的会话，且不能读取早于其 `history_visible_from_seq` 的消息。
+### 4.1 能力列表
+
+普通第三方应用当前可以调用以下 18 个 RPC：
+
+| 分类 | 方法 | 能力 |
+| --- | --- | --- |
+| 消息 | `message.send` | 以应用身份发送消息。 |
+| 查询 | `users.get` | 查询应用可见用户。 |
+| 查询 | `apps.get` | 查询自己、公开或同群应用。 |
+| 查询 | `conversations.list` | 列出应用参与的会话。 |
+| 查询 | `conversation.messages.list` | 读取应用可见的会话历史。 |
+| 话题 | `conversation.topic.create` | 创建或复用话题。 |
+| 话题 | `conversation.topic.get` | 查询话题状态。 |
+| 话题 | `conversation.topic.close` | 关闭当前应用创建的话题。 |
+| 群聊 | `group_conversations.create` | 创建应用担任群主的群聊。 |
+| 群聊 | `group_conversations.get` | 查询群聊详情。 |
+| 群聊 | `group_conversations.update` | 修改群名称。 |
+| 群聊 | `group_conversations.dissolve` | 解散群聊。 |
+| 群聊 | `group_conversations.members.list` | 查询群成员。 |
+| 群聊 | `group_conversations.members.add` | 添加群成员。 |
+| 群聊 | `group_conversations.members.remove` | 移除群成员。 |
+| 群聊 | `group_conversations.members.set_role` | 设置或取消管理员。 |
+| 文件 | `temporary_files.read_urls` | 获取消息引用文件的签名 URL。 |
+| 事件 | `events.ack` | 确认可靠事件。 |
+
+不在该列表中的方法会返回 `forbidden`。普通应用不能使用 `runas`、`message.send_as_user`、联系人目录、项目或任务 RPC，也不能发送 `entity_card`。
+
+### 4.2 通用调用方式
+
+```js
+import { randomUUID } from "node:crypto";
+
+const pending = new Map();
+
+function request(method, payload) {
+  const id = randomUUID();
+
+  return new Promise((resolve, reject) => {
+    pending.set(id, { resolve, reject });
+    ws.send(JSON.stringify({ v: 1, kind: "request", id, method, payload }));
+  });
+}
+
+function resolvePendingRequest(replyTo, envelope) {
+  const current = pending.get(replyTo);
+  if (!current) return;
+  pending.delete(replyTo);
+
+  if (envelope.ok) current.resolve(envelope.payload);
+  else current.reject(envelope.error);
+}
+```
+
+生产实现还应增加请求超时、断线清理、原请求 ID 重试和待处理请求数量限制。
+
+### 4.3 `message.send`
+
+以应用身份发送消息。
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `target` | 是 | 消息目标对象。 |
+| `target.type` | 是 | `user`、`app`、`group`、`topic` 或 `conversation`。 |
+| `target.user_id` | 条件必填 | `target.type=user` 时使用。 |
+| `target.conversation_id` | 条件必填 | 其他目标类型使用。 |
+| `message` | 是 | 消息 body。 |
+
+示例：
 
 ```json
 {
-  "v": 1,
-  "kind": "request",
-  "id": "history-42",
-  "method": "conversation.messages.list",
-  "payload": {
-    "conversation_id": "f967369f-9fd3-4058-92f0-b1960b5ea783",
-    "before_or_equal_seq": 42,
-    "limit": 30
+  "target": {
+    "type": "group",
+    "conversation_id": "群聊 ID"
+  },
+  "message": {
+    "type": "markdown",
+    "content": "## 处理结果\n\n已生成 5 项统计。"
   }
 }
 ```
 
-- `before_or_equal_seq` 必须是正整数。通常使用刚收到事件或发送响应中的 `message.seq`。
-- `limit` 默认 30，最大 100。
-- 返回消息按 seq 升序排列。
-- 已撤回消息不返回原始 body，只返回撤回摘要。
-- 请求中不要携带 `runas`；第三方应用无权使用该字段。
+`target.type=user` 会创建或复用用户与应用的一对一会话，目标用户必须处于应用可见范围内。其他目标要求当前应用仍是会话成员且会话可发言。
 
-响应 payload 示例：
+可发送的普通消息类型包括 `text`、`markdown`、`link`、`card`、`chart`、`image` 和 `file`。不能发送 `entity_card`。图片和文件应提供可由 Server 拉取的 URL，整个 Envelope 仍受 1 MiB 限制。
+
+响应包含 `conversation`、`message` 和 `created`。同一请求 ID 重试不会重复发送。
+
+### 4.4 `users.get`
+
+查询应用可见范围内的有效用户。
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `user_id` | 是 | 用户 UUID。 |
+
+```json
+{"user_id":"用户 ID"}
+```
+
+响应的 `user` 包含 `id`、`name`、`nickname`、`email` 和 `avatar`。无权查询和用户不存在都返回 `not_found`。
+
+### 4.5 `apps.get`
+
+查询应用基本资料。
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `app_id` | 是 | 应用 UUID。 |
+
+```json
+{"app_id":"应用 ID"}
+```
+
+只能查询当前应用自身、`public` 应用或与当前应用处于同一有效群聊的应用。响应包含 `id`、`name`、`description`、`avatar`、`enabled`、`online` 和 `visibility`，不包含连接密钥。
+
+### 4.6 `conversations.list`
+
+列出当前应用参与的应用单聊、群聊和话题。
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `keyword` | 否 | 按会话名称过滤。 |
+| `limit` | 否 | 默认 20，最大 100。 |
+
+```json
+{"keyword":"报表","limit":20}
+```
+
+响应的 `conversations` 元素包含 `conversation_id`、`name`、`type`、`member_count` 和 `last_active_at`，按最后活跃时间倒序排列。普通应用不得携带代用户查询参数。
+
+### 4.7 `conversation.messages.list`
+
+读取当前应用可见的会话历史。
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `conversation_id` | 是 | 会话 UUID。 |
+| `before_or_equal_seq` | 是 | 正整数，读取不大于该 seq 的消息。 |
+| `limit` | 否 | 默认 30，最大 100。 |
 
 ```json
 {
-  "limit": 30,
-  "messages": [
-    {
-      "id": "25347bdd-c500-4108-929b-423ca4d1067a",
-      "seq": 42,
-      "sender": {
-        "id": "7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4",
-        "type": "user",
-        "name": "Alice",
-        "nickname": "Alice",
-        "email": "alice@example.com"
-      },
-      "body": {"type": "text", "content": "请生成本周报表"},
-      "summary": "请生成本周报表",
-      "created_at": "2026-07-16T06:05:00Z"
-    }
-  ]
+  "conversation_id": "会话 ID",
+  "before_or_equal_seq": 42,
+  "limit": 30
 }
 ```
 
-读取话题历史时，响应还会携带创建话题的父会话 ID 和来源消息快照，方便应用在自身会话丢失后重建上下文：
+消息按 seq 升序返回，并遵守应用的 `history_visible_from_seq`。已撤回消息不返回原始 body。读取话题时，响应还包含父会话和来源消息快照。普通应用不得携带 `runas`。
+
+### 4.8 `conversation.topic.create`
+
+基于一条可见历史消息创建或复用话题。
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `conversation_id` | 是 | 父会话 UUID。 |
+| `source_message_id` | 是 | 来源消息 UUID。 |
 
 ```json
 {
-  "topic": {
-    "parent_conversation": {
-      "id": "ae76b535-5dc1-42a9-b829-27d0402b5757",
-      "name": "产品讨论组",
-      "type": "group"
-    },
-    "parent_conversation_id": "ae76b535-5dc1-42a9-b829-27d0402b5757",
-    "source_message": {
-      "id": "25347bdd-c500-4108-929b-423ca4d1067a",
-      "seq": 42,
-      "sender": {"id": "用户 ID", "type": "user", "name": "Alice"},
-      "body": {"type": "text", "content": "请生成本周报表"},
-      "summary": "请生成本周报表",
-      "created_at": "2026-07-16T06:05:00Z"
-    }
-  }
+  "conversation_id": "父会话 ID",
+  "source_message_id": "来源消息 ID"
 }
 ```
 
-## 9. `message.send`
+同一来源消息只能对应一个话题，重复创建会返回同一话题。应用必须是父会话成员，来源消息必须可见，话题不能嵌套。
 
-### 9.1 回复已有应用会话
+响应包含 `conversation`、`parent_conversation_id`、`source_message_id`、`last_message_seq`、`created` 和 `archived`。
+
+### 4.9 `conversation.topic.get`
+
+查询当前应用已参与的话题状态。
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `conversation_id` | 是 | 话题会话 UUID。 |
+
+```json
+{"conversation_id":"话题会话 ID"}
+```
+
+响应结构与话题创建响应相同，可通过 `last_message_seq` 和 `archived` 判断最新状态。
+
+### 4.10 `conversation.topic.close`
+
+关闭由当前应用创建的话题。
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `conversation_id` | 是 | 话题会话 UUID。 |
+| `expected_last_message_seq` | 是 | 调用 `conversation.topic.get` 获得的最新 seq，可为 0。 |
 
 ```json
 {
-  "v": 1,
-  "kind": "request",
-  "id": "reply-42",
-  "method": "message.send",
-  "payload": {
-    "target": {
-      "type": "app",
-      "conversation_id": "f967369f-9fd3-4058-92f0-b1960b5ea783"
-    },
-    "message": {
-      "type": "markdown",
-      "content": "## 本周报表\n\n已生成 5 项统计。"
-    }
-  }
+  "conversation_id": "话题会话 ID",
+  "expected_last_message_seq": 12
 }
 ```
 
-### 9.2 向授权范围内的用户主动发送
+如果话题在读取后又产生新消息，返回 `conflict`。调用方应重新读取后再决定是否关闭。关闭后不能继续发言，并会产生可靠的 `topic.closed` 事件。
 
-```json
-{
-  "v": 1,
-  "kind": "request",
-  "id": "proactive-1",
-  "method": "message.send",
-  "payload": {
-    "target": {
-      "type": "user",
-      "user_id": "7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"
-    },
-    "message": {
-      "type": "text",
-      "content": "日报已经生成。"
-    }
-  }
-}
-```
+### 4.11 `group_conversations.create`
 
-Server 会创建或复用该用户与应用的一对一会话。目标用户必须符合应用的 creator/restricted/public 访问范围，否则返回 `forbidden`。
+创建由当前应用担任群主的群聊。
 
-### 9.3 向已有群聊发送
-
-```json
-{
-  "v": 1,
-  "kind": "request",
-  "id": "group-reply-1",
-  "method": "message.send",
-  "payload": {
-    "target": {
-      "type": "group",
-      "conversation_id": "ae76b535-5dc1-42a9-b829-27d0402b5757"
-    },
-    "message": {
-      "type": "text",
-      "content": "报表已更新。"
-    }
-  }
-}
-```
-
-应用必须已经是该群聊的有效成员，且会话处于可发言状态。对 `type: "app"` 的目标也执行相同的成员校验。
-
-### 9.4 按会话 ID 发送
-
-应用可以用统一的 `conversation` 目标向自己仍是有效成员的应用私聊、群聊或已参与话题发送消息：
-
-```json
-{
-  "v": 1,
-  "kind": "request",
-  "id": "conversation-message-1",
-  "method": "message.send",
-  "payload": {
-    "target": {
-      "type": "conversation",
-      "conversation_id": "ae76b535-5dc1-42a9-b829-27d0402b5757"
-    },
-    "message": {
-      "type": "text",
-      "content": "消息内容"
-    }
-  }
-}
-```
-
-用户之间的双人私聊不允许应用加入，应用也不能向这类会话发送消息。
-
-成功响应 payload 包含 `conversation`、`message` 和 `created`。同一个请求 ID 重试不会重复创建消息。
-
-第三方应用可以发送现有的普通消息类型，例如 `text`、`markdown`、`link`、`card`、`chart`、`image` 和 `file`；不能发送 `entity_card`。图片和文件会由 Server 按现有消息规则校验和转存，整个请求仍受 1 MiB Envelope 限制，大文件应使用可由 Server 拉取的 URL。
-
-## 10. `temporary_files.read_urls`
-
-第三方应用不能只提交 `file_ids`。请求必须同时指定应用有权访问的会话和消息：
-
-```json
-{
-  "v": 1,
-  "kind": "request",
-  "id": "file-url-1",
-  "method": "temporary_files.read_urls",
-  "payload": {
-    "conversation_id": "f967369f-9fd3-4058-92f0-b1960b5ea783",
-    "message_id": "25347bdd-c500-4108-929b-423ca4d1067a",
-    "file_ids": [
-      "42d5d6f7-6bc5-46c8-bbe5-498a39f36981"
-    ]
-  }
-}
-```
-
-Server 会依次校验：
-
-1. 应用仍是该会话成员。
-2. 消息属于该会话，并位于应用可见的历史范围内。
-3. 每个 file ID 确实出现在该消息的 `file`、`image`、`voice` 或嵌套转发消息 body 中。
-4. 临时文件仍存在且未过期。
-
-成功响应 payload：
-
-```json
-{
-  "urls": [
-    {
-      "file_id": "42d5d6f7-6bc5-46c8-bbe5-498a39f36981",
-      "url": "https://assets.example.com/...signed...",
-      "expires_at": "2026-07-17T06:10:00Z"
-    }
-  ]
-}
-```
-
-签名 URL 最长有效 24 小时，并且不会超过临时文件自身剩余生命周期。不要长期保存签名 URL；需要访问时重新申请。
-
-## 11. 用户、应用和群聊 RPC
-
-以下 RPC 对普通应用和内置应用使用相同的应用身份、参数和角色校验：
-
-| 方法 | 说明 |
-| --- | --- |
-| `users.get` | 按 ID 查询应用可见范围内的有效用户。 |
-| `apps.get` | 查询自己、全员可见或与自己处于同一群聊的应用。 |
-| `conversations.list` | 列出调用应用作为成员参与的应用私聊、群聊和话题。 |
-| `conversation.topic.create` | 基于一条已有消息创建或复用话题。 |
-| `conversation.topic.get` | 获取应用已参与话题的状态和最新消息序号。 |
-| `conversation.topic.close` | 由创建话题的应用关闭话题。 |
-| `group_conversations.get` | 查询应用已加入的群聊详情、群主和当前应用角色。 |
-| `group_conversations.create` | 创建应用担任群主的群聊。 |
-| `group_conversations.update` | 群主或管理员修改群名称。 |
-| `group_conversations.dissolve` | 应用群主解散群聊。 |
-| `group_conversations.members.list` | 分页列出群内用户和应用成员。 |
-| `group_conversations.members.add` | 群主或管理员添加成员。 |
-| `group_conversations.members.remove` | 群主或管理员移除允许管理的成员。 |
-| `group_conversations.members.set_role` | 应用群主设置或取消管理员。 |
-
-### 11.1 查询用户或应用
-
-`users.get` 请求使用 `user_id`；目标用户必须符合调用应用的 creator、restricted 或 public 可见范围：
-
-```json
-{"user_id":"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"}
-```
-
-`apps.get` 请求使用 `app_id`。响应不会返回连接密钥：
-
-```json
-{"app_id":"6b98ad5c-4e32-4f2a-95be-f0a229a9e91b"}
-```
-
-无权查询和目标不存在均返回 `not_found`，避免通过 ID 探测实体。
-
-### 11.2 应用创建群聊
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `name` | 是 | 群名称，最多 120 个字符。 |
+| `member_ids` | 是 | 用户 UUID 数组，至少包含一名有效用户。 |
+| `app_ids` | 否 | 其他应用 UUID 数组。 |
 
 ```json
 {
@@ -531,214 +496,161 @@ Server 会依次校验：
 }
 ```
 
-调用应用自动加入并成为群主，不要放入 `app_ids`。至少需要一名有效用户，总成员数最多 500。用户必须在调用应用的可见范围内，其他应用必须全员可见。
+调用应用自动加入并成为群主。用户必须处于应用可见范围，其他应用必须为有效的 `public` 应用，总成员数最多 500。
 
-内置应用也可以使用这个应用身份模式。茉莉原有携带 `actor_user_id`、`trigger_message_id` 的委托模式继续兼容；委托模式创建的群聊仍由触发用户担任群主，普通应用不能使用委托模式。
+响应包含 `conversation` 和本次创建产生的系统 `message`。
 
-### 11.3 查询与管理群成员
+### 4.12 `group_conversations.get`
 
-成员列表请求：
+查询当前应用已加入的群聊详情。
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `conversation_id` | 是 | 群聊 UUID。 |
+
+```json
+{"conversation_id":"群聊 ID"}
+```
+
+响应的 `conversation` 包含群名称、状态、群主、创建者、成员数量、当前应用角色和创建时间等信息。
+
+### 4.13 `group_conversations.update`
+
+修改群名称。
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `conversation_id` | 是 | 群聊 UUID。 |
+| `name` | 是 | 新名称，最多 120 个字符。 |
+
+```json
+{"conversation_id":"群聊 ID","name":"新版项目讨论组"}
+```
+
+应用必须是群主或管理员。响应包含更新后的 `conversation` 和可能产生的系统 `message`。
+
+### 4.14 `group_conversations.dissolve`
+
+解散群聊。
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `conversation_id` | 是 | 群聊 UUID。 |
+
+只有应用群主可以调用。成功响应：
+
+```json
+{"conversation_id":"群聊 ID"}
+```
+
+### 4.15 `group_conversations.members.list`
+
+分页查询群成员。
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `conversation_id` | 是 | 群聊 UUID。 |
+| `page` | 否 | 默认 1。 |
+| `page_size` | 否 | 默认 100，最大 500。 |
+
+```json
+{"conversation_id":"群聊 ID","page":1,"page_size":100}
+```
+
+响应包含 `members`、`page`、`page_size` 和 `total`。成员包含身份资料、`role` 和 `joined_at`。
+
+### 4.16 `group_conversations.members.add`
+
+向群聊添加用户或应用。
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `conversation_id` | 是 | 群聊 UUID。 |
+| `member_ids` | 条件必填 | 用户 UUID 数组。 |
+| `app_ids` | 条件必填 | 应用 UUID 数组。 |
+
+`member_ids` 和 `app_ids` 至少有一个非空。调用应用必须是群主或管理员。用户必须处于当前应用可见范围，其他应用必须为有效的 `public` 应用。
 
 ```json
 {
   "conversation_id": "群聊 ID",
-  "page": 1,
-  "page_size": 100
+  "member_ids": ["用户 ID"],
+  "app_ids": ["应用 ID"]
 }
 ```
 
-成员包含 `type`、`id`、基本资料、`role` 和 `joined_at`。角色为 `owner`、`admin` 或 `member`；默认每页 100，最大 500。
+### 4.17 `group_conversations.members.remove`
 
-添加成员使用 `member_ids` 和 `app_ids`；移除成员使用 `member_type`、`member_id`；设置管理员额外传入 `role: "admin"`，取消管理员传入 `role: "member"`。
+移除群成员。
 
-应用群主可以添加和移除成员、设置管理员、改名和解散群聊。应用管理员可以添加成员、移除普通成员和改名，但不能处理群主或其他管理员，也不能解散群聊。应用普通成员只能收发消息。应用不能主动移除最后一名有效用户；用户仍可以自行退出群聊。
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `conversation_id` | 是 | 群聊 UUID。 |
+| `member_type` | 是 | `user` 或 `app`。 |
+| `member_id` | 是 | 目标成员 UUID。 |
 
-应用被禁用不会改变群聊或成员关系，但应用离线期间无法调用 RPC。应用被删除或可见范围收缩时，应用拥有的群聊优先转让给用户管理员，其次转给最早加入的有效用户；没有有效用户时解散群聊。
-
-### 11.4 创建、恢复和关闭话题
-
-应用可以基于自己有权看到的父会话消息创建话题：
+管理员只能移除普通成员；群主可以移除管理员和普通成员。应用不能移除自己、群主或群内最后一名有效用户。
 
 ```json
 {
-  "v": 1,
-  "kind": "request",
-  "id": "topic-create-1",
-  "method": "conversation.topic.create",
-  "payload": {
-    "conversation_id": "父会话 ID",
-    "source_message_id": "来源消息 ID"
-  }
+  "conversation_id": "群聊 ID",
+  "member_type": "user",
+  "member_id": "用户 ID"
 }
 ```
 
-同一条来源消息只能对应一个话题；相同请求或并发请求会返回同一个话题，响应中的 `created` 表示本次是否实际创建。应用必须是父会话的有效成员，来源消息必须处于应用的历史可见范围内。话题不能嵌套。创建成功后，调用应用、来源消息发送者和来源消息中被 @ 的成员会成为初始参与者。
+### 4.18 `group_conversations.members.set_role`
 
-响应包含 `conversation`、`parent_conversation_id`、`source_message_id`、`last_message_seq`、`created` 和 `archived`。后续可通过 `conversation.topic.get` 获取当前状态：
+设置或取消群管理员。
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `conversation_id` | 是 | 群聊 UUID。 |
+| `member_type` | 是 | `user` 或 `app`。 |
+| `member_id` | 是 | 目标成员 UUID。 |
+| `role` | 是 | `admin` 表示设置管理员，`member` 表示取消管理员。 |
+
+只有应用群主可以调用，不能修改群主角色。
 
 ```json
 {
-  "v": 1,
-  "kind": "request",
-  "id": "topic-get-1",
-  "method": "conversation.topic.get",
-  "payload": {"conversation_id": "话题 ID"}
+  "conversation_id": "群聊 ID",
+  "member_type": "user",
+  "member_id": "用户 ID",
+  "role": "admin"
 }
 ```
 
-应用使用 `message.send` 的 `topic` 目标在话题内回复：
+### 4.19 `temporary_files.read_urls`
+
+获取可见消息所引用临时文件的签名 URL。
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `conversation_id` | 是 | 文件所在消息的会话 UUID。 |
+| `message_id` | 是 | 引用文件的消息 UUID。 |
+| `file_ids` | 是 | 临时文件 UUID 数组。 |
 
 ```json
 {
-  "target": {"type": "topic", "conversation_id": "话题 ID"},
-  "message": {"type": "markdown", "content": "处理完成"}
+  "conversation_id": "会话 ID",
+  "message_id": "消息 ID",
+  "file_ids": ["临时文件 ID"]
 }
 ```
 
-只有创建话题的应用可以关闭它。关闭前先调用 `conversation.topic.get`，再把获得的 `last_message_seq` 原样传入关闭请求：
+Server 会校验应用会话权限、消息历史范围以及文件是否确实被该消息引用。签名 URL 最长有效 24 小时，且不会超过临时文件剩余生命周期。
+
+### 4.20 `events.ack`
+
+确认已经完成处理的可靠事件。
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `cursor` | 是 | 正整数事件 cursor。 |
 
 ```json
-{
-  "v": 1,
-  "kind": "request",
-  "id": "topic-close-1",
-  "method": "conversation.topic.close",
-  "payload": {
-    "conversation_id": "话题 ID",
-    "expected_last_message_seq": 12
-  }
-}
+{"cursor":1287}
 ```
 
-如果读取状态后又产生了新消息，关闭请求返回 `conflict`，应用应重新读取状态后再决定是否关闭。关闭成功会插入一条“应用名 已将话题关闭”的系统消息；参与话题且当前在线的应用还会收到 `topic.closed` 事件。关闭后不能继续发言。
-
-## 12. JavaScript 最小示例
-
-以下示例使用 Node.js 的 `ws` 包：
-
-```js
-import WebSocket from "ws";
-import { randomUUID } from "node:crypto";
-
-const appId = process.env.MAGICCHAT_APP_ID;
-const secret = process.env.MAGICCHAT_APP_SECRET;
-const pending = new Map();
-const ws = new WebSocket("wss://your-server.example.com/api/app/ws", {
-  headers: {
-    "X-MagicChat-App-ID": appId,
-    Authorization: `Bearer ${secret}`,
-  },
-});
-
-function request(method, payload) {
-  const id = randomUUID();
-  return new Promise((resolve, reject) => {
-    pending.set(id, { resolve, reject });
-    ws.send(JSON.stringify({ v: 1, kind: "request", id, method, payload }));
-  });
-}
-
-ws.on("message", async (raw) => {
-  const envelope = JSON.parse(raw.toString());
-
-  if (envelope.kind === "response") {
-    const callback = pending.get(envelope.reply_to);
-    if (!callback) return;
-    pending.delete(envelope.reply_to);
-    if (envelope.ok) callback.resolve(envelope.payload);
-    else callback.reject(new Error(`${envelope.error.code}: ${envelope.error.message}`));
-    return;
-  }
-
-  if (envelope.kind !== "event" || envelope.event !== "message.created") return;
-
-  // 先把 cursor 和业务处理结果持久化，再 ACK。
-  console.log("message", envelope.payload.message);
-  await request("message.send", {
-    target: {
-      type: envelope.payload.conversation.type,
-      conversation_id: envelope.payload.conversation.id,
-    },
-    message: { type: "text", content: "消息已收到。" },
-  });
-  await request("events.ack", { cursor: envelope.cursor });
-});
-
-ws.on("close", () => {
-  // 使用带退避和抖动的策略重连；未 ACK 事件会由 Server 重放。
-  console.error("connection closed");
-});
-```
-
-生产代码应维护 `request id -> Promise` 映射，按 `reply_to` 关联响应，并在 ACK 前确保事件已持久处理。若一次事件需要发送多条消息，每条 `message.send` 必须使用不同请求 ID，并等待所有响应成功后再决定是否 ACK。
-
-## 13. Go 最小示例
-
-以下示例使用 `github.com/gorilla/websocket`：
-
-```go
-package main
-
-import (
-	"encoding/json"
-	"log"
-	"net/http"
-	"os"
-
-	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
-)
-
-type Envelope struct {
-	V       int             `json:"v"`
-	Kind    string          `json:"kind"`
-	ID      string          `json:"id,omitempty"`
-	Cursor  int64           `json:"cursor,omitempty"`
-	Event   string          `json:"event,omitempty"`
-	ReplyTo string          `json:"reply_to,omitempty"`
-	OK      *bool           `json:"ok,omitempty"`
-	Payload json.RawMessage `json:"payload,omitempty"`
-}
-
-func main() {
-	header := http.Header{}
-	header.Set("X-MagicChat-App-ID", os.Getenv("MAGICCHAT_APP_ID"))
-	header.Set("Authorization", "Bearer "+os.Getenv("MAGICCHAT_APP_SECRET"))
-	conn, _, err := websocket.DefaultDialer.Dial("wss://your-server.example.com/api/app/ws", header)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer conn.Close()
-
-	for {
-		var event Envelope
-		if err := conn.ReadJSON(&event); err != nil {
-			log.Fatal(err)
-		}
-		if event.Kind != "event" || event.Event != "message.created" {
-			continue
-		}
-
-		// 此处先持久化并完成业务处理，再确认 cursor。
-		ack := map[string]any{
-			"v": 1, "kind": "request", "id": uuid.NewString(),
-			"method": "events.ack",
-			"payload": map[string]any{"cursor": event.Cursor},
-		}
-		if err := conn.WriteJSON(ack); err != nil {
-			log.Fatal(err)
-		}
-	}
-}
-```
-
-Gorilla WebSocket 不允许多个 goroutine 并发写同一连接。生产实现应使用单独的写循环或互斥锁串行发送请求，并加入重连、指数退避、请求超时、幂等和优雅停机处理。
-
-## 14. 安全建议
-
-- 将连接密钥保存在服务端密钥管理系统，通过环境变量或运行时注入使用。
-- 密钥泄漏时立即调用重置接口；重置会关闭旧连接并使旧密钥失效。
-- 不要把 App 密钥交给浏览器、移动端或不受控用户设备。建议由自己的后端服务连接 WebSocket。
-- 对事件 cursor 和请求 ID 建立持久化幂等记录，避免重连或超时重试导致重复业务动作。
-- 下载临时文件前仍应按自身业务做类型、大小和内容安全校验。
-- 只记录必要的 Envelope 元数据，日志中不要写密钥、签名 URL 或敏感消息正文。
+成功响应同样返回 `cursor`。ACK 会同时确认不大于该 cursor 的所有事件，必须在业务处理和相关 RPC 全部成功后调用。
