@@ -28,6 +28,7 @@ export type UserEntityProfile = {
 export type AppEntityProfile = {
   avatar: string
   description: string
+  developerName: string | null
   displayName: string
   id: string
   online: boolean | null
@@ -70,7 +71,12 @@ export function resolveEntityProfile({
   }
 
   if (reference.type === "app") {
-    return resolveAppProfile(reference.id, contacts, conversations)
+    return resolveAppProfile(
+      reference.id,
+      contacts,
+      conversations,
+      currentUser
+    )
   }
 
   return resolveGroupProfile(reference.id, contacts, conversations)
@@ -126,14 +132,26 @@ function resolveUserProfile(
 function resolveAppProfile(
   id: string,
   contacts: ClientContacts,
-  conversations: ClientConversation[]
+  conversations: ClientConversation[],
+  currentUser: ClientUser | null
 ): AppEntityProfile | null {
   const contact = contacts.apps.find((item) => idsMatch(item.id, id))
 
   if (contact) {
+    const developer = contact.creatorUserId
+      ? (currentUser && idsMatch(currentUser.id, contact.creatorUserId)
+          ? currentUser
+          : contacts.users.find((item) =>
+              idsMatch(item.id, contact.creatorUserId ?? "")
+            ))
+      : null
+
     return {
       avatar: contact.avatar,
       description: contact.description,
+      developerName: developer
+        ? getContactDisplayName(developer) || developer.email
+        : null,
       displayName: contact.name.trim() || "未命名应用",
       id: contact.id,
       online: contact.online,
@@ -146,6 +164,7 @@ function resolveAppProfile(
     return {
       avatar: member.avatar,
       description: "",
+      developerName: null,
       displayName: member.name.trim() || member.nickname.trim() || "未命名应用",
       id: member.id,
       online: null,
@@ -161,6 +180,7 @@ function resolveAppProfile(
   return {
     avatar: conversation.avatar,
     description: "",
+    developerName: null,
     displayName: conversation.name.trim() || "未命名应用",
     id: conversation.id,
     online: null,

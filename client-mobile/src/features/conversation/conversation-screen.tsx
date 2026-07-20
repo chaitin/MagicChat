@@ -4,12 +4,14 @@ import {
   useLocalSearchParams,
   useRouter,
 } from "expo-router"
+import { Ellipsis } from "lucide-react-native"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Alert, AppState } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { YStack } from "tamagui"
 
 import { ContentState } from "@/components/feedback/content-state"
+import { ThemedIcon } from "@/components/icons/themed-icon"
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
 import {
   PAGE_HEADER_HEIGHT,
@@ -34,6 +36,7 @@ import {
 } from "@/data/resources"
 import {
   type EntityReference,
+  getConversationEntityReference,
 } from "@/domain/entities/entity-profile"
 import {
   buildPresentedMessages,
@@ -76,6 +79,10 @@ export function ConversationScreen() {
   const { contacts, conversations, currentUser, currentUserError, isReady } =
     useClientData()
   const conversation = conversations.find((item) => item.id === conversationId)
+  const conversationEntity =
+    conversation && currentUser
+      ? getConversationEntityReference(conversation, currentUser.id)
+      : null
   const mentionCandidates = useMemo(
     () =>
       conversation?.type === "group"
@@ -303,6 +310,11 @@ export function ConversationScreen() {
     router.push(buildEntityDetailHref(sender))
   }
 
+  function handleConversationDetails() {
+    if (!conversationEntity) return
+    router.push(buildEntityDetailHref(conversationEntity))
+  }
+
   function handleAvatarLongPress(sender: EntityReference) {
     if (conversation?.type !== "group" || sender.type === "group") return
 
@@ -352,6 +364,11 @@ export function ConversationScreen() {
   return (
     <YStack bg="$background" flex={1}>
       <PageHeader
+        actionIcon={<ThemedIcon icon={Ellipsis} size={22} />}
+        actionLabel="查看对话详情"
+        onActionPress={
+          conversationEntity ? handleConversationDetails : undefined
+        }
         onBackPress={() => router.back()}
         title={conversation?.name ?? "对话"}
       />

@@ -71,11 +71,26 @@ export function ContactsScreen() {
       <YStack gap="$3" px="$4" py="$3">
         <Tabs onValueChange={handleTabChange} size="$3" value={activeTab}>
           <Tabs.List width="100%">
-            {DIRECTORY_TABS.map((tab) => (
-              <Tabs.Tab flex={1} key={tab.value} value={tab.value}>
-                <SizableText size="$3">{tab.label}</SizableText>
-              </Tabs.Tab>
-            ))}
+            {DIRECTORY_TABS.map((tab) => {
+              const selected = tab.value === activeTab
+
+              return (
+                <Tabs.Tab
+                  bg={selected ? "$teal3" : "$teal2"}
+                  flex={1}
+                  key={tab.value}
+                  pressStyle={{ bg: selected ? "$teal3" : "$teal2" }}
+                  value={tab.value}
+                >
+                  <SizableText
+                    color={selected ? "$color10" : "$gray9"}
+                    size="$3"
+                  >
+                    {tab.label}
+                  </SizableText>
+                </Tabs.Tab>
+              )
+            })}
           </Tabs.List>
         </Tabs>
       </YStack>

@@ -9,7 +9,7 @@ import {
   type LucideIcon,
 } from "lucide-react-native"
 import { Fragment } from "react"
-import { ListItem, Separator, YGroup } from "tamagui"
+import { ListItem, Separator, SizableText, XStack, YGroup } from "tamagui"
 
 import { ThemedIcon } from "@/components/icons/themed-icon"
 import { formatContactPhone } from "@/domain/contacts/contact-display"
@@ -25,22 +25,35 @@ export function EntityDetailFields({ profile }: { profile: EntityProfile }) {
   const fields = buildProfileFields(profile)
 
   return (
-    <YGroup
-      borderColor="$gray8"
-      borderWidth={1}
-      rounded="$4"
-      size="$5"
-    >
+    <YGroup bg="$backgroundLight" overflow="hidden" rounded="$4" size="$5">
       {fields.map((field, index) => (
         <Fragment key={field.label}>
           <YGroup.Item>
             <ListItem
+              bg="$backgroundLight"
               icon={<ThemedIcon icon={field.icon} />}
-              subTitle={field.value.trim() || "未设置"}
-              title={field.label}
+              minH="$5"
+              title={
+                <XStack gap="$3" items="center" minW={0} width="100%">
+                  <SizableText size="$4">
+                    {field.label}
+                  </SizableText>
+                  <SizableText
+                    color="$gray9"
+                    flex={1}
+                    numberOfLines={1}
+                    size="$3"
+                    text="right"
+                  >
+                    {field.value.trim() || "未设置"}
+                  </SizableText>
+                </XStack>
+              }
             />
           </YGroup.Item>
-          {index < fields.length - 1 ? <Separator /> : null}
+          {index < fields.length - 1 ? (
+            <Separator borderColor="$background" />
+          ) : null}
         </Fragment>
       ))}
     </YGroup>
@@ -64,6 +77,15 @@ function buildProfileFields(profile: EntityProfile): ProfileField[] {
   if (profile.type === "app") {
     return [
       { icon: Bot, label: "类型", value: "应用" },
+      ...(profile.developerName
+        ? [
+            {
+              icon: UserRound,
+              label: "开发者",
+              value: profile.developerName,
+            },
+          ]
+        : []),
       {
         icon: Activity,
         label: "状态",

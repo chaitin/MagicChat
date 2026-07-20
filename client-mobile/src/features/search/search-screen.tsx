@@ -9,6 +9,7 @@ import { ContentState } from "@/components/feedback/content-state"
 import { AppInput } from "@/components/forms/app-input"
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
 import { HeaderButton } from "@/components/navigation/header-button"
+import { PAGE_HEADER_HEIGHT } from "@/components/navigation/page-header"
 import { useAuthenticatedSession } from "@/features/auth/auth-context"
 import { SearchResultList } from "@/features/search/search-result-list"
 import {
@@ -79,7 +80,13 @@ export function SearchScreen() {
   return (
     <KeyboardAwareScreen edges={[]} scrollable={false}>
       <YStack bg="$background" pt={insets.top}>
-        <XStack gap="$2" height={44} items="center" pl="$3" pr="$2">
+        <XStack
+          gap="$2"
+          height={PAGE_HEADER_HEIGHT}
+          items="center"
+          pl="$3"
+          pr="$2"
+        >
           <XStack
             bg="$background"
             borderColor="$gray7"

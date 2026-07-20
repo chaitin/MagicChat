@@ -1,5 +1,5 @@
-import { usePathname, useRouter, type Href } from "expo-router"
-import { Bug, Check, ChevronRight, LogOut } from "lucide-react-native"
+import { useRouter, type Href } from "expo-router"
+import { Bug, LogOut } from "lucide-react-native"
 import { Alert } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import {
@@ -10,7 +10,6 @@ import {
   SizableText,
   Spinner,
   Text,
-  Theme,
   useTheme,
   XStack,
   YStack,
@@ -19,7 +18,6 @@ import {
 import { CachedAvatarImage } from "@/components/avatar/cached-avatar-image"
 import { AppButton } from "@/components/forms/app-button"
 import { ThemedIcon } from "@/components/icons/themed-icon"
-import { AppListItem } from "@/components/lists/app-list-item"
 import { appConfig } from "@/config/app-config"
 import { ApiRequestError } from "@/data/api-client"
 import { useCachedAppInfo } from "@/data/hooks"
@@ -27,11 +25,9 @@ import {
   useAuth,
   useAuthenticatedSession,
 } from "@/features/auth/auth-context"
-import { appSections } from "@/navigation/app-sections"
 import { useClientData } from "@/providers/client-data-provider"
 
 export function AppDrawerContent({ closeDrawer }: { closeDrawer: () => void }) {
-  const pathname = usePathname()
   const router = useRouter()
   const theme = useTheme()
   const session = useAuthenticatedSession()
@@ -46,11 +42,6 @@ export function AppDrawerContent({ closeDrawer }: { closeDrawer: () => void }) {
     currentUser?.name.trim() ||
     currentUser?.email ||
     "当前账号"
-
-  function navigateTo(href: Href) {
-    closeDrawer()
-    router.replace(href)
-  }
 
   function openThemeDebug() {
     closeDrawer()
@@ -101,70 +92,40 @@ export function AppDrawerContent({ closeDrawer }: { closeDrawer: () => void }) {
           </XStack>
         </YStack>
 
-        <YStack flex={1} gap="$2" px="$4" pt="$2">
-          <Paragraph color="$color10" px="$1" size="$2">
-            工作台
-          </Paragraph>
-          {appSections.map((item) => {
-            const active = pathname.endsWith(`/${item.routeName}`)
-
-            return (
-              <Theme key={item.routeName} name={active ? "teal" : "gray"}>
-                <AppListItem
-                  accessibilityLabel={`打开${item.label}`}
-                  bg={active ? "$color2" : undefined}
-                  borderColor={active ? "$color10" : "$color7"}
-                  icon={<ThemedIcon icon={item.icon} />}
-                  iconAfter={
-                    <ThemedIcon icon={active ? Check : ChevronRight} />
-                  }
-                  onPress={() => navigateTo(item.href)}
-                  size="$4"
-                  title={item.label}
-                />
-              </Theme>
-            )
-          })}
-
-          <Paragraph color="$color10" mt="$3" px="$1" size="$2">
-            工具
-          </Paragraph>
-          <Theme name={pathname.endsWith("/theme-debug") ? "teal" : "gray"}>
-            <AppListItem
-              accessibilityLabel="打开调试页面"
-              bg={pathname.endsWith("/theme-debug") ? "$color2" : undefined}
-              borderColor={
-                pathname.endsWith("/theme-debug") ? "$color10" : "$color7"
-              }
-              icon={<ThemedIcon icon={Bug} />}
-              iconAfter={<ThemedIcon icon={ChevronRight} />}
-              onPress={openThemeDebug}
-              size="$4"
-              title="调试"
-            />
-          </Theme>
+        <YStack flex={1} px="$4" pt="$2">
+          <AppButton
+            accessibilityLabel="打开调试页面"
+            borderColor="$color10"
+            color="$color10"
+            icon={<Bug color={String(theme.color10.val)} size={20} />}
+            onPress={openThemeDebug}
+            style={{ borderColor: String(theme.color10.val) }}
+            variant="outlined"
+            width="100%"
+          >
+            调试
+          </AppButton>
         </YStack>
 
         <YStack gap="$3" p="$4">
-          <Theme name="gray">
-            <ListItem
-              borderColor="$color7"
-              icon={
-                <Avatar circular size="$3">
-                  <CachedAvatarImage
-                    avatar={currentUser?.avatar ?? ""}
-                    server={session}
-                  />
-                  <Avatar.Fallback>
-                    <Text>{Array.from(currentUserName)[0] ?? "即"}</Text>
-                  </Avatar.Fallback>
-                </Avatar>
-              }
-              subTitle={currentUser?.email ?? session.url}
-              title={currentUserName}
-              variant="outlined"
-            />
-          </Theme>
+          <ListItem
+            borderColor="$color10"
+            borderWidth={1}
+            icon={
+              <Avatar circular size="$3">
+                <CachedAvatarImage
+                  avatar={currentUser?.avatar ?? ""}
+                  server={session}
+                />
+                <Avatar.Fallback>
+                  <Text>{Array.from(currentUserName)[0] ?? "即"}</Text>
+                </Avatar.Fallback>
+              </Avatar>
+            }
+            rounded="$4"
+            subTitle={currentUser?.email ?? session.url}
+            title={currentUserName}
+          />
           <AppButton
             accessibilityLabel="退出登录"
             disabled={isSigningOut}
