@@ -25,7 +25,7 @@ import type {
 } from "@/lib/client-data-context"
 import {
   emptyConversationMessageState,
-  pinAppConversations,
+  orderConversations,
 } from "@/lib/client-data-state"
 
 export function useConversationActions({
@@ -84,7 +84,7 @@ export function useConversationActions({
             ? { ...conversation, projects: currentConversation.projects }
             : conversation
 
-        return pinAppConversations([
+        return orderConversations([
           nextConversation,
           ...currentConversations.filter((item) => item.id !== conversation.id),
         ])

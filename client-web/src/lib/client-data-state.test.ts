@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest"
 
-import type { ClientMessage } from "@/lib/client-data-api"
-import { mergeConversationMessages } from "@/lib/client-data-state"
+import type { ClientConversation, ClientMessage } from "@/lib/client-data-api"
+import {
+  mergeConversationMessages,
+  orderConversations,
+} from "@/lib/client-data-state"
 
 describe("mergeConversationMessages", () => {
   it("appends newer messages in sequence order", () => {
@@ -61,6 +64,38 @@ describe("mergeConversationMessages", () => {
   })
 })
 
+describe("orderConversations", () => {
+  it("pins only the built-in assistant and orders every other conversation by activity", () => {
+    const assistant = createConversation("assistant", "app", "2026-07-01", [
+      createAppMember("00000000-0000-0000-0000-000000000001"),
+    ])
+    const regularApp = createConversation("regular-app", "app", "2026-07-18")
+    const activeGroup = createConversation(
+      "active-group",
+      "group",
+      "2026-07-20"
+    )
+    const direct = createConversation("direct", "direct", "2026-07-19")
+
+    expect(
+      orderConversations([regularApp, assistant, direct, activeGroup]).map(
+        ({ id }) => id
+      )
+    ).toEqual(["assistant", "active-group", "direct", "regular-app"])
+  })
+
+  it("does not pin a group that contains the built-in assistant", () => {
+    const recentApp = createConversation("recent-app", "app", "2026-07-20")
+    const oldGroup = createConversation("old-group", "group", "2026-07-01", [
+      createAppMember("00000000-0000-0000-0000-000000000001"),
+    ])
+
+    expect(
+      orderConversations([oldGroup, recentApp]).map(({ id }) => id)
+    ).toEqual(["recent-app", "old-group"])
+  })
+})
+
 function createMessage(
   id: string,
   seq: number,
@@ -75,5 +110,43 @@ function createMessage(
     id,
     sender: { id: "user-1", type: "user" },
     seq,
+  }
+}
+
+function createConversation(
+  id: string,
+  type: ClientConversation["type"],
+  activityDate: string,
+  members?: ClientConversation["members"]
+): ClientConversation {
+  return {
+    avatar: "",
+    createdAt: `${activityDate}T08:00:00Z`,
+    id,
+    lastMessageAt: `${activityDate}T09:00:00Z`,
+    lastMessageId: `message-${id}`,
+    lastMessageSeq: 1,
+    lastMessageSummary: id,
+    lastMentionedSeq: 0,
+    lastReadSeq: 1,
+    memberCount: members?.length ?? 2,
+    members,
+    name: id,
+    type,
+    unreadCount: 0,
+    visibility: "private",
+  }
+}
+
+function createAppMember(id: string) {
+  return {
+    avatar: "",
+    email: "",
+    id,
+    name: "App",
+    nickname: "",
+    phone: "",
+    role: "member" as const,
+    type: "app" as const,
   }
 }

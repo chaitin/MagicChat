@@ -166,19 +166,41 @@ export function getNewestMessageSeq(state: ClientConversationMessageState) {
   return Math.max(state.page?.newestSeq ?? 0, lastMessage?.seq ?? 0)
 }
 
-export function pinAppConversations(conversations: ClientConversation[]) {
-  const appConversations: ClientConversation[] = []
-  const otherConversations: ClientConversation[] = []
+const builtinAssistantAppId = "00000000-0000-0000-0000-000000000001"
 
-  for (const conversation of conversations) {
-    if (conversation.type === "app") {
-      appConversations.push(conversation)
-    } else {
-      otherConversations.push(conversation)
+export function orderConversations(conversations: ClientConversation[]) {
+  return [...conversations].sort((left, right) => {
+    const leftIsBuiltinAssistant = isBuiltinAssistantConversation(left)
+    const rightIsBuiltinAssistant = isBuiltinAssistantConversation(right)
+    if (leftIsBuiltinAssistant !== rightIsBuiltinAssistant) {
+      return leftIsBuiltinAssistant ? -1 : 1
     }
-  }
 
-  return [...appConversations, ...otherConversations]
+    const leftActivity = getConversationActivityTimestamp(left)
+    const rightActivity = getConversationActivityTimestamp(right)
+    if (leftActivity !== rightActivity) {
+      return rightActivity - leftActivity
+    }
+
+    return left.id < right.id ? -1 : left.id > right.id ? 1 : 0
+  })
+}
+
+function isBuiltinAssistantConversation(conversation: ClientConversation) {
+  return (
+    conversation.type === "app" &&
+    conversation.members?.some(
+      (member) => member.type === "app" && member.id === builtinAssistantAppId
+    ) === true
+  )
+}
+
+function getConversationActivityTimestamp(conversation: ClientConversation) {
+  const timestamp = Date.parse(
+    conversation.lastMessageAt ?? conversation.createdAt
+  )
+
+  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp
 }
 
 export function getClientDataErrorMessage(

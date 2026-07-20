@@ -32,7 +32,7 @@ import {
   mergePageWithAfterResult,
   mergePageWithBeforeResult,
   messagePageLimit,
-  pinAppConversations,
+  orderConversations,
   updatePageWithMessage,
 } from "@/lib/client-data-state"
 import {
@@ -180,7 +180,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
 
   const refreshConversations = useCallback(async () => {
     try {
-      setConversations(pinAppConversations(await listClientConversations()))
+      setConversations(orderConversations(await listClientConversations()))
     } catch (error) {
       throw handleError(error, "加载会话列表失败")
     }
@@ -315,7 +315,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
             : conversation.unreadCount,
         }
 
-        return pinAppConversations([
+        return orderConversations([
           updatedConversation,
           ...currentConversations.filter(
             (currentConversation) =>
@@ -700,7 +700,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
       setContactApps(nextContacts.apps)
       setContactGroups(nextContacts.groups)
       setContacts(nextContacts.users)
-      setConversations(pinAppConversations(nextConversations))
+      setConversations(orderConversations(nextConversations))
       setPersonalProject(nextProjects.personalProject)
       setProjects(nextProjects.projects)
       setProjectsNextCursor(nextProjects.nextCursor)
