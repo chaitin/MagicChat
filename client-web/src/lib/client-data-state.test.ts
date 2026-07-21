@@ -136,6 +136,8 @@ function createMessage(
     conversationId: "conversation-1",
     createdAt,
     id,
+    reactionVersion: 0,
+    reactions: [],
     sender: { id: "user-1", type: "user" },
     seq,
   }

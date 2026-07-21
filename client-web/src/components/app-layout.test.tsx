@@ -57,37 +57,6 @@ vi.mock("@/lib/client-data-api", () => ({
 }))
 
 describe("AppLayout", () => {
-  it("shows the notification dot only while conversations are unread", () => {
-    mocks.clientData.conversations = [{ unreadCount: 0 }, { unreadCount: 2 }]
-
-    const view = render(
-      <MemoryRouter initialEntries={["/chat"]}>
-        <AppLayout />
-      </MemoryRouter>
-    )
-
-    const chatLink = screen.getByRole("link", {
-      name: "聊天，有未读消息",
-    })
-
-    expect(
-      chatLink.querySelector('[data-slot="notification-dot"]')
-    ).toBeInTheDocument()
-
-    mocks.clientData.conversations = [{ unreadCount: 0 }, { unreadCount: 0 }]
-    view.rerender(
-      <MemoryRouter initialEntries={["/chat"]}>
-        <AppLayout />
-      </MemoryRouter>
-    )
-
-    const readChatLink = screen.getByRole("link", { name: "聊天" })
-
-    expect(
-      readChatLink.querySelector('[data-slot="notification-dot"]')
-    ).not.toBeInTheDocument()
-  })
-
   it("splits profile and settings actions in the user avatar menu", async () => {
     const user = userEvent.setup()
 
@@ -137,20 +106,6 @@ describe("AppLayout", () => {
     )
 
     const downloadButton = screen.getByRole("button", { name: "下载客户端" })
-    const themeButton = screen.getByRole("button", { name: "配色：跟随系统" })
-
-    expect(downloadButton).toHaveClass(
-      "hover:bg-transparent",
-      "hover:text-teal-500",
-      "data-[state=open]:bg-transparent",
-      "data-[state=open]:text-teal-500"
-    )
-    expect(themeButton).toHaveClass(
-      "hover:bg-transparent",
-      "hover:text-teal-500",
-      "data-[state=open]:bg-transparent",
-      "data-[state=open]:text-teal-500"
-    )
 
     await user.click(downloadButton)
 

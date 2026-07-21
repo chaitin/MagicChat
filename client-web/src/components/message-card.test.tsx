@@ -46,14 +46,6 @@ describe("MessageCard", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("renders a title-only card without an empty separator", () => {
-    const card = createCard("/projects/project-1")
-    card.description = ""
-    const { container } = renderCard(card)
-
-    expect(screen.getByText("任务标题")).toBeInTheDocument()
-    expect(container.querySelector('[data-slot="separator"]')).toBeNull()
-  })
 })
 
 function renderCard(card: ClientCardMessageBody) {

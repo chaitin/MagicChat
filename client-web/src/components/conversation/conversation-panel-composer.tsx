@@ -35,10 +35,8 @@ import {
   type MentionCandidate,
   type MentionTrigger,
 } from "@/lib/conversation-composer"
-import {
-  ExpressionPicker,
-  type ExpressionItem,
-} from "@/components/expression-picker"
+import { type ExpressionItem } from "@/components/expression-picker"
+import { ExpressionPickerPopover } from "@/components/expression-picker-popover"
 import { SendVoiceMessageDialog } from "@/components/conversation/send-voice-message-dialog"
 import { SmartVoiceInputDialog } from "@/components/conversation/smart-voice-input-dialog"
 import { ConversationVoiceMenu } from "@/components/conversation/conversation-voice-menu"
@@ -47,11 +45,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { SendFileMessageDialog } from "@/components/send-file-message-dialog"
 import { SendImageMessageDialog } from "@/components/send-image-message-dialog"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
 import { Toggle } from "@/components/ui/toggle"
 import type {
@@ -677,26 +670,23 @@ export const ConversationPanelComposer = React.forwardRef<
           data-testid="conversation-panel-toolbar-row"
         >
           <div className="flex items-center gap-1">
-            <Popover
+            <ExpressionPickerPopover
+              align="start"
+              onSelect={handleExpressionSelect}
               open={expressionPickerOpen}
               onOpenChange={setExpressionPickerOpen}
             >
-              <PopoverTrigger asChild>
-                <Button
-                  aria-label="选择表情"
-                  disabled={sending}
-                  size="icon-sm"
-                  title="选择表情"
-                  type="button"
-                  variant="ghost"
-                >
-                  <Smile className="size-4" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="start" className="w-auto p-3" side="top">
-                <ExpressionPicker onSelect={handleExpressionSelect} />
-              </PopoverContent>
-            </Popover>
+              <Button
+                aria-label="选择表情"
+                disabled={sending}
+                size="icon-sm"
+                title="选择表情"
+                type="button"
+                variant="ghost"
+              >
+                <Smile className="size-4" />
+              </Button>
+            </ExpressionPickerPopover>
             <Button
               aria-label="上传文件"
               disabled={sending}

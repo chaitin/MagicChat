@@ -5,8 +5,12 @@ import { toast } from "sonner"
 import {
   archiveConversationTopic,
   getConversationTopic,
+  listConversationMessageReactionSnapshots,
   normalizeConversationRemovedEventPayload,
+  normalizeMessageReactionsUpdatedEventPayload,
   participateConversationTopic,
+  type ClientMessageReaction,
+  type MessageReactionSnapshot,
   type ClientMessage,
   type ClientTopicDetail,
   type ClientTopicSourceMessage,
@@ -32,6 +36,10 @@ import {
   type ConversationPanelMessage,
 } from "@/components/conversation-panel"
 import { MessageBodyRenderer } from "@/components/conversation/conversation-message"
+import {
+  MessageReactionAddButton,
+  MessageReactionChips,
+} from "@/components/conversation/message-reactions"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -98,6 +106,7 @@ function TopicDrawerContent({
     sendConversationMarkdown,
     sendConversationText,
     sendConversationVoice,
+    setMessageReaction,
     updateMessageTopic,
   } = useClientData()
   const [detail, setDetail] = React.useState<ClientTopicDetail | null>(null)
@@ -111,6 +120,8 @@ function TopicDrawerContent({
   >([])
   const [replyTarget, setReplyTarget] =
     React.useState<ConversationDraftReplyTarget | null>(null)
+  const [sourceReactionSnapshot, setSourceReactionSnapshot] =
+    React.useState<MessageReactionSnapshot | null>(null)
   const [richTextMode, setRichTextMode] = React.useState(false)
   React.useEffect(() => {
     if (!open || !conversationId) {
@@ -135,6 +146,42 @@ function TopicDrawerContent({
       active = false
     }
   }, [conversationId, ensureConversationMessages, open])
+
+  const sourceConversationId = detail?.parentConversation.id ?? ""
+  const sourceMessageId = detail?.sourceMessage.id ?? ""
+  const refreshSourceReactions = React.useCallback(async () => {
+    if (!sourceConversationId || !sourceMessageId) return
+    const [snapshot] = await listConversationMessageReactionSnapshots(
+      sourceConversationId,
+      [sourceMessageId]
+    )
+    if (!snapshot) return
+    setSourceReactionSnapshot((current) =>
+      current && current.reactionVersion > snapshot.reactionVersion
+        ? current
+        : snapshot
+    )
+  }, [sourceConversationId, sourceMessageId])
+
+  React.useEffect(() => {
+    if (!open || !sourceConversationId || !sourceMessageId) return
+    let active = true
+    void listConversationMessageReactionSnapshots(sourceConversationId, [
+      sourceMessageId,
+    ])
+      .then(([snapshot]) => {
+        if (!active || !snapshot) return
+        setSourceReactionSnapshot((current) =>
+          current && current.reactionVersion > snapshot.reactionVersion
+            ? current
+            : snapshot
+        )
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [open, sourceConversationId, sourceMessageId])
 
   const detailConversation = detail?.conversation ?? null
   const listedConversation = detailConversation
@@ -346,14 +393,38 @@ function TopicDrawerContent({
     }
   }
 
+  async function setSourceReaction(text: string, reacted: boolean) {
+    if (!detail) return
+    const snapshot = await setMessageReaction(
+      detail.parentConversation.id,
+      detail.sourceMessage.id,
+      text,
+      reacted
+    )
+    setSourceReactionSnapshot((current) =>
+      current && current.reactionVersion > snapshot.reactionVersion
+        ? current
+        : snapshot
+    )
+  }
+
   return (
     <Sheet onOpenChange={onOpenChange} open={open}>
       {open && (
-        <TopicRemovalSync
-          conversationId={conversationId}
-          onRemoved={() => onOpenChange(false)}
-          parentConversationId={detail?.parentConversation.id}
-        />
+        <>
+          <TopicRemovalSync
+            conversationId={conversationId}
+            onRemoved={() => onOpenChange(false)}
+            parentConversationId={detail?.parentConversation.id}
+          />
+          {sourceConversationId && sourceMessageId && (
+            <TopicSourceReactionSync
+              conversationId={sourceConversationId}
+              messageId={sourceMessageId}
+              onUpdate={refreshSourceReactions}
+            />
+          )}
+        </>
       )}
       <SheetContent
         className="min-h-0 gap-0 overflow-hidden p-0 data-[side=right]:w-[80vw] data-[side=right]:sm:max-w-400"
@@ -383,12 +454,14 @@ function TopicDrawerContent({
             draftMentions={draftMentions}
             headerActions={
               <>
-                {detail?.canArchive && !conversation.topic?.archived && (
-                  <TopicArchiveMenu
-                    disabled={mutating}
-                    onSelect={() => setArchiveConfirmOpen(true)}
-                  />
-                )}
+                {detail?.canArchive &&
+                  conversation.canSend !== false &&
+                  !conversation.topic?.archived && (
+                    <TopicArchiveMenu
+                      disabled={mutating}
+                      onSelect={() => setArchiveConfirmOpen(true)}
+                    />
+                  )}
                 <SheetClose asChild>
                   <Button aria-label="关闭话题" size="icon-sm" variant="ghost">
                     <X className="size-4" />
@@ -403,8 +476,13 @@ function TopicDrawerContent({
             historyLoadingBefore={Boolean(messageState?.loadingBefore)}
             historyHeader={
               <TopicSourceBanner
+                reactionConversationId={sourceConversationId}
                 currentUserId={me.id}
                 mentionLabelResolver={mentionLabelResolver}
+                onSetReaction={
+                  conversation.canSend === false ? undefined : setSourceReaction
+                }
+                reactions={sourceReactionSnapshot?.reactions}
                 sourceMessage={detail?.sourceMessage}
               />
             }
@@ -424,6 +502,14 @@ function TopicDrawerContent({
                   )
               )
             }
+            onSetMessageReaction={async (message, text, reacted) => {
+              await setMessageReaction(
+                conversation.id,
+                message.id,
+                text,
+                reacted
+              )
+            }}
             onRichTextModeChange={setRichTextMode}
             onSendFile={sendFile}
             onSendImage={sendImage}
@@ -431,6 +517,7 @@ function TopicDrawerContent({
             onSendVoice={sendVoice}
             readOnlyFooter={
               detail?.canParticipate &&
+              conversation.canSend !== false &&
               !conversation.topic?.participating &&
               !conversation.topic?.archived ? (
                 <div className="flex items-center justify-between gap-3 border-t bg-muted/30 px-5 py-3">
@@ -450,7 +537,16 @@ function TopicDrawerContent({
                 </div>
               ) : undefined
             }
-            readOnly={conversation.topic?.archived}
+            readOnly={
+              conversation.topic?.archived || conversation.canSend === false
+            }
+            readOnlyReason={
+              conversation.canSend === false && !conversation.topic?.archived
+                ? conversation.topic?.parentConversationType === "app"
+                  ? "你当前无权直接使用此应用"
+                  : "当前会话不能发送消息"
+                : undefined
+            }
             replyTarget={replyTarget}
             richTextMode={richTextMode}
             sending={Boolean(messageState?.sending)}
@@ -494,6 +590,38 @@ function TopicRemovalSync({
         }
       }),
     [conversationId, onRemoved, parentConversationId, subscribeRealtimeEvent]
+  )
+
+  return null
+}
+
+function TopicSourceReactionSync({
+  conversationId,
+  messageId,
+  onUpdate,
+}: {
+  conversationId: string
+  messageId: string
+  onUpdate: () => Promise<void>
+}) {
+  const { subscribeRealtimeEvent } = useRealtime()
+
+  React.useEffect(
+    () =>
+      subscribeRealtimeEvent("message.reactions_updated", (payload) => {
+        try {
+          const event = normalizeMessageReactionsUpdatedEventPayload(payload)
+          if (
+            event.conversationId === conversationId &&
+            event.messageId === messageId
+          ) {
+            void onUpdate().catch(() => undefined)
+          }
+        } catch {
+          // Ignore malformed realtime events. The websocket remains usable.
+        }
+      }),
+    [conversationId, messageId, onUpdate, subscribeRealtimeEvent]
   )
 
   return null
@@ -651,11 +779,17 @@ export function TopicSourceBanner({
   conversationId,
   currentUserId,
   mentionLabelResolver,
+  onSetReaction,
+  reactionConversationId,
+  reactions = [],
   sourceMessage,
 }: {
   conversationId?: string
   currentUserId: string
   mentionLabelResolver?: MentionLabelResolver
+  onSetReaction?: (text: string, reacted: boolean) => Promise<unknown>
+  reactionConversationId?: string
+  reactions?: ClientMessageReaction[]
   sourceMessage?: ClientTopicSourceMessage
 }) {
   const [fetchedSource, setFetchedSource] =
@@ -710,7 +844,7 @@ export function TopicSourceBanner({
   return (
     <div
       className={cn(
-        "flex gap-3",
+        "group/message-row flex gap-3",
         fromCurrentUser ? "justify-end" : "justify-start"
       )}
     >
@@ -727,20 +861,49 @@ export function TopicSourceBanner({
         </div>
         <div
           className={cn(
-            "max-w-full min-w-0 rounded-md p-3 text-sm leading-relaxed shadow-sm",
-            fromCurrentUser
-              ? "bg-teal-100/60 text-foreground dark:bg-teal-950/80"
-              : "bg-zinc-100 text-foreground dark:bg-zinc-800"
+            "flex max-w-full items-end gap-1.5",
+            fromCurrentUser && "flex-row-reverse"
           )}
-          data-testid="topic-source-message-bubble"
+          data-slot="message-bubble-line"
         >
-          <MessageBodyRenderer
-            body={loadedSource.body}
-            currentUserId={currentUserId}
-            mentionLabelResolver={
-              mentionLabelResolver ?? emptyMentionLabelResolver
-            }
-          />
+          <div
+            className={cn(
+              "max-w-full min-w-0 rounded-md p-3 text-sm leading-relaxed shadow-sm",
+              fromCurrentUser
+                ? "bg-teal-100/60 text-foreground dark:bg-teal-950/80"
+                : "bg-zinc-100 text-foreground dark:bg-zinc-800"
+            )}
+            data-testid="topic-source-message-bubble"
+          >
+            <MessageBodyRenderer
+              body={loadedSource.body}
+              currentUserId={currentUserId}
+              mentionLabelResolver={
+                mentionLabelResolver ?? emptyMentionLabelResolver
+              }
+            />
+            {reactions.length > 0 && (
+              <div className="mt-2">
+                <MessageReactionChips
+                  align={fromCurrentUser ? "end" : "start"}
+                  canAdd={loadedSource.body.type !== "revoked"}
+                  conversationId={
+                    reactionConversationId ?? conversationId ?? ""
+                  }
+                  enabled={loadedSource.body.type !== "revoked"}
+                  messageId={loadedSource.id}
+                  onSetReaction={onSetReaction}
+                  reactions={reactions}
+                />
+              </div>
+            )}
+          </div>
+          {onSetReaction && loadedSource.body.type !== "revoked" && (
+            <MessageReactionAddButton
+              align={fromCurrentUser ? "end" : "start"}
+              onSetReaction={onSetReaction}
+            />
+          )}
         </div>
       </div>
       {fromCurrentUser && avatar}

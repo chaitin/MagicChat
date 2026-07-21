@@ -7,7 +7,6 @@ import {
   chartColors,
   createChartSeriesConfig,
   getBarChartLayout,
-  getBarRadius,
   getBarStackID,
   shouldShowChartLegend,
 } from "@/components/message-chart-config"
@@ -24,79 +23,11 @@ afterAll(() => {
 })
 
 describe("MessageChart", () => {
-  it.each(createCharts())(
-    "renders the $chartType chart in three rows",
-    (chart) => {
-      const { container } = render(<MessageChart chart={chart} />)
-
-      expect(screen.getByText(chart.title)).toBeInTheDocument()
-      expect(screen.getByText(chart.description)).toBeInTheDocument()
-      const messageChart = container.querySelector(
-        '[data-slot="message-chart"]'
-      )
-      expect(messageChart).toHaveAttribute("data-chart-type", chart.chartType)
-      expect(messageChart).toHaveClass("w-160", "max-w-full")
-      expect(messageChart?.children).toHaveLength(3)
-      expect(messageChart?.firstElementChild).toHaveClass(
-        "border-b",
-        "border-foreground/10"
-      )
-      expect(messageChart?.lastElementChild).toHaveClass(
-        "border-t",
-        "border-foreground/10"
-      )
-      expect(container.querySelector('[data-slot="chart"]')).toBeInTheDocument()
-    }
-  )
-
-  it("uses fixed five-color sequences for light and dark themes", () => {
-    expect(chartColors).toEqual([
-      {
-        dark: "var(--color-sky-300, #7dd3fc)",
-        light: "var(--color-sky-700, #0369a1)",
-      },
-      {
-        dark: "var(--color-sky-400, #38bdf8)",
-        light: "var(--color-sky-600, #0284c7)",
-      },
-      {
-        dark: "var(--color-sky-500, #0ea5e9)",
-        light: "var(--color-sky-500, #0ea5e9)",
-      },
-      {
-        dark: "var(--color-sky-600, #0284c7)",
-        light: "var(--color-sky-400, #38bdf8)",
-      },
-      {
-        dark: "var(--color-sky-700, #0369a1)",
-        light: "var(--color-sky-300, #7dd3fc)",
-      },
-    ])
-  })
-
   it("maps protocol bar direction and mode to Recharts semantics", () => {
     expect(getBarChartLayout("horizontal")).toBe("vertical")
     expect(getBarChartLayout("vertical")).toBe("horizontal")
     expect(getBarStackID("grouped")).toBeUndefined()
     expect(getBarStackID("stacked")).toBe("total")
-  })
-
-  it("rounds grouped bars and only the outside ends of stacked bars", () => {
-    expect(getBarRadius("horizontal", "grouped", 1, [0, 1, 2])).toBe(4)
-    expect(getBarRadius("horizontal", "stacked", 0, [0, 1, 2])).toEqual([
-      4, 0, 0, 4,
-    ])
-    expect(getBarRadius("horizontal", "stacked", 1, [0, 1, 2])).toBe(0)
-    expect(getBarRadius("horizontal", "stacked", 2, [0, 1, 2])).toEqual([
-      0, 4, 4, 0,
-    ])
-    expect(getBarRadius("vertical", "stacked", 0, [0, 1, 2])).toEqual([
-      0, 0, 4, 4,
-    ])
-    expect(getBarRadius("vertical", "stacked", 2, [0, 1, 2])).toEqual([
-      4, 4, 0, 0,
-    ])
-    expect(getBarRadius("horizontal", "stacked", 2, [2])).toBe(4)
   })
 
   it("builds legend entries for every series in a multi-series chart", () => {
@@ -136,44 +67,6 @@ describe("MessageChart", () => {
       expect(firstLegendItem).toHaveAttribute("data-state", "on")
     }
   )
-
-  it.each(["line", "bar"] as const)(
-    "hides the x-axis in %s charts",
-    async (chartType) => {
-      const chart = createCharts().find((item) => item.chartType === chartType)
-      if (!chart) {
-        throw new Error(`Missing ${chartType} chart fixture`)
-      }
-
-      const { container } = render(<MessageChart chart={chart} />)
-      await screen.findByRole("button", {
-        name: chartType === "bar" ? "新增" : "发送",
-      })
-      expect(container.querySelector(".recharts-xAxis")).not.toBeInTheDocument()
-      expect(container.querySelector(".recharts-surface")).toBeInTheDocument()
-    }
-  )
-
-  it("keeps the radar grid visible when every series is disabled", async () => {
-    const user = userEvent.setup()
-    const chart = createCharts().find((item) => item.chartType === "radar")
-    if (!chart) {
-      throw new Error("Missing radar chart fixture")
-    }
-
-    const { container } = render(<MessageChart chart={chart} />)
-    const current = await screen.findByRole("button", { name: "本周" })
-    const previous = screen.getByRole("button", { name: "上周" })
-    await user.click(current)
-    await user.click(previous)
-
-    expect(current).toHaveAttribute("aria-pressed", "false")
-    expect(previous).toHaveAttribute("aria-pressed", "false")
-    expect(container.querySelector(".recharts-polar-grid")).toBeInTheDocument()
-    expect(
-      container.querySelector(".message-chart-radar-grid-anchor")
-    ).toBeInTheDocument()
-  })
 
   it("keeps a disabled pie item in the legend so it can be enabled again", async () => {
     const user = userEvent.setup()

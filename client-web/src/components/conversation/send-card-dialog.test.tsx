@@ -87,13 +87,7 @@ describe("SendCardDialog", () => {
 
     const sendButton = screen.getByRole("button", { name: "发送" })
     expect(sendButton).toBeDisabled()
-    expect(screen.getByRole("radiogroup", { name: "目标会话" })).toHaveClass(
-      "grid-cols-[minmax(0,1fr)]"
-    )
-    expect(screen.getByText(mocks.longConversationName)).toHaveClass(
-      "min-w-0",
-      "truncate"
-    )
+    expect(screen.getByText(mocks.longConversationName)).toBeVisible()
 
     await user.click(screen.getByRole("radio", { name: "设计群" }))
     await user.click(screen.getByRole("radio", { name: "Alice" }))

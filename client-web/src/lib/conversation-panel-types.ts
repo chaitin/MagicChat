@@ -9,8 +9,11 @@ export type ConversationPanelMessage = {
   avatar: string
   body: ClientMessage["body"]
   canRevoke: boolean
+  createdAt: string
   delegatedByName: string
   mentionTarget: ConversationPanelMentionTarget | null
+  reactionVersion: number
+  reactions: ClientMessage["reactions"]
   replyTo?: ConversationPanelReplyTarget
   time: string
   topic?: ConversationPanelMessageTopic

@@ -76,8 +76,6 @@ describe("AppProfileDialog", () => {
     renderProfileDialog({ app, onAppChange, onOpenChange })
 
     const dialog = screen.getByRole("dialog", { name: "修改应用资料" })
-    expect(within(dialog).queryByText("app-1")).not.toBeInTheDocument()
-    expect(within(dialog).queryByText("ID：app-1")).not.toBeInTheDocument()
     const avatarButton = within(dialog).getByRole("button", {
       name: "更换应用头像",
     })

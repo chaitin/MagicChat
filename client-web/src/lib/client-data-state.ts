@@ -4,6 +4,7 @@ import {
   type ClientConversation,
   type ClientMessage,
   type ClientMessagePage,
+  type MessageReactionsUpdatedEvent,
 } from "@/lib/client-data-api"
 import type { ClientConversationMessageState } from "@/lib/client-data-context"
 
@@ -21,6 +22,60 @@ export const emptyConversationMessageState: ClientConversationMessageState = {
 
 export function getMessageSummary(message: ClientMessage) {
   return formatClientMessageBodySummary(message.body)
+}
+
+export function applyMessageReactionsUpdate(
+  message: ClientMessage,
+  event: MessageReactionsUpdatedEvent,
+  currentUserId: string
+) {
+  if (
+    message.id !== event.messageId ||
+    message.conversationId !== event.conversationId ||
+    message.body.type === "revoked" ||
+    (message.reactionVersion ?? 0) >= event.reactionVersion ||
+    event.reactionVersion > (message.reactionVersion ?? 0) + 1
+  ) {
+    return message
+  }
+  const previousByText = new Map(
+    (message.reactions ?? []).map((reaction) => [reaction.text, reaction])
+  )
+  return {
+    ...message,
+    reactionVersion: event.reactionVersion,
+    reactions: event.reactions.map((reaction) => ({
+      ...reaction,
+      reactedByMe:
+        event.actorUserId === currentUserId && event.actorText === reaction.text
+          ? event.actorReacted
+          : (previousByText.get(reaction.text)?.reactedByMe ?? false),
+    })),
+  }
+}
+
+export function applyMessageReactionSnapshot(
+  message: ClientMessage,
+  snapshot: {
+    conversationId: string
+    messageId: string
+    reactionVersion: number
+    reactions: ClientMessage["reactions"]
+  }
+) {
+  if (
+    message.id !== snapshot.messageId ||
+    message.conversationId !== snapshot.conversationId ||
+    message.body.type === "revoked" ||
+    message.reactionVersion > snapshot.reactionVersion
+  ) {
+    return message
+  }
+  return {
+    ...message,
+    reactionVersion: snapshot.reactionVersion,
+    reactions: snapshot.reactions,
+  }
 }
 
 export function createConversationMessageState(): ClientConversationMessageState {

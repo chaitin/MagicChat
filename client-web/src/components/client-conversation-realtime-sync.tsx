@@ -7,6 +7,7 @@ import {
   normalizeConversationRemovedEventPayload,
   normalizeMessageCreatedEventPayload,
   normalizeMessageUpdatedEventPayload,
+  normalizeMessageReactionsUpdatedEventPayload,
   normalizeTopicEventPayload,
 } from "@/lib/client-data-api"
 import { useClientData } from "@/lib/client-data-context"
@@ -20,6 +21,7 @@ export function ClientConversationRealtimeSync() {
     foregroundConversationId,
     handleIncomingConversationMessage,
     handleIncomingConversationMessageUpdate,
+    handleIncomingMessageReactionsUpdate,
     refreshConversations,
     removeConversation,
     syncLoadedConversationMessages,
@@ -75,6 +77,18 @@ export function ClientConversationRealtimeSync() {
       }
     })
   }, [handleIncomingConversationMessageUpdate, subscribeRealtimeEvent])
+
+  React.useEffect(() => {
+    return subscribeRealtimeEvent("message.reactions_updated", (payload) => {
+      try {
+        handleIncomingMessageReactionsUpdate(
+          normalizeMessageReactionsUpdatedEventPayload(payload)
+        )
+      } catch {
+        // Ignore malformed realtime events. The websocket remains usable.
+      }
+    })
+  }, [handleIncomingMessageReactionsUpdate, subscribeRealtimeEvent])
 
   React.useEffect(() => {
     return subscribeRealtimeEvent("conversation.removed", (payload) => {

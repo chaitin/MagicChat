@@ -52,9 +52,12 @@ export function toConversationPanelMessage(
     ),
     body: message.body,
     canRevoke: canRevokeMessage(message, conversation, currentUser.id),
+    createdAt: message.createdAt,
     delegatedByName: message.delegatedBy?.name ?? "",
     id: message.id,
     mentionTarget: getMessageMentionTarget(message, mentionLabelResolver),
+    reactionVersion: message.reactionVersion ?? 0,
+    reactions: message.reactions ?? [],
     replyTo: getMessageReplyTarget(
       message,
       conversation,

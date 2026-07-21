@@ -60,6 +60,11 @@ type ConversationPanelProps = {
   onCancelReply: () => void
   onReplyToMessage: (message: ConversationPanelMessage) => void
   onRevokeMessage: (message: ConversationPanelMessage) => void
+  onSetMessageReaction?: (
+    message: ConversationPanelMessage,
+    text: string,
+    reacted: boolean
+  ) => Promise<void>
   onSendFile: (file: File) => Promise<ClientMessage | null>
   onSendImage: (image: File) => Promise<ClientMessage | null>
   onSendVoice: (voice: VoiceMessageRecording) => Promise<ClientMessage | null>
@@ -100,6 +105,7 @@ export function ConversationPanel({
   onCancelReply,
   onReplyToMessage,
   onRevokeMessage,
+  onSetMessageReaction,
   onSendFile,
   onSendImage,
   onSendVoice,
@@ -289,7 +295,10 @@ export function ConversationPanel({
             onInsertMention={insertComposerMention}
             onOpenTopic={onOpenTopic}
             onReplyToMessage={handleReplyToMessage}
-            onRevokeMessage={onRevokeMessage}
+            onRevokeMessage={readOnlyReason ? undefined : onRevokeMessage}
+            onSetMessageReaction={
+              readOnlyReason ? undefined : onSetMessageReaction
+            }
             onToggleMessageSelection={onToggleMessageSelection}
           />
           {conversationReadOnly ? (

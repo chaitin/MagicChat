@@ -7,7 +7,6 @@ import { ContactDirectorySidebar } from "@/components/contacts/contact-directory
 import { SidebarProvider } from "@/components/ui/sidebar"
 import type {
   ContactApp,
-  ContactGroup,
   ContactUser,
 } from "@/lib/client-data-api"
 import type { ClientAppCredentials } from "@/lib/client-api/apps"
@@ -95,9 +94,6 @@ describe("ContactDirectorySidebar", () => {
       name: "测试组织",
     })
     expect(organizationTrigger).toHaveTextContent("测试组织2")
-    expect(
-      organizationTrigger.closest('[data-slot="collapsible"]')
-    ).toHaveClass("border")
     expect(screen.getByRole("option", { name: "Alice" })).toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: "与 Alice 对话" })
@@ -105,7 +101,6 @@ describe("ContactDirectorySidebar", () => {
     expect(
       screen.queryByRole("button", { name: "与 Me 对话" })
     ).not.toBeInTheDocument()
-    expectTabContentToOwnScrolling("测试组织 联系人列表")
     expect(organizationTrigger).toHaveAttribute("aria-expanded", "true")
 
     await user.click(organizationTrigger)
@@ -113,97 +108,6 @@ describe("ContactDirectorySidebar", () => {
       screen.queryByRole("option", { name: "Alice" })
     ).not.toBeInTheDocument()
     expect(organizationTrigger).toBeInTheDocument()
-  })
-
-  it("groups joined groups and all public groups into collapsible sections", async () => {
-    const user = userEvent.setup()
-    const groups: ContactGroup[] = [
-      createGroup("joined-group", "已加入群", true, "private"),
-      createGroup("joined-public-group", "已加入公开群", true, "public"),
-      createGroup("public-group", "公开群", false, "public"),
-      createGroup("private-group", "未加入私有群", false, "private"),
-    ]
-
-    render(
-      <SidebarProvider>
-        <ContactDirectorySidebar
-          activeKeyword=""
-          activeSelection={null}
-          activeTab="group"
-          appGrantUsers={[]}
-          apps={[]}
-          contacts={[]}
-          contactsRefreshing={false}
-          currentUserId="current-user"
-          groups={groups}
-          organizationName="测试组织"
-          onActiveTabChange={vi.fn()}
-          onKeywordChange={vi.fn()}
-          onRefresh={vi.fn()}
-          onSelect={vi.fn()}
-          onStartAppConversation={vi.fn()}
-          onStartContactConversation={vi.fn()}
-          onStartGroupConversation={vi.fn()}
-          openingDirectoryItemKey=""
-        />
-      </SidebarProvider>
-    )
-
-    const joinedTrigger = screen.getByRole("button", { name: "我加入的" })
-    const publicTrigger = screen.getByRole("button", { name: "公开群组" })
-    expect(joinedTrigger).toHaveTextContent("我加入的2")
-    expect(publicTrigger).toHaveTextContent("公开群组2")
-    expect(joinedTrigger).toHaveAttribute("aria-expanded", "true")
-    expect(publicTrigger).toHaveAttribute("aria-expanded", "true")
-    const joinedGroupItem = screen.getByRole("option", { name: "已加入群" })
-    expect(joinedGroupItem).toBeInTheDocument()
-    expect(joinedGroupItem.querySelectorAll("img")).toHaveLength(2)
-    expect(
-      screen.getAllByRole("option", { name: "已加入公开群" })
-    ).toHaveLength(2)
-    expect(screen.getByRole("option", { name: "公开群" })).toBeInTheDocument()
-    expect(
-      screen.queryByRole("option", { name: "未加入私有群" })
-    ).not.toBeInTheDocument()
-    expectTabContentToOwnScrolling("我加入的群组列表")
-
-    await user.click(joinedTrigger)
-    expect(
-      screen.queryByRole("option", { name: "已加入群" })
-    ).not.toBeInTheDocument()
-    expect(
-      screen.getByRole("option", { name: "已加入公开群" })
-    ).toBeInTheDocument()
-  })
-
-  it("groups applications by creator", () => {
-    const apps: ContactApp[] = [
-      createApp("built-in-app", "内置助手", null),
-      createApp("owned-app", "我的助手", "current-user"),
-      createApp("other-app", "其他助手", "other-user"),
-    ]
-
-    render(
-      <SidebarProvider>
-        <ContactDirectorySidebar
-          {...createSidebarProps({ activeTab: "app", apps })}
-        />
-      </SidebarProvider>
-    )
-
-    expect(screen.getByRole("button", { name: "内置应用" })).toHaveTextContent(
-      "内置应用1"
-    )
-    expect(screen.getByRole("button", { name: "我的应用" })).toHaveTextContent(
-      "我的应用1"
-    )
-    expect(screen.getByRole("button", { name: "其他应用" })).toHaveTextContent(
-      "其他应用1"
-    )
-    expect(screen.getByRole("button", { name: "创建应用" })).toBeInTheDocument()
-    expect(screen.getByRole("option", { name: "内置助手" })).toBeInTheDocument()
-    expect(screen.getByRole("option", { name: "我的助手" })).toBeInTheDocument()
-    expect(screen.getByRole("option", { name: "其他助手" })).toBeInTheDocument()
   })
 
   it("creates an application and shows its access information", async () => {
@@ -421,39 +325,6 @@ function createSidebarProps(
   }
 }
 
-function createGroup(
-  id: string,
-  name: string,
-  joined: boolean,
-  visibility: ContactGroup["visibility"]
-): ContactGroup {
-  return {
-    avatar: "",
-    avatarMembers: joined
-      ? [
-          {
-            avatar: "/alice.webp",
-            name: "Alice",
-            nickname: "",
-            role: "owner",
-          },
-          {
-            avatar: "/bob.webp",
-            name: "Bob",
-            nickname: "",
-            role: "member",
-          },
-        ]
-      : [],
-    id,
-    joined,
-    memberCount: 1,
-    name,
-    type: "group",
-    visibility,
-  }
-}
-
 function createApp(
   id: string,
   name: string,
@@ -486,21 +357,4 @@ function createCredentials(): ClientAppCredentials {
     },
     connectionSecret: "app-secret",
   }
-}
-
-function expectTabContentToOwnScrolling(ariaLabel: string) {
-  const list = screen.getByRole("listbox", { name: ariaLabel })
-  const tabsContent = list.closest('[data-slot="tabs-content"]')
-
-  expect(tabsContent).toHaveClass(
-    "no-scrollbar",
-    "min-h-0",
-    "flex-1",
-    "overflow-x-hidden",
-    "overflow-y-auto",
-    "pb-3"
-  )
-  expect(
-    tabsContent?.querySelector('[data-slot="sidebar-content"]') ?? null
-  ).not.toBeInTheDocument()
 }

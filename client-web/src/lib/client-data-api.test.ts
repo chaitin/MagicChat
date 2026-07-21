@@ -210,6 +210,7 @@ describe("client data API", () => {
     await expect(listClientConversations(fetcher)).resolves.toEqual([
       {
         avatar: "/assets/avatars/builtin/03.webp",
+        canSend: true,
         createdAt: "2026-07-03T07:00:00Z",
         id: "conversation-1",
         lastMessageAt: "2026-07-03T08:00:00Z",
@@ -337,6 +338,7 @@ describe("client data API", () => {
       )
     ).resolves.toEqual({
       avatar: "",
+      canSend: true,
       createdAt: "2026-07-03T09:30:00Z",
       id: "conversation-group-1",
       lastMessageAt: null,
@@ -541,6 +543,8 @@ describe("client data API", () => {
           },
           clientMessageId: "client-message-12",
           createdAt: "2026-07-03T08:00:00Z",
+          reactionVersion: 0,
+          reactions: [],
         },
       ],
       page: {
@@ -916,6 +920,8 @@ describe("client data API", () => {
           createdAt: "2026-07-03T08:00:00Z",
           revokedAt: "2026-07-03T08:02:00Z",
           revokedByUserId: "user-2",
+          reactionVersion: 0,
+          reactions: [],
         },
       ],
       page: {

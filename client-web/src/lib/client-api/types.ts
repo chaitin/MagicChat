@@ -89,6 +89,7 @@ export type ContactGroupAvatarMemberResponse = {
 
 export type ConversationResponse = {
   avatar?: string
+  can_send?: boolean
   created_at?: string
   id?: string
   last_message_at?: string | null
@@ -419,11 +420,50 @@ export type MessageResponse = {
   id?: string
   reply_to?: MessageReplyToResponse | null
   reply_to_message_id?: string
+  reaction_version?: number
+  reactions?: MessageReactionResponse[]
   revoked_at?: string
   revoked_by_user_id?: string
   sender?: MessageSenderResponse
   seq?: number
   topic?: MessageTopicResponse | null
+}
+
+export type MessageReactionResponse = {
+  count?: number
+  reacted_by_me?: boolean
+  text?: string
+  users?: MessageReactionUserResponse[]
+}
+
+export type MessageReactionUserResponse = {
+  id?: string
+  name?: string
+}
+
+export type SetMessageReactionResponse = {
+  conversation_id?: string
+  message_id?: string
+  reaction_version?: number
+  reactions?: MessageReactionResponse[]
+}
+
+export type MessageReactionSnapshotResponse = {
+  message_id?: string
+  reaction_version?: number
+  reactions?: MessageReactionResponse[]
+}
+
+export type ListMessageReactionSnapshotsResponse = {
+  conversation_id?: string
+  snapshots?: MessageReactionSnapshotResponse[]
+}
+
+export type ListMessageReactionUsersResponse = {
+  conversation_id?: string
+  message_id?: string
+  text?: string
+  users?: MessageReactionUserResponse[]
 }
 
 export type MessageTopicResponse = {
@@ -491,6 +531,20 @@ export type MessageCreatedEventPayloadResponse = {
 
 export type MessageUpdatedEventPayloadResponse = {
   message?: MessageResponse
+}
+
+export type MessageReactionsUpdatedEventPayloadResponse = {
+  actor_reacted?: boolean
+  actor_text?: string
+  actor_user_id?: string
+  conversation_id?: string
+  message_id?: string
+  reaction_version?: number
+  reactions?: Array<{
+    count?: number
+    text?: string
+    users?: MessageReactionUserResponse[]
+  }>
 }
 
 export type ConversationRemovedEventPayloadResponse = {
@@ -584,6 +638,7 @@ export type ClientContacts = {
 
 export type ClientConversation = {
   avatar: string
+  canSend?: boolean
   createdAt: string
   id: string
   lastMessageAt: string | null
@@ -937,11 +992,51 @@ export type ClientMessage = {
   id: string
   replyTo?: ClientMessageReplyTo
   replyToMessageId?: string
+  reactionVersion: number
+  reactions: ClientMessageReaction[]
   revokedAt?: string
   revokedByUserId?: string
   sender: ClientMessageSender
   seq: number
   topic?: ClientMessageTopic
+}
+
+export type ClientMessageReaction = {
+  count: number
+  reactedByMe: boolean
+  text: string
+  users: ClientMessageReactionUser[]
+}
+
+export type ClientMessageReactionUser = {
+  id: string
+  name: string
+}
+
+export type SetMessageReactionInput = {
+  reacted: boolean
+  text: string
+}
+
+export type MessageReactionSnapshot = {
+  conversationId: string
+  messageId: string
+  reactionVersion: number
+  reactions: ClientMessageReaction[]
+}
+
+export type MessageReactionsUpdatedEvent = {
+  actorReacted: boolean
+  actorText: string
+  actorUserId: string
+  conversationId: string
+  messageId: string
+  reactionVersion: number
+  reactions: Array<{
+    count: number
+    text: string
+    users: ClientMessageReactionUser[]
+  }>
 }
 
 export type ClientMessageTopic = {

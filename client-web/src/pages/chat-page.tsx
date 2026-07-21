@@ -119,6 +119,7 @@ export function ChatPage() {
     sendConversationText,
     sendConversationVoice,
     setConversationPinned,
+    setMessageReaction,
     setForegroundConversationId,
     updateMessageTopic,
   } = useClientData()
@@ -184,6 +185,13 @@ export function ChatPage() {
     !activeMessageState.loaded &&
     !activeMessageState.error
   )
+  const activeConversationReadOnlyReason =
+    activeConversation?.canSend === false && !activeConversation.topic?.archived
+      ? activeConversation.type === "app" ||
+        activeConversation.topic?.parentConversationType === "app"
+        ? "你当前无权直接使用此应用"
+        : "当前会话不能发送消息"
+      : undefined
   const activeClientMessages =
     activeMessageState?.messages ?? emptyClientMessages
   const activeClientMessagesById = React.useMemo(
@@ -410,6 +418,17 @@ export function ChatPage() {
       )
     },
     [activeConversationId, revokeConversationMessage]
+  )
+
+  const updateMessageReaction = React.useCallback(
+    async (
+      message: ConversationPanelMessage,
+      text: string,
+      reacted: boolean
+    ) => {
+      await setMessageReaction(activeConversationId, message.id, text, reacted)
+    },
+    [activeConversationId, setMessageReaction]
   )
 
   const openForwardOperation = React.useCallback(
@@ -681,11 +700,15 @@ export function ChatPage() {
               conversationId={activeConversation.id}
               currentUserId={me.id}
               mentionLabelResolver={activeMentionLabelResolver}
+              reactionConversationId={
+                activeConversation.topic?.parentConversationId
+              }
             />
           ) : undefined
         }
         headerActions={
-          activeConversation?.type === "topic" ? (
+          activeConversation?.type === "topic" &&
+          activeConversation.canSend !== false ? (
             <TopicArchiveAction conversationId={activeConversation.id} />
           ) : undefined
         }
@@ -697,12 +720,16 @@ export function ChatPage() {
         onDraftBlur={flushDrafts}
         onDraftChange={setDraft}
         onCreateTopic={
-          activeConversation?.type === "topic" ? undefined : requestCreateTopic
+          activeConversation?.type === "topic" ||
+          activeConversation?.canSend === false
+            ? undefined
+            : requestCreateTopic
         }
         onForwardMessage={forwardSingleMessage}
         onForwardSelectedMessages={forwardSelectedMessages}
         onReplyToMessage={replyToMessage}
         onRevokeMessage={revokeMessage}
+        onSetMessageReaction={updateMessageReaction}
         onRichTextModeChange={setRichTextMode}
         onSendFile={sendFileMessage}
         onSendImage={sendImageMessage}
@@ -714,7 +741,11 @@ export function ChatPage() {
         onToggleMessageSelection={toggleMessageSelection}
         replyTarget={replyTarget}
         richTextMode={richTextMode}
-        readOnly={activeConversation?.topic?.archived}
+        readOnly={
+          activeConversation?.topic?.archived ||
+          activeConversation?.canSend === false
+        }
+        readOnlyReason={activeConversationReadOnlyReason}
         sending={Boolean(activeMessageState?.sending)}
       />
       <CreateGroupConversationDialog

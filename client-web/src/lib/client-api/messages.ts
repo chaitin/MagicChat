@@ -10,6 +10,10 @@ import type {
   MarkConversationReadResponse,
   MessageCreatedEventPayloadResponse,
   MessageUpdatedEventPayloadResponse,
+  MessageReactionsUpdatedEventPayloadResponse,
+  ListMessageReactionUsersResponse,
+  ListMessageReactionSnapshotsResponse,
+  SetMessageReactionResponse,
   ConversationRemovedEventPayloadResponse,
   ConversationMemberMentionedEventPayloadResponse,
   TopicEventPayloadResponse,
@@ -31,16 +35,155 @@ import type {
   MarkConversationReadResult,
   ForwardConversationMessagesInput,
   ForwardConversationMessagesResult,
+  MessageReactionsUpdatedEvent,
+  MessageReactionSnapshot,
+  ClientMessageReactionUser,
+  SetMessageReactionInput,
 } from "./types"
 import {
   isTemporaryFileReadURLFresh,
   normalizeMarkConversationReadResult,
   normalizeMessage,
   normalizeMessagePage,
+  normalizeMessageReactions,
+  normalizeMessageReactionUsers,
   normalizeTemporaryFileReadURL,
 } from "./message-normalizers"
 
 const temporaryFileReadURLCache = new Map<string, TemporaryFileReadURL>()
+
+export async function setConversationMessageReaction(
+  conversationId: string,
+  messageId: string,
+  input: SetMessageReactionInput,
+  fetcher: ClientDataFetch = fetch
+): Promise<MessageReactionSnapshot> {
+  const response = await fetcher(
+    `/api/client/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/reactions`,
+    {
+      body: JSON.stringify({ reacted: input.reacted, text: input.text }),
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      method: "PUT",
+    }
+  )
+  const payload = await readJson<
+    | ClientDataErrorEnvelope
+    | ClientDataSuccessEnvelope<SetMessageReactionResponse>
+  >(response)
+  if (!response.ok || payload?.success === false) {
+    throw createRequestError(payload, response, "更新消息表情失败")
+  }
+  const data = (
+    payload as ClientDataSuccessEnvelope<SetMessageReactionResponse> | undefined
+  )?.data
+  if (
+    !data?.conversation_id ||
+    !data.message_id ||
+    !Number.isSafeInteger(data.reaction_version) ||
+    (data.reaction_version ?? -1) < 0
+  ) {
+    throw new ClientDataRequestError("消息表情响应格式不正确")
+  }
+  return {
+    conversationId: data.conversation_id,
+    messageId: data.message_id,
+    reactionVersion: data.reaction_version!,
+    reactions: normalizeMessageReactions(data.reactions),
+  }
+}
+
+export async function listConversationMessageReactionSnapshots(
+  conversationId: string,
+  messageIds: string[],
+  fetcher: ClientDataFetch = fetch
+): Promise<MessageReactionSnapshot[]> {
+  const response = await fetcher(
+    `/api/client/conversations/${encodeURIComponent(conversationId)}/messages/reactions/query`,
+    {
+      body: JSON.stringify({ message_ids: messageIds }),
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    }
+  )
+  const payload = await readJson<
+    | ClientDataErrorEnvelope
+    | ClientDataSuccessEnvelope<ListMessageReactionSnapshotsResponse>
+  >(response)
+  if (!response.ok || payload?.success === false) {
+    throw createRequestError(payload, response, "同步消息表情失败")
+  }
+  const data = (
+    payload as
+      | ClientDataSuccessEnvelope<ListMessageReactionSnapshotsResponse>
+      | undefined
+  )?.data
+  if (
+    data?.conversation_id !== conversationId ||
+    !Array.isArray(data.snapshots)
+  ) {
+    throw new ClientDataRequestError("消息表情快照响应格式不正确")
+  }
+  const snapshots = data.snapshots.map((snapshot) => {
+    if (
+      !snapshot?.message_id ||
+      !Number.isSafeInteger(snapshot.reaction_version) ||
+      (snapshot.reaction_version ?? -1) < 0
+    ) {
+      throw new ClientDataRequestError("消息表情快照响应格式不正确")
+    }
+    return {
+      conversationId: data.conversation_id!,
+      messageId: snapshot.message_id,
+      reactionVersion: snapshot.reaction_version!,
+      reactions: normalizeMessageReactions(snapshot.reactions),
+    }
+  })
+  const requestedMessageIds = [...new Set(messageIds)]
+  if (
+    snapshots.length !== requestedMessageIds.length ||
+    snapshots.some(
+      (snapshot, index) => snapshot.messageId !== requestedMessageIds[index]
+    )
+  ) {
+    throw new ClientDataRequestError("消息表情快照响应格式不正确")
+  }
+  return snapshots
+}
+
+export async function listConversationMessageReactionUsers(
+  conversationId: string,
+  messageId: string,
+  text: string,
+  fetcher: ClientDataFetch = fetch
+): Promise<ClientMessageReactionUser[]> {
+  const searchParams = new URLSearchParams({ text })
+  const response = await fetcher(
+    `/api/client/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/reactions/users?${searchParams.toString()}`,
+    { credentials: "include", method: "GET" }
+  )
+  const payload = await readJson<
+    | ClientDataErrorEnvelope
+    | ClientDataSuccessEnvelope<ListMessageReactionUsersResponse>
+  >(response)
+  if (!response.ok || payload?.success === false) {
+    throw createRequestError(payload, response, "加载表情参与者失败")
+  }
+  const data = (
+    payload as
+      | ClientDataSuccessEnvelope<ListMessageReactionUsersResponse>
+      | undefined
+  )?.data
+  if (
+    data?.conversation_id !== conversationId ||
+    data.message_id !== messageId ||
+    data.text !== text
+  ) {
+    throw new ClientDataRequestError("消息表情参与者响应格式不正确")
+  }
+  return normalizeMessageReactionUsers(data.users)
+}
 
 export async function listConversationMessages(
   conversationId: string,
@@ -674,6 +817,56 @@ export function normalizeMessageUpdatedEventPayload(
   return normalizeMessage(
     (payload as MessageUpdatedEventPayloadResponse).message
   )
+}
+
+export function normalizeMessageReactionsUpdatedEventPayload(
+  payload: unknown
+): MessageReactionsUpdatedEvent {
+  if (!isObject(payload)) {
+    throw new ClientDataRequestError("消息表情推送格式不正确")
+  }
+  const value = payload as MessageReactionsUpdatedEventPayloadResponse
+  if (
+    typeof value.actor_reacted !== "boolean" ||
+    typeof value.actor_text !== "string" ||
+    !value.actor_text ||
+    typeof value.actor_user_id !== "string" ||
+    !value.actor_user_id ||
+    typeof value.conversation_id !== "string" ||
+    !value.conversation_id ||
+    typeof value.message_id !== "string" ||
+    !value.message_id ||
+    !Number.isSafeInteger(value.reaction_version) ||
+    (value.reaction_version ?? -1) < 0 ||
+    !Array.isArray(value.reactions)
+  ) {
+    throw new ClientDataRequestError("消息表情推送格式不正确")
+  }
+  const reactions = value.reactions.map((reaction) => {
+    if (
+      typeof reaction?.text !== "string" ||
+      !reaction.text ||
+      typeof reaction.count !== "number" ||
+      !Number.isInteger(reaction.count) ||
+      reaction.count <= 0
+    ) {
+      throw new ClientDataRequestError("消息表情推送格式不正确")
+    }
+    return {
+      count: reaction.count,
+      text: reaction.text,
+      users: normalizeMessageReactionUsers(reaction.users),
+    }
+  })
+  return {
+    actorReacted: value.actor_reacted,
+    actorText: value.actor_text,
+    actorUserId: value.actor_user_id,
+    conversationId: value.conversation_id,
+    messageId: value.message_id,
+    reactionVersion: value.reaction_version!,
+    reactions,
+  }
 }
 
 export function normalizeConversationRemovedEventPayload(payload: unknown) {

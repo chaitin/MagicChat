@@ -630,6 +630,7 @@ function normalizeConversation(
 
   const normalizedConversation: ClientConversation = {
     avatar: conversation.avatar ?? "",
+    canSend: conversation.can_send !== false,
     createdAt: conversation.created_at,
     id: conversation.id,
     lastMessageAt: conversation.last_message_at ?? null,

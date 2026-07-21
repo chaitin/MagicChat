@@ -15,6 +15,7 @@ import type {
   MessageRevokedSystemEventBodyResponse,
   TopicClosedSystemEventBodyResponse,
   MessageBodyResponse,
+  MessageReactionUserResponse,
   MessageResponse,
   MessagePageResponse,
   MarkConversationReadResponse,
@@ -37,6 +38,7 @@ import type {
   ClientTopicClosedSystemEventBody,
   ClientMessageBody,
   ClientMessage,
+  ClientMessageReaction,
   ClientMessagePage,
   ClientMessageTopicReply,
   TemporaryFileReadURL,
@@ -90,14 +92,22 @@ export function normalizeMessage(
     clientMessageId: message.client_message_id ?? "",
     conversationId: message.conversation_id,
     createdAt: message.created_at,
-    delegatedBy: normalizeMessageDelegatedBy(message.delegated_by),
     id: message.id,
-    replyTo: normalizeMessageReplyTo(message.reply_to),
+    reactionVersion: normalizeReactionVersion(message.reaction_version),
+    reactions: normalizeMessageReactions(message.reactions),
     sender: {
       id: senderId,
       type: senderType,
     },
     seq: message.seq,
+  }
+  const delegatedBy = normalizeMessageDelegatedBy(message.delegated_by)
+  if (delegatedBy) {
+    normalized.delegatedBy = delegatedBy
+  }
+  const replyTo = normalizeMessageReplyTo(message.reply_to)
+  if (replyTo) {
+    normalized.replyTo = replyTo
   }
   if (message.topic) {
     if (!message.topic.conversation_id) {
@@ -122,6 +132,65 @@ export function normalizeMessage(
   }
 
   return normalized
+}
+
+export function normalizeMessageReactions(
+  reactions: MessageResponse["reactions"]
+): ClientMessageReaction[] {
+  if (reactions === undefined) {
+    return []
+  }
+  if (!Array.isArray(reactions)) {
+    throw new ClientDataRequestError("消息表情响应格式不正确")
+  }
+  return reactions.map((reaction) => {
+    if (
+      typeof reaction?.text !== "string" ||
+      reaction.text === "" ||
+      typeof reaction.count !== "number" ||
+      !Number.isInteger(reaction.count) ||
+      reaction.count <= 0 ||
+      (reaction.reacted_by_me !== undefined &&
+        typeof reaction.reacted_by_me !== "boolean")
+    ) {
+      throw new ClientDataRequestError("消息表情响应格式不正确")
+    }
+    return {
+      count: reaction.count,
+      reactedByMe: Boolean(reaction.reacted_by_me),
+      text: reaction.text,
+      users: normalizeMessageReactionUsers(reaction.users),
+    }
+  })
+}
+
+export function normalizeMessageReactionUsers(
+  value: MessageReactionUserResponse[] | undefined
+) {
+  if (value === undefined) return []
+  if (
+    !Array.isArray(value) ||
+    value.some(
+      (user) =>
+        typeof user?.id !== "string" ||
+        user.id.trim() === "" ||
+        typeof user.name !== "string" ||
+        user.name.trim() === ""
+    )
+  ) {
+    throw new ClientDataRequestError("消息表情响应格式不正确")
+  }
+  return value.map((user) => ({ id: user.id!, name: user.name! }))
+}
+
+function normalizeReactionVersion(value: number | undefined) {
+  if (value === undefined) {
+    return 0
+  }
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new ClientDataRequestError("消息表情版本格式不正确")
+  }
+  return value
 }
 
 function normalizeMessageTopicReply(

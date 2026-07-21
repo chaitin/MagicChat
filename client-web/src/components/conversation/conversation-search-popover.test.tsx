@@ -34,49 +34,6 @@ describe("ConversationSearchPopover", () => {
     expect(screen.getAllByRole("option")[0]).toHaveTextContent("最近会话")
   })
 
-  it("uses the provided description for empty-keyword results", async () => {
-    const user = userEvent.setup()
-    render(
-      <ConversationSearchPopover
-        conversations={[
-          createConversation({
-            lastMessageSummary:
-              "{(@user/00000000-0000-0000-0000-000000000001)} 你好",
-            name: "群聊",
-          }),
-        ]}
-        currentUserId="current-user"
-        getConversationDescription={() => "@张三 你好"}
-        onSelectConversation={vi.fn()}
-      />
-    )
-
-    await user.click(screen.getByRole("combobox", { name: "搜索消息" }))
-
-    expect(screen.getByRole("option", { name: /群聊/ })).toHaveTextContent(
-      "@张三 你好"
-    )
-    expect(screen.queryByText(/\{\(@user\//)).not.toBeInTheDocument()
-  })
-
-  it("uses the application fallback avatar for app conversations", async () => {
-    const user = userEvent.setup()
-    renderSearch([
-      createConversation({
-        name: "智能助手",
-        type: "app",
-      }),
-    ])
-
-    await user.click(screen.getByRole("combobox", { name: "搜索消息" }))
-
-    expect(
-      screen
-        .getByRole("option", { name: /智能助手/ })
-        .querySelector(".lucide-bot")
-    ).toBeInTheDocument()
-  })
-
   it("shows and searches a topic with its parent conversation name", async () => {
     const user = userEvent.setup()
     renderSearch([

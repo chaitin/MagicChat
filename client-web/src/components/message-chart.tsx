@@ -42,7 +42,7 @@ import type {
 } from "@/lib/client-data-api"
 
 const defaultChartHeight = 256
-const defaultChartWidth = 640
+const defaultChartWidth = 480
 const radarGridAnchorKey = "radarGridAnchor"
 
 export const MessageChart = React.memo(function MessageChart({
@@ -52,7 +52,7 @@ export const MessageChart = React.memo(function MessageChart({
 }) {
   return (
     <div
-      className="grid w-160 max-w-full gap-3"
+      className="grid w-120 max-w-full gap-3"
       data-chart-type={chart.chartType}
       data-slot="message-chart"
     >

@@ -8,8 +8,10 @@ import {
   isClientMessageInitiatedByUser,
   listClientContacts,
   listClientConversations,
+  listConversationMessageReactionSnapshots,
   listConversationMessages,
   markConversationRead as markConversationReadRequest,
+  setConversationMessageReaction as setConversationMessageReactionRequest,
   setConversationPinned as setConversationPinnedRequest,
   type ClientConversation,
   type ClientMessage,
@@ -19,6 +21,8 @@ import {
   type ContactGroup,
   type ContactUser,
   type MarkConversationReadOptions,
+  type MessageReactionsUpdatedEvent,
+  type MessageReactionSnapshot,
 } from "@/lib/client-data-api"
 import {
   ClientDataContext,
@@ -27,6 +31,8 @@ import {
 } from "@/lib/client-data-context"
 import {
   createConversationMessageState,
+  applyMessageReactionSnapshot,
+  applyMessageReactionsUpdate,
   getClientDataErrorMessage,
   getMessageSummary,
   getNewestMessageSeq,
@@ -53,6 +59,8 @@ type BootstrapState = "loading" | "ready" | "error"
 
 const minimumBootstrapLoadingMs = 1_000
 const refreshIntervalMs = 15_000
+const reactionSnapshotBatchSize = 100
+const maxReactionSnapshotCatchUpAttempts = 3
 
 export function ClientDataProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
@@ -93,6 +101,10 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
   const mountedRef = useRef(true)
   const loadingConversationIdsRef = useRef<Set<string>>(new Set())
   const syncingAfterConversationIdsRef = useRef<Set<string>>(new Set())
+  const refreshingReactionSnapshotKeysRef = useRef<Set<string>>(new Set())
+  const reactionSnapshotMinimumVersionsRef = useRef<Map<string, number>>(
+    new Map()
+  )
 
   useEffect(() => {
     conversationMessageStatesRef.current = conversationMessageStates
@@ -431,6 +443,108 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
   )
 
   const currentUserId = me?.id ?? ""
+  const refreshMessageReactions = useCallback(
+    async (conversationId: string, rawMessageIds: string[]) => {
+      const messageIds = [...new Set(rawMessageIds)].filter((messageId) => {
+        const key = `${conversationId}:${messageId}`
+        return !refreshingReactionSnapshotKeysRef.current.has(key)
+      })
+      const batches: string[][] = []
+      for (
+        let index = 0;
+        index < messageIds.length;
+        index += reactionSnapshotBatchSize
+      ) {
+        batches.push(messageIds.slice(index, index + reactionSnapshotBatchSize))
+      }
+
+      await Promise.all(
+        batches.map(async (initialBatch) => {
+          let batch = initialBatch
+          let attempts = 0
+          while (
+            batch.length > 0 &&
+            attempts < maxReactionSnapshotCatchUpAttempts
+          ) {
+            attempts += 1
+            for (const messageId of batch) {
+              refreshingReactionSnapshotKeysRef.current.add(
+                `${conversationId}:${messageId}`
+              )
+            }
+            let snapshots: MessageReactionSnapshot[]
+            try {
+              snapshots = await listConversationMessageReactionSnapshots(
+                conversationId,
+                batch
+              )
+              setConversationMessageStates((currentStates) => {
+                const state = currentStates[conversationId]
+                if (!state) return currentStates
+                const snapshotsByMessageId = new Map(
+                  snapshots.map((snapshot) => [snapshot.messageId, snapshot])
+                )
+                let changed = false
+                const messages = state.messages.map((message) => {
+                  const snapshot = snapshotsByMessageId.get(message.id)
+                  if (!snapshot) return message
+                  const nextMessage = applyMessageReactionSnapshot(
+                    message,
+                    snapshot
+                  )
+                  if (nextMessage !== message) changed = true
+                  return nextMessage
+                })
+                return changed
+                  ? {
+                      ...currentStates,
+                      [conversationId]: { ...state, messages },
+                    }
+                  : currentStates
+              })
+            } catch (error) {
+              for (const messageId of batch) {
+                reactionSnapshotMinimumVersionsRef.current.delete(
+                  `${conversationId}:${messageId}`
+                )
+              }
+              throw error
+            } finally {
+              for (const messageId of batch) {
+                refreshingReactionSnapshotKeysRef.current.delete(
+                  `${conversationId}:${messageId}`
+                )
+              }
+            }
+
+            const versionsByMessageId = new Map(
+              snapshots.map((snapshot) => [
+                snapshot.messageId,
+                snapshot.reactionVersion,
+              ])
+            )
+            batch = batch.filter((messageId) => {
+              const key = `${conversationId}:${messageId}`
+              const minimumVersion =
+                reactionSnapshotMinimumVersionsRef.current.get(key) ?? 0
+              if ((versionsByMessageId.get(messageId) ?? -1) < minimumVersion) {
+                return true
+              }
+              reactionSnapshotMinimumVersionsRef.current.delete(key)
+              return false
+            })
+          }
+          for (const messageId of batch) {
+            reactionSnapshotMinimumVersionsRef.current.delete(
+              `${conversationId}:${messageId}`
+            )
+          }
+        })
+      )
+    },
+    []
+  )
+
   const handleIncomingConversationMessage = useCallback(
     (
       message: ClientMessage,
@@ -478,6 +592,99 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
       updateTopicSourcePreview(message)
     },
     [updateTopicSourcePreview]
+  )
+
+  const handleIncomingMessageReactionsUpdate = useCallback(
+    (event: MessageReactionsUpdatedEvent) => {
+      const state = conversationMessageStatesRef.current[event.conversationId]
+      const message = state?.messages.find(
+        (candidate) => candidate.id === event.messageId
+      )
+      if (!message || message.reactionVersion >= event.reactionVersion) {
+        return
+      }
+      if (event.reactionVersion > message.reactionVersion + 1) {
+        const key = `${event.conversationId}:${event.messageId}`
+        const previousMinimum =
+          reactionSnapshotMinimumVersionsRef.current.get(key) ?? 0
+        reactionSnapshotMinimumVersionsRef.current.set(
+          key,
+          Math.max(previousMinimum, event.reactionVersion)
+        )
+        void refreshMessageReactions(event.conversationId, [
+          event.messageId,
+        ]).catch(() => undefined)
+        return
+      }
+      setConversationMessageStates((currentStates) => {
+        const state = currentStates[event.conversationId]
+        if (!state) {
+          return currentStates
+        }
+        const messageIndex = state.messages.findIndex(
+          (message) => message.id === event.messageId
+        )
+        if (
+          messageIndex < 0 ||
+          (state.messages[messageIndex].reactionVersion ?? 0) >=
+            event.reactionVersion
+        ) {
+          return currentStates
+        }
+        const messages = [...state.messages]
+        messages[messageIndex] = applyMessageReactionsUpdate(
+          messages[messageIndex],
+          event,
+          currentUserId
+        )
+        return {
+          ...currentStates,
+          [event.conversationId]: { ...state, messages },
+        }
+      })
+    },
+    [currentUserId, refreshMessageReactions]
+  )
+
+  const setMessageReaction = useCallback(
+    async (
+      conversationId: string,
+      messageId: string,
+      text: string,
+      reacted: boolean
+    ) => {
+      const result = await setConversationMessageReactionRequest(
+        conversationId,
+        messageId,
+        { reacted, text }
+      )
+      setConversationMessageStates((currentStates) => {
+        const state = currentStates[result.conversationId]
+        if (!state) {
+          return currentStates
+        }
+        const messageIndex = state.messages.findIndex(
+          (message) => message.id === result.messageId
+        )
+        if (messageIndex < 0) {
+          return currentStates
+        }
+        const messages = [...state.messages]
+        messages[messageIndex] = applyMessageReactionSnapshot(
+          messages[messageIndex],
+          result
+        )
+        if (messages[messageIndex] === state.messages[messageIndex]) {
+          return currentStates
+        }
+        return {
+          ...currentStates,
+          [result.conversationId]: { ...state, messages },
+        }
+      })
+      return result
+    },
+    []
   )
 
   const updateConversationLastMentionedSeq = useCallback(
@@ -785,8 +992,12 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
       if (newestSeq > 0) {
         syncAfterConversationMessages(conversationId, newestSeq)
       }
+      void refreshMessageReactions(
+        conversationId,
+        state.messages.map((message) => message.id)
+      ).catch(() => undefined)
     }
-  }, [syncAfterConversationMessages])
+  }, [refreshMessageReactions, syncAfterConversationMessages])
 
   const {
     sendConversationFile,
@@ -982,6 +1193,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     setConversationPinned,
     handleIncomingConversationMessage,
     handleIncomingConversationMessageUpdate,
+    handleIncomingMessageReactionsUpdate,
     me,
     meError,
     meLoading,
@@ -1004,6 +1216,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     removeConversation,
     removeGroupConversationMember,
     revokeConversationMessage,
+    setMessageReaction,
     sendConversationFile,
     sendConversationImage,
     sendConversationLink,

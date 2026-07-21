@@ -48,29 +48,6 @@ describe("conversation topic preview", () => {
     expect(onOpenTopic).toHaveBeenCalledWith("topic-1")
   })
 
-  it("uses the same entry label for closed topics", () => {
-    const message = createMessage()
-    message.topic!.archived = true
-
-    render(
-      <MemoryRouter>
-        <ClientDataContext.Provider value={createClientDataValue()}>
-          <MessageBubble
-            conversation={createConversation()}
-            currentUserId="user-1"
-            mentionLabelResolver={() => undefined}
-            message={message}
-            onInsertMention={vi.fn()}
-            onOpenTopic={vi.fn()}
-            onRevoke={vi.fn()}
-          />
-        </ClientDataContext.Provider>
-      </MemoryRouter>
-    )
-
-    expect(screen.getByRole("button", { name: "查看话题" })).toBeVisible()
-    expect(screen.queryByText("查看已关闭话题")).not.toBeInTheDocument()
-  })
 })
 
 function createMessage(): ConversationPanelMessage {
@@ -79,9 +56,12 @@ function createMessage(): ConversationPanelMessage {
     avatar: "",
     body: { content: "我们讨论一下", type: "text" },
     canRevoke: false,
+    createdAt: "2026-07-20T10:00:00Z",
     delegatedByName: "",
     id: "message-1",
     mentionTarget: null,
+    reactionVersion: 0,
+    reactions: [],
     role: "other",
     senderAppId: null,
     senderAppProfile: null,

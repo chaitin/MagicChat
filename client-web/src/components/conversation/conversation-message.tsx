@@ -33,6 +33,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { MessageActionMenu } from "@/components/message-action-menu"
+import {
+  MessageReactionAddButton,
+  MessageReactionChips,
+} from "@/components/conversation/message-reactions"
 import { UserProfilePopover } from "@/components/user-profile-popover"
 import type {
   ConversationPanelMentionTarget,
@@ -84,7 +88,12 @@ type MessageBubbleProps = {
   onMultiSelect?: (message: ConversationPanelMessage) => void
   onReply?: (message: ConversationPanelMessage) => void
   onOpenTopic?: (conversationId: string) => void
-  onRevoke: (message: ConversationPanelMessage) => void
+  onRevoke?: (message: ConversationPanelMessage) => void
+  onSetReaction?: (
+    message: ConversationPanelMessage,
+    text: string,
+    reacted: boolean
+  ) => Promise<void>
   onToggleSelected?: (message: ConversationPanelMessage) => void
   selectable?: boolean
   canReply?: boolean
@@ -104,6 +113,7 @@ export const MessageBubble = React.memo(function MessageBubble({
   onReply,
   onOpenTopic,
   onRevoke,
+  onSetReaction,
   onToggleSelected,
   selectable = true,
   canReply = true,
@@ -125,10 +135,10 @@ export const MessageBubble = React.memo(function MessageBubble({
     message.mentionTarget !== null
   const unavailable =
     message.body.type === "revoked" || message.body.type === "unsupported"
+  const canAddReaction = canReply && message.body.type !== "revoked"
   const copyText = getMessageCopyText(message, mentionLabelResolver)
   const bubbleRef = React.useRef<HTMLDivElement | null>(null)
   const selectedCopyTextRef = React.useRef("")
-
   function handleMessageContextMenu() {
     selectedCopyTextRef.current = getSelectedTextWithinElement(
       bubbleRef.current
@@ -176,7 +186,10 @@ export const MessageBubble = React.memo(function MessageBubble({
   const messageBody = (
     <div
       className={cn(
-        "group/message-bubble max-w-full rounded-md text-sm leading-relaxed shadow-sm",
+        "group/message-bubble min-w-0 rounded-md text-sm leading-relaxed shadow-sm",
+        message.body.type === "text" && !message.topic
+          ? "max-w-120"
+          : "max-w-full",
         flushImageBubble ? "overflow-hidden p-0" : "p-3",
         fromMe
           ? "bg-teal-100/60 text-foreground dark:bg-teal-950/80"
@@ -200,6 +213,23 @@ export const MessageBubble = React.memo(function MessageBubble({
         currentUserId={currentUserId}
         mentionLabelResolver={mentionLabelResolver}
       />
+      {!selectionMode && message.reactions.length > 0 && (
+        <div className={cn("mt-2", flushImageBubble && "mx-2 mb-2")}>
+          <MessageReactionChips
+            align={fromMe ? "end" : "start"}
+            canAdd={canAddReaction}
+            conversationId={conversation.id}
+            enabled={message.body.type !== "revoked"}
+            messageId={message.id}
+            onSetReaction={
+              onSetReaction
+                ? (text, reacted) => onSetReaction(message, text, reacted)
+                : undefined
+            }
+            reactions={message.reactions}
+          />
+        </div>
+      )}
       {message.topic && onOpenTopic && (
         <TopicReplyPreview
           onOpen={
@@ -212,11 +242,32 @@ export const MessageBubble = React.memo(function MessageBubble({
       )}
     </div>
   )
+  const renderedMessageBody =
+    selectionMode || unavailable ? (
+      messageBody
+    ) : (
+      <MessageActionMenu
+        canRevoke={Boolean(onRevoke) && message.canRevoke}
+        copyDisabled={message.body.type !== "image" && !copyText}
+        onCreateTopic={
+          onCreateTopic && !message.topic
+            ? () => onCreateTopic(message)
+            : undefined
+        }
+        onCopy={handleCopyMessage}
+        onForward={onForward ? () => onForward(message) : undefined}
+        onMultiSelect={onMultiSelect ? () => onMultiSelect(message) : undefined}
+        onReply={canReply && onReply ? () => onReply(message) : undefined}
+        onRevoke={onRevoke ? () => onRevoke(message) : undefined}
+      >
+        {messageBody}
+      </MessageActionMenu>
+    )
 
   return (
     <div
       className={cn(
-        "relative rounded-md transition-colors",
+        "group/message-row relative rounded-md transition-colors",
         selectionMode && "px-3 py-2 pl-11",
         selected && "bg-primary/5"
       )}
@@ -258,28 +309,23 @@ export const MessageBubble = React.memo(function MessageBubble({
             )}
             <span>{message.time}</span>
           </div>
-          {selectionMode || unavailable ? (
-            messageBody
-          ) : (
-            <MessageActionMenu
-              canRevoke={message.canRevoke}
-              copyDisabled={message.body.type !== "image" && !copyText}
-              onCreateTopic={
-                onCreateTopic && !message.topic
-                  ? () => onCreateTopic(message)
-                  : undefined
-              }
-              onCopy={handleCopyMessage}
-              onForward={onForward ? () => onForward(message) : undefined}
-              onMultiSelect={
-                onMultiSelect ? () => onMultiSelect(message) : undefined
-              }
-              onReply={canReply && onReply ? () => onReply(message) : undefined}
-              onRevoke={() => onRevoke(message)}
-            >
-              {messageBody}
-            </MessageActionMenu>
-          )}
+          <div
+            className={cn(
+              "flex max-w-full items-end gap-1.5",
+              fromMe && "flex-row-reverse"
+            )}
+            data-slot="message-bubble-line"
+          >
+            {renderedMessageBody}
+            {!selectionMode && onSetReaction && canAddReaction && (
+              <MessageReactionAddButton
+                align={fromMe ? "end" : "start"}
+                onSetReaction={(text, reacted) =>
+                  onSetReaction(message, text, reacted)
+                }
+              />
+            )}
+          </div>
           {message.delegatedByName && (
             <div className="text-xs text-muted-foreground">
               由 {message.delegatedByName} 代发
@@ -334,6 +380,7 @@ function areMessageBubblePropsEqual(
     previous.canReply === next.canReply &&
     previous.onOpenTopic === next.onOpenTopic &&
     previous.onRevoke === next.onRevoke &&
+    previous.onSetReaction === next.onSetReaction &&
     previous.onToggleSelected === next.onToggleSelected &&
     previous.selectable === next.selectable &&
     previous.selected === next.selected &&
@@ -355,6 +402,7 @@ function arePanelMessagesEqual(
     previous.body === next.body &&
     previous.canRevoke === next.canRevoke &&
     previous.delegatedByName === next.delegatedByName &&
+    previous.reactionVersion === next.reactionVersion &&
     previous.role === next.role &&
     previous.senderAppId === next.senderAppId &&
     previous.senderUserId === next.senderUserId &&
@@ -569,7 +617,10 @@ function TopicReplyPreview({
   const latestReplyTime = topic.recentReplies.at(-1)?.time ?? ""
 
   return (
-    <div className="mt-3 w-full min-w-80 border-t border-foreground/10 pt-2">
+    <div
+      className="mt-3 w-120 max-w-full border-t border-foreground/10 pt-2"
+      data-slot="topic-reply-preview"
+    >
       {topic.recentReplies.length > 0 && (
         <>
           <button
@@ -712,7 +763,7 @@ export const MessageBodyRenderer = React.memo(function MessageBodyRenderer({
         >
           <React.Suspense
             fallback={
-              <div className="h-64 w-160 max-w-full animate-pulse rounded-sm bg-foreground/5" />
+              <div className="h-64 w-120 max-w-full animate-pulse rounded-sm bg-foreground/5" />
             }
           >
             <MessageChart chart={body} />

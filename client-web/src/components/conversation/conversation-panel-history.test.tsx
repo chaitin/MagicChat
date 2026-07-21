@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { ClientConversation } from "@/lib/client-data-api"
 import type { ConversationPanelMessage } from "@/lib/conversation-panel-types"
 import { ConversationPanelHistory } from "@/components/conversation/conversation-panel-history"
+import { formatConversationMessageTime } from "@/lib/conversation-message-presenter"
 
 const testState = vi.hoisted(() => ({
   anchorTop: 100,
@@ -266,6 +267,40 @@ describe("ConversationPanelHistory", () => {
 
     expect(testState.bubbleRenderCount).toBe(1)
   })
+
+  it("marks the newer message when adjacent messages are more than one hour apart", () => {
+    const firstMessage = createMessage(
+      "message-1",
+      "other",
+      "2026-07-21T10:00:00Z"
+    )
+    const exactlyOneHourLater = createMessage(
+      "message-2",
+      "other",
+      "2026-07-21T11:00:00Z"
+    )
+    const moreThanOneHourLater = createMessage(
+      "message-3",
+      "other",
+      "2026-07-21T12:00:01Z"
+    )
+
+    render(
+      <ConversationPanelHistory
+        {...createProps([
+          firstMessage,
+          exactlyOneHourLater,
+          moreThanOneHourLater,
+        ])}
+      />
+    )
+
+    const markers = document.querySelectorAll("[data-message-time-marker]")
+    expect(markers).toHaveLength(1)
+    expect(markers[0]).toHaveTextContent(
+      formatConversationMessageTime(moreThanOneHourLater.createdAt)
+    )
+  })
 })
 
 function getViewport() {
@@ -318,16 +353,20 @@ function createConversation(): ClientConversation {
 
 function createMessage(
   id: string,
-  role: ConversationPanelMessage["role"]
+  role: ConversationPanelMessage["role"],
+  createdAt = "2026-07-14T10:00:00Z"
 ): ConversationPanelMessage {
   return {
     author: role === "me" ? "我" : "Alice",
     avatar: "",
     body: { content: id, type: "text" },
     canRevoke: role === "me",
+    createdAt,
     delegatedByName: "",
     id,
     mentionTarget: null,
+    reactionVersion: 0,
+    reactions: [],
     role,
     senderAppId: "",
     senderAppProfile: null,

@@ -15,6 +15,7 @@ import {
   MessageBubble,
   SystemMessageBadge,
 } from "@/components/conversation/conversation-message"
+import { formatConversationMessageTime } from "@/lib/conversation-message-presenter"
 import type {
   ConversationPanelMentionTarget,
   ConversationPanelMessage,
@@ -41,6 +42,7 @@ export const ConversationPanelHistory = React.memo(
     onOpenTopic,
     onReplyToMessage,
     onRevokeMessage,
+    onSetMessageReaction,
     onToggleMessageSelection,
   }: {
     canReply?: boolean
@@ -60,7 +62,12 @@ export const ConversationPanelHistory = React.memo(
     onInsertMention: (target: ConversationPanelMentionTarget) => void
     onOpenTopic?: (conversationId: string) => void
     onReplyToMessage: (message: ConversationPanelMessage) => void
-    onRevokeMessage: (message: ConversationPanelMessage) => void
+    onRevokeMessage?: (message: ConversationPanelMessage) => void
+    onSetMessageReaction?: (
+      message: ConversationPanelMessage,
+      text: string,
+      reacted: boolean
+    ) => Promise<void>
     onToggleMessageSelection?: (message: ConversationPanelMessage) => void
   }) {
     const viewportRef = React.useRef<HTMLDivElement | null>(null)
@@ -327,44 +334,53 @@ export const ConversationPanelHistory = React.memo(
                 <span>正在加载更早消息</span>
               </div>
             )}
-            {messages.map((message) =>
-              message.role === "system" ? (
-                <SystemMessageBadge
-                  key={message.id}
-                  currentUserId={currentUserId}
-                  mentionLabelResolver={mentionLabelResolver}
-                  message={message}
-                />
-              ) : (
-                <MessageBubble
-                  canReply={canReply}
-                  key={message.id}
-                  message={message}
-                  conversation={conversation}
-                  currentUserId={currentUserId}
-                  mentionLabelResolver={mentionLabelResolver}
-                  onForward={
-                    isMessageAvailable(message) ? onForwardMessage : undefined
-                  }
-                  onCreateTopic={onCreateTopic}
-                  onInsertMention={onInsertMention}
-                  onOpenTopic={onOpenTopic}
-                  onMultiSelect={
-                    isMessageAvailable(message)
-                      ? onStartMessageSelection
-                      : undefined
-                  }
-                  onReply={onReplyToMessage}
-                  onRevoke={onRevokeMessage}
-                  onToggleSelected={onToggleMessageSelection}
-                  selectable={isMessageAvailable(message)}
-                  selected={messageSelection?.selectedMessageIds.has(
-                    message.id
-                  )}
-                  selectionMode={messageSelection?.active}
-                />
-              )
-            )}
+            {messages.map((message, index) => (
+              <React.Fragment key={message.id}>
+                {shouldShowMessageTimeMarker(messages[index - 1], message) && (
+                  <div
+                    className="text-center text-xs text-muted-foreground"
+                    data-message-time-marker
+                  >
+                    {formatConversationMessageTime(message.createdAt)}
+                  </div>
+                )}
+                {message.role === "system" ? (
+                  <SystemMessageBadge
+                    currentUserId={currentUserId}
+                    mentionLabelResolver={mentionLabelResolver}
+                    message={message}
+                  />
+                ) : (
+                  <MessageBubble
+                    canReply={canReply}
+                    message={message}
+                    conversation={conversation}
+                    currentUserId={currentUserId}
+                    mentionLabelResolver={mentionLabelResolver}
+                    onForward={
+                      isMessageAvailable(message) ? onForwardMessage : undefined
+                    }
+                    onCreateTopic={onCreateTopic}
+                    onInsertMention={onInsertMention}
+                    onOpenTopic={onOpenTopic}
+                    onMultiSelect={
+                      isMessageAvailable(message)
+                        ? onStartMessageSelection
+                        : undefined
+                    }
+                    onReply={onReplyToMessage}
+                    onRevoke={onRevokeMessage}
+                    onSetReaction={onSetMessageReaction}
+                    onToggleSelected={onToggleMessageSelection}
+                    selectable={isMessageAvailable(message)}
+                    selected={messageSelection?.selectedMessageIds.has(
+                      message.id
+                    )}
+                    selectionMode={messageSelection?.active}
+                  />
+                )}
+              </React.Fragment>
+            ))}
           </div>
         </ScrollArea>
         {pendingNewMessageCount > 0 && (
@@ -386,6 +402,25 @@ export const ConversationPanelHistory = React.memo(
 
 function isMessageAvailable(message: ConversationPanelMessage) {
   return message.body.type !== "revoked" && message.body.type !== "unsupported"
+}
+
+const messageTimeMarkerThresholdMs = 60 * 60 * 1000
+
+function shouldShowMessageTimeMarker(
+  previousMessage: ConversationPanelMessage | undefined,
+  message: ConversationPanelMessage
+) {
+  if (!previousMessage) {
+    return false
+  }
+
+  const previousTime = new Date(previousMessage.createdAt).getTime()
+  const messageTime = new Date(message.createdAt).getTime()
+  if (Number.isNaN(previousTime) || Number.isNaN(messageTime)) {
+    return false
+  }
+
+  return messageTime - previousTime > messageTimeMarkerThresholdMs
 }
 
 function scrollToBottom(viewport: HTMLDivElement) {

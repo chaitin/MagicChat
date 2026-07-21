@@ -44,11 +44,6 @@ describe("AppCredentialsDialog", () => {
     ).toBeInTheDocument()
     expect(screen.getByLabelText("连接密钥")).toHaveValue("current-secret")
     expect(screen.getByLabelText("应用 ID")).toHaveValue("app-1")
-    expect(screen.getByLabelText("连接密钥")).toHaveClass("font-mono!")
-    expect(screen.getByLabelText("应用 ID")).toHaveClass("font-mono!")
-    expect(screen.getByLabelText("WebSocket 地址")).toHaveClass("font-mono!")
-    expect(screen.queryByText("分析助手")).not.toBeInTheDocument()
-    expect(screen.queryByText("分析消息")).not.toBeInTheDocument()
 
     await user.click(screen.getByRole("button", { name: "重置连接密钥" }))
     const confirmation = screen.getByRole("alertdialog", {

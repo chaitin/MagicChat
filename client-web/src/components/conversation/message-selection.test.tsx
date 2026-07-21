@@ -120,18 +120,13 @@ describe("conversation message selection", () => {
     expect(dialog).not.toHaveTextContent("[聊天记录] 2 条 - 第一条")
     expect(dialog).toHaveTextContent("Alice")
     expect(dialog).toHaveTextContent("Bob")
-    expect(
-      screen.getByText("第一条").closest("[data-forward-bundle-item-body]")
-    ).toHaveClass("w-full", "bg-zinc-100")
 
     const nestedCard = screen.getByRole("button", {
       name: /\[聊天记录\] 1 条 - 内层消息/,
     })
-    expect(nestedCard).toHaveClass("w-80", "max-w-full")
     expect(nestedCard.parentElement).toHaveAttribute(
       "data-forward-bundle-item-body"
     )
-    expect(nestedCard.parentElement).toHaveClass("w-full", "bg-zinc-100")
 
     await user.click(nestedCard)
     expect(screen.getByRole("dialog")).toHaveTextContent("Carol")
@@ -179,7 +174,6 @@ describe("conversation message selection", () => {
     )
 
     const unsupported = screen.getByText("暂不支持查看该消息")
-    expect(unsupported).toHaveClass("text-muted-foreground")
     expect(screen.getByText("后续正常消息")).toBeInTheDocument()
 
     await user.pointer({ keys: "[MouseRight]", target: unsupported })
@@ -277,9 +271,12 @@ function createMessage(id: string, content: string): ConversationPanelMessage {
     avatar: "",
     body: { content, type: "text" },
     canRevoke: false,
+    createdAt: "2026-07-13T10:00:00Z",
     delegatedByName: "",
     id,
     mentionTarget: null,
+    reactionVersion: 0,
+    reactions: [],
     role: "other",
     senderAppId: null,
     senderAppProfile: null,

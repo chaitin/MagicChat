@@ -180,8 +180,8 @@ function CreateGroupConversationForm({
 
       await onCreate(trimmedName, memberIds, appIds)
       onOpenChange(false)
-    } catch {
-      toast.error("创建群聊失败")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "创建群聊失败")
     } finally {
       setCreating(false)
     }

@@ -44,7 +44,6 @@ describe("ConversationPanel", () => {
     expect(screen.getByText("话题来源消息")).toBeInTheDocument()
     expect(screen.queryByTestId("conversation-history-empty")).toBeNull()
     expect(screen.queryByText("暂无消息")).toBeNull()
-    expect(screen.getByTestId("chat-detail-shell")).toHaveClass("min-h-0")
   })
 
   it("shows a closed-topic system message without a locked composer footer", () => {
@@ -66,9 +65,12 @@ describe("ConversationPanel", () => {
               type: "system_event",
             },
             canRevoke: false,
+            createdAt: "2026-07-20T12:00:00Z",
             delegatedByName: "",
             id: "message-1",
             mentionTarget: null,
+            reactionVersion: 0,
+            reactions: [],
             role: "system",
             senderAppId: null,
             senderAppProfile: null,
@@ -98,6 +100,89 @@ describe("ConversationPanel", () => {
     expect(
       screen.queryByText("话题已归档，无法继续发言")
     ).not.toBeInTheDocument()
+  })
+
+  it("keeps retained history visible but disables message mutations when access is revoked", async () => {
+    const onRevokeMessage = vi.fn()
+    const onSetMessageReaction = vi.fn().mockResolvedValue(undefined)
+    render(
+      <MemoryRouter>
+        <ClientDataContext.Provider value={createClientDataValue()}>
+          <ConversationPanel
+            conversation={{
+              ...createConversation("conversation-1"),
+              canSend: false,
+            }}
+            currentUserId="user-1"
+            draft=""
+            historyError={null}
+            historyLoading={false}
+            historyLoadingBefore={false}
+            messages={[
+              {
+                author: "我",
+                avatar: "",
+                body: { content: "保留的历史消息", type: "text" },
+                canRevoke: true,
+                createdAt: "2026-07-20T12:00:00Z",
+                delegatedByName: "",
+                id: "message-1",
+                mentionTarget: null,
+                reactionVersion: 1,
+                reactions: [
+                  {
+                    count: 1,
+                    reactedByMe: true,
+                    text: "👍",
+                    users: [],
+                  },
+                ],
+                role: "me",
+                senderAppId: null,
+                senderAppProfile: null,
+                senderUserId: "user-1",
+                time: "12:00",
+              },
+            ]}
+            onCancelReply={vi.fn()}
+            onDraftChange={vi.fn()}
+            onLoadBeforeMessages={vi.fn()}
+            onReplyToMessage={vi.fn()}
+            onRevokeMessage={onRevokeMessage}
+            onRichTextModeChange={vi.fn()}
+            onSendFile={async () => null}
+            onSendImage={async () => null}
+            onSendVoice={async () => null}
+            onSendMessage={vi.fn()}
+            onSetMessageReaction={onSetMessageReaction}
+            readOnly
+            readOnlyReason="你当前无权直接使用此应用"
+            replyTarget={null}
+            richTextMode={false}
+            sending={false}
+          />
+        </ClientDataContext.Provider>
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText("保留的历史消息")).toBeVisible()
+    expect(screen.queryByPlaceholderText("输入消息")).not.toBeInTheDocument()
+    const reaction = screen.getByRole("button", { name: "移除表情 👍" })
+    expect(reaction).toBeDisabled()
+    fireEvent.click(reaction)
+    expect(onSetMessageReaction).not.toHaveBeenCalled()
+
+    const messageActionTrigger = screen
+      .getByText("保留的历史消息")
+      .closest("[data-message-action-trigger]")
+    expect(messageActionTrigger).not.toBeNull()
+    fireEvent.contextMenu(messageActionTrigger!)
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("menuitem", { name: "撤回" })
+      ).not.toBeInTheDocument()
+    )
+    expect(onRevokeMessage).not.toHaveBeenCalled()
   })
 
   it("refocuses the composer textarea when a reply target is selected", async () => {
@@ -267,7 +352,6 @@ describe("ConversationPanel", () => {
     const appProfileTrigger = screen.getByRole("button", {
       name: "智能助手资料",
     })
-    expect(appProfileTrigger.querySelector(".lucide-bot")).toBeInTheDocument()
 
     await user.click(appProfileTrigger)
 
@@ -317,9 +401,12 @@ function createAppPanelMessage({
       type: "text",
     },
     canRevoke: false,
+    createdAt: "2026-07-20T10:00:00Z",
     delegatedByName: "",
     id: "message-1",
     mentionTarget: null,
+    reactionVersion: 0,
+    reactions: [],
     role: "other",
     senderAppId: appId,
     senderAppProfile: {

@@ -106,6 +106,37 @@ describe("ChatPage create topic confirmation", () => {
   })
 })
 
+describe("ChatPage app direct access", () => {
+  it("renders retained app history as read-only after access is revoked", async () => {
+    const conversation: ClientConversation = {
+      ...createConversation("conversation-app-1", "受限应用"),
+      canSend: false,
+      type: "app",
+    }
+    const sourceMessage = createSourceMessage(conversation.id)
+    renderChatPage(
+      {
+        ...createConversationOverrides([conversation]),
+        getConversationMessageState: vi.fn(() => ({
+          error: null,
+          loaded: true,
+          loading: false,
+          loadingBefore: false,
+          messages: [sourceMessage],
+          page: null,
+          sending: false,
+        })),
+      },
+      `/chat/${conversation.id}`
+    )
+
+    expect(await screen.findByText("你当前无权直接使用此应用")).toBeVisible()
+    expect(
+      screen.queryByTestId("conversation-panel-composer")
+    ).not.toBeInTheDocument()
+  })
+})
+
 describe("ChatPage last conversation", () => {
   beforeEach(() => {
     window.localStorage.clear()
@@ -286,6 +317,7 @@ function createClientDataValue(
     getConversationMessageState: vi.fn(),
     handleIncomingConversationMessage: vi.fn(),
     handleIncomingConversationMessageUpdate: vi.fn(),
+    handleIncomingMessageReactionsUpdate: vi.fn(),
     joinGroupConversation: vi.fn(),
     leaveGroupConversation: vi.fn(),
     loadBeforeConversationMessages: vi.fn(),
@@ -302,6 +334,7 @@ function createClientDataValue(
     removeConversation: vi.fn(),
     removeGroupConversationMember: vi.fn(),
     revokeConversationMessage: vi.fn(),
+    setMessageReaction: vi.fn(),
     sendConversationFile: vi.fn(),
     sendConversationImage: vi.fn(),
     sendConversationVoice: vi.fn(),
@@ -380,6 +413,8 @@ function createSourceMessage(conversationId: string): ClientMessage {
     conversationId,
     createdAt: "2026-07-20T10:00:00Z",
     id: "message-1",
+    reactionVersion: 0,
+    reactions: [],
     sender: { id: "user-1", type: "user" },
     seq: 1,
   }
