@@ -108,7 +108,7 @@ export function InitScreen() {
 
         if (isActive) {
           signIn(authenticatedTarget)
-          router.replace("/(app)/(tabs)/messages")
+          router.replace("/messages")
         }
       } catch (error: unknown) {
         await minimumLoading

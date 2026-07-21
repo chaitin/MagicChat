@@ -4,6 +4,8 @@ import type {
   ClientMessage,
   ClientMessageBody,
   ClientMessagePage,
+  ClientMessageReaction,
+  ClientMessageReactionUser,
   ClientMessageReplyTo,
   ClientSystemEventMessageBody,
   ClientSystemEventUserRef,
@@ -43,6 +45,8 @@ export function normalizeClientMessage(value: unknown): ClientMessage {
     conversationId,
     createdAt,
     id,
+    reactionVersion: normalizeReactionVersion(message.reaction_version),
+    reactions: normalizeMessageReactions(message.reactions),
     sender: {
       id: senderId,
       type: senderType,
@@ -75,6 +79,65 @@ export function normalizeClientMessage(value: unknown): ClientMessage {
   }
 
   return normalized
+}
+
+export function normalizeReactionVersion(value: unknown) {
+  if (value === undefined) return 0
+  if (!Number.isSafeInteger(value) || (value as number) < 0) {
+    throw new ApiRequestError("消息表情版本格式不正确")
+  }
+  return value as number
+}
+
+export function normalizeMessageReactions(
+  value: unknown
+): ClientMessageReaction[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) {
+    throw new ApiRequestError("消息表情响应格式不正确")
+  }
+
+  return value.map((candidate) => {
+    const reaction = asRecord(candidate)
+    const count = asNumber(reaction?.count)
+    const text = asString(reaction?.text)
+    const reactedByMe = reaction?.reacted_by_me
+    if (
+      !reaction ||
+      !text ||
+      !Number.isSafeInteger(count) ||
+      (count ?? 0) <= 0 ||
+      (reactedByMe !== undefined && typeof reactedByMe !== "boolean")
+    ) {
+      throw new ApiRequestError("消息表情响应格式不正确")
+    }
+
+    return {
+      count: count!,
+      reactedByMe: Boolean(reactedByMe),
+      text,
+      users: normalizeMessageReactionUsers(reaction.users),
+    }
+  })
+}
+
+export function normalizeMessageReactionUsers(
+  value: unknown
+): ClientMessageReactionUser[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) {
+    throw new ApiRequestError("消息表情参与者响应格式不正确")
+  }
+
+  return value.map((candidate) => {
+    const user = asRecord(candidate)
+    const id = asString(user?.id)?.trim()
+    const name = asString(user?.name)?.trim()
+    if (!user || !id || !name) {
+      throw new ApiRequestError("消息表情参与者响应格式不正确")
+    }
+    return { id, name }
+  })
 }
 
 function normalizeMessageTopic(

@@ -22,6 +22,7 @@ import type { ServerTarget } from "@/data/query"
 import type { ResourceLoadState } from "@/data/resources"
 
 export function MessageList({
+  canAddReaction,
   conversationId,
   currentUserId,
   error,
@@ -38,6 +39,7 @@ export function MessageList({
   onRefresh,
   onResourceError,
   onResourcePress,
+  onSetReaction,
   onVoiceResourcePress,
   onMentionPress,
   onOpenTopic,
@@ -45,6 +47,7 @@ export function MessageList({
   resourceStates,
   server,
 }: {
+  canAddReaction: boolean
   conversationId: string
   currentUserId: string
   error: Error | null
@@ -61,6 +64,11 @@ export function MessageList({
   onRefresh: () => void
   onResourceError: (fileId: string) => void
   onResourcePress: (fileId: string) => void
+  onSetReaction?: (
+    messageId: string,
+    text: string,
+    reacted: boolean
+  ) => Promise<void>
   onVoiceResourcePress: (fileId: string) => void
   onMentionPress: (target: EntityReference) => void
   onOpenTopic: (conversationId: string) => void
@@ -218,6 +226,7 @@ export function MessageList({
         }
         renderItem={({ item }) => (
           <MessageBubble
+            canAddReaction={canAddReaction}
             currentUserId={currentUserId}
             message={item}
             onAvatarLongPress={onAvatarLongPress}
@@ -227,6 +236,7 @@ export function MessageList({
             onOpenTopic={onOpenTopic}
             onResourceError={onResourceError}
             onResourcePress={onResourcePress}
+            onSetReaction={onSetReaction}
             onVoiceResourcePress={onVoiceResourcePress}
             resolveMentionLabel={resolveMentionLabel}
             resourceStates={resourceStates}

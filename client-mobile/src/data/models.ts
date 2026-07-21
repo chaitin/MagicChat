@@ -172,6 +172,35 @@ export type ClientMessageTopic = {
   recentReplies: ClientMessageTopicReply[]
 }
 
+export type ClientMessageReactionUser = {
+  id: string
+  name: string
+}
+
+export type ClientMessageReaction = {
+  count: number
+  reactedByMe: boolean
+  text: string
+  users: ClientMessageReactionUser[]
+}
+
+export type MessageReactionSnapshot = {
+  conversationId: string
+  messageId: string
+  reactionVersion: number
+  reactions: ClientMessageReaction[]
+}
+
+export type MessageReactionsUpdatedEvent = {
+  actorReacted: boolean
+  actorText: string
+  actorUserId: string
+  conversationId: string
+  messageId: string
+  reactionVersion: number
+  reactions: Omit<ClientMessageReaction, "reactedByMe">[]
+}
+
 export type ClientTextMessageBody = {
   content: string
   type: "text"
@@ -307,6 +336,8 @@ export type ClientMessage = {
     type: "user" | "app"
   }
   id: string
+  reactionVersion: number
+  reactions: ClientMessageReaction[]
   replyTo?: ClientMessageReplyTo
   replyToMessageId?: string
   revokedAt?: string

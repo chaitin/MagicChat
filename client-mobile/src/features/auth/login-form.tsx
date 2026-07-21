@@ -275,6 +275,7 @@ export function LoginForm({
                   accessibilityLabel="邮箱"
                   autoCapitalize="none"
                   autoComplete="email"
+                  bg="$color1"
                   color="$gray12"
                   disabled={isCredentialsLoading || isPending}
                   id={ACCOUNT_INPUT_ID}
@@ -306,6 +307,7 @@ export function LoginForm({
                   actionLoading={requestEmailCodeMutation.isPending}
                   autoCapitalize="none"
                   autoComplete="one-time-code"
+                  bg="$color1"
                   color="$gray12"
                   disabled={isCredentialsLoading || isPending}
                   id={EMAIL_CODE_INPUT_ID}
@@ -340,6 +342,7 @@ export function LoginForm({
                   accessibilityLabel="账号"
                   autoCapitalize="none"
                   autoComplete="email"
+                  bg="$color1"
                   color="$gray12"
                   disabled={isCredentialsLoading || isPending}
                   id={ACCOUNT_INPUT_ID}
@@ -357,6 +360,7 @@ export function LoginForm({
                   accessibilityLabel="密码"
                   autoCapitalize="none"
                   autoComplete="password"
+                  bg="$color1"
                   color="$gray12"
                   disabled={isCredentialsLoading || isPending}
                   id={PASSWORD_INPUT_ID}

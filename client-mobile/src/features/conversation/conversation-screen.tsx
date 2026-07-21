@@ -25,6 +25,7 @@ import {
   useSendConversationImageMessage,
   useSendConversationTextMessage,
   useSendConversationVoiceMessage,
+  useSetConversationMessageReaction,
 } from "@/data/message-hooks"
 import type {
   PreparedClientMessageUpload,
@@ -144,6 +145,10 @@ export function ConversationScreen() {
     session,
     conversationId
   )
+  const setReactionMutation = useSetConversationMessageReaction(
+    session,
+    conversationId
+  )
   const isSending =
     sendTextMutation.isPending ||
     sendFileMutation.isPending ||
@@ -248,7 +253,7 @@ export function ConversationScreen() {
 
   useEffect(() => {
     if (isReady && !conversation && !expectsTopic) {
-      router.replace("/(app)/(tabs)/messages")
+      router.replace("/messages")
     }
   }, [conversation, expectsTopic, isReady, router])
 
@@ -362,6 +367,29 @@ export function ConversationScreen() {
           : "消息发送失败，请重试。"
       )
       return false
+    }
+  }
+
+  async function handleSetReaction(
+    messageId: string,
+    text: string,
+    reacted: boolean
+  ) {
+    try {
+      await setReactionMutation.mutateAsync({ messageId, reacted, text })
+    } catch (error: unknown) {
+      if (isUnauthorizedError(error)) {
+        void invalidateSession()
+        router.replace("/init")
+      } else {
+        toast.show(
+          error instanceof ApiRequestError
+            ? error.message
+            : "更新消息表情失败，请重试。",
+          { customData: { tone: "error" satisfies AppToastTone } }
+        )
+      }
+      throw error
     }
   }
 
@@ -506,6 +534,7 @@ export function ConversationScreen() {
         ) : (
           <>
             <MessageList
+              canAddReaction={!topicArchived}
               conversationId={conversation.id}
               currentUserId={currentUser.id}
               error={messagesQuery.error}
@@ -530,6 +559,7 @@ export function ConversationScreen() {
                 void resources.reload(fileId).catch(() => undefined)
               }
               onResourcePress={(fileId) => void handleResourcePress(fileId)}
+              onSetReaction={handleSetReaction}
               onVoiceResourcePress={(fileId) =>
                 void handleVoiceResourcePress(fileId)
               }

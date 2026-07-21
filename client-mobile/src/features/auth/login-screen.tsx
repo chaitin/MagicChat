@@ -18,7 +18,7 @@ export function LoginScreen() {
   const appInfoQuery = useCachedAppInfo(selectedServer)
 
   if (isAuthenticated) {
-    return <Redirect href="/(app)/(tabs)/messages" />
+    return <Redirect href="/messages" />
   }
 
   if (!isHydrated || !appInfoQuery.data) {

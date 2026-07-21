@@ -4,8 +4,13 @@ import { ApiRequestError, createApiClient, type ApiFetch } from "@/data/api-clie
 import {
   normalizeClientMessage,
   normalizeClientMessagePage,
+  normalizeMessageReactions,
+  normalizeReactionVersion,
 } from "@/data/message-normalizer"
-import type { ClientMessageList } from "@/data/models"
+import type {
+  ClientMessageList,
+  MessageReactionSnapshot,
+} from "@/data/models"
 import type { ClientMessageUpload } from "@/data/message-upload"
 
 type ApiOptions = {
@@ -43,6 +48,79 @@ export async function fetchConversationMessages(
     messages: data.messages.map(normalizeClientMessage),
     page: normalizeClientMessagePage(data.page),
   }
+}
+
+export async function setConversationMessageReaction(
+  serverUrl: string,
+  conversationId: string,
+  messageId: string,
+  input: { reacted: boolean; text: string },
+  options: ApiOptions = {}
+): Promise<MessageReactionSnapshot> {
+  const data = await createApiClient(serverUrl, options.fetcher).request<{
+    conversation_id?: unknown
+    message_id?: unknown
+    reaction_version?: unknown
+    reactions?: unknown
+  }>(
+    `/api/client/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/reactions`,
+    {
+      body: JSON.stringify({ reacted: input.reacted, text: input.text }),
+      errorMessage: "更新消息表情失败",
+      headers: { "Content-Type": "application/json" },
+      method: "PUT",
+      signal: options.signal,
+    }
+  )
+
+  return normalizeReactionSnapshot(data, conversationId, messageId, true)
+}
+
+export async function fetchConversationMessageReactionSnapshots(
+  serverUrl: string,
+  conversationId: string,
+  messageIds: string[],
+  options: ApiOptions = {}
+): Promise<MessageReactionSnapshot[]> {
+  const uniqueMessageIds = [...new Set(messageIds)]
+  const data = await createApiClient(serverUrl, options.fetcher).request<{
+    conversation_id?: unknown
+    snapshots?: unknown
+  }>(
+    `/api/client/conversations/${encodeURIComponent(conversationId)}/messages/reactions/query`,
+    {
+      body: JSON.stringify({ message_ids: uniqueMessageIds }),
+      errorMessage: "同步消息表情失败",
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+      signal: options.signal,
+    }
+  )
+
+  if (
+    data?.conversation_id !== conversationId ||
+    !Array.isArray(data.snapshots)
+  ) {
+    throw new ApiRequestError("消息表情快照响应格式不正确")
+  }
+
+  const snapshots = data.snapshots.map((value, index) =>
+    normalizeReactionSnapshot(
+      value,
+      conversationId,
+      uniqueMessageIds[index] ?? ""
+    )
+  )
+  if (
+    snapshots.length !== uniqueMessageIds.length ||
+    snapshots.some(
+      (snapshot, index) => snapshot.messageId !== uniqueMessageIds[index]
+    )
+  ) {
+    throw new ApiRequestError("消息表情快照响应格式不正确")
+  }
+
+  return snapshots
 }
 
 export async function sendConversationTextMessage(
@@ -209,4 +287,43 @@ async function sendConversationUploadMessage(
   }
 
   return normalizeClientMessage(data.message)
+}
+
+function normalizeReactionSnapshot(
+  value: unknown,
+  expectedConversationId: string,
+  expectedMessageId: string,
+  requireConversationId = false
+): MessageReactionSnapshot {
+  const snapshot = asRecord(value)
+  const responseConversationId = asString(snapshot?.conversation_id)
+  const messageId = asString(snapshot?.message_id)
+  if (
+    !snapshot ||
+    (requireConversationId && responseConversationId !== expectedConversationId) ||
+    (responseConversationId !== undefined &&
+      responseConversationId !== expectedConversationId) ||
+    messageId !== expectedMessageId ||
+    !Number.isSafeInteger(snapshot.reaction_version) ||
+    (snapshot.reaction_version as number) < 0
+  ) {
+    throw new ApiRequestError("消息表情快照响应格式不正确")
+  }
+
+  return {
+    conversationId: expectedConversationId,
+    messageId,
+    reactionVersion: normalizeReactionVersion(snapshot.reaction_version),
+    reactions: normalizeMessageReactions(snapshot.reactions),
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+function asString(value: unknown) {
+  return typeof value === "string" ? value : undefined
 }

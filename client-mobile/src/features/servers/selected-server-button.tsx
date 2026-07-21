@@ -15,6 +15,7 @@ export function SelectedServerButton({ disabled = false }: { disabled?: boolean 
   return (
     <AppButton
       accessibilityLabel={`切换服务器，当前为${selectedServer.name}`}
+      bg="$color1"
       disabled={disabled}
       justify="space-between"
       noTextWrap

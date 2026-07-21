@@ -3,6 +3,7 @@ import type {
   ClientConversation,
   ClientMessage,
   ClientMessageBody,
+  ClientMessageReaction,
   ClientUser,
 } from "@/data/models"
 import type { AttachmentResourceReference } from "@/data/resources"
@@ -24,6 +25,7 @@ export type PresentedMessage = {
   body: ClientMessageBody
   delegatedByName: string
   id: string
+  reactions: ClientMessageReaction[]
   replyTo?: {
     author: string
     summary: string
@@ -100,6 +102,7 @@ export function buildPresentedMessages({
       body: message.body,
       delegatedByName: message.delegatedBy?.name ?? "",
       id: message.id,
+      reactions: message.reactions,
       replyTo: message.replyTo
         ? {
             author: getReplyAuthor(

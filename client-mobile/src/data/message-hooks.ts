@@ -1,5 +1,6 @@
 import {
   type InfiniteData,
+  replaceEqualDeep,
   useInfiniteQuery,
   useMutation,
   useQueryClient,
@@ -13,7 +14,9 @@ import {
   sendConversationImageMessage,
   sendConversationTextMessage,
   sendConversationVoiceMessage,
+  setConversationMessageReaction,
 } from "@/data/messages-api"
+import { updateCachedMessageReactionSnapshot } from "@/data/message-reaction-cache"
 import type {
   ClientConversation,
   ClientMessage,
@@ -22,6 +25,7 @@ import type {
 import type { ClientMessageUpload } from "@/data/message-upload"
 import { queryKeys, type AuthenticatedTarget } from "@/data/query"
 import { updateCachedTopicSourcePreview } from "@/data/topic-cache"
+import { preserveNewerMessageReactionState } from "@/domain/messages/message-reactions"
 
 const MESSAGE_PAGE_SIZE = 20
 const MESSAGE_REFRESH_INTERVAL_MS = 5_000
@@ -53,6 +57,13 @@ export function useConversationMessages(
       ),
     queryKey: queryKeys.conversationMessages(server, conversationId),
     refetchInterval: MESSAGE_REFRESH_INTERVAL_MS,
+    structuralSharing: (current, incoming) =>
+      preserveNewerMessageReactions(
+        current as
+          | InfiniteData<ClientMessageList, number | null>
+          | undefined,
+        incoming as InfiniteData<ClientMessageList, number | null>
+      ),
   })
   const messages = useMemo(
     () => mergeMessages(query.data?.pages.flatMap((page) => page.messages) ?? []),
@@ -81,6 +92,30 @@ export function useSendConversationTextMessage(
     (input: { clientMessageId: string; content: string }) =>
       sendConversationTextMessage(server.url, conversationId, input)
   )
+}
+
+export function useSetConversationMessageReaction(
+  server: AuthenticatedTarget,
+  conversationId: string
+) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: {
+      messageId: string
+      reacted: boolean
+      text: string
+    }) =>
+      setConversationMessageReaction(
+        server.url,
+        conversationId,
+        input.messageId,
+        { reacted: input.reacted, text: input.text }
+      ),
+    onSuccess: (snapshot) => {
+      updateCachedMessageReactionSnapshot(queryClient, server, snapshot)
+    },
+  })
 }
 
 export function useSendConversationFileMessage(
@@ -215,12 +250,44 @@ function mergeMessages(messages: ClientMessage[]) {
   const messagesById = new Map<string, ClientMessage>()
 
   for (const message of messages) {
-    messagesById.set(message.id, message)
+    const current = messagesById.get(message.id)
+    messagesById.set(
+      message.id,
+      current
+        ? preserveNewerMessageReactionState(current, message)
+        : message
+    )
   }
 
   return Array.from(messagesById.values()).sort(
     (left, right) => right.seq - left.seq
   )
+}
+
+function preserveNewerMessageReactions(
+  current: InfiniteData<ClientMessageList, number | null> | undefined,
+  incoming: InfiniteData<ClientMessageList, number | null>
+) {
+  if (!current) return incoming
+
+  const currentMessages = new Map(
+    current.pages.flatMap((page) =>
+      page.messages.map((message) => [message.id, message] as const)
+    )
+  )
+  const merged = {
+    ...incoming,
+    pages: incoming.pages.map((page) => ({
+      ...page,
+      messages: page.messages.map((message) => {
+        const previous = currentMessages.get(message.id)
+        return previous
+          ? preserveNewerMessageReactionState(previous, message)
+          : message
+      }),
+    })),
+  }
+  return replaceEqualDeep(current, merged)
 }
 
 function appendMessage(

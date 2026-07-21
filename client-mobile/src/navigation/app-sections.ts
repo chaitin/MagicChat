@@ -15,19 +15,19 @@ export type AppSection = {
 
 export const appSections: readonly AppSection[] = [
   {
-    href: "/(app)/(tabs)/messages",
+    href: "/messages",
     icon: MessageCircleMore,
     label: "消息",
     routeName: "messages",
   },
   {
-    href: "/(app)/(tabs)/contacts",
+    href: "/contacts",
     icon: ContactRound,
     label: "通讯录",
     routeName: "contacts",
   },
   {
-    href: "/(app)/(tabs)/projects",
+    href: "/projects",
     icon: BriefcaseBusiness,
     label: "项目",
     routeName: "projects",

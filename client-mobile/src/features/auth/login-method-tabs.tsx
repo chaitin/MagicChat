@@ -59,7 +59,7 @@ export function LoginMethodTabs({
       width="100%"
     >
       <Tabs.List
-        bg="$gray3"
+        bg="$color1"
         borderWidth={0}
         gap="$0.5"
         height="$4"
@@ -69,7 +69,7 @@ export function LoginMethodTabs({
       >
         {emailCodeLoginEnabled ? (
           <Tabs.Tab
-            bg={activeMethod === "email-code" ? "$background" : "transparent"}
+            bg={activeMethod === "email-code" ? "$color9" : "transparent"}
             borderWidth={0}
             boxShadow={
               activeMethod === "email-code"
@@ -86,7 +86,7 @@ export function LoginMethodTabs({
             value="email-code"
           >
             <SizableText
-              color={activeMethod === "email-code" ? "$gray12" : "$gray10"}
+              color={activeMethod === "email-code" ? "$color1" : "$gray10"}
               fontWeight={activeMethod === "email-code" ? "600" : "500"}
               size="$3"
             >
@@ -96,7 +96,7 @@ export function LoginMethodTabs({
         ) : null}
         {passwordLoginEnabled ? (
           <Tabs.Tab
-            bg={activeMethod === "password" ? "$background" : "transparent"}
+            bg={activeMethod === "password" ? "$color9" : "transparent"}
             borderWidth={0}
             boxShadow={
               activeMethod === "password"
@@ -113,7 +113,7 @@ export function LoginMethodTabs({
             value="password"
           >
             <SizableText
-              color={activeMethod === "password" ? "$gray12" : "$gray10"}
+              color={activeMethod === "password" ? "$color1" : "$gray10"}
               fontWeight={activeMethod === "password" ? "600" : "500"}
               size="$3"
             >

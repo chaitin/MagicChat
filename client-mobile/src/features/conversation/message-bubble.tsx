@@ -14,6 +14,7 @@ import type { EntityReference } from "@/domain/entities/entity-profile"
 import type { ServerTarget } from "@/data/query"
 import type { ResourceLoadState } from "@/data/resources"
 import { MessageBody } from "@/features/conversation/message-body"
+import { MessageReactionChips } from "@/features/conversation/message-reactions"
 import { TopicReplyPreview } from "@/features/conversation/topic-reply-preview"
 import {
   formatClientMessageBodySummary,
@@ -24,6 +25,7 @@ import {
 export function MessageBubble({
   currentUserId,
   message,
+  canAddReaction,
   onAvatarLongPress,
   onAvatarPress,
   onImagePress,
@@ -31,11 +33,13 @@ export function MessageBubble({
   onOpenTopic,
   onResourceError,
   onResourcePress,
+  onSetReaction,
   onVoiceResourcePress,
   resolveMentionLabel,
   resourceStates,
   server,
 }: {
+  canAddReaction: boolean
   currentUserId: string
   message: PresentedMessage
   onAvatarLongPress?: (sender: EntityReference) => void
@@ -45,6 +49,11 @@ export function MessageBubble({
   onOpenTopic: (conversationId: string) => void
   onResourceError: (fileId: string) => void
   onResourcePress: (fileId: string) => void
+  onSetReaction?: (
+    messageId: string,
+    text: string,
+    reacted: boolean
+  ) => Promise<void>
   onVoiceResourcePress: (fileId: string) => void
   resolveMentionLabel: MessageMentionLabelResolver
   resourceStates: ReadonlyMap<string, ResourceLoadState>
@@ -72,6 +81,8 @@ export function MessageBubble({
     message.body.type === "revoked" ||
     message.body.type === "unsupported"
   const sender = message.sender
+  const flushImageBubble =
+    message.body.type === "image" && !message.replyTo && !message.topic
   const avatar = sender ? (
     <Button
       aria-label={`查看${fromMe ? "我的" : message.author}资料`}
@@ -170,13 +181,7 @@ export function MessageBubble({
             borderWidth={0}
             maxW="100%"
             overflow="hidden"
-            p={
-              message.body.type === "image" &&
-              !message.replyTo &&
-              !message.topic
-                ? 0
-                : "$3"
-            }
+            p={flushImageBubble ? 0 : "$3"}
           >
             {message.replyTo ? (
               <YStack
@@ -205,6 +210,30 @@ export function MessageBubble({
               resourceStates={resourceStates}
               serverUrl={server.url}
             />
+            {message.reactions.length > 0 ? (
+              <YStack
+                mb={flushImageBubble ? "$2" : undefined}
+                mt="$1"
+                px={flushImageBubble ? "$2" : undefined}
+              >
+                <MessageReactionChips
+                  align={fromMe ? "end" : "start"}
+                  canAdd={
+                    canAddReaction && message.body.type !== "revoked"
+                  }
+                  onSetReaction={
+                    onSetReaction && message.body.type !== "revoked"
+                      ? (text, reacted) =>
+                          onSetReaction(message.id, text, reacted)
+                      : undefined
+                  }
+                  onUserPress={(user) =>
+                    onAvatarPress({ id: user.id, type: "user" })
+                  }
+                  reactions={message.reactions}
+                />
+              </YStack>
+            ) : null}
             {message.topic ? (
               <TopicReplyPreview
                 onOpen={() => onOpenTopic(message.topic!.conversationId)}

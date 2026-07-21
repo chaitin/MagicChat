@@ -79,7 +79,13 @@ function ConversationListItem({
       accessibilityLabel={`打开会话 ${conversation.name}`}
       bg={conversation.pinned ? "$backgroundLight" : "transparent"}
       icon={
-        <ConversationAvatar conversation={conversation} server={server} />
+        <ConversationAvatar
+          conversation={conversation}
+          server={server}
+          surroundingBackground={
+            conversation.pinned ? "$backgroundLight" : "$color1"
+          }
+        />
       }
       onPress={onPress}
       pressStyle={{ bg: "$backgroundPress" }}

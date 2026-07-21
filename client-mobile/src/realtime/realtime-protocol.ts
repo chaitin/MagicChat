@@ -5,6 +5,7 @@ export const realtimeEvents = {
   conversationPinUpdated: "conversation.pin_updated",
   conversationRemoved: "conversation.removed",
   messageCreated: "message.created",
+  messageReactionsUpdated: "message.reactions_updated",
   messageUpdated: "message.updated",
   systemReady: "system.ready",
   topicArchived: "topic.archived",

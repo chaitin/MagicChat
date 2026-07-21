@@ -14,6 +14,11 @@ import {
   updateCachedTopicSourcePreview,
 } from "@/data/topic-cache"
 import { formatClientMessageBodySummary } from "@/domain/messages/message-presenter"
+import { preserveNewerMessageReactionState } from "@/domain/messages/message-reactions"
+import {
+  applyRealtimeMessageReactionsEvent,
+  synchronizeConversationMessageReactions,
+} from "@/realtime/reaction-sync"
 import { realtimeEvents } from "@/realtime/realtime-protocol"
 
 type MessageInfiniteData = InfiniteData<ClientMessageList, number | null>
@@ -69,6 +74,11 @@ export async function applyRealtimeEvent(
       invalidateConversations(queryClient, server)
     }
     return { message }
+  }
+
+  if (event === realtimeEvents.messageReactionsUpdated) {
+    await applyRealtimeMessageReactionsEvent(queryClient, server, payload)
+    return {}
   }
 
   if (event === realtimeEvents.conversationRemoved) {
@@ -248,17 +258,31 @@ export async function synchronizeRealtimeData(
     ...loadedConversationQueries.flatMap(([queryKey, data]) => {
       const conversationId = getConversationIdFromMessageQueryKey(queryKey)
       const newestSeq = data ? getNewestMessageSeq(data) : 0
+      if (!conversationId || !data) return []
 
-      return conversationId && newestSeq > 0
-        ? [
-            catchUpConversationMessages(
-              queryClient,
-              server,
-              conversationId,
-              newestSeq
-            ),
-          ]
-        : []
+      const messageIds = getLoadedMessageIds(data)
+      return [
+        ...(newestSeq > 0
+          ? [
+              catchUpConversationMessages(
+                queryClient,
+                server,
+                conversationId,
+                newestSeq
+              ),
+            ]
+          : []),
+        ...(messageIds.length > 0
+          ? [
+              synchronizeConversationMessageReactions(
+                queryClient,
+                server,
+                conversationId,
+                messageIds
+              ),
+            ]
+          : []),
+      ]
     }),
   ])
 }
@@ -386,7 +410,7 @@ function updateMessage(
       }
 
       found = true
-      return incoming
+      return preserveNewerMessageReactionState(message, incoming)
     }),
   }))
 
@@ -396,7 +420,13 @@ function updateMessage(
 function mergeMessages(messages: ClientMessage[]) {
   const messagesById = new Map<string, ClientMessage>()
   for (const message of messages) {
-    messagesById.set(message.id, message)
+    const current = messagesById.get(message.id)
+    messagesById.set(
+      message.id,
+      current
+        ? preserveNewerMessageReactionState(current, message)
+        : message
+    )
   }
 
   return Array.from(messagesById.values()).sort(
@@ -412,6 +442,12 @@ function getNewestMessageSeq(data: MessageInfiniteData) {
     }
   }
   return newestSeq
+}
+
+function getLoadedMessageIds(data: MessageInfiniteData) {
+  return data.pages.flatMap((page) =>
+    page.messages.map((message) => message.id)
+  )
 }
 
 function getConversationIdFromMessageQueryKey(queryKey: readonly unknown[]) {
