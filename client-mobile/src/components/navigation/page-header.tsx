@@ -1,4 +1,4 @@
-import { ArrowLeft } from "lucide-react-native"
+import { ArrowLeft, type LucideIcon } from "lucide-react-native"
 import type { ReactNode } from "react"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import {
@@ -10,6 +10,7 @@ import {
   YStack,
 } from "tamagui"
 
+import { CompactIconButton } from "@/components/buttons/compact-icon-button"
 import { ThemedIcon } from "@/components/icons/themed-icon"
 import { HeaderButton } from "@/components/navigation/header-button"
 
@@ -17,6 +18,8 @@ export const PAGE_HEADER_HEIGHT = 56
 
 export function PageHeader({
   actionIcon,
+  compactActionIcon,
+  compactIconButtons = false,
   actionLabel,
   compactTitle = true,
   onActionPress,
@@ -27,6 +30,8 @@ export function PageHeader({
 }: {
   actionIcon?: GetProps<typeof Button>["icon"]
   actionLabel?: string
+  compactActionIcon?: LucideIcon
+  compactIconButtons?: boolean
   compactTitle?: boolean
   onActionPress?: () => void
   onBackPress: () => void
@@ -38,15 +43,29 @@ export function PageHeader({
 
   return (
     <YStack bg="$background" pt={insets.top}>
-      <XStack height={PAGE_HEADER_HEIGHT} items="center" px="$2">
+      <XStack
+        height={PAGE_HEADER_HEIGHT}
+        items="center"
+        px={compactIconButtons ? "$3" : "$2"}
+      >
         <XStack width={72}>
-          <HeaderButton
-            accessibilityLabel="返回"
-            circular
-            icon={<ThemedIcon icon={ArrowLeft} size={22} />}
-            onPress={onBackPress}
-            subtlePress={subtleButtonPress}
-          />
+          {compactIconButtons ? (
+            <CompactIconButton
+              accessibilityLabel="返回"
+              icon={ArrowLeft}
+              iconSize={26}
+              onPress={onBackPress}
+              strokeWidth={1.5}
+            />
+          ) : (
+            <HeaderButton
+              accessibilityLabel="返回"
+              circular
+              icon={<ThemedIcon icon={ArrowLeft} size={22} />}
+              onPress={onBackPress}
+              subtlePress={subtleButtonPress}
+            />
+          )}
         </XStack>
 
         <XStack flex={1} gap="$2" items="center" justify="center" minW={0}>
@@ -64,15 +83,25 @@ export function PageHeader({
 
         <XStack justify="flex-end" width={72}>
           {actionLabel && onActionPress ? (
-            <HeaderButton
-              accessibilityLabel={actionLabel}
-              circular={Boolean(actionIcon)}
-              icon={actionIcon}
-              onPress={onActionPress}
-              subtlePress={subtleButtonPress}
-            >
-              {actionIcon ? null : actionLabel}
-            </HeaderButton>
+            compactIconButtons && compactActionIcon ? (
+              <CompactIconButton
+                accessibilityLabel={actionLabel}
+                icon={compactActionIcon}
+                iconSize={26}
+                onPress={onActionPress}
+                strokeWidth={1.5}
+              />
+            ) : (
+              <HeaderButton
+                accessibilityLabel={actionLabel}
+                circular={Boolean(actionIcon)}
+                icon={actionIcon}
+                onPress={onActionPress}
+                subtlePress={subtleButtonPress}
+              >
+                {actionIcon ? null : actionLabel}
+              </HeaderButton>
+            )
           ) : null}
         </XStack>
       </XStack>

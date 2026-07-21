@@ -143,10 +143,11 @@ function SearchResultItem({
 
 function getConversationSubtitle(conversation: {
   memberCount: number
-  type: "app" | "direct" | "group"
+  type: "app" | "direct" | "group" | "topic"
 }) {
   if (conversation.type === "app") return "对话 · 应用"
   if (conversation.type === "direct") return "对话 · 私聊"
+  if (conversation.type === "topic") return "对话 · 话题"
   return `对话 · ${conversation.memberCount} 人群聊`
 }
 

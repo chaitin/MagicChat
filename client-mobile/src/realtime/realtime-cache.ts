@@ -6,8 +6,13 @@ import type {
   ClientConversation,
   ClientMessage,
   ClientMessageList,
+  ClientTopicDetail,
 } from "@/data/models"
 import { queryKeys, type AuthenticatedTarget } from "@/data/query"
+import {
+  updateCachedMessageTopic,
+  updateCachedTopicSourcePreview,
+} from "@/data/topic-cache"
 import { formatClientMessageBodySummary } from "@/domain/messages/message-presenter"
 import { realtimeEvents } from "@/realtime/realtime-protocol"
 
@@ -38,6 +43,7 @@ export async function applyRealtimeEvent(
         ? appendMessages(current, [message])
         : updateMessage(current, message)
     )
+    updateCachedTopicSourcePreview(queryClient, server, message)
 
     if (
       event === realtimeEvents.messageCreated &&
@@ -103,6 +109,71 @@ export async function applyRealtimeEvent(
             : conversation
         )
     )
+    return {}
+  }
+
+  if (event === realtimeEvents.conversationPinUpdated) {
+    const pinUpdate = normalizeConversationPinUpdatedPayload(payload)
+
+    queryClient.setQueryData<ClientConversation[]>(
+      queryKeys.conversations(server),
+      (current) =>
+        current?.map((conversation) =>
+          conversation.id === pinUpdate.conversationId
+            ? { ...conversation, pinned: pinUpdate.pinned }
+            : conversation
+        )
+    )
+    return {}
+  }
+
+  if (
+    event === realtimeEvents.topicCreated ||
+    event === realtimeEvents.topicParticipated ||
+    event === realtimeEvents.topicArchived
+  ) {
+    const topic = normalizeTopicEventPayload(payload)
+
+    updateCachedMessageTopic(queryClient, server, topic)
+    queryClient.setQueryData<ClientTopicDetail>(
+      queryKeys.conversationTopic(server, topic.conversationId),
+      (current) =>
+        current
+          ? {
+              ...current,
+              canArchive: topic.archived ? false : current.canArchive,
+              canParticipate: topic.archived
+                ? false
+                : current.canParticipate,
+              conversation: current.conversation.topic
+                ? {
+                    ...current.conversation,
+                    topic: {
+                      ...current.conversation.topic,
+                      archived: topic.archived,
+                    },
+                  }
+                : current.conversation,
+            }
+          : current
+    )
+    queryClient.setQueryData<ClientConversation[]>(
+      queryKeys.conversations(server),
+      (current) =>
+        topic.archived
+          ? current?.filter(
+              (conversation) => conversation.id !== topic.conversationId
+            )
+          : current?.map((conversation) =>
+              conversation.id === topic.conversationId && conversation.topic
+                ? {
+                    ...conversation,
+                    topic: { ...conversation.topic, archived: false },
+                  }
+                : conversation
+            )
+    )
+    invalidateConversations(queryClient, server)
     return {}
   }
 
@@ -385,6 +456,42 @@ function normalizeConversationMentionedPayload(payload: unknown) {
   return {
     conversationId: value.conversation_id,
     lastMentionedSeq: value.last_mentioned_seq,
+  }
+}
+
+function normalizeConversationPinUpdatedPayload(payload: unknown) {
+  const value = asRecord(payload)
+  if (
+    !value ||
+    typeof value.conversation_id !== "string" ||
+    value.conversation_id.trim() === "" ||
+    typeof value.pinned !== "boolean"
+  ) {
+    throw new Error("实时会话置顶事件格式不正确")
+  }
+
+  return {
+    conversationId: value.conversation_id,
+    pinned: value.pinned,
+  }
+}
+
+function normalizeTopicEventPayload(payload: unknown) {
+  const value = asRecord(payload)
+  if (
+    !value ||
+    typeof value.conversation_id !== "string" ||
+    typeof value.parent_conversation_id !== "string" ||
+    typeof value.source_message_id !== "string"
+  ) {
+    throw new Error("实时话题事件格式不正确")
+  }
+
+  return {
+    archived: Boolean(value.archived),
+    conversationId: value.conversation_id,
+    parentConversationId: value.parent_conversation_id,
+    sourceMessageId: value.source_message_id,
   }
 }
 

@@ -3,6 +3,7 @@ import type {
   ClientConversation,
   ClientConversationMember,
   ClientConversationProject,
+  ClientTopicDetail,
 } from "@/data/models"
 
 type ConversationProjectResponse = {
@@ -23,6 +24,22 @@ type ConversationMemberResponse = {
   type?: string
 }
 
+type ConversationTopicResponse = {
+  archived?: boolean
+  parent_conversation_id?: string
+  parent_conversation_name?: string
+  parent_conversation_type?: string
+  participating?: boolean
+  source_message_id?: string
+  source_message_seq?: number
+  source_sender?: {
+    avatar?: string
+    id?: string
+    name?: string
+    type?: string
+  }
+}
+
 type ConversationResponse = {
   avatar?: string
   created_at?: string
@@ -36,7 +53,9 @@ type ConversationResponse = {
   member_count?: number
   members?: ConversationMemberResponse[]
   name?: string
+  pinned?: boolean
   projects?: ConversationProjectResponse[]
+  topic?: ConversationTopicResponse | null
   type?: string
   unread_count?: number
   visibility?: string
@@ -47,6 +66,12 @@ type ConversationsResponse = {
 }
 
 type ConversationActionResponse = {
+  conversation?: ConversationResponse
+}
+
+type ConversationTopicDetailResponse = {
+  can_archive?: boolean
+  can_participate?: boolean
   conversation?: ConversationResponse
 }
 
@@ -129,6 +154,49 @@ export async function joinGroupConversation(
   return normalizeConversationAction(data, "加入群聊响应格式不正确")
 }
 
+export async function fetchConversationTopic(
+  serverUrl: string,
+  conversationId: string,
+  options: ConversationRequestOptions = {}
+): Promise<ClientTopicDetail> {
+  const data = await createApiClient(serverUrl, options.fetcher).request<
+    ConversationTopicDetailResponse
+  >(`/api/client/conversations/topics/${encodeURIComponent(conversationId)}`, {
+    errorMessage: "加载话题失败",
+    method: "GET",
+    signal: options.signal,
+  })
+
+  if (!data?.conversation) {
+    throw new ApiRequestError("话题详情响应格式不正确")
+  }
+
+  return {
+    canArchive: Boolean(data.can_archive),
+    canParticipate: Boolean(data.can_participate),
+    conversation: normalizeConversation(data.conversation),
+  }
+}
+
+export async function archiveConversationTopic(
+  serverUrl: string,
+  conversationId: string,
+  options: ConversationRequestOptions = {}
+) {
+  const data = await createApiClient(serverUrl, options.fetcher).request<
+    ConversationActionResponse
+  >(
+    `/api/client/conversations/topics/${encodeURIComponent(conversationId)}/archive`,
+    {
+      errorMessage: "关闭话题失败",
+      method: "POST",
+      signal: options.signal,
+    }
+  )
+
+  return normalizeConversationAction(data, "关闭话题响应格式不正确")
+}
+
 function normalizeConversationAction(
   data: ConversationActionResponse | undefined,
   errorMessage: string
@@ -159,6 +227,7 @@ function normalizeConversation(
     lastReadSeq: conversation.last_read_seq ?? 0,
     memberCount: conversation.member_count ?? 0,
     name: conversation.name,
+    pinned: Boolean(conversation.pinned),
     type: normalizeConversationType(conversation.type),
     unreadCount: conversation.unread_count ?? 0,
     visibility: conversation.visibility === "public" ? "public" : "private",
@@ -174,7 +243,46 @@ function normalizeConversation(
     )
   }
 
+  if (conversation.topic) {
+    normalized.topic = normalizeConversationTopic(conversation.topic)
+  }
+
   return normalized
+}
+
+function normalizeConversationTopic(
+  topic: ConversationTopicResponse
+): NonNullable<ClientConversation["topic"]> {
+  const sourceSender = topic.source_sender
+  if (
+    !topic.parent_conversation_id ||
+    !topic.parent_conversation_name ||
+    !topic.source_message_id ||
+    typeof topic.source_message_seq !== "number" ||
+    !sourceSender?.id ||
+    !sourceSender.name ||
+    (sourceSender.type !== "user" && sourceSender.type !== "app")
+  ) {
+    throw new ApiRequestError("会话话题信息响应格式不正确")
+  }
+
+  return {
+    archived: Boolean(topic.archived),
+    parentConversationId: topic.parent_conversation_id,
+    parentConversationName: topic.parent_conversation_name,
+    parentConversationType: normalizeParentConversationType(
+      topic.parent_conversation_type
+    ),
+    participating: Boolean(topic.participating),
+    sourceMessageId: topic.source_message_id,
+    sourceMessageSeq: topic.source_message_seq,
+    sourceSender: {
+      avatar: sourceSender.avatar ?? "",
+      id: sourceSender.id,
+      name: sourceSender.name,
+      type: sourceSender.type,
+    },
+  }
 }
 
 function normalizeConversationMember(
@@ -217,9 +325,14 @@ function normalizeConversationProject(
 }
 
 function normalizeConversationType(type: string | undefined) {
-  if (type === "direct" || type === "app") {
+  if (type === "direct" || type === "app" || type === "topic") {
     return type
   }
 
+  return "group"
+}
+
+function normalizeParentConversationType(type: string | undefined) {
+  if (type === "direct" || type === "app") return type
   return "group"
 }

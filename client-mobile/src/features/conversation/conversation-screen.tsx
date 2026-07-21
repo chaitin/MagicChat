@@ -6,12 +6,12 @@ import {
 } from "expo-router"
 import { Ellipsis } from "lucide-react-native"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Alert, AppState } from "react-native"
+import { Alert, AppState, BackHandler } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { YStack } from "tamagui"
+import { SizableText, useToastController, YStack } from "tamagui"
 
+import type { AppToastTone } from "@/components/feedback/app-toast"
 import { ContentState } from "@/components/feedback/content-state"
-import { ThemedIcon } from "@/components/icons/themed-icon"
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
 import {
   PAGE_HEADER_HEIGHT,
@@ -35,6 +35,10 @@ import {
   useMessageResources,
 } from "@/data/resources"
 import {
+  useArchiveConversationTopic,
+  useConversationTopic,
+} from "@/data/topic-hooks"
+import {
   type EntityReference,
   getConversationEntityReference,
 } from "@/domain/entities/entity-profile"
@@ -50,22 +54,35 @@ import {
 } from "@/features/conversation/message-composer"
 import { MessageList } from "@/features/conversation/message-list"
 import { createMentionCandidates } from "@/features/conversation/mention-model"
+import { TopicArchiveDialog } from "@/features/conversation/topic-archive-dialog"
 import {
   useAuth,
   useAuthenticatedSession,
 } from "@/features/auth/auth-context"
-import { useClientData } from "@/providers/client-data-provider"
+import {
+  buildConversationHref,
+  buildTopicConversationHref,
+} from "@/navigation/conversations"
 import { buildEntityDetailHref } from "@/navigation/entity-details"
+import { useClientData } from "@/providers/client-data-provider"
 import { useRealtime } from "@/realtime/realtime-context"
 
 const EMPTY_MENTION_RESOLVER: MessageMentionLabelResolver = () => undefined
 
 export function ConversationScreen() {
-  const params = useLocalSearchParams<{ conversationId: string }>()
+  const params = useLocalSearchParams<{
+    conversationId: string
+    parentConversationId?: string
+    topic?: string
+  }>()
   const conversationId = Array.isArray(params.conversationId)
     ? (params.conversationId[0] ?? "")
     : (params.conversationId ?? "")
+  const parentConversationId = Array.isArray(params.parentConversationId)
+    ? (params.parentConversationId[0] ?? "")
+    : (params.parentConversationId ?? "")
   const router = useRouter()
+  const toast = useToastController()
   const isFocused = useIsFocused()
   const insets = useSafeAreaInsets()
   const { invalidateSession } = useAuth()
@@ -76,16 +93,36 @@ export function ConversationScreen() {
   )
   const appIsActiveRef = useRef(appIsActive)
   const composerRef = useRef<MessageComposerHandle>(null)
+  const [topicArchiveDialogOpen, setTopicArchiveDialogOpen] = useState(false)
   const { contacts, conversations, currentUser, currentUserError, isReady } =
     useClientData()
-  const conversation = conversations.find((item) => item.id === conversationId)
+  const listedConversation = conversations.find(
+    (item) => item.id === conversationId
+  )
+  const expectsTopic =
+    Boolean(parentConversationId) ||
+    params.topic === "1" ||
+    listedConversation?.type === "topic"
+  const topicQuery = useConversationTopic(
+    session,
+    conversationId,
+    expectsTopic
+  )
+  const conversation = topicQuery.data?.conversation ?? listedConversation
+  const isTopicConversation = expectsTopic || conversation?.type === "topic"
+  const topicArchived = Boolean(conversation?.topic?.archived)
+  const archiveTopicMutation = useArchiveConversationTopic(
+    session,
+    conversationId
+  )
   const conversationEntity =
-    conversation && currentUser
+    conversation && currentUser && conversation.type !== "topic"
       ? getConversationEntityReference(conversation, currentUser.id)
       : null
   const mentionCandidates = useMemo(
     () =>
-      conversation?.type === "group"
+      conversation?.type === "group" ||
+      conversation?.topic?.parentConversationType === "group"
         ? createMentionCandidates(conversation.members ?? [])
         : [],
     [conversation]
@@ -171,18 +208,49 @@ export function ConversationScreen() {
   }, [activateConversation, conversationId, isFocused])
 
   useEffect(() => {
-    const error = messagesQuery.error ?? currentUserError
+    if (!isFocused || !parentConversationId) return
+
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => {
+        if (topicArchiveDialogOpen) {
+          if (!archiveTopicMutation.isPending) {
+            setTopicArchiveDialogOpen(false)
+          }
+          return true
+        }
+        router.replace(buildConversationHref(parentConversationId))
+        return true
+      }
+    )
+    return () => subscription.remove()
+  }, [
+    archiveTopicMutation.isPending,
+    isFocused,
+    parentConversationId,
+    router,
+    topicArchiveDialogOpen,
+  ])
+
+  useEffect(() => {
+    const error = messagesQuery.error ?? topicQuery.error ?? currentUserError
     if (isUnauthorizedError(error)) {
       void invalidateSession()
       router.replace("/init")
     }
-  }, [currentUserError, invalidateSession, messagesQuery.error, router])
+  }, [
+    currentUserError,
+    invalidateSession,
+    messagesQuery.error,
+    router,
+    topicQuery.error,
+  ])
 
   useEffect(() => {
-    if (isReady && !conversation) {
+    if (isReady && !conversation && !expectsTopic) {
       router.replace("/(app)/(tabs)/messages")
     }
-  }, [conversation, isReady, router])
+  }, [conversation, expectsTopic, isReady, router])
 
   useEffect(() => {
     if (!conversation) return
@@ -315,8 +383,45 @@ export function ConversationScreen() {
     router.push(buildEntityDetailHref(conversationEntity))
   }
 
+  function handleOpenTopic(topicConversationId: string) {
+    router.push(
+      buildTopicConversationHref(conversationId, topicConversationId)
+    )
+  }
+
+  function handleBack() {
+    if (parentConversationId) {
+      router.replace(buildConversationHref(parentConversationId))
+      return
+    }
+    router.back()
+  }
+
+  async function handleArchiveTopic() {
+    if (archiveTopicMutation.isPending) return
+
+    try {
+      await archiveTopicMutation.mutateAsync()
+      setTopicArchiveDialogOpen(false)
+      toast.show("话题已关闭", {
+        customData: { tone: "success" satisfies AppToastTone },
+      })
+    } catch (error: unknown) {
+      Alert.alert(
+        "关闭话题失败",
+        error instanceof ApiRequestError ? error.message : "请稍后重试。"
+      )
+    }
+  }
+
   function handleAvatarLongPress(sender: EntityReference) {
-    if (conversation?.type !== "group" || sender.type === "group") return
+    if (
+      (conversation?.type !== "group" &&
+        conversation?.topic?.parentConversationType !== "group") ||
+      sender.type === "group"
+    ) {
+      return
+    }
 
     const label = resolveMentionLabel({
       id: sender.id,
@@ -364,12 +469,19 @@ export function ConversationScreen() {
   return (
     <YStack bg="$background" flex={1}>
       <PageHeader
-        actionIcon={<ThemedIcon icon={Ellipsis} size={22} />}
-        actionLabel="查看对话详情"
+        actionLabel={isTopicConversation ? "关闭话题" : "查看对话详情"}
+        compactActionIcon={Ellipsis}
+        compactIconButtons
         onActionPress={
-          conversationEntity ? handleConversationDetails : undefined
+          isTopicConversation
+            ? topicQuery.data?.canArchive && !topicArchived
+              ? () => setTopicArchiveDialogOpen(true)
+              : undefined
+            : conversationEntity
+              ? handleConversationDetails
+              : undefined
         }
-        onBackPress={() => router.back()}
+        onBackPress={handleBack}
         title={conversation?.name ?? "对话"}
       />
 
@@ -380,7 +492,15 @@ export function ConversationScreen() {
         scrollable={false}
       >
         {!conversation ? (
-          <ContentState message="该会话不存在或已被移除" />
+          <ContentState
+            loading={expectsTopic && topicQuery.isLoading}
+            message={
+              expectsTopic
+                ? topicQuery.error?.message ?? "正在加载话题"
+                : "该会话不存在或已被移除"
+            }
+            tone={topicQuery.error ? "error" : undefined}
+          />
         ) : !currentUser ? (
           <ContentState loading message="正在加载用户信息" />
         ) : (
@@ -414,22 +534,38 @@ export function ConversationScreen() {
                 void handleVoiceResourcePress(fileId)
               }
               onMentionPress={handleAvatarPress}
+              onOpenTopic={handleOpenTopic}
               resolveMentionLabel={resolveMentionLabel}
               resourceStates={resources.states}
               server={session}
             />
-            <MessageComposer
-              disabled={isSending}
-              mentionCandidates={mentionCandidates}
-              onSend={handleSend}
-              onSendUpload={handleSendUpload}
-              onSendVoice={handleSendVoice}
-              ref={composerRef}
-              server={session}
-            />
+            {topicArchived ? (
+              <YStack bg="$background" items="center" p="$4">
+                <SizableText color="$color10" size="$3">
+                  话题已关闭，无法继续发言
+                </SizableText>
+              </YStack>
+            ) : (
+              <MessageComposer
+                disabled={isSending}
+                mentionCandidates={mentionCandidates}
+                onSend={handleSend}
+                onSendUpload={handleSendUpload}
+                onSendVoice={handleSendVoice}
+                ref={composerRef}
+                server={session}
+              />
+            )}
           </>
         )}
       </KeyboardAwareScreen>
+
+      <TopicArchiveDialog
+        onConfirm={() => void handleArchiveTopic()}
+        onOpenChange={setTopicArchiveDialogOpen}
+        open={topicArchiveDialogOpen}
+        saving={archiveTopicMutation.isPending}
+      />
     </YStack>
   )
 }

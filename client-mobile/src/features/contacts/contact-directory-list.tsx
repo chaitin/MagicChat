@@ -129,6 +129,7 @@ function DirectoryListItem({
           />
         }
         onPress={onPress}
+        pressStyle={{ bg: "$backgroundPress" }}
         size="$4"
         title={
           <ListItemContent
@@ -155,6 +156,7 @@ function DirectoryListItem({
           />
         }
         onPress={onPress}
+        pressStyle={{ bg: "$backgroundPress" }}
         size="$4"
         title={
           <ListItemContent
@@ -180,6 +182,7 @@ function DirectoryListItem({
         />
       }
       onPress={onPress}
+      pressStyle={{ bg: "$backgroundPress" }}
       size="$4"
       title={
         <ListItemContent

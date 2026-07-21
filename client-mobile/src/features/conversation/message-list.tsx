@@ -40,6 +40,7 @@ export function MessageList({
   onResourcePress,
   onVoiceResourcePress,
   onMentionPress,
+  onOpenTopic,
   resolveMentionLabel,
   resourceStates,
   server,
@@ -62,6 +63,7 @@ export function MessageList({
   onResourcePress: (fileId: string) => void
   onVoiceResourcePress: (fileId: string) => void
   onMentionPress: (target: EntityReference) => void
+  onOpenTopic: (conversationId: string) => void
   resolveMentionLabel: MessageMentionLabelResolver
   resourceStates: ReadonlyMap<string, ResourceLoadState>
   server: ServerTarget
@@ -222,6 +224,7 @@ export function MessageList({
             onAvatarPress={onAvatarPress}
             onImagePress={onImagePress}
             onMentionPress={onMentionPress}
+            onOpenTopic={onOpenTopic}
             onResourceError={onResourceError}
             onResourcePress={onResourcePress}
             onVoiceResourcePress={onVoiceResourcePress}

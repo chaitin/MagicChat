@@ -2,8 +2,7 @@ import { Menu, type LucideIcon } from "lucide-react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { SizableText, XStack, YStack } from "tamagui"
 
-import { ThemedIcon } from "@/components/icons/themed-icon"
-import { HeaderButton } from "@/components/navigation/header-button"
+import { CompactIconButton } from "@/components/buttons/compact-icon-button"
 
 export type HeaderAction = {
   icon: LucideIcon
@@ -24,13 +23,14 @@ export function AppHeader({
 
   return (
     <YStack bg="$background" pt={insets.top}>
-      <XStack height={56} items="center" px="$2">
+      <XStack height={56} items="center" px="$3">
         <XStack width={72}>
-          <HeaderButton
+          <CompactIconButton
             accessibilityLabel="打开菜单"
-            circular
-            icon={<ThemedIcon icon={Menu} size={22} />}
+            icon={Menu}
+            iconSize={26}
             onPress={onMenuPress}
+            strokeWidth={1.5}
           />
         </XStack>
 
@@ -40,12 +40,13 @@ export function AppHeader({
 
         <XStack gap="$1" justify="flex-end" width={72}>
           {actions.slice(0, 2).map((action) => (
-            <HeaderButton
+            <CompactIconButton
               accessibilityLabel={action.label}
-              circular
-              icon={<ThemedIcon icon={action.icon} size={22} />}
+              icon={action.icon}
+              iconSize={26}
               key={action.label}
               onPress={action.onPress}
+              strokeWidth={1.5}
             />
           ))}
         </XStack>

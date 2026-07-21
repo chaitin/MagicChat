@@ -31,6 +31,17 @@ export type PresentedMessage = {
   role: "me" | "other" | "system"
   sender: EntityReference | null
   time: string
+  topic?: {
+    archived: boolean
+    conversationId: string
+    recentReplies: {
+      author: string
+      avatar: string
+      id: string
+      summary: string
+      time: string
+    }[]
+  }
 }
 
 const messageTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
@@ -124,6 +135,34 @@ export function buildPresentedMessages({
           ? null
           : { id: message.sender.id, type: message.sender.type },
       time: formatMessageTime(message.createdAt),
+      topic: message.topic
+        ? {
+            archived: message.topic.archived,
+            conversationId: message.topic.conversationId,
+            recentReplies: message.topic.recentReplies.map((reply) => ({
+              author: getTopicReplyAuthor(
+                reply.sender,
+                conversation,
+                currentUser,
+                usersById,
+                appsById
+              ),
+              avatar: getTopicReplyAvatar(
+                reply.sender,
+                conversation,
+                currentUser,
+                usersById,
+                appsById
+              ),
+              id: reply.id,
+              summary: formatMentionTemplateText(
+                reply.summary,
+                resolveMentionLabel
+              ),
+              time: formatMessageTime(reply.createdAt),
+            })),
+          }
+        : undefined,
     }
   })
 }
@@ -192,6 +231,9 @@ export function formatClientMessageBodySummary(
   if (body.type === "unsupported") return "暂不支持查看该消息"
   if (body.event === "message_revoked") {
     return `${body.actor.displayName} 撤回了一条消息`
+  }
+  if (body.event === "topic_closed") {
+    return `${body.actor.displayName} 已将话题关闭`
   }
   if (body.event === "group_avatar_updated") {
     return `${body.actor.displayName} 修改了群头像`
@@ -362,4 +404,45 @@ function getReplyAuthor(
   return user
     ? getContactDisplayName(user)
     : sender.name || (conversation.type === "direct" ? conversation.name : "成员")
+}
+
+function getTopicReplyAuthor(
+  sender: NonNullable<ClientMessage["topic"]>["recentReplies"][number]["sender"],
+  conversation: ClientConversation,
+  currentUser: ClientUser,
+  usersById: ReadonlyMap<string, ClientContacts["users"][number]>,
+  appsById: ReadonlyMap<string, ClientContacts["apps"][number]>
+) {
+  if (sender.type === "app") {
+    return (
+      appsById.get(sender.id.toLowerCase())?.name ||
+      conversation.members?.find((member) => member.id === sender.id)?.name ||
+      "应用"
+    )
+  }
+  if (sender.id === currentUser.id) return getContactDisplayName(currentUser)
+  const user = usersById.get(sender.id.toLowerCase())
+  if (user) return getContactDisplayName(user)
+  return conversation.type === "direct" ? conversation.name : "成员"
+}
+
+function getTopicReplyAvatar(
+  sender: NonNullable<ClientMessage["topic"]>["recentReplies"][number]["sender"],
+  conversation: ClientConversation,
+  currentUser: ClientUser,
+  usersById: ReadonlyMap<string, ClientContacts["users"][number]>,
+  appsById: ReadonlyMap<string, ClientContacts["apps"][number]>
+) {
+  if (sender.type === "app") {
+    return (
+      appsById.get(sender.id.toLowerCase())?.avatar ||
+      conversation.members?.find((member) => member.id === sender.id)?.avatar ||
+      ""
+    )
+  }
+  if (sender.id === currentUser.id) return currentUser.avatar
+  return (
+    usersById.get(sender.id.toLowerCase())?.avatar ||
+    (conversation.type === "direct" ? conversation.avatar : "")
+  )
 }

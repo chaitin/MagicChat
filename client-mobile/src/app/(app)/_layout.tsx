@@ -30,6 +30,13 @@ export default function AppDrawerLayout() {
         }}
       />
       <Drawer.Screen
+        name="conversation/[parentConversationId]/topic/[conversationId]"
+        options={{
+          drawerItemStyle: { display: "none" },
+          drawerLabel: "话题",
+        }}
+      />
+      <Drawer.Screen
         name="entity/[entityType]/[entityId]"
         options={{
           drawerItemStyle: { display: "none" },

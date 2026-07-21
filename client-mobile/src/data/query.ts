@@ -52,6 +52,16 @@ export const queryKeys = {
       conversationId,
       "messages",
     ] as const,
+  conversationTopic: (
+    target: AuthenticatedTarget,
+    conversationId: string
+  ) =>
+    [
+      ...authenticatedQueryKey(target),
+      "conversation",
+      conversationId,
+      "topic",
+    ] as const,
   currentUser: (target: AuthenticatedTarget) =>
     [...authenticatedQueryKey(target), "current-user"] as const,
   projects: (target: AuthenticatedTarget) =>

@@ -21,6 +21,7 @@ import type {
 } from "@/data/models"
 import type { ClientMessageUpload } from "@/data/message-upload"
 import { queryKeys, type AuthenticatedTarget } from "@/data/query"
+import { updateCachedTopicSourcePreview } from "@/data/topic-cache"
 
 const MESSAGE_PAGE_SIZE = 20
 const MESSAGE_REFRESH_INTERVAL_MS = 5_000
@@ -135,6 +136,7 @@ function useSendConversationMessageMutation<TInput>(
         queryKeys.conversationMessages(server, conversationId),
         (current) => appendMessage(current, message)
       )
+      updateCachedTopicSourcePreview(queryClient, server, message)
       void queryClient.invalidateQueries({
         queryKey: queryKeys.conversations(server),
       })

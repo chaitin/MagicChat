@@ -125,6 +125,7 @@ function ProjectListItem({
           server={server}
         />
       }
+      pressStyle={{ bg: "$backgroundPress" }}
       size="$4"
       title={
         <ListItemContent

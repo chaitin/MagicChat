@@ -14,6 +14,7 @@ import type { EntityReference } from "@/domain/entities/entity-profile"
 import type { ServerTarget } from "@/data/query"
 import type { ResourceLoadState } from "@/data/resources"
 import { MessageBody } from "@/features/conversation/message-body"
+import { TopicReplyPreview } from "@/features/conversation/topic-reply-preview"
 import {
   formatClientMessageBodySummary,
   type MessageMentionLabelResolver,
@@ -27,6 +28,7 @@ export function MessageBubble({
   onAvatarPress,
   onImagePress,
   onMentionPress,
+  onOpenTopic,
   onResourceError,
   onResourcePress,
   onVoiceResourcePress,
@@ -40,6 +42,7 @@ export function MessageBubble({
   onAvatarPress: (sender: EntityReference) => void
   onImagePress: (fileId: string) => void
   onMentionPress: (target: EntityReference) => void
+  onOpenTopic: (conversationId: string) => void
   onResourceError: (fileId: string) => void
   onResourcePress: (fileId: string) => void
   onVoiceResourcePress: (fileId: string) => void
@@ -53,7 +56,7 @@ export function MessageBubble({
   if (message.role === "system") {
     return (
       <XStack justify="center" px="$5">
-        <XStack bg="$backgroundPress" maxW="85%" p="$2" px="$3" rounded="$10">
+        <XStack bg="$color4" maxW="85%" p="$2" px="$3" rounded="$10">
           <SizableText color="$color10" size="$2" text="center">
             {formatClientMessageBodySummary(message.body, resolveMentionLabel)}
           </SizableText>
@@ -155,11 +158,11 @@ export function MessageBubble({
             bg={
               bubblePressed
                 ? fromMe
-                  ? "$teal5"
-                  : "$teal2"
+                  ? "$color5"
+                  : "$color2"
                 : fromMe
-                  ? "$teal4"
-                  : "$teal1"
+                  ? "$color4"
+                  : "$color1"
             }
             rounded="$5"
             borderTopLeftRadius={fromMe ? "$5" : "$1"}
@@ -167,7 +170,13 @@ export function MessageBubble({
             borderWidth={0}
             maxW="100%"
             overflow="hidden"
-            p="$3"
+            p={
+              message.body.type === "image" &&
+              !message.replyTo &&
+              !message.topic
+                ? 0
+                : "$3"
+            }
           >
             {message.replyTo ? (
               <YStack
@@ -196,6 +205,13 @@ export function MessageBubble({
               resourceStates={resourceStates}
               serverUrl={server.url}
             />
+            {message.topic ? (
+              <TopicReplyPreview
+                onOpen={() => onOpenTopic(message.topic!.conversationId)}
+                server={server}
+                topic={message.topic}
+              />
+            ) : null}
           </YStack>
         </View>
 

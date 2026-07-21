@@ -52,6 +52,7 @@ export function normalizeClientMessage(value: unknown): ClientMessage {
   const delegatedBy = normalizeDelegatedBy(message.delegated_by)
   const replyTo = normalizeReplyTo(message.reply_to)
   const replyToMessageId = asString(message.reply_to_message_id)
+  const topic = normalizeMessageTopic(message.topic)
 
   if (delegatedBy) {
     normalized.delegatedBy = delegatedBy
@@ -62,6 +63,9 @@ export function normalizeClientMessage(value: unknown): ClientMessage {
   if (replyToMessageId) {
     normalized.replyToMessageId = replyToMessageId
   }
+  if (topic) {
+    normalized.topic = topic
+  }
   if (revokedAt) {
     normalized.revokedAt = revokedAt
     const revokedByUserId = asString(message.revoked_by_user_id)
@@ -71,6 +75,52 @@ export function normalizeClientMessage(value: unknown): ClientMessage {
   }
 
   return normalized
+}
+
+function normalizeMessageTopic(
+  value: unknown
+): ClientMessage["topic"] | undefined {
+  if (value === undefined || value === null) return undefined
+
+  const topic = asRecord(value)
+  const conversationId = asString(topic?.conversation_id)
+  const replies = Array.isArray(topic?.recent_replies)
+    ? topic.recent_replies
+    : []
+  if (!topic || !conversationId) {
+    throw new ApiRequestError("消息话题信息响应格式不正确")
+  }
+
+  return {
+    archived: Boolean(topic.archived),
+    conversationId,
+    recentReplies: replies.map((value) => {
+      const reply = asRecord(value)
+      const sender = asRecord(reply?.sender)
+      const createdAt = asString(reply?.created_at)
+      const id = asString(reply?.id)
+      const senderId = asString(sender?.id)
+      const senderType = asString(sender?.type)
+      const summary = asString(reply?.summary)
+      if (
+        !reply ||
+        !createdAt ||
+        !id ||
+        !senderId ||
+        (senderType !== "user" && senderType !== "app") ||
+        summary === undefined
+      ) {
+        throw new ApiRequestError("话题回复摘要响应格式不正确")
+      }
+
+      return {
+        createdAt,
+        id,
+        sender: { id: senderId, type: senderType },
+        summary,
+      }
+    }),
+  }
 }
 
 export function normalizeClientMessagePage(value: unknown): ClientMessagePage {
@@ -283,7 +333,8 @@ function normalizeSystemEvent(
     event === "group_avatar_updated" ||
     event === "group_member_joined" ||
     event === "group_member_left" ||
-    event === "message_revoked"
+    event === "message_revoked" ||
+    event === "topic_closed"
   ) {
     return { actor, event, type: "system_event" }
   }

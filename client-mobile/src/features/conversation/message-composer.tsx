@@ -1,7 +1,7 @@
 import {
-  AudioLines,
+  CirclePlus,
   Keyboard as KeyboardIcon,
-  Plus,
+  Mic,
   Send,
   Smile,
 } from "lucide-react-native"
@@ -12,19 +12,22 @@ import {
   useRef,
   useState,
 } from "react"
-import { Keyboard, Pressable, StyleSheet } from "react-native"
+import {
+  Keyboard,
+  Pressable,
+  StyleSheet,
+} from "react-native"
 import {
   Button,
-  Spinner,
   type TamaguiElement,
   useToastController,
   XStack,
   YStack,
 } from "tamagui"
 
+import { CompactIconButton } from "@/components/buttons/compact-icon-button"
 import type { AppToastTone } from "@/components/feedback/app-toast"
 import { AppInput } from "@/components/forms/app-input"
-import { ThemedIcon } from "@/components/icons/themed-icon"
 import type {
   PreparedClientMessageUpload,
   PreparedClientVoiceMessage,
@@ -60,6 +63,20 @@ export type MessageComposerHandle = {
   insertMention: (target: MentionSelection) => void
 }
 
+const COMPOSER_CONTROL_HEIGHT = 38
+const COMPOSER_INPUT_GAP = 8
+const COMPOSER_INPUT_HORIZONTAL_PADDING = 8
+const COMPOSER_LINE_HEIGHT = 22
+const COMPOSER_MAX_LINES = 4
+const COMPOSER_MAX_CONTROL_HEIGHT =
+  COMPOSER_CONTROL_HEIGHT + COMPOSER_LINE_HEIGHT * (COMPOSER_MAX_LINES - 1)
+const COMPOSER_PANEL_HEIGHT = 56
+const COMPOSER_EXTRA_BOTTOM_PADDING = 4
+const COMPOSER_PANEL_VERTICAL_CHROME =
+  COMPOSER_PANEL_HEIGHT - COMPOSER_CONTROL_HEIGHT
+const COMPOSER_TEXT_VERTICAL_CHROME =
+  COMPOSER_CONTROL_HEIGHT - COMPOSER_LINE_HEIGHT
+
 export const MessageComposer = forwardRef<
   MessageComposerHandle,
   {
@@ -93,8 +110,10 @@ export const MessageComposer = forwardRef<
   const uploadInFlightRef = useRef(false)
   const voiceUploadInFlightRef = useRef(false)
   const voiceRecordingRef = useRef<PreparedClientVoiceMessage | null>(null)
+  const inputVoiceGestureRef = useRef(false)
   const mountedRef = useRef(true)
   const [content, setContent] = useState("")
+  const [inputHeight, setInputHeight] = useState(COMPOSER_CONTROL_HEIGHT)
   const [accessoryMode, setAccessoryMode] =
     useState<ComposerAccessoryMode>(null)
   const [preparingUpload, setPreparingUpload] = useState(false)
@@ -115,6 +134,12 @@ export const MessageComposer = forwardRef<
     voiceRecorder.status,
     voiceRecorder.elapsedMS
   )
+  const visibleControlHeight = voiceMode
+    ? COMPOSER_CONTROL_HEIGHT
+    : inputHeight
+  const composerPanelHeight =
+    visibleControlHeight + COMPOSER_PANEL_VERTICAL_CHROME
+  const inputScrollEnabled = inputHeight >= COMPOSER_MAX_CONTROL_HEIGHT
 
   useEffect(() => {
     voiceRecordingRef.current = voiceRecorder.recording
@@ -216,6 +241,22 @@ export const MessageComposer = forwardRef<
     recordSelection(nextSelection)
   }
 
+  function handleInputContentSizeChange(
+    event: { nativeEvent: { contentSize: { height: number; width: number } } }
+  ) {
+    const measuredHeight = Math.ceil(event.nativeEvent.contentSize.height)
+    const nextHeight = Math.max(
+      COMPOSER_CONTROL_HEIGHT,
+      Math.min(
+        COMPOSER_MAX_CONTROL_HEIGHT,
+        measuredHeight + COMPOSER_TEXT_VERTICAL_CHROME
+      )
+    )
+    setInputHeight((currentHeight) =>
+      currentHeight === nextHeight ? currentHeight : nextHeight
+    )
+  }
+
   function insertMentionTarget(
     target: MentionSelection,
     explicitSelection?: TextSelection
@@ -282,6 +323,7 @@ export const MessageComposer = forwardRef<
       mentionTriggerRef.current = null
       setMentionPickerOpen(false)
       updateDraft("", [])
+      setInputHeight(COMPOSER_CONTROL_HEIGHT)
       requestSelection({ end: 0, start: 0 })
     }
   }
@@ -377,6 +419,34 @@ export const MessageComposer = forwardRef<
     void voiceRecorder.stopRecording()
   }
 
+  function handleInputPress() {
+    if (inputVoiceGestureRef.current) {
+      inputVoiceGestureRef.current = false
+      return
+    }
+    if (interactionDisabled) return
+
+    setAccessoryMode(null)
+    setMentionPickerOpen(false)
+    focusInputAfterRender()
+  }
+
+  function handleInputLongPress() {
+    if (interactionDisabled || contentRef.current.trim()) return
+
+    inputVoiceGestureRef.current = true
+    setAccessoryMode(null)
+    setMentionPickerOpen(false)
+    inputRef.current?.blur()
+    Keyboard.dismiss()
+    void voiceRecorder.startRecording()
+  }
+
+  function handleInputPressOut() {
+    if (!inputVoiceGestureRef.current) return
+    void voiceRecorder.stopRecording()
+  }
+
   async function handleVoiceConfirm() {
     const recording = voiceRecorder.recording
     if (!recording || disabled) return
@@ -396,85 +466,121 @@ export const MessageComposer = forwardRef<
   return (
     <>
       <YStack bg="$background">
-        <XStack gap="$1" items="center" px="$3" py="$2">
-          <Button
+        <XStack
+          height={composerPanelHeight}
+          items="center"
+          pb={COMPOSER_EXTRA_BOTTOM_PADDING}
+          px="$2"
+        >
+          <CompactIconButton
             accessibilityLabel={voiceMode ? "切换到键盘输入" : "切换到语音输入"}
-            chromeless
-            circular
             disabled={interactionDisabled}
-            icon={
-              <ThemedIcon
-                icon={voiceMode ? KeyboardIcon : AudioLines}
-                size={21}
-              />
-            }
+            icon={voiceMode ? KeyboardIcon : Mic}
+            iconSize={26}
             onPress={handleVoiceModeToggle}
-            size="$4"
+            strokeWidth={1.5}
           />
-          {voiceMode ? (
-            <VoiceRecordButton
-              disabled={disabled || preparingUpload}
-              onPressIn={handleVoicePressIn}
-              onPressOut={handleVoicePressOut}
-              prompt={voicePrompt}
-              recording={voiceRecorder.status === "recording"}
+          <YStack
+            bg="$color1"
+            flex={1}
+            height={visibleControlHeight}
+            mx={COMPOSER_INPUT_GAP}
+            rounded="$4"
+          >
+            {voiceMode ? (
+              <VoiceRecordButton
+                disabled={disabled || preparingUpload}
+                onPressIn={handleVoicePressIn}
+                onPressOut={handleVoicePressOut}
+                prompt={voicePrompt}
+                recording={voiceRecorder.status === "recording"}
+              />
+            ) : (
+              <>
+                <AppInput
+                  autoCapitalize="sentences"
+                  bg="transparent"
+                  borderWidth={0}
+                  color="$gray12"
+                  disabled={disabled || voiceInteractionActive}
+                  fontFamily="$body"
+                  fontSize="$4"
+                  focusStyle={{ borderWidth: 0, outlineWidth: 0 }}
+                  height={inputHeight}
+                  minH={0}
+                  multiline
+                  onChangeText={handleContentChange}
+                  onContentSizeChange={handleInputContentSizeChange}
+                  onFocus={() => setAccessoryMode(null)}
+                  onSelectionChange={handleSelectionChange}
+                  placeholder={
+                    voiceInteractionActive
+                      ? voicePrompt
+                      : "发消息或按住说话"
+                  }
+                  placeholderTextColor="$gray9"
+                  px={COMPOSER_INPUT_HORIZONTAL_PADDING}
+                  py={0}
+                  ref={inputRef}
+                  returnKeyType="default"
+                  scrollEnabled={inputScrollEnabled}
+                  selection={pendingSelection}
+                  style={styles.composerInput}
+                  submitBehavior="newline"
+                  textAlignVertical="center"
+                  unstyled
+                  value={content}
+                  width="100%"
+                />
+                {content.trim().length === 0 ? (
+                  <Pressable
+                    accessibilityHint="短按输入文字，长按录制语音"
+                    accessibilityLabel="发消息或按住说话"
+                    delayLongPress={400}
+                    disabled={disabled || preparingUpload}
+                    onLongPress={handleInputLongPress}
+                    onPress={handleInputPress}
+                    onPressIn={() => {
+                      inputVoiceGestureRef.current = false
+                    }}
+                    onPressOut={handleInputPressOut}
+                    style={styles.inputGestureTarget}
+                  />
+                ) : null}
+              </>
+            )}
+          </YStack>
+          <XStack gap="$1" items="center">
+            <CompactIconButton
+              accessibilityLabel="选择表情"
+              disabled={interactionDisabled}
+              icon={Smile}
+              iconSize={26}
+              onPress={() => handleAccessoryToggle("emoji")}
+              strokeWidth={1.5}
             />
-          ) : (
-            <AppInput
-              autoCapitalize="sentences"
-              color="$gray12"
-              disabled={disabled || voiceInteractionActive}
-              onChangeText={handleContentChange}
-              onFocus={() => setAccessoryMode(null)}
-              onSelectionChange={handleSelectionChange}
-              onSubmitEditing={() => void handleSend()}
-              flex={1}
-              placeholder="发消息或按住说话"
-              placeholderTextColor="$gray9"
-              ref={inputRef}
-              returnKeyType="send"
-              selection={pendingSelection}
-              size="$4"
-              value={content}
-            />
-          )}
-          <Button
-            accessibilityLabel="选择表情"
-            chromeless
-            circular
-            disabled={interactionDisabled}
-            icon={<ThemedIcon icon={Smile} size={20} />}
-            onPress={() => handleAccessoryToggle("emoji")}
-            size="$4"
-          />
-          <Button
-            accessibilityLabel="添加图片或附件"
-            chromeless
-            circular
-            disabled={interactionDisabled}
-            icon={
-              preparingUpload ? (
-                <Spinner />
-              ) : (
-                <ThemedIcon icon={Plus} size={22} />
-              )
-            }
-            onPress={() => handleAccessoryToggle("attachments")}
-            size="$4"
-          />
-          {!voiceMode && content.trim().length > 0 ? (
-            <Button
-              accessibilityLabel="发送消息"
-              circular
-              disabled={!canSend}
-              icon={
-                disabled ? <Spinner /> : <ThemedIcon icon={Send} size={18} />
-              }
-              onPress={() => void handleSend()}
-              size="$4"
-              theme="accent"
-            />
-          ) : null}
+            {!voiceMode && content.trim().length > 0 ? (
+              <CompactIconButton
+                accessibilityLabel="发送消息"
+                disabled={!canSend}
+                icon={Send}
+                iconSize={26}
+                loading={disabled}
+                onPress={() => void handleSend()}
+                strokeWidth={1.5}
+              />
+            ) : (
+              <CompactIconButton
+                accessibilityLabel="添加图片或附件"
+                disabled={interactionDisabled}
+                icon={CirclePlus}
+                iconSize={26}
+                loading={preparingUpload}
+                onPress={() => handleAccessoryToggle("attachments")}
+                strokeWidth={1.5}
+              />
+            )}
+          </XStack>
         </XStack>
         <ComposerAccessoryPanel
           disabled={interactionDisabled}
@@ -557,12 +663,16 @@ function VoiceRecordButton({
       {({ pressed }) => (
         <Button
           accessible={false}
+          bg="$color1"
+          borderWidth={0}
+          color={recording ? "$red10" : undefined}
           disabled={disabled}
           forceStyle={pressed ? "press" : undefined}
+          height={COMPOSER_CONTROL_HEIGHT}
+          minH={0}
           pointerEvents="none"
+          pressStyle={{ bg: "$color2" }}
           size="$4"
-          theme={recording ? "red" : "gray"}
-          variant="outlined"
           width="100%"
         >
           {prompt}
@@ -573,6 +683,13 @@ function VoiceRecordButton({
 }
 
 const styles = StyleSheet.create({
+  composerInput: {
+    includeFontPadding: false,
+    paddingVertical: 0,
+  },
+  inputGestureTarget: {
+    ...StyleSheet.absoluteFill,
+  },
   voicePressTarget: {
     flex: 1,
   },

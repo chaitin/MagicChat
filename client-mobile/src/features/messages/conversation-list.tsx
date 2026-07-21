@@ -77,11 +77,12 @@ function ConversationListItem({
   return (
     <ListItem
       accessibilityLabel={`打开会话 ${conversation.name}`}
-      bg="transparent"
+      bg={conversation.pinned ? "$backgroundLight" : "transparent"}
       icon={
         <ConversationAvatar conversation={conversation} server={server} />
       }
       onPress={onPress}
+      pressStyle={{ bg: "$backgroundPress" }}
       size="$4"
       title={
         <ListItemContent

@@ -93,7 +93,7 @@ export function SearchScreen() {
             borderWidth={1}
             flex={1}
             gap="$1.5"
-            height="$2.5"
+            height="$3"
             items="center"
             px="$2"
             rounded="$3"
@@ -132,7 +132,7 @@ export function SearchScreen() {
           <HeaderButton
             accessibilityLabel="取消搜索"
             onPress={handleCancel}
-            size="$2.5"
+            size="$3"
           >
             取消
           </HeaderButton>

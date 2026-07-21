@@ -76,10 +76,10 @@ export function ContactsScreen() {
 
               return (
                 <Tabs.Tab
-                  bg={selected ? "$teal3" : "$teal2"}
+                  bg={selected ? "$color3" : "$color2"}
                   flex={1}
                   key={tab.value}
-                  pressStyle={{ bg: selected ? "$teal3" : "$teal2" }}
+                  pressStyle={{ bg: selected ? "$color3" : "$color2" }}
                   value={tab.value}
                 >
                   <SizableText

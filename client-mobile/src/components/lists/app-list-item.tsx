@@ -13,7 +13,7 @@ export function AppListItem({
   variant = "outlined",
   ...listItemProps
 }: AppListItemProps) {
-  const resolvedPressStyle = pressStyle ?? { background: "$color1" }
+  const resolvedPressStyle = pressStyle ?? { background: "$backgroundPress" }
 
   if (Platform.OS === "web") {
     return (

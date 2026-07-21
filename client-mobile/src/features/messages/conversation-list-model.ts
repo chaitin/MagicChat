@@ -2,6 +2,7 @@ import type {
   ClientContacts,
   ClientConversation,
 } from "@/data/models"
+import { orderConversations } from "@/domain/conversations/conversation-order"
 import { getContactDisplayName } from "@/domain/contacts/contact-display"
 import {
   formatMentionTemplateText,
@@ -29,7 +30,7 @@ export function buildConversationListItems({
   const labels = createMentionLabels(contacts, conversations)
   const normalizedKeyword = keyword.trim().toLocaleLowerCase()
 
-  return pinAppConversations(conversations)
+  return orderConversations(conversations)
     .map((conversation) => {
       const description = formatConversationDescription(conversation, labels)
 
@@ -54,21 +55,6 @@ export function buildConversationListItems({
 
 export function formatUnreadCount(count: number) {
   return count > 99 ? "99+" : String(count)
-}
-
-function pinAppConversations(conversations: ClientConversation[]) {
-  const appConversations: ClientConversation[] = []
-  const otherConversations: ClientConversation[] = []
-
-  for (const conversation of conversations) {
-    if (conversation.type === "app") {
-      appConversations.push(conversation)
-    } else {
-      otherConversations.push(conversation)
-    }
-  }
-
-  return [...appConversations, ...otherConversations]
 }
 
 function createMentionLabels(

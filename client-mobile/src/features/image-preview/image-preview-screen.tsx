@@ -123,6 +123,7 @@ function AuthenticatedImagePreview({
         <ZoomableImage
           onError={() => setError(new Error("图片无法显示，请重新加载"))}
           onLoad={() => setImageReady(true)}
+          onPress={() => router.back()}
           uri={resource.uri}
         />
       ) : null}

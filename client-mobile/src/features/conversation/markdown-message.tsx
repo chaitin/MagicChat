@@ -34,6 +34,8 @@ const markdownParser = new MarkdownIt({
   typographer: false,
 })
 
+const horizontalScrollStyle = { flexGrow: 0, flexShrink: 0 } as const
+
 export function MarkdownMessage({
   content,
   currentUserId,
@@ -303,7 +305,12 @@ function MarkdownCodeBlock({ token }: { token: Token }) {
           {language}
         </SizableText>
       ) : null}
-      <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator>
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator
+        style={horizontalScrollStyle}
+      >
         <SizableText p="$3" selectable size="$2" style={{ fontFamily: "monospace" }}>
           {token.content.replace(/\n$/, "")}
         </SizableText>
@@ -322,7 +329,12 @@ function MarkdownTable({
   const rows = collectNodes(node, "tr_open")
 
   return (
-    <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator>
+    <ScrollView
+      horizontal
+      nestedScrollEnabled
+      showsHorizontalScrollIndicator
+      style={horizontalScrollStyle}
+    >
       <YStack borderColor="$borderColor" borderTopWidth={1} minW={280}>
         {rows.map((row, rowIndex) => {
           const cells = row.children.filter(
@@ -443,10 +455,8 @@ function renderInlineNode(
   if (token.type === "code_inline") {
     return (
       <SizableText
-        bg="$backgroundPress"
+        color="$color10"
         key={key}
-        px="$1"
-        rounded="$1"
         style={{ fontFamily: "monospace" }}
       >
         {token.content}
@@ -481,7 +491,7 @@ function renderInlineNode(
     )
     return (
       <SizableText
-        color="$teal10"
+        color="$color10"
         key={key}
         onPress={url ? () => void openMarkdownUrl(url) : undefined}
         textDecorationLine="underline"

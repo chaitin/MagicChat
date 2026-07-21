@@ -11,10 +11,12 @@ const MAX_SCALE = 4
 export function ZoomableImage({
   onError,
   onLoad,
+  onPress,
   uri,
 }: {
   onError: () => void
   onLoad: () => void
+  onPress: () => void
   uri: string
 }) {
   const { height, width } = useWindowDimensions()
@@ -70,7 +72,14 @@ export function ZoomableImage({
       savedTranslationY.value = translationY.value
     })
 
-  const gesture = Gesture.Simultaneous(pinch, pan)
+  const tap = Gesture.Tap()
+    .maxDistance(8)
+    .runOnJS(true)
+    .onEnd((_event, success) => {
+      if (success) onPress()
+    })
+
+  const gesture = Gesture.Simultaneous(pinch, pan, tap)
   const imageStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: translationX.value },

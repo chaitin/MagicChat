@@ -86,6 +86,10 @@ export function getConversationEntityReference(
   conversation: ClientConversation,
   currentUserId: string
 ): EntityReference | null {
+  if (conversation.type === "topic") {
+    return null
+  }
+
   if (conversation.type === "group") {
     return { id: conversation.id, type: "group" }
   }

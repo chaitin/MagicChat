@@ -2,10 +2,14 @@ export const REALTIME_PROTOCOL_VERSION = 1
 
 export const realtimeEvents = {
   conversationMemberMentioned: "conversation.member_mentioned",
+  conversationPinUpdated: "conversation.pin_updated",
   conversationRemoved: "conversation.removed",
   messageCreated: "message.created",
   messageUpdated: "message.updated",
   systemReady: "system.ready",
+  topicArchived: "topic.archived",
+  topicCreated: "topic.created",
+  topicParticipated: "topic.participated",
 } as const
 
 export type RealtimeEnvelope = {

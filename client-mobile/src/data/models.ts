@@ -103,6 +103,22 @@ export type ClientConversationMember = {
   type: "user" | "app"
 }
 
+export type ClientConversationTopic = {
+  archived: boolean
+  parentConversationId: string
+  parentConversationName: string
+  parentConversationType: "direct" | "group" | "app"
+  participating: boolean
+  sourceMessageId: string
+  sourceMessageSeq: number
+  sourceSender: {
+    avatar: string
+    id: string
+    name: string
+    type: "user" | "app"
+  }
+}
+
 export type ClientConversation = {
   avatar: string
   createdAt: string
@@ -116,8 +132,10 @@ export type ClientConversation = {
   memberCount: number
   members?: ClientConversationMember[]
   name: string
+  pinned: boolean
   projects?: ClientConversationProject[]
-  type: "direct" | "group" | "app"
+  topic?: ClientConversationTopic
+  type: "direct" | "group" | "app" | "topic"
   unreadCount: number
   visibility: "private" | "public"
 }
@@ -136,6 +154,22 @@ export type ClientMessageReplyTo = {
   }
   seq: number
   summary: string
+}
+
+export type ClientMessageTopicReply = {
+  createdAt: string
+  id: string
+  sender: {
+    id: string
+    type: "user" | "app"
+  }
+  summary: string
+}
+
+export type ClientMessageTopic = {
+  archived: boolean
+  conversationId: string
+  recentReplies: ClientMessageTopicReply[]
 }
 
 export type ClientTextMessageBody = {
@@ -234,6 +268,7 @@ export type ClientSystemEventMessageBody =
         | "group_member_joined"
         | "group_member_left"
         | "message_revoked"
+        | "topic_closed"
       type: "system_event"
     }
   | {
@@ -278,6 +313,13 @@ export type ClientMessage = {
   revokedByUserId?: string
   sender: ClientMessageSender
   seq: number
+  topic?: ClientMessageTopic
+}
+
+export type ClientTopicDetail = {
+  canArchive: boolean
+  canParticipate: boolean
+  conversation: ClientConversation
 }
 
 export type ClientMessagePage = {
