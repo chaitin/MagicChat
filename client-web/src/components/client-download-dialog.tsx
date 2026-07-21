@@ -42,7 +42,7 @@ const clientPlatforms: ClientPlatform[] = [
   {
     description: "Android 手机和平板",
     downloadUrl:
-      "https://chat-public-1450770193.cos.ap-guangzhou.myqcloud.com/releases/magic-chat-2026-07-17-1.apk",
+      "https://chat-public-1450770193.cos.ap-guangzhou.myqcloud.com/releases/magic-chat.apk.1",
     icon: Smartphone,
     name: "Android",
     released: true,

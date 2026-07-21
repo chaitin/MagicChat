@@ -119,12 +119,28 @@ describe("AppLayout", () => {
         name: "下载 Android 客户端",
       })
     ).toMatchObject({
-      href: "https://chat-public-1450770193.cos.ap-guangzhou.myqcloud.com/releases/magic-chat-2026-07-17-1.apk",
+      href: "https://chat-public-1450770193.cos.ap-guangzhou.myqcloud.com/releases/magic-chat.apk.1",
       target: "_blank",
     })
     expect(
       within(dialog).getAllByRole("button", { name: "敬请期待" })
     ).toHaveLength(3)
+  })
+
+  it("opens the MagicChat repository in a new tab", () => {
+    render(
+      <MemoryRouter initialEntries={["/chat"]}>
+        <AppLayout />
+      </MemoryRouter>
+    )
+
+    expect(
+      screen.getByRole("link", { name: "在 GitHub 查看 MagicChat" })
+    ).toMatchObject({
+      href: "https://github.com/chaitin/MagicChat",
+      rel: "noopener noreferrer",
+      target: "_blank",
+    })
   })
 
   it("stays on the login page after logout", async () => {
