@@ -860,7 +860,15 @@ func shouldHandleIncomingMessage(appID string, payload messageCreatedPayload, bo
 			return false
 		}
 	case "topic":
-		return payload.Sender.Type == "user"
+		if payload.Sender.Type != "user" || strings.TrimSpace(appID) == "" {
+			return false
+		}
+		switch body.Type {
+		case "text", "markdown":
+			return contentMentionsApp(body.Content, appID)
+		default:
+			return false
+		}
 	default:
 		return false
 	}

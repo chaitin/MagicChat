@@ -341,6 +341,72 @@ func TestHandleParsedServerMessageIgnoresGroupMessageWithoutDirectAppMention(t *
 	}
 }
 
+func TestHandleParsedServerMessageIgnoresTopicMessageWithoutDirectAppMention(t *testing.T) {
+	appID := "00000000-0000-0000-0000-000000000001"
+	body, err := json.Marshal(messageBody{Type: "text", Content: "我们先讨论一下实现方案"})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	payload, err := json.Marshal(messageCreatedPayload{
+		Conversation: conversationPayload{ID: "topic-1", Name: "客户端方案", Type: "topic"},
+		Message:      messagePayload{Body: body, ID: "topic-message-1", Seq: 1, Summary: "我们先讨论一下实现方案"},
+		Sender:       senderPayload{ID: "user-1", Name: "Alice", Type: "user"},
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	calledRequester := false
+	calledAgent := false
+	requester := appRequestFunc(func(context.Context, string, any) (json.RawMessage, error) {
+		calledRequester = true
+		return nil, nil
+	})
+	replyAgent := replyAgentFunc(func(context.Context, agent.Request, agent.OutputSink) error {
+		calledAgent = true
+		return nil
+	})
+
+	handleParsedServerMessage(
+		context.Background(),
+		envelope{V: protocolVersion, Kind: kindEvent, Event: eventMessageCreated, Payload: payload},
+		appID,
+		requester,
+		replyAgent,
+		directAgentRunner{},
+		func(context.Context, envelope) error { return nil },
+	)
+
+	if calledRequester || calledAgent {
+		t.Fatalf("topic message without direct mention triggered requester=%t agent=%t", calledRequester, calledAgent)
+	}
+}
+
+func TestShouldHandleIncomingTopicMessageRequiresDirectMention(t *testing.T) {
+	appID := "00000000-0000-0000-0000-000000000001"
+	for _, test := range []struct {
+		name       string
+		senderType string
+		body       messageBody
+		want       bool
+	}{
+		{name: "text mention", senderType: "user", body: messageBody{Type: "text", Content: "请处理 {(@app/" + appID + ")}"}, want: true},
+		{name: "markdown uppercase mention", senderType: "user", body: messageBody{Type: "markdown", Content: "请处理 {(@app/" + strings.ToUpper(appID) + ")}"}, want: true},
+		{name: "text without mention", senderType: "user", body: messageBody{Type: "text", Content: "我们先讨论一下"}},
+		{name: "image", senderType: "user", body: messageBody{Type: "image", FileID: "file-1"}},
+		{name: "app sender", senderType: "app", body: messageBody{Type: "text", Content: "请处理 {(@app/" + appID + ")}"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := shouldHandleIncomingMessage(appID, messageCreatedPayload{
+				Conversation: conversationPayload{ID: "topic-1", Type: "topic"},
+				Sender:       senderPayload{ID: "sender-1", Type: test.senderType},
+			}, test.body)
+			if got != test.want {
+				t.Fatalf("shouldHandleIncomingMessage() = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
 func TestHandleParsedServerMessageRunsGroupMessageWithDirectAppMention(t *testing.T) {
 	appID := "00000000-0000-0000-0000-000000000001"
 	var actions []string
@@ -471,13 +537,14 @@ func TestHandleParsedServerMessageRunsGroupMessageWithUppercaseDirectAppMention(
 
 func TestHandleParsedServerMessageRecoversAgentSessionFromTopic(t *testing.T) {
 	appID := "00000000-0000-0000-0000-000000000001"
-	body, err := json.Marshal(messageBody{Type: "text", Content: "继续处理"})
+	content := "继续处理 {(@app/" + appID + ")}"
+	body, err := json.Marshal(messageBody{Type: "text", Content: content})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
 	payload, err := json.Marshal(messageCreatedPayload{
 		Conversation: conversationPayload{ID: "topic-1", Name: "发布计划", Type: "topic"},
-		Message:      messagePayload{Body: body, ID: "topic-message-2", Seq: 2, Summary: "继续处理"},
+		Message:      messagePayload{Body: body, ID: "topic-message-3", Seq: 3, Summary: content},
 		Sender:       senderPayload{ID: "user-2", Name: "Bob", Type: "user"},
 	})
 	if err != nil {
@@ -505,7 +572,8 @@ func TestHandleParsedServerMessageRecoversAgentSessionFromTopic(t *testing.T) {
 		return json.Marshal(appListConversationMessagesResponsePayload{
 			Messages: []historyMessagePayload{
 				historyTextMessage("topic-message-1", 1, appID, "茉莉", "已经开始处理"),
-				historyTextMessage("topic-message-2", 2, "user-2", "Bob", "继续处理"),
+				historyTextMessage("topic-message-2", 2, "user-1", "Alice", "我们先讨论一下实现方案"),
+				historyTextMessage("topic-message-3", 3, "user-2", "Bob", content),
 			},
 			Topic: &topicContextPayload{
 				ParentConversation: conversationReferencePayload{
@@ -534,7 +602,8 @@ func TestHandleParsedServerMessageRecoversAgentSessionFromTopic(t *testing.T) {
 		request.Conversation.Parent == nil || request.Conversation.Parent.ID != "parent-group" || request.Conversation.Parent.Type != "group" {
 		t.Fatalf("recovered agent request = %#v", request)
 	}
-	if len(request.History) != 2 || request.History[0].Seq != 0 || request.History[0].Summary != "请整理发布计划" || request.History[1].Summary != "已经开始处理" {
+	if len(request.History) != 3 || request.History[0].Seq != 0 || request.History[0].Summary != "请整理发布计划" ||
+		request.History[1].Summary != "已经开始处理" || request.History[2].Summary != "我们先讨论一下实现方案" {
 		t.Fatalf("recovered topic history = %#v", request.History)
 	}
 	if len(sent) != 1 {
@@ -550,7 +619,9 @@ func TestHandleParsedServerMessageRecoversAgentSessionFromTopic(t *testing.T) {
 }
 
 func TestHandleParsedServerMessageReportsTopicPreparationFailureToParent(t *testing.T) {
-	body, err := json.Marshal(messageBody{Type: "text", Content: "继续处理"})
+	appID := "00000000-0000-0000-0000-000000000001"
+	content := "继续处理 {(@app/" + appID + ")}"
+	body, err := json.Marshal(messageBody{Type: "text", Content: content})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
@@ -559,7 +630,7 @@ func TestHandleParsedServerMessageReportsTopicPreparationFailureToParent(t *test
 			ID: "topic-1", Name: "发布计划", Type: "topic",
 			Parent: &conversationReferencePayload{ID: "parent-group", Name: "产品讨论组", Type: "group"},
 		},
-		Message: messagePayload{Body: body, ID: "topic-message-2", Seq: 2, Summary: "继续处理"},
+		Message: messagePayload{Body: body, ID: "topic-message-2", Seq: 2, Summary: content},
 		Sender:  senderPayload{ID: "user-2", Name: "Bob", Type: "user"},
 	})
 	if err != nil {
@@ -572,7 +643,7 @@ func TestHandleParsedServerMessageReportsTopicPreparationFailureToParent(t *test
 	handled := handleParsedServerMessage(
 		context.Background(),
 		envelope{V: protocolVersion, Kind: kindEvent, Event: eventMessageCreated, Payload: payload},
-		"assistant-app",
+		appID,
 		requester,
 		replyAgentFunc(func(context.Context, agent.Request, agent.OutputSink) error {
 			t.Fatal("agent should not run when preparation fails")
@@ -1065,7 +1136,7 @@ func TestHandleServerMessageProvidesBuiltinToolScope(t *testing.T) {
 
 func TestHandleServerMessageLetsActiveWaiterClaimReply(t *testing.T) {
 	runner := newConversationAgentRunner(context.Background())
-	registration, err := runner.waiters.RegisterConversationWait("conversation-1", 10, "user", "user-2")
+	registration, err := runner.waiters.RegisterConversationWait("topic-1", 10, "user", "user-2")
 	if err != nil {
 		t.Fatalf("RegisterConversationWait() error = %v", err)
 	}
@@ -1074,11 +1145,23 @@ func TestHandleServerMessageLetsActiveWaiterClaimReply(t *testing.T) {
 		t.Fatal("claimed reply should not trigger history or tool requests")
 		return nil, nil
 	})
+	body, err := json.Marshal(messageBody{Type: "text", Content: "收到"})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	payload, err := json.Marshal(messageCreatedPayload{
+		Conversation: conversationPayload{ID: "topic-1", Name: "任务讨论", Type: "topic"},
+		Message:      messagePayload{Body: body, ID: "message-11", Seq: 11, Summary: "收到"},
+		Sender:       senderPayload{ID: "user-1", Name: "Alice", Type: "user"},
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
 
 	handled := handleParsedServerMessage(
 		context.Background(),
-		testMessageCreatedEnvelope(t, "user-1", "message-11", 11, "收到"),
-		"assistant-app",
+		envelope{V: protocolVersion, Kind: kindEvent, Event: eventMessageCreated, Payload: payload},
+		"00000000-0000-0000-0000-000000000001",
 		requester,
 		nil,
 		runner,
