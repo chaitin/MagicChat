@@ -53,7 +53,7 @@ export function MessageAttachment({ file }: MessageAttachmentProps) {
   }
 
   return (
-    <div className="flex w-80 max-w-full items-center gap-3">
+    <div className="flex w-120 max-w-full items-center gap-3">
       <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-background/50 text-muted-foreground">
         <AttachmentFileIcon fileName={file.name} />
       </div>

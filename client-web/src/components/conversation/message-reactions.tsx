@@ -61,10 +61,7 @@ export function MessageReactionChips({
 
   return (
     <div
-      className={cn(
-        "flex max-w-full flex-wrap items-center gap-1",
-        align === "end" ? "justify-end" : "justify-start"
-      )}
+      className="flex max-w-full flex-wrap items-center justify-start gap-1"
       data-slot="message-reactions"
     >
       {reactions.map((reaction) => {

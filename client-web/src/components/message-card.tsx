@@ -12,7 +12,7 @@ export function MessageCard({
 }) {
   const target = interactive ? getCardTarget(card.url) : null
   const className =
-    "grid w-80 max-w-full gap-2 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+    "grid w-120 max-w-full gap-2 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
   const content = <CardContent card={card} />
 
   if (target?.type === "internal") {

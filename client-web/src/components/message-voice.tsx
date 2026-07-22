@@ -69,7 +69,7 @@ export function MessageVoice({ voice }: MessageVoiceProps) {
   }
 
   return (
-    <div className="flex w-80 max-w-full items-center gap-3">
+    <div className="flex w-120 max-w-full items-center gap-3">
       <audio
         ref={audioRef}
         onEnded={() => {
