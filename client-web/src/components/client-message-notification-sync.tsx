@@ -25,6 +25,7 @@ import {
   playMessageNotificationSound,
   prepareMessageNotificationSound,
 } from "@/lib/message-notification-sound"
+import { isBrowserMessageNotificationEnabled } from "@/lib/message-notification-preferences"
 import { shouldSuppressMessageNotification } from "@/lib/message-notification-policy"
 import { useRealtime } from "@/lib/realtime-context"
 
@@ -78,6 +79,9 @@ export function ClientMessageNotificationSync() {
           document.visibilityState === "visible" &&
           message.conversationId === visibleConversationId
         ) {
+          return
+        }
+        if (!isBrowserMessageNotificationEnabled()) {
           return
         }
 

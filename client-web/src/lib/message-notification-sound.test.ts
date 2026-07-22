@@ -1,6 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 describe("message notification sound", () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.resetModules()
@@ -56,5 +60,22 @@ describe("message notification sound", () => {
     expect(() => playMessageNotificationSound()).not.toThrow()
     await Promise.resolve()
     expect(play).toHaveBeenCalledOnce()
+  })
+
+  it("does not prepare or play audio when the sound is disabled", async () => {
+    const audio = vi.fn()
+    vi.stubGlobal("Audio", audio)
+    window.localStorage.setItem(
+      "client-web:message-notification-sound-enabled",
+      "false"
+    )
+
+    const { playMessageNotificationSound, prepareMessageNotificationSound } =
+      await import("./message-notification-sound")
+
+    prepareMessageNotificationSound()
+    playMessageNotificationSound()
+
+    expect(audio).not.toHaveBeenCalled()
   })
 })

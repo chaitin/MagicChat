@@ -1,12 +1,20 @@
+import { isMessageNotificationSoundEnabled } from "@/lib/message-notification-preferences"
+
 const messageNotificationSoundURL = "/assets/sounds/message-notification.ogg"
 
 let messageNotificationAudio: HTMLAudioElement | null = null
 
 export function prepareMessageNotificationSound() {
+  if (!isMessageNotificationSoundEnabled()) {
+    return
+  }
   getMessageNotificationAudio()
 }
 
 export function playMessageNotificationSound() {
+  if (!isMessageNotificationSoundEnabled()) {
+    return
+  }
   const audio = getMessageNotificationAudio()
   if (!audio) {
     return

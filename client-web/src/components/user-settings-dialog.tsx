@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Bell, Loader2Icon, X } from "lucide-react"
+import { X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -9,11 +9,18 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Switch } from "@/components/ui/switch"
 import {
   getBrowserNotificationPermission,
   requestBrowserNotificationPermission,
   type BrowserNotificationPermission,
 } from "@/lib/browser-notifications"
+import {
+  isBrowserMessageNotificationEnabled,
+  isMessageNotificationSoundEnabled,
+  setBrowserMessageNotificationEnabled,
+  setMessageNotificationSoundEnabled,
+} from "@/lib/message-notification-preferences"
 import { playMessageNotificationSound } from "@/lib/message-notification-sound"
 
 type UserSettingsDialogProps = {
@@ -38,16 +45,46 @@ function UserSettingsDialogContent() {
       getBrowserNotificationPermission()
     )
   const [notificationRequesting, setNotificationRequesting] = useState(false)
+  const [browserNotificationEnabled, setBrowserNotificationEnabledState] =
+    useState(isBrowserMessageNotificationEnabled)
+  const [notificationSoundEnabled, setNotificationSoundEnabledState] = useState(
+    isMessageNotificationSoundEnabled
+  )
 
-  async function handleNotificationPermissionRequest() {
-    if (notificationRequesting || notificationPermission !== "default") {
+  function handleNotificationSoundEnabledChange(enabled: boolean) {
+    setNotificationSoundEnabledState(enabled)
+    setMessageNotificationSoundEnabled(enabled)
+  }
+
+  async function handleBrowserNotificationEnabledChange(enabled: boolean) {
+    if (notificationRequesting) {
+      return
+    }
+
+    if (!enabled) {
+      setBrowserNotificationEnabledState(false)
+      setBrowserMessageNotificationEnabled(false)
+      return
+    }
+
+    if (notificationPermission === "granted") {
+      setBrowserNotificationEnabledState(true)
+      setBrowserMessageNotificationEnabled(true)
+      return
+    }
+    if (notificationPermission !== "default") {
       return
     }
 
     playMessageNotificationSound()
     setNotificationRequesting(true)
     try {
-      setNotificationPermission(await requestBrowserNotificationPermission())
+      const permission = await requestBrowserNotificationPermission()
+      setNotificationPermission(permission)
+      if (permission === "granted") {
+        setBrowserNotificationEnabledState(true)
+        setBrowserMessageNotificationEnabled(true)
+      }
     } finally {
       setNotificationRequesting(false)
     }
@@ -81,24 +118,45 @@ function UserSettingsDialogContent() {
         <div className="min-w-0">
           <div className="text-sm font-medium">桌面通知</div>
           <div className="text-xs text-muted-foreground">
-            {getNotificationPermissionText(notificationPermission)}
+            {getNotificationPermissionText(
+              notificationPermission,
+              browserNotificationEnabled
+            )}
           </div>
         </div>
-        {notificationPermission === "default" && (
-          <Button
-            disabled={notificationRequesting}
-            onClick={() => void handleNotificationPermissionRequest()}
-            type="button"
-            variant="outline"
+        <Switch
+          aria-label="桌面通知"
+          checked={
+            notificationPermission === "granted" && browserNotificationEnabled
+          }
+          disabled={
+            notificationRequesting ||
+            notificationPermission === "denied" ||
+            notificationPermission === "unsupported"
+          }
+          onCheckedChange={(enabled) =>
+            void handleBrowserNotificationEnabledChange(enabled)
+          }
+        />
+      </div>
+
+      <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/20 px-3 py-2">
+        <div className="min-w-0">
+          <label
+            className="text-sm font-medium"
+            htmlFor="message-notification-sound"
           >
-            {notificationRequesting ? (
-              <Loader2Icon aria-hidden="true" className="animate-spin" />
-            ) : (
-              <Bell aria-hidden="true" />
-            )}
-            开启桌面通知
-          </Button>
-        )}
+            消息通知铃声
+          </label>
+          <div className="text-xs text-muted-foreground">
+            收到新消息时播放提示音
+          </div>
+        </div>
+        <Switch
+          checked={notificationSoundEnabled}
+          id="message-notification-sound"
+          onCheckedChange={handleNotificationSoundEnabledChange}
+        />
       </div>
 
       <div className="flex justify-end">
@@ -111,11 +169,12 @@ function UserSettingsDialogContent() {
 }
 
 function getNotificationPermissionText(
-  permission: BrowserNotificationPermission
+  permission: BrowserNotificationPermission,
+  enabled: boolean
 ) {
   switch (permission) {
     case "granted":
-      return "桌面通知已开启"
+      return enabled ? "桌面通知已开启" : "桌面通知已关闭"
     case "denied":
       return "通知权限已被浏览器阻止"
     case "unsupported":
