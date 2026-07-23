@@ -28,9 +28,11 @@ vi.mock("@/lib/project-members", () => ({
 
 vi.mock("@/components/projects/project-task-details-dialog", () => ({
   ProjectTaskDetailsDialog: ({
+    onDeleted,
     onOpenChange,
     task,
   }: {
+    onDeleted?: (taskId: string) => void
     onOpenChange: (open: boolean) => void
     task: ProjectTask
   }) => (
@@ -38,6 +40,15 @@ vi.mock("@/components/projects/project-task-details-dialog", () => ({
       <span>{task.title}</span>
       <button onClick={() => onOpenChange(false)} type="button">
         关闭详情
+      </button>
+      <button
+        onClick={() => {
+          onOpenChange(false)
+          onDeleted?.(task.id)
+        }}
+        type="button"
+      >
+        删除任务
       </button>
     </div>
   ),
@@ -99,6 +110,25 @@ describe("ProjectTasksTab task details route state", () => {
     expect(screen.getByTestId("location-search")).toHaveTextContent(
       "source=list&taskId=task-1"
     )
+  })
+
+  it("does not reload a task while its deleted details are closing", async () => {
+    const user = userEvent.setup()
+    const task = createProjectTask()
+    projectTaskApiMocks.listClientProjectTasks
+      .mockResolvedValueOnce({ nextCursor: null, tasks: [task] })
+      .mockResolvedValue({ nextCursor: null, tasks: [] })
+
+    renderProjectTasksTab("/projects/project-1?source=list&taskId=task-1")
+
+    await user.click(await screen.findByRole("button", { name: "删除任务" }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId("location-search")).toHaveTextContent(
+        "?source=list"
+      )
+    })
+    expect(projectTaskApiMocks.getClientProjectTask).not.toHaveBeenCalled()
   })
 })
 

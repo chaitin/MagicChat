@@ -72,6 +72,10 @@ type ProjectTaskListResponse = {
   tasks?: ProjectTaskResponse[]
 }
 
+type DeleteProjectTaskResponse = {
+  task_id?: string
+}
+
 export type ListClientProjectTasksOptions = {
   assigneeUserIds?: string[]
   cursor?: string
@@ -282,6 +286,34 @@ export async function updateClientProjectTask(
     (payload as ProjectTaskDataSuccessEnvelope<ProjectTaskResponse> | undefined)
       ?.data
   )
+}
+
+export async function deleteClientProjectTask(
+  projectId: string,
+  taskId: string,
+  fetcher: ProjectTaskDataFetch = fetch
+): Promise<string> {
+  const response = await fetcher(
+    `/api/client/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`,
+    { credentials: "include", method: "DELETE" }
+  )
+  const payload = await readJson<
+    | ProjectTaskDataErrorEnvelope
+    | ProjectTaskDataSuccessEnvelope<DeleteProjectTaskResponse>
+  >(response)
+
+  if (!response.ok || payload?.success === false) {
+    throw createProjectTaskRequestError(payload, response, "删除任务失败")
+  }
+
+  const deletedTaskId = (
+    payload as
+      ProjectTaskDataSuccessEnvelope<DeleteProjectTaskResponse> | undefined
+  )?.data?.task_id
+  if (typeof deletedTaskId !== "string" || !deletedTaskId.trim()) {
+    throw new ClientDataRequestError("删除任务响应格式不正确")
+  }
+  return deletedTaskId
 }
 
 function normalizeProjectTask(

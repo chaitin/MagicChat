@@ -10,6 +10,7 @@ import {
   Eye,
   Pencil,
   Send,
+  Trash2,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -26,6 +27,16 @@ import type {
   ProjectTaskStatus,
 } from "@/components/projects/project-types"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -55,6 +66,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { ClientProjectMember } from "@/lib/project-data-api"
 import { listAllClientProjectMembers } from "@/lib/project-members"
 import {
+  deleteClientProjectTask,
   getClientProjectTask,
   listClientProjectTasks,
   type UpdateClientProjectTaskInput,
@@ -86,11 +98,13 @@ type NormalizedTaskEditForm = {
 }
 
 export function ProjectTaskDetailsDialog({
+  onDeleted,
   onOpenChange,
   onUpdated,
   open,
   task,
 }: {
+  onDeleted?: (taskId: string) => void
   onOpenChange: (open: boolean) => void
   onUpdated?: () => Promise<void>
   open: boolean
@@ -102,6 +116,8 @@ export function ProjectTaskDetailsDialog({
   )
   const [details, setDetails] = React.useState(task)
   const [descriptionEditing, setDescriptionEditing] = React.useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
+  const [deleting, setDeleting] = React.useState(false)
   const [error, setError] = React.useState("")
   const [form, setForm] = React.useState<TaskEditForm>(initialForm)
   const [loading, setLoading] = React.useState(true)
@@ -191,7 +207,7 @@ export function ProjectTaskDetailsDialog({
   const normalizedForm = normalizeTaskEditForm(form)
   const validationError = getTaskEditValidationError(normalizedForm)
   const dirty = !taskEditFormsEqual(normalizedForm, baseline)
-  const canSave = dirty && !loading && !saving && !validationError
+  const canSave = dirty && !loading && !saving && !deleting && !validationError
   const fallbackAssignee = createFallbackProjectMember(details)
   const memberOptions =
     fallbackAssignee &&
@@ -215,13 +231,14 @@ export function ProjectTaskDetailsDialog({
   }
 
   function handleOpenChange(nextOpen: boolean) {
-    if (saving) {
+    if (saving || deleting) {
       return
     }
     if (!nextOpen) {
       const resetForm = createTaskEditForm(details)
       setBaseline(normalizeTaskEditForm(resetForm))
       setDescriptionEditing(false)
+      setDeleteDialogOpen(false)
       setError("")
       setForm(resetForm)
       setLoading(true)
@@ -265,6 +282,33 @@ export function ProjectTaskDetailsDialog({
     } finally {
       setSaving(false)
     }
+  }
+
+  async function handleDelete() {
+    if (deleting) {
+      return
+    }
+
+    setDeleting(true)
+    let deletedTaskId: string
+    try {
+      deletedTaskId = await deleteClientProjectTask(
+        task.projectId,
+        task.id
+      )
+    } catch (deleteError) {
+      toast.error(
+        deleteError instanceof Error ? deleteError.message : "删除任务失败"
+      )
+      setDeleting(false)
+      return
+    }
+
+    setDeleting(false)
+    toast.success("任务已删除")
+    setDeleteDialogOpen(false)
+    onOpenChange(false)
+    onDeleted?.(deletedTaskId)
   }
 
   return (
@@ -514,25 +558,38 @@ export function ProjectTaskDetailsDialog({
           </div>
 
           <DialogFooter className="sm:justify-between">
-            <Button
-              disabled={loading || saving || dirty || Boolean(error)}
-              onClick={() => setSendDialogOpen(true)}
-              title={
-                dirty
-                  ? "请先保存修改后再发送"
-                  : error
-                    ? "任务详情加载失败，暂不能发送"
-                    : undefined
-              }
-              type="button"
-              variant="outline"
-            >
-              <Send />
-              发送到对话
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                disabled={
+                  loading || saving || deleting || dirty || Boolean(error)
+                }
+                onClick={() => setSendDialogOpen(true)}
+                title={
+                  dirty
+                    ? "请先保存修改后再发送"
+                    : error
+                      ? "任务详情加载失败，暂不能发送"
+                      : undefined
+                }
+                type="button"
+                variant="outline"
+              >
+                <Send />
+                发送到对话
+              </Button>
+              <Button
+                disabled={loading || saving || deleting}
+                onClick={() => setDeleteDialogOpen(true)}
+                type="button"
+                variant="destructive"
+              >
+                <Trash2 />
+                删除任务
+              </Button>
+            </div>
             <div className="flex justify-end gap-2">
               <Button
-                disabled={saving}
+                disabled={saving || deleting}
                 onClick={() => handleOpenChange(false)}
                 type="button"
                 variant="outline"
@@ -556,6 +613,37 @@ export function ProjectTaskDetailsDialog({
         onOpenChange={setSendDialogOpen}
         open={sendDialogOpen}
       />
+      <AlertDialog
+        onOpenChange={(nextOpen) => {
+          if (!deleting) {
+            setDeleteDialogOpen(nextOpen)
+          }
+        }}
+        open={deleteDialogOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除任务</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`确定删除“${details.title}”吗？此操作无法撤销。`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleDelete()
+              }}
+              variant="destructive"
+            >
+              {deleting && <Spinner />}
+              删除任务
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   )
 }

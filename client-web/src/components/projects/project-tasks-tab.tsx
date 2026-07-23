@@ -143,6 +143,7 @@ export function ProjectTasksTab({
   const [membersError, setMembersError] = React.useState(false)
   const [membersLoading, setMembersLoading] = React.useState(true)
   const [tasks, setTasks] = React.useState<ProjectTask[]>([])
+  const closingTaskIdRef = React.useRef("")
   const activeTaskId = searchParams.get(projectTaskIdSearchParam)?.trim() ?? ""
   const activeTask =
     tasks.find((task) => task.id === activeTaskId) ??
@@ -204,8 +205,13 @@ export function ProjectTasksTab({
 
   React.useEffect(() => {
     if (!activeTaskId) {
+      closingTaskIdRef.current = ""
       return
     }
+    if (closingTaskIdRef.current === activeTaskId) {
+      return
+    }
+    closingTaskIdRef.current = ""
 
     const listedTask = tasks.find((task) => task.id === activeTaskId)
     if (
@@ -228,6 +234,7 @@ export function ProjectTasksTab({
         if (!active) {
           return
         }
+        closingTaskIdRef.current = activeTaskId
         setFallbackActiveTask(null)
         setSearchParams(
           (current) => {
@@ -275,6 +282,11 @@ export function ProjectTasksTab({
     await Promise.allSettled([refreshTasks(), onTasksChanged()])
   }
 
+  function handleTaskDeleted(taskId: string) {
+    setTasks((current) => current.filter((task) => task.id !== taskId))
+    void Promise.allSettled([refreshTasks(), onTasksChanged()])
+  }
+
   function handleTaskStatusChange(taskId: string, status: ProjectTaskStatus) {
     setTasks((current) =>
       current.map((task) => (task.id === taskId ? { ...task, status } : task))
@@ -287,6 +299,7 @@ export function ProjectTasksTab({
   }
 
   function handleOpenTask(task: ProjectTask) {
+    closingTaskIdRef.current = ""
     setFallbackActiveTask(task)
     setSearchParams((current) => {
       const next = new URLSearchParams(current)
@@ -296,6 +309,7 @@ export function ProjectTasksTab({
   }
 
   function handleCloseTask() {
+    closingTaskIdRef.current = activeTaskId
     setFallbackActiveTask(null)
     setSearchParams(
       (current) => {
@@ -389,6 +403,7 @@ export function ProjectTasksTab({
       {activeTask && activeTask.id === activeTaskId && (
         <ProjectTaskDetailsDialog
           key={`${activeTask.id}-${activeTask.updatedAt}`}
+          onDeleted={handleTaskDeleted}
           onOpenChange={(open) => {
             if (!open) {
               handleCloseTask()
