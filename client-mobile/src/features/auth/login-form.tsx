@@ -275,6 +275,7 @@ export function LoginForm({
                   accessibilityLabel="邮箱"
                   autoCapitalize="none"
                   autoComplete="email"
+                  autoCorrect={false}
                   bg="$color1"
                   color="$gray12"
                   disabled={isCredentialsLoading || isPending}
@@ -286,6 +287,7 @@ export function LoginForm({
                   placeholderTextColor="$gray9"
                   ref={accountInputRef}
                   returnKeyType="next"
+                  spellCheck={false}
                   value={account}
                 />
 
@@ -342,6 +344,7 @@ export function LoginForm({
                   accessibilityLabel="账号"
                   autoCapitalize="none"
                   autoComplete="email"
+                  autoCorrect={false}
                   bg="$color1"
                   color="$gray12"
                   disabled={isCredentialsLoading || isPending}
@@ -353,6 +356,7 @@ export function LoginForm({
                   placeholderTextColor="$gray9"
                   ref={accountInputRef}
                   returnKeyType="next"
+                  spellCheck={false}
                   value={account}
                 />
 

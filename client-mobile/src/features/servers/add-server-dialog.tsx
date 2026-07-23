@@ -4,6 +4,7 @@ import {
   type ColorTokens,
   Dialog,
   Paragraph,
+  SizableText,
   type TamaguiElement,
   useTheme,
   VisuallyHidden,
@@ -20,6 +21,7 @@ import {
 
 const SERVER_NAME_INPUT_ID = "new-server-name"
 const SERVER_URL_INPUT_ID = "new-server-url"
+const SERVER_URL_PREFIX = "https://"
 
 type AddServerDialogProps = {
   onOpenChange: (open: boolean) => void
@@ -45,9 +47,12 @@ function OpenServerDialog({
   const accentColor = theme.color10.val as ColorTokens
   const urlInputRef = useRef<TamaguiElement>(null)
   const [name, setName] = useState(server?.name ?? "")
-  const [url, setUrl] = useState(server?.url ?? "")
+  const [urlAddress, setUrlAddress] = useState(() =>
+    stripServerUrlPrefix(server?.url ?? "")
+  )
   const [errorMessage, setErrorMessage] = useState("")
   const [keyboardHeight, setKeyboardHeight] = useState(0)
+  const url = `${SERVER_URL_PREFIX}${urlAddress.trim()}`
   const canSave = name.trim().length > 0 && isValidServerUrl(url)
   const isEditing = Boolean(server)
 
@@ -75,7 +80,7 @@ function OpenServerDialog({
 
   function resetForm() {
     setName("")
-    setUrl("")
+    setUrlAddress("")
     setErrorMessage("")
   }
 
@@ -100,7 +105,7 @@ function OpenServerDialog({
 
   function handleSave() {
     if (!canSave) {
-      setErrorMessage("请填写服务器名称和有效的 HTTP 或 HTTPS 地址")
+      setErrorMessage("请填写服务器名称和有效的 HTTPS 地址")
       return
     }
 
@@ -114,7 +119,7 @@ function OpenServerDialog({
     }
 
     if (result.status === "invalid") {
-      setErrorMessage("请填写服务器名称和有效的 HTTP 或 HTTPS 地址")
+      setErrorMessage("请填写服务器名称和有效的 HTTPS 地址")
       return
     }
 
@@ -160,6 +165,7 @@ function OpenServerDialog({
             accessibilityLabel="服务器名称"
             color="$gray12"
             cursorColor={accentColor}
+            defaultValue={server?.name ?? ""}
             id={SERVER_NAME_INPUT_ID}
             onChangeText={(value) => {
               setName(value)
@@ -170,29 +176,47 @@ function OpenServerDialog({
             placeholderTextColor="$gray9"
             returnKeyType="next"
             selectionColor={accentColor}
-            value={name}
           />
 
-          <AppInput
-            accessibilityLabel="服务器地址"
-            autoCapitalize="none"
-            autoCorrect={false}
-            caretHidden={false}
-            color="$gray12"
-            cursorColor={accentColor}
-            id={SERVER_URL_INPUT_ID}
-            onChangeText={(value) => {
-              setUrl(value)
-              setErrorMessage("")
-            }}
-            onSubmitEditing={handleSave}
-            placeholder="https://example.com"
-            placeholderTextColor="$gray9"
-            ref={urlInputRef}
-            returnKeyType="done"
-            selectionColor={accentColor}
-            value={url}
-          />
+          <XStack position="relative" width="100%">
+            <AppInput
+              accessibilityLabel="服务器地址，固定使用 HTTPS"
+              autoCapitalize="none"
+              autoComplete="url"
+              autoCorrect={false}
+              caretHidden={false}
+              color="$gray12"
+              cursorColor={accentColor}
+              id={SERVER_URL_INPUT_ID}
+              keyboardType="url"
+              onChangeText={(value) => {
+                setUrlAddress(stripServerUrlPrefix(value))
+                setErrorMessage("")
+              }}
+              onSubmitEditing={handleSave}
+              pl={72}
+              placeholder="example.com"
+              placeholderTextColor="$gray9"
+              ref={urlInputRef}
+              returnKeyType="done"
+              selectionColor={accentColor}
+              spellCheck={false}
+              value={urlAddress}
+              width="100%"
+            />
+            <XStack
+              b={0}
+              items="center"
+              l="$3"
+              pointerEvents="none"
+              position="absolute"
+              t={0}
+            >
+              <SizableText color="$gray12" size="$4">
+                {SERVER_URL_PREFIX}
+              </SizableText>
+            </XStack>
+          </XStack>
 
           {errorMessage ? (
             <Paragraph color="$red10" size="$2">
@@ -222,4 +246,8 @@ function OpenServerDialog({
       </Dialog.Portal>
     </Dialog>
   )
+}
+
+function stripServerUrlPrefix(value: string) {
+  return value.trimStart().replace(/^https?:\/\//i, "")
 }

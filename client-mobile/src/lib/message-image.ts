@@ -9,6 +9,8 @@ const IMAGE_MESSAGE_MAX_DIMENSION = 1920
 const IMAGE_MESSAGE_OUTPUT_QUALITY = 0.82
 const IMAGE_MESSAGE_OUTPUT_TYPE = "image/webp"
 const acceptedImageTypes = new Set([
+  "image/heic",
+  "image/heif",
   "image/jpeg",
   "image/png",
   "image/webp",
@@ -89,7 +91,7 @@ export function isAcceptedImageMessage({
   name: string
 }) {
   if (acceptedImageTypes.has(mimeType.toLowerCase())) return true
-  return /\.(jpe?g|png|webp)$/i.test(name)
+  return /\.(hei[cf]|jpe?g|png|webp)$/i.test(name)
 }
 
 function createOutputFileName(fileName: string) {

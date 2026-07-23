@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useState,
 } from "react"
 
 import { isUnauthorizedError } from "@/data/api-client"
@@ -84,6 +85,11 @@ export function ClientDataProvider({ children }: React.PropsWithChildren) {
     ...projectsQueryOptions(target),
     enabled,
   })
+  const [manualRefresh, setManualRefresh] = useState({
+    contacts: false,
+    conversations: false,
+    projects: false,
+  })
   const projectPages = enabled ? projectsQuery.data?.pages : undefined
   const projects = useMemo(() => mergeProjectPages(projectPages), [projectPages])
   const personalProject = projectPages?.[projectPages.length - 1]?.personalProject
@@ -100,26 +106,41 @@ export function ClientDataProvider({ children }: React.PropsWithChildren) {
   }, [error, invalidateSession])
 
   const refreshContacts = useCallback(async () => {
-    const result = await contactsQuery.refetch()
+    setManualRefresh((current) => ({ ...current, contacts: true }))
+    try {
+      const result = await contactsQuery.refetch()
 
-    if (result.error) {
-      throw result.error
+      if (result.error) {
+        throw result.error
+      }
+    } finally {
+      setManualRefresh((current) => ({ ...current, contacts: false }))
     }
   }, [contactsQuery])
 
   const refreshConversations = useCallback(async () => {
-    const result = await conversationsQuery.refetch()
+    setManualRefresh((current) => ({ ...current, conversations: true }))
+    try {
+      const result = await conversationsQuery.refetch()
 
-    if (result.error) {
-      throw result.error
+      if (result.error) {
+        throw result.error
+      }
+    } finally {
+      setManualRefresh((current) => ({ ...current, conversations: false }))
     }
   }, [conversationsQuery])
 
   const refreshProjects = useCallback(async () => {
-    const result = await projectsQuery.refetch()
+    setManualRefresh((current) => ({ ...current, projects: true }))
+    try {
+      const result = await projectsQuery.refetch()
 
-    if (result.error) {
-      throw result.error
+      if (result.error) {
+        throw result.error
+      }
+    } finally {
+      setManualRefresh((current) => ({ ...current, projects: false }))
     }
   }, [projectsQuery])
 
@@ -152,14 +173,11 @@ export function ClientDataProvider({ children }: React.PropsWithChildren) {
       currentUserError: enabled ? currentUserQuery.error : null,
       error: enabled ? error : null,
       hasMoreProjects: enabled && projectsQuery.hasNextPage,
-      isContactsRefreshing: enabled && contactsQuery.isFetching,
-      isConversationsRefreshing: enabled && conversationsQuery.isFetching,
+      isContactsRefreshing: enabled && manualRefresh.contacts,
+      isConversationsRefreshing: enabled && manualRefresh.conversations,
       isProjectsLoading: enabled && projectsQuery.isLoading,
       isProjectsLoadingMore: enabled && projectsQuery.isFetchingNextPage,
-      isProjectsRefreshing:
-        enabled &&
-        projectsQuery.isRefetching &&
-        !projectsQuery.isFetchingNextPage,
+      isProjectsRefreshing: enabled && manualRefresh.projects,
       isReady:
         enabled &&
         currentUserQuery.data !== undefined &&
@@ -167,9 +185,9 @@ export function ClientDataProvider({ children }: React.PropsWithChildren) {
         conversationsQuery.data !== undefined,
       isRefreshing:
         enabled &&
-        (contactsQuery.isFetching ||
-          conversationsQuery.isFetching ||
-          projectsQuery.isFetching),
+        (manualRefresh.contacts ||
+          manualRefresh.conversations ||
+          manualRefresh.projects),
       loadMoreProjects,
       personalProject: personalProject ?? null,
       projects,
@@ -182,23 +200,22 @@ export function ClientDataProvider({ children }: React.PropsWithChildren) {
     [
       contactsQuery.data,
       contactsQuery.error,
-      contactsQuery.isFetching,
       conversationsQuery.data,
       conversationsQuery.error,
-      conversationsQuery.isFetching,
       currentUserQuery.data,
       currentUserQuery.error,
       enabled,
       error,
       loadMoreProjects,
+      manualRefresh.contacts,
+      manualRefresh.conversations,
+      manualRefresh.projects,
       personalProject,
       projects,
       projectsQuery.error,
       projectsQuery.hasNextPage,
-      projectsQuery.isFetching,
       projectsQuery.isFetchingNextPage,
       projectsQuery.isLoading,
-      projectsQuery.isRefetching,
       refresh,
       refreshContacts,
       refreshConversations,

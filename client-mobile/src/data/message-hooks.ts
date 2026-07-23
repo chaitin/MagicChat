@@ -76,7 +76,6 @@ export function useConversationMessages(
     hasOlder: query.hasNextPage,
     isFetchingOlder: query.isFetchingNextPage,
     isLoading: query.isLoading,
-    isRefreshing: query.isRefetching && !query.isFetchingNextPage,
     messages,
     refetch: query.refetch,
   }

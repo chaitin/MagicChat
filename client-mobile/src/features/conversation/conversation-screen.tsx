@@ -94,6 +94,7 @@ export function ConversationScreen() {
   )
   const appIsActiveRef = useRef(appIsActive)
   const composerRef = useRef<MessageComposerHandle>(null)
+  const [isPullRefreshing, setIsPullRefreshing] = useState(false)
   const [topicArchiveDialogOpen, setTopicArchiveDialogOpen] = useState(false)
   const { contacts, conversations, currentUser, currentUserError, isReady } =
     useClientData()
@@ -394,7 +395,10 @@ export function ConversationScreen() {
   }
 
   function handleRefresh() {
-    void messagesQuery.refetch()
+    if (isPullRefreshing) return
+
+    setIsPullRefreshing(true)
+    void messagesQuery.refetch().finally(() => setIsPullRefreshing(false))
   }
 
   function handleLoadOlder() {
@@ -541,7 +545,7 @@ export function ConversationScreen() {
               hasOlder={messagesQuery.hasOlder}
               isFetchingOlder={messagesQuery.isFetchingOlder}
               isLoading={messagesQuery.isLoading}
-              isRefreshing={messagesQuery.isRefreshing}
+              isPullRefreshing={isPullRefreshing}
               messages={presentedMessages}
               onAvatarLongPress={
                 conversation.type === "group"

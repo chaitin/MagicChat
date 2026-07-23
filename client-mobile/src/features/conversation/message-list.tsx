@@ -40,7 +40,7 @@ export function MessageList({
   hasOlder,
   isFetchingOlder,
   isLoading,
-  isRefreshing,
+  isPullRefreshing,
   messages,
   onAvatarPress,
   onAvatarLongPress,
@@ -65,7 +65,7 @@ export function MessageList({
   hasOlder: boolean
   isFetchingOlder: boolean
   isLoading: boolean
-  isRefreshing: boolean
+  isPullRefreshing: boolean
   messages: PresentedMessage[]
   onAvatarLongPress?: (sender: EntityReference) => void
   onAvatarPress: (sender: EntityReference) => void
@@ -232,7 +232,7 @@ export function MessageList({
           <RefreshControl
             colors={[String(theme.color10.val)]}
             onRefresh={onRefresh}
-            refreshing={isRefreshing}
+            refreshing={isPullRefreshing}
             tintColor={String(theme.color10.val)}
           />
         }
