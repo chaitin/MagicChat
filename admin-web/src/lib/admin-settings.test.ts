@@ -7,6 +7,7 @@ import {
   disableThirdPartyProvider,
   enableThirdPartyProvider,
   getEmailLoginSettings,
+  getAssistantSettings,
   getInfoSettings,
   getPasswordLoginSettings,
   listThirdPartyProviders,
@@ -15,6 +16,7 @@ import {
   updateThirdPartyProvider,
   updateInfoSettings,
   updateEmailLoginSettings,
+  updateAssistantSettings,
   updatePasswordLoginSettings,
   type ThirdPartyProviderInput,
 } from "@/lib/admin-settings"
@@ -167,6 +169,62 @@ describe("admin settings", () => {
       "/api/admin/settings/password-login",
       {
         body: JSON.stringify({ enabled: false }),
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        method: "PUT",
+      }
+    )
+  })
+
+  it("loads and updates assistant auto group naming settings", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: true,
+            data: {
+              auto_group_naming_enabled: true,
+              auto_group_naming_message_count: 5,
+            },
+          }),
+          { headers: { "content-type": "application/json" }, status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: true,
+            data: {
+              auto_group_naming_enabled: false,
+              auto_group_naming_message_count: 8,
+            },
+          }),
+          { headers: { "content-type": "application/json" }, status: 200 }
+        )
+      )
+
+    await expect(getAssistantSettings(fetcher)).resolves.toEqual({
+      autoGroupNamingEnabled: true,
+      autoGroupNamingMessageCount: 5,
+    })
+    await expect(
+      updateAssistantSettings(
+        { autoGroupNamingEnabled: false, autoGroupNamingMessageCount: 8 },
+        fetcher
+      )
+    ).resolves.toEqual({
+      autoGroupNamingEnabled: false,
+      autoGroupNamingMessageCount: 8,
+    })
+    expect(fetcher).toHaveBeenNthCalledWith(
+      2,
+      "/api/admin/settings/assistant",
+      {
+        body: JSON.stringify({
+          auto_group_naming_enabled: false,
+          auto_group_naming_message_count: 8,
+        }),
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         method: "PUT",

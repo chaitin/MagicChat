@@ -63,6 +63,7 @@ import {
   disableThirdPartyLoginProvider,
   enableThirdPartyLoginProvider,
   getEmailLoginSettings,
+  getAssistantSettings,
   getInfoSettings,
   getPasswordLoginSettings,
   listThirdPartyLoginProviders,
@@ -72,10 +73,12 @@ import {
   type ThirdPartyLoginProviderMoveDirection,
   type ThirdPartyLoginProviderType,
   type EmailLoginSettings,
+  type AssistantSettings,
   type PasswordLoginSettings,
   type SMTPSecurity,
   testEmailLoginSettings,
   updateEmailLoginSettings,
+  updateAssistantSettings,
   updateInfoSettings,
   updatePasswordLoginSettings,
   updateThirdPartyLoginProvider,
@@ -156,6 +159,8 @@ export default function SettingsPage() {
   const { setAppName: setProductName } = useProductInfo()
   const appNameId = useId()
   const organizationNameId = useId()
+  const assistantEnabledId = useId()
+  const assistantMessageCountId = useId()
   const [appName, setAppName] = useState("")
   const [callbackProvider, setCallbackProvider] =
     useState<ThirdPartyLoginProvider | null>(null)
@@ -166,8 +171,15 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isProviderDialogOpen, setIsProviderDialogOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isSavingAssistant, setIsSavingAssistant] = useState(false)
   const [organizationName, setOrganizationName] = useState("")
   const [providers, setProviders] = useState<ThirdPartyLoginProvider[]>([])
+  const [assistantSettings, setAssistantSettings] = useState(
+    defaultAssistantSettings
+  )
+  const [savedAssistantSettings, setSavedAssistantSettings] = useState(
+    defaultAssistantSettings
+  )
   const [savedAppName, setSavedAppName] = useState("")
   const [savedOrganizationName, setSavedOrganizationName] = useState("")
   const [updatingProviderId, setUpdatingProviderId] = useState<string | null>(
@@ -182,6 +194,15 @@ export default function SettingsPage() {
     !hasInfoSettingsChanged ||
     appName.trim() === "" ||
     organizationName.trim() === ""
+  const hasAssistantSettingsChanged =
+    assistantSettings.autoGroupNamingEnabled !==
+      savedAssistantSettings.autoGroupNamingEnabled ||
+    assistantSettings.autoGroupNamingMessageCount !==
+      savedAssistantSettings.autoGroupNamingMessageCount
+  const isAssistantMessageCountValid =
+    Number.isInteger(assistantSettings.autoGroupNamingMessageCount) &&
+    assistantSettings.autoGroupNamingMessageCount >= 1 &&
+    assistantSettings.autoGroupNamingMessageCount <= 30
 
   useEffect(() => {
     let ignore = false
@@ -190,10 +211,12 @@ export default function SettingsPage() {
       setIsLoading(true)
 
       try {
-        const [settings, loadedProviders] = await Promise.all([
-          getInfoSettings(),
-          listThirdPartyLoginProviders(),
-        ])
+        const [settings, loadedProviders, loadedAssistantSettings] =
+          await Promise.all([
+            getInfoSettings(),
+            listThirdPartyLoginProviders(),
+            getAssistantSettings(),
+          ])
 
         if (ignore) {
           return
@@ -204,6 +227,8 @@ export default function SettingsPage() {
         setSavedAppName(settings.appName)
         setSavedOrganizationName(settings.organizationName)
         setProviders(sortThirdPartyProvidersForDisplay(loadedProviders))
+        setAssistantSettings(loadedAssistantSettings)
+        setSavedAssistantSettings(loadedAssistantSettings)
       } catch (error) {
         if (ignore) {
           return
@@ -257,6 +282,28 @@ export default function SettingsPage() {
       )
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  async function handleAssistantSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!hasAssistantSettingsChanged || !isAssistantMessageCountValid) {
+      return
+    }
+    setIsSavingAssistant(true)
+    try {
+      const updated = await updateAssistantSettings(assistantSettings)
+      setAssistantSettings(updated)
+      setSavedAssistantSettings(updated)
+      toast.success("茉莉自动命名设置已保存")
+    } catch (error) {
+      toast.error(
+        error instanceof AdminSettingsRequestError
+          ? error.message
+          : "保存茉莉设置失败"
+      )
+    } finally {
+      setIsSavingAssistant(false)
     }
   }
 
@@ -430,6 +477,86 @@ export default function SettingsPage() {
         <PasswordLoginSettingsCard />
         <Card className={getSettingsCardClassName()}>
           <CardHeader>
+            <CardTitle>茉莉自动命名</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form
+              className="flex flex-col gap-6"
+              onSubmit={handleAssistantSubmit}
+            >
+              <Field orientation="horizontal">
+                <div className="flex flex-1 flex-col gap-1">
+                  <FieldLabel htmlFor={assistantEnabledId}>
+                    自动为新群命名
+                  </FieldLabel>
+                  <FieldDescription>
+                    启用后，所有新建群聊都会在积累足够消息后由茉莉命名，即使茉莉不在群内。
+                  </FieldDescription>
+                </div>
+                <Switch
+                  checked={assistantSettings.autoGroupNamingEnabled}
+                  disabled={isLoading || isSavingAssistant}
+                  id={assistantEnabledId}
+                  onCheckedChange={(autoGroupNamingEnabled) =>
+                    setAssistantSettings((current) => ({
+                      ...current,
+                      autoGroupNamingEnabled,
+                    }))
+                  }
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={assistantMessageCountId}>
+                  触发消息条数
+                </FieldLabel>
+                <Input
+                  disabled={isLoading || isSavingAssistant}
+                  id={assistantMessageCountId}
+                  max={30}
+                  min={1}
+                  onChange={(event) =>
+                    setAssistantSettings((current) => ({
+                      ...current,
+                      autoGroupNamingMessageCount: event.target.valueAsNumber,
+                    }))
+                  }
+                  required
+                  type="number"
+                  value={
+                    Number.isNaN(assistantSettings.autoGroupNamingMessageCount)
+                      ? ""
+                      : assistantSettings.autoGroupNamingMessageCount
+                  }
+                />
+                <FieldDescription>
+                  范围 1–30，默认
+                  5。只统计用户和应用发送的普通消息；系统消息不计数，已有群或已经人工、第三方、明确请求改名的群不会被自动覆盖。
+                </FieldDescription>
+              </Field>
+              {hasAssistantSettingsChanged && (
+                <div className="flex justify-end">
+                  <Button
+                    disabled={
+                      isLoading ||
+                      isSavingAssistant ||
+                      !isAssistantMessageCountValid
+                    }
+                    type="submit"
+                  >
+                    {isSavingAssistant ? (
+                      <Spinner data-icon="inline-start" />
+                    ) : (
+                      <SaveIcon data-icon="inline-start" />
+                    )}
+                    保存
+                  </Button>
+                </div>
+              )}
+            </form>
+          </CardContent>
+        </Card>
+        <Card className={getSettingsCardClassName()}>
+          <CardHeader>
             <div className="flex items-center justify-between gap-3">
               <CardTitle>第三方登录</CardTitle>
               <ThirdPartyProviderAddMenu
@@ -497,6 +624,11 @@ export default function SettingsPage() {
 
 const defaultPasswordLoginSettings: PasswordLoginSettings = {
   enabled: true,
+}
+
+const defaultAssistantSettings: AssistantSettings = {
+  autoGroupNamingEnabled: true,
+  autoGroupNamingMessageCount: 5,
 }
 
 function PasswordLoginSettingsCard() {

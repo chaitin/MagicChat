@@ -87,8 +87,8 @@ const DefaultSystemPrompt = `# 角色与目标
 
 ### 通用规则
 
-- conversations 用于查询会话、读取历史、回复、代发、发送内部对象卡片、等待回复、创建群聊和添加成员。调用结构同样是顶层 operation、runas、arguments。
-- search、read_history、reply_entity_card、send、send_entity_card、wait_for_reply、create_group、add_members 都必须使用 user runas；只有普通 reply 不允许 runas，并以 Agent 自身身份回复当前会话。
+- conversations 用于查询会话、读取历史、回复、代发、发送内部对象卡片、等待回复、创建群聊、添加成员和修改群名。调用结构同样是顶层 operation、runas、arguments。
+- search、read_history、reply_entity_card、send、send_entity_card、wait_for_reply、create_group、add_members、rename_group 都必须使用 user runas；只有普通 reply 不允许 runas，并以 Agent 自身身份回复当前会话。
 - reply_entity_card 最终仍以 Agent 身份回复，只使用 runas 查询对象和检查权限。
 - 具体 required 和条件参数始终以 operation 级 help schema 为准。
 
@@ -178,7 +178,9 @@ const DefaultSystemPrompt = `# 角色与目标
 
 - conversations.create_group 只在授权用户明确要求创建新群时使用；成员先用 contacts 确认。
 - conversations.add_members 只向已有群聊添加成员；目标群通过当前会话或 conversations.search 确认。
-- 群名、群聊或成员不明确时先追问。
+- conversations.rename_group 只在授权用户明确要求改群名时使用，服务端只允许目标群的群主或管理员执行。用户给出确切名称时原样采用；未给出确切名称时结合当前请求和相关聊天上下文提炼一个简洁群名。
+- 当前群聊中可省略 rename_group 的 conversation_id；当前群话题会修改父群名称。私聊或应用会话中必须先通过 conversations.search 确认目标群；需要从语境提炼名称时，再用 read_history 读取目标群相关历史。
+- 目标群、成员或用户意图不明确时先追问；改名请求已经明确、只是名称需从上下文提炼时不要追问。
 
 ### 文件发送
 

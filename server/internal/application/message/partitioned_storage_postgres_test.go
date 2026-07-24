@@ -173,6 +173,48 @@ func TestPostgresPartitionedMessageServiceEnforcesOnlineWindowAndPreservesCurren
 	if registry.RevokedAt == nil {
 		t.Fatal("previous-year registry revoke was not synchronized")
 	}
+	if err := service.AuthorizeRunAsTrigger(context.Background(), RunAsTriggerCommand{
+		ActorID: fixture.user.ID, ActorType: store.MessageSenderTypeUser, AppID: fixture.app.ID,
+		AuthorizationConversationID: fixture.conversation.ID, TriggerMessageID: previousMessage.ID,
+	}); ErrorCodeOf(err) != CodeForbidden {
+		t.Fatalf("revoked partitioned run-as trigger error = %v, want forbidden", err)
+	}
+	if err := service.AuthorizeRunAsTrigger(context.Background(), RunAsTriggerCommand{
+		ActorID: fixture.user.ID, ActorType: store.MessageSenderTypeUser, AppID: fixture.app.ID,
+		AuthorizationConversationID: uuid.NewString(), TriggerMessageID: created.Message.ID,
+	}); ErrorCodeOf(err) != CodeForbidden {
+		t.Fatalf("mismatched partitioned authorization conversation error = %v, want forbidden", err)
+	}
+
+	deletedAt := time.Now().UTC()
+	if err := db.Model(&store.MessageRegistry{}).Where("id = ?", created.Message.ID).
+		Updates(map[string]any{"deleted_at": deletedAt}).Error; err != nil {
+		t.Fatalf("delete partitioned trigger registry: %v", err)
+	}
+	if err := db.Model(&store.Message{}).Where("id = ?", created.Message.ID).
+		Updates(map[string]any{"deleted_at": deletedAt, "updated_at": deletedAt}).Error; err != nil {
+		t.Fatalf("delete partitioned trigger message: %v", err)
+	}
+	if err := service.AuthorizeRunAsTrigger(context.Background(), RunAsTriggerCommand{
+		ActorID: fixture.user.ID, ActorType: store.MessageSenderTypeUser, AppID: fixture.app.ID,
+		AuthorizationConversationID: fixture.conversation.ID, TriggerMessageID: created.Message.ID,
+	}); ErrorCodeOf(err) != CodeForbidden {
+		t.Fatalf("deleted partitioned run-as trigger error = %v, want forbidden", err)
+	}
+	if err := db.Model(&store.MessageRegistry{}).Where("id = ?", created.Message.ID).
+		Update("deleted_at", nil).Error; err != nil {
+		t.Fatalf("restore partitioned trigger registry for inactive-user check: %v", err)
+	}
+	if err := db.Model(&store.User{}).Where("id = ?", fixture.user.ID).
+		Update("status", store.UserStatusDisabled).Error; err != nil {
+		t.Fatalf("disable partitioned trigger user: %v", err)
+	}
+	if err := service.AuthorizeRunAsTrigger(context.Background(), RunAsTriggerCommand{
+		ActorID: fixture.user.ID, ActorType: store.MessageSenderTypeUser, AppID: fixture.app.ID,
+		AuthorizationConversationID: fixture.conversation.ID, TriggerMessageID: created.Message.ID,
+	}); ErrorCodeOf(err) != CodeForbidden {
+		t.Fatalf("inactive partitioned trigger user error = %v, want forbidden", err)
+	}
 
 	var retainedCount int64
 	if err := db.Model(&store.Message{}).Where("id = ?", oldMessage.ID).Count(&retainedCount).Error; err != nil {

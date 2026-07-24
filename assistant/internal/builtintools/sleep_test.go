@@ -786,6 +786,56 @@ func TestConversationsSearchUsesTopLevelRunAs(t *testing.T) {
 	}
 }
 
+func TestConversationsRenameGroupUsesParentGroupAndTrustedRunAs(t *testing.T) {
+	requester := &fakeRequester{}
+	ctx := WithScope(context.Background(), Scope{
+		AuthorizationConversationID: "topic-1",
+		AuthorizationResolver: AuthorizationResolverFunc(func(ref string) (Authorization, bool) {
+			return Authorization{ActorType: "user", ActorID: "user-1", TriggerMessageID: "message-1"}, ref == "auth-user-1"
+		}),
+		ConversationID:         "topic-1",
+		ConversationType:       "topic",
+		ParentConversationID:   "group-1",
+		ParentConversationType: "group",
+		Requester:              requester,
+	})
+	_, err := NewSource().CallTool(ctx, conversationsToolName, json.RawMessage(`{
+		"operation":"rename_group",
+		"runas":{"type":"user","id":"user-1","authorization_ref":"auth-user-1"},
+		"arguments":{"name":" 发布冲刺组 "}
+	}`))
+	if err != nil {
+		t.Fatalf("CallTool() error = %v", err)
+	}
+	if len(requester.calls) != 1 || requester.calls[0].method != methodAssistantGroupRename {
+		t.Fatalf("calls = %#v", requester.calls)
+	}
+	var payload renameGroupPayload
+	if err := json.Unmarshal(requester.calls[0].payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.ActorUserID != "user-1" || payload.AuthorizationConversationID != "topic-1" || payload.TriggerMessageID != "message-1" || payload.ConversationID != "group-1" || payload.Mode != "explicit" || payload.Name != "发布冲刺组" {
+		t.Fatalf("payload = %#v", payload)
+	}
+}
+
+func TestConversationsRenameGroupRequiresTargetOutsideGroup(t *testing.T) {
+	ctx := WithScope(context.Background(), Scope{
+		AuthorizationResolver: AuthorizationResolverFunc(func(ref string) (Authorization, bool) {
+			return Authorization{ActorType: "user", ActorID: "user-1", TriggerMessageID: "message-1"}, ref == "auth-user-1"
+		}),
+		ConversationID: "app-conversation-1", ConversationType: "app", Requester: &fakeRequester{},
+	})
+	_, err := NewSource().CallTool(ctx, conversationsToolName, json.RawMessage(`{
+		"operation":"rename_group",
+		"runas":{"type":"user","id":"user-1","authorization_ref":"auth-user-1"},
+		"arguments":{"name":"发布冲刺组"}
+	}`))
+	if err == nil || !strings.Contains(err.Error(), "conversation_id is required") {
+		t.Fatalf("CallTool() error = %v", err)
+	}
+}
+
 func TestConversationsWaitForReplyRequiresUserRunAs(t *testing.T) {
 	requester := &fakeRequester{}
 	ctx := WithScope(context.Background(), Scope{

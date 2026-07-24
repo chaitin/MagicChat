@@ -95,6 +95,7 @@ func migrateTestSchema(db *gorm.DB) error {
 		&store.Conversation{},
 		&store.ConversationMember{},
 		&store.ConversationUserPreference{},
+		&store.ConversationAutoNameTask{},
 		&store.Message{},
 		&store.MessageReaction{},
 		&store.MessageReactionState{},
@@ -8397,6 +8398,49 @@ func TestAdminCanReadAndUpdateInfoSettings(t *testing.T) {
 	if clientData["app_name"] != "星环协作" {
 		t.Fatalf("client app_name = %v, want 星环协作", clientData["app_name"])
 	}
+}
+
+func TestAdminCanReadAndUpdateAssistantAutoGroupNamingSettings(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+	adminCookie := loginAsAdmin(t, server)
+
+	readResp, readBody := getJSON(t, server, "/api/admin/settings/assistant", adminCookie)
+	if readResp.StatusCode != http.StatusOK {
+		t.Fatalf("read status = %d, body = %#v", readResp.StatusCode, readBody)
+	}
+	readData := requireSuccess(t, readBody)
+	if readData["auto_group_naming_enabled"] != true || readData["auto_group_naming_message_count"] != float64(5) {
+		t.Fatalf("settings = %#v", readData)
+	}
+
+	updateResp, updateBody := putJSON(t, server, "/api/admin/settings/assistant", map[string]any{
+		"auto_group_naming_enabled":       false,
+		"auto_group_naming_message_count": 8,
+	}, adminCookie)
+	if updateResp.StatusCode != http.StatusOK {
+		t.Fatalf("update status = %d, body = %#v", updateResp.StatusCode, updateBody)
+	}
+	updateData := requireSuccess(t, updateBody)
+	if updateData["auto_group_naming_enabled"] != false || updateData["auto_group_naming_message_count"] != float64(8) {
+		t.Fatalf("updated settings = %#v", updateData)
+	}
+	var stored store.AppSettings
+	if err := db.First(&stored, "id = ?", store.AppSettingsID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.AssistantAutoGroupNamingEnabled || stored.AssistantAutoGroupNamingMessageCount != 8 {
+		t.Fatalf("stored settings = %#v", stored)
+	}
+
+	invalidResp, invalidBody := putJSON(t, server, "/api/admin/settings/assistant", map[string]any{
+		"auto_group_naming_enabled":       true,
+		"auto_group_naming_message_count": 31,
+	}, adminCookie)
+	if invalidResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid status = %d, body = %#v", invalidResp.StatusCode, invalidBody)
+	}
+	requireError(t, invalidBody, "invalid_request")
 }
 
 func TestAdminCanManageApps(t *testing.T) {

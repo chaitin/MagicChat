@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"app/internal/application/groupautoname"
 	"app/internal/appregistry"
+	"app/internal/config"
 	"app/internal/store"
 
 	"github.com/glebarez/sqlite"
@@ -447,6 +449,131 @@ func TestParseMessageMentionTargetsSupportsChoiceContent(t *testing.T) {
 	targets := parseMessageMentionTargets(json.RawMessage(`{"type":"choice","content_type":"markdown","content":"{(@user/` + userID + `)} 请选择","selection":"single","options":[{"id":"a","label":"A"},{"id":"b","label":"B"}]}`))
 	if len(targets) != 1 || targets[0].MemberType != store.ConversationMemberTypeUser || targets[0].MemberID != userID {
 		t.Fatalf("choice mention targets = %#v", targets)
+	}
+}
+
+func TestForwardedMessagesCountTowardAutomaticGroupNamingWithoutDoubleCountingRetries(t *testing.T) {
+	db := openMessageTestDB(t)
+	now := time.Date(2026, 7, 23, 12, 0, 0, 0, time.UTC)
+	user := store.User{ID: uuid.NewString(), Email: "forward@example.com", Name: "Forwarder", Status: store.UserStatusActive, CreatedAt: now, UpdatedAt: now}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+	conversation := store.Conversation{ID: uuid.NewString(), Kind: store.ConversationKindGroup, Name: "新群聊", CreatedByUserID: user.ID, Status: store.ConversationStatusActive, PostingPolicy: store.ConversationPostingPolicyOpen, Visibility: store.ConversationVisibilityPrivate, CreatedAt: now, UpdatedAt: now}
+	if err := db.Create(&conversation).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&store.ConversationMember{ConversationID: conversation.ID, MemberType: store.ConversationMemberTypeUser, MemberID: user.ID, Role: store.ConversationMemberRoleOwner, JoinedAt: now, HistoryVisibleFromSeq: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&store.AppSettings{ID: store.AppSettingsID, AppName: "即应", OrganizationName: "测试", AssistantAutoGroupNamingEnabled: true, AssistantAutoGroupNamingMessageCount: 2, CreatedAt: now, UpdatedAt: now}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&store.ConversationAutoNameTask{ConversationID: conversation.ID, Status: store.ConversationAutoNameStatusPending, MessageLimit: 2, Version: 1, CreatedAt: now, UpdatedAt: now}).Error; err != nil {
+		t.Fatal(err)
+	}
+	locker := &sync.Mutex{}
+	delivery := &autoNameDeliveryLockRecorder{locker: locker}
+	autoNames := groupautoname.NewService(groupautoname.Dependencies{
+		DB: db, Apps: config.AppsConfig{AIAssistantSecret: "forward-auto-secret"}, Events: delivery, EventLocker: locker,
+	})
+	service := NewService(Dependencies{DB: db, AutoNames: autoNames, AppEventLocker: locker})
+	drafts := []forwardMessageDraft{
+		{Body: json.RawMessage(`{"type":"text","content":"one"}`), ClientMessageID: "forward:first", Summary: "讨论发布"},
+		{Body: json.RawMessage(`{"type":"text","content":"two"}`), ClientMessageID: "forward:second", Summary: "确认上线"},
+	}
+	if _, err := service.createForwardedMessagesForTarget(context.Background(), user, conversation.ID, drafts); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.createForwardedMessagesForTarget(context.Background(), user, conversation.ID, drafts); err != nil {
+		t.Fatal(err)
+	}
+	var task store.ConversationAutoNameTask
+	if err := db.First(&task, "conversation_id = ?", conversation.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if task.MessageCount != 2 || task.TriggeredVersion != 1 {
+		t.Fatalf("task = %#v", task)
+	}
+	var eventCount int64
+	if err := db.Model(&store.AppEventOutbox{}).Where("event = ?", groupautoname.EventRequested).Count(&eventCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if eventCount != 1 {
+		t.Fatalf("auto-name event count = %d, want 1", eventCount)
+	}
+	if delivery.count != 1 || !delivery.lockHeld {
+		t.Fatalf("delivery count = %d, lock held = %v", delivery.count, delivery.lockHeld)
+	}
+}
+
+func TestAppAndDelegatedAutomaticNamingEventsUseReliableEventLock(t *testing.T) {
+	tests := []struct {
+		name string
+		send func(context.Context, *Service, store.User, store.App, store.Conversation) error
+	}{
+		{name: "app", send: func(ctx context.Context, service *Service, _ store.User, app store.App, conversation store.Conversation) error {
+			_, err := service.CreateAsApp(ctx, CreateAsAppCommand{
+				AppID: app.ID, ConversationID: conversation.ID, ClientMessageID: "app-message",
+				Body: json.RawMessage(`{"type":"text","content":"讨论发布"}`),
+				Finalize: func(_ context.Context, body json.RawMessage) (json.RawMessage, string, error) {
+					return body, "讨论发布", nil
+				},
+			})
+			return err
+		}},
+		{name: "delegated", send: func(ctx context.Context, service *Service, user store.User, app store.App, conversation store.Conversation) error {
+			_, err := service.CreateDelegated(ctx, CreateDelegatedCommand{
+				AccountID: user.ID, ConversationID: conversation.ID, ClientMessageID: "delegated-message",
+				DelegatedBy: Identity{ID: app.ID, Name: app.Name, Type: store.MessageSenderTypeApp},
+				Body:        json.RawMessage(`{"type":"text","content":"讨论发布"}`),
+				Finalize: func(_ context.Context, body json.RawMessage) (json.RawMessage, string, error) {
+					return body, "讨论发布", nil
+				},
+			})
+			return err
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			db := openMessageTestDB(t)
+			now := time.Date(2026, 7, 23, 12, 30, 0, 0, time.UTC)
+			user := store.User{ID: uuid.NewString(), Email: test.name + "@example.com", Name: "Owner", Status: store.UserStatusActive, CreatedAt: now, UpdatedAt: now}
+			app := store.App{ID: uuid.NewString(), Name: "Sender App", Enabled: true, Visibility: store.AppVisibilityPublic, ConnectionSecret: "sender-" + test.name, CreatedAt: now, UpdatedAt: now}
+			if err := db.Create(&user).Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Create(&app).Error; err != nil {
+				t.Fatal(err)
+			}
+			conversation := store.Conversation{ID: uuid.NewString(), Kind: store.ConversationKindGroup, Name: "新群聊", CreatedByUserID: user.ID, Status: store.ConversationStatusActive, PostingPolicy: store.ConversationPostingPolicyOpen, Visibility: store.ConversationVisibilityPrivate, CreatedAt: now, UpdatedAt: now}
+			if err := db.Create(&conversation).Error; err != nil {
+				t.Fatal(err)
+			}
+			members := []store.ConversationMember{
+				{ConversationID: conversation.ID, MemberType: store.ConversationMemberTypeUser, MemberID: user.ID, Role: store.ConversationMemberRoleOwner, JoinedAt: now, HistoryVisibleFromSeq: 1},
+				{ConversationID: conversation.ID, MemberType: store.ConversationMemberTypeApp, MemberID: app.ID, Role: store.ConversationMemberRoleMember, JoinedAt: now, HistoryVisibleFromSeq: 1},
+			}
+			if err := db.Create(&members).Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Create(&store.AppSettings{ID: store.AppSettingsID, AppName: "即应", OrganizationName: "测试", AssistantAutoGroupNamingEnabled: true, AssistantAutoGroupNamingMessageCount: 1, CreatedAt: now, UpdatedAt: now}).Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Create(&store.ConversationAutoNameTask{ConversationID: conversation.ID, Status: store.ConversationAutoNameStatusPending, MessageLimit: 1, Version: 1, CreatedAt: now, UpdatedAt: now}).Error; err != nil {
+				t.Fatal(err)
+			}
+			locker := &sync.Mutex{}
+			delivery := &autoNameDeliveryLockRecorder{locker: locker}
+			autoNames := groupautoname.NewService(groupautoname.Dependencies{DB: db, Apps: config.AppsConfig{AIAssistantSecret: "auto-" + test.name}, Events: delivery, EventLocker: locker})
+			service := NewService(Dependencies{DB: db, AutoNames: autoNames, AppEventLocker: locker})
+			if err := test.send(context.Background(), service, user, app, conversation); err != nil {
+				t.Fatal(err)
+			}
+			if delivery.count != 1 || !delivery.lockHeld {
+				t.Fatalf("delivery count = %d, lock held = %v", delivery.count, delivery.lockHeld)
+			}
+		})
 	}
 }
 
@@ -904,6 +1031,21 @@ type messageAppEventRecorder struct {
 	order  *[]string
 }
 
+type autoNameDeliveryLockRecorder struct {
+	locker   *sync.Mutex
+	count    int
+	lockHeld bool
+}
+
+func (r *autoNameDeliveryLockRecorder) DeliverGroupAutoNameEvents(_ context.Context, events []groupautoname.Event) {
+	r.count += len(events)
+	if r.locker.TryLock() {
+		r.locker.Unlock()
+		return
+	}
+	r.lockHeld = true
+}
+
 func (r *messageAppEventRecorder) DeliverAppEvents(_ context.Context, events []AppEvent) {
 	var count int64
 	if len(events) > 0 {
@@ -931,6 +1073,7 @@ func openMessageTestDB(t *testing.T) *gorm.DB {
 	if err := db.AutoMigrate(
 		&store.User{}, &store.App{}, &store.Conversation{}, &store.ConversationMember{},
 		&store.Message{}, &store.AppEventOutbox{}, &store.AppConversation{}, &store.AppUserGrant{},
+		&store.AppSettings{}, &store.ConversationAutoNameTask{},
 		&store.ConversationTopic{}, &store.ConversationTopicParticipant{},
 		&store.MessageReaction{}, &store.MessageReactionState{},
 		&store.MessageChoiceResponse{},

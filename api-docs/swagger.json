@@ -612,6 +612,112 @@
                 }
             }
         },
+        "/api/admin/settings/assistant": {
+            "get": {
+                "description": "管理员读取群聊自动命名开关和消息条数。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理员设置"
+                ],
+                "summary": "获取茉莉设置",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/admin.successEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/admin.assistantSettingsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/admin.errorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/admin.errorEnvelope"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "管理员更新群聊自动命名开关和消息条数。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理员设置"
+                ],
+                "summary": "更新茉莉设置",
+                "parameters": [
+                    {
+                        "description": "茉莉设置",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/admin.updateAssistantSettingsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/admin.successEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/admin.assistantSettingsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/admin.errorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/admin.errorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/admin.errorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
         "/api/admin/settings/email-login": {
             "get": {
                 "description": "管理员读取邮箱验证码登录和完整 SMTP 设置，包括已保存的 SMTP 密码。",
@@ -7530,6 +7636,19 @@
                 }
             }
         },
+        "admin.assistantSettingsResponse": {
+            "type": "object",
+            "properties": {
+                "auto_group_naming_enabled": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "auto_group_naming_message_count": {
+                    "type": "integer",
+                    "example": 5
+                }
+            }
+        },
         "admin.createUserRequest": {
             "type": "object",
             "properties": {
@@ -7877,6 +7996,17 @@
                 },
                 "type": {
                     "type": "string"
+                }
+            }
+        },
+        "admin.updateAssistantSettingsRequest": {
+            "type": "object",
+            "properties": {
+                "auto_group_naming_enabled": {
+                    "type": "boolean"
+                },
+                "auto_group_naming_message_count": {
+                    "type": "integer"
                 }
             }
         },

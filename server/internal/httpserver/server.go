@@ -20,6 +20,7 @@ import (
 	entitycardapp "app/internal/application/entitycard"
 	externalauthapp "app/internal/application/externalauth"
 	fileapp "app/internal/application/file"
+	"app/internal/application/groupautoname"
 	"app/internal/application/identityprovider"
 	messageapp "app/internal/application/message"
 	messagecontentapp "app/internal/application/messagecontent"
@@ -78,6 +79,7 @@ type Server struct {
 	tasks               *taskapp.Service
 	clientTasks         *clientapi.TaskAPI
 	appConnections      *appconnection.Manager
+	groupAutoNames      *groupautoname.Service
 	realtime            *realtime.ConnectionPool
 	appEventMu          sync.Mutex
 
@@ -113,12 +115,15 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 	server.appConnections = appconnection.NewManager(appconnection.Options{
 		RequestHandler: server.handleAppRequest,
 	})
+	server.groupAutoNames = groupautoname.NewService(groupautoname.Dependencies{
+		DB: db, Events: server, EventLocker: &server.appEventMu, Apps: cfg.Apps,
+	})
 	server.apps = appapp.NewService(appapp.Dependencies{
 		DB: db, Apps: cfg.Apps, Files: server.files, Connections: server.appConnections,
 	})
 	server.adminApps = adminapi.NewAppAPI(server.apps)
 	server.clientApps = clientapi.NewAppAPI(server.apps)
-	server.settings = settingsapp.NewService(settingsapp.Dependencies{DB: db})
+	server.settings = settingsapp.NewService(settingsapp.Dependencies{DB: db, AutoNames: server.groupAutoNames})
 	server.adminSettings = adminapi.NewSettingsAPI(server.settings)
 	server.adminPasswordLogin = adminapi.NewPasswordLoginSettingsAPI(server.settings)
 	server.accounts = account.NewService(account.Dependencies{
@@ -156,6 +161,7 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 		Files:          server.files,
 		Projects:       server.projects,
 		Notifications:  server,
+		AutoNames:      server.groupAutoNames,
 	})
 	server.clientConversations = clientapi.NewConversationAPI(server.conversations, server.projects)
 	server.tasks = taskapp.NewService(taskapp.Dependencies{
@@ -206,6 +212,7 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 				server.afterUserMessageCommit(legacyStoredMessage(message))
 			}
 		},
+		AutoNames: server.groupAutoNames,
 	})
 	server.clientMessages = clientapi.NewMessageAPI(server.messages, server.files)
 

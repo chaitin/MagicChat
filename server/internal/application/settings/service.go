@@ -5,8 +5,10 @@ import (
 	"errors"
 	"net/mail"
 	"strings"
+	"sync"
 	"time"
 
+	"app/internal/application/groupautoname"
 	"app/internal/store"
 
 	"gorm.io/gorm"
@@ -14,13 +16,16 @@ import (
 )
 
 type Dependencies struct {
-	DB  *gorm.DB
-	Now func() time.Time
+	DB        *gorm.DB
+	Now       func() time.Time
+	AutoNames *groupautoname.Service
 }
 
 type Service struct {
-	db  *gorm.DB
-	now func() time.Time
+	db                *gorm.DB
+	now               func() time.Time
+	autoNames         *groupautoname.Service
+	assistantUpdateMu sync.Mutex
 }
 
 func NewService(deps Dependencies) *Service {
@@ -28,7 +33,7 @@ func NewService(deps Dependencies) *Service {
 	if now == nil {
 		now = func() time.Time { return time.Now().UTC() }
 	}
-	return &Service{db: deps.DB, now: now}
+	return &Service{db: deps.DB, now: now, autoNames: deps.AutoNames}
 }
 
 func (s *Service) Get(ctx context.Context) (Settings, error) {
@@ -62,6 +67,43 @@ func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (Settings, erro
 		return Settings{}, internalError(err)
 	}
 	return Settings{AppName: appName, OrganizationName: organizationName}, nil
+}
+
+func (s *Service) GetAssistant(ctx context.Context) (AssistantSettings, error) {
+	value, err := s.getOrCreate(ctx)
+	if err != nil {
+		return AssistantSettings{}, internalError(err)
+	}
+	return newAssistantSettings(value), nil
+}
+
+func (s *Service) UpdateAssistant(ctx context.Context, cmd UpdateAssistantSettingsCommand) (AssistantSettings, error) {
+	if cmd.AutoGroupNamingMessageCount < 1 || cmd.AutoGroupNamingMessageCount > 30 {
+		return AssistantSettings{}, newError(CodeInvalidRequest, "自动命名的消息条数必须在 1 到 30 之间", nil)
+	}
+	s.assistantUpdateMu.Lock()
+	defer s.assistantUpdateMu.Unlock()
+	if _, err := s.getOrCreate(ctx); err != nil {
+		return AssistantSettings{}, internalError(err)
+	}
+	now := s.now().UTC()
+	if err := s.db.WithContext(ctx).Model(&store.AppSettings{}).Where("id = ?", store.AppSettingsID).
+		Updates(map[string]any{
+			"assistant_auto_group_naming_enabled":       cmd.AutoGroupNamingEnabled,
+			"assistant_auto_group_naming_message_count": cmd.AutoGroupNamingMessageCount,
+			"updated_at": now,
+		}).Error; err != nil {
+		return AssistantSettings{}, internalError(err)
+	}
+	if s.autoNames != nil {
+		if err := s.autoNames.Reconfigure(ctx, cmd.AutoGroupNamingEnabled, cmd.AutoGroupNamingMessageCount); err != nil {
+			return AssistantSettings{}, internalError(err)
+		}
+	}
+	return AssistantSettings{
+		AutoGroupNamingEnabled:      cmd.AutoGroupNamingEnabled,
+		AutoGroupNamingMessageCount: cmd.AutoGroupNamingMessageCount,
+	}, nil
 }
 
 func (s *Service) GetPublicInfo(ctx context.Context) (PublicInfo, error) {
@@ -188,14 +230,16 @@ func (s *Service) getOrCreate(ctx context.Context) (store.AppSettings, error) {
 
 	now := s.now().UTC()
 	defaults := store.AppSettings{
-		ID:                   store.AppSettingsID,
-		AppName:              store.DefaultAppName,
-		OrganizationName:     store.DefaultOrganizationName,
-		PasswordLoginEnabled: true,
-		SMTPPort:             465,
-		SMTPSecurity:         SMTPSecurityTLS,
-		CreatedAt:            now,
-		UpdatedAt:            now,
+		ID:                                   store.AppSettingsID,
+		AppName:                              store.DefaultAppName,
+		OrganizationName:                     store.DefaultOrganizationName,
+		PasswordLoginEnabled:                 true,
+		SMTPPort:                             465,
+		SMTPSecurity:                         SMTPSecurityTLS,
+		AssistantAutoGroupNamingEnabled:      true,
+		AssistantAutoGroupNamingMessageCount: store.DefaultAssistantAutoGroupNamingMessageCount,
+		CreatedAt:                            now,
+		UpdatedAt:                            now,
 	}
 	if err := s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&defaults).Error; err != nil {
 		return store.AppSettings{}, err
@@ -204,6 +248,17 @@ func (s *Service) getOrCreate(ctx context.Context) (store.AppSettings, error) {
 		return store.AppSettings{}, err
 	}
 	return value, nil
+}
+
+func newAssistantSettings(value store.AppSettings) AssistantSettings {
+	messageCount := value.AssistantAutoGroupNamingMessageCount
+	if messageCount < 1 || messageCount > 30 {
+		messageCount = store.DefaultAssistantAutoGroupNamingMessageCount
+	}
+	return AssistantSettings{
+		AutoGroupNamingEnabled:      value.AssistantAutoGroupNamingEnabled,
+		AutoGroupNamingMessageCount: messageCount,
+	}
 }
 
 func newSettings(value store.AppSettings) Settings {

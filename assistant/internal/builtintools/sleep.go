@@ -32,6 +32,7 @@ const (
 	conversationsOperationWait            = "wait_for_reply"
 	conversationsOperationCreate          = "create_group"
 	conversationsOperationAdd             = "add_members"
+	conversationsOperationRename          = "rename_group"
 	methodContactsUsersList               = "contacts.users.list"
 	methodContactsAppsList                = "contacts.apps.list"
 	methodContactsGroupsList              = "contacts.groups.list"
@@ -40,6 +41,7 @@ const (
 	methodGroupConversationsList          = "group_conversations.list"
 	methodCreateGroup                     = "group_conversations.create"
 	methodAddGroupMembers                 = "group_conversations.members.add"
+	methodAssistantGroupRename            = "assistant.group.rename"
 	methodMessageSend                     = "message.send"
 	methodMessageSendAsUser               = "message.send_as_user"
 	methodTemporaryFilesReadURLs          = "temporary_files.read_urls"
@@ -233,6 +235,12 @@ type addGroupMembersInput struct {
 	MemberIDs        []string `json:"member_ids"`
 }
 
+type renameGroupInput struct {
+	AuthorizationRef string `json:"authorization_ref"`
+	ConversationID   string `json:"conversation_id"`
+	Name             string `json:"name"`
+}
+
 type readFileURLsInput struct {
 	FileIDs []string `json:"file_ids"`
 }
@@ -327,6 +335,15 @@ type addGroupMembersPayload struct {
 	ConversationID              string   `json:"conversation_id"`
 	MemberIDs                   []string `json:"member_ids"`
 	TriggerMessageID            string   `json:"trigger_message_id"`
+}
+
+type renameGroupPayload struct {
+	ActorUserID                 string `json:"actor_user_id"`
+	AuthorizationConversationID string `json:"authorization_conversation_id"`
+	ConversationID              string `json:"conversation_id"`
+	Mode                        string `json:"mode"`
+	Name                        string `json:"name"`
+	TriggerMessageID            string `json:"trigger_message_id"`
 }
 
 type readTemporaryFileURLsPayload struct {
@@ -449,7 +466,7 @@ func (s *Source) callConversations(ctx context.Context, input json.RawMessage) (
 		return callReply(ctx, parsed.Arguments)
 	case conversationsOperationWait:
 		return s.callWaitForReply(ctx, parsed)
-	case conversationsOperationSearch, conversationsOperationRead, conversationsOperationSend, conversationsOperationReplyEntityCard, conversationsOperationSendEntityCard, conversationsOperationCreate, conversationsOperationAdd:
+	case conversationsOperationSearch, conversationsOperationRead, conversationsOperationSend, conversationsOperationReplyEntityCard, conversationsOperationSendEntityCard, conversationsOperationCreate, conversationsOperationAdd, conversationsOperationRename:
 		legacyInput, err := conversationLegacyUserInput(ctx, parsed)
 		if err != nil {
 			return mcpclient.ToolResult{}, err
@@ -467,12 +484,49 @@ func (s *Source) callConversations(ctx context.Context, input json.RawMessage) (
 			return callSendEntityCard(ctx, legacyInput)
 		case conversationsOperationCreate:
 			return callCreateGroup(ctx, legacyInput)
+		case conversationsOperationRename:
+			return callRenameGroup(ctx, legacyInput)
 		default:
 			return callAddGroupMembers(ctx, legacyInput)
 		}
 	default:
 		return mcpclient.ToolResult{}, fmt.Errorf("unsupported conversations operation %q; use help to inspect supported operations", parsed.Operation)
 	}
+}
+
+func callRenameGroup(ctx context.Context, input json.RawMessage) (mcpclient.ToolResult, error) {
+	scope, err := requireScope(ctx)
+	if err != nil {
+		return mcpclient.ToolResult{}, err
+	}
+	var parsed renameGroupInput
+	if err := json.Unmarshal(input, &parsed); err != nil {
+		return mcpclient.ToolResult{}, fmt.Errorf("parse conversations rename_group input: %w", err)
+	}
+	auth, err := requireUserAuthorization(scope, parsed.AuthorizationRef)
+	if err != nil {
+		return mcpclient.ToolResult{}, err
+	}
+	name := strings.TrimSpace(parsed.Name)
+	if name == "" {
+		return mcpclient.ToolResult{}, fmt.Errorf("name is required")
+	}
+	conversationID := strings.TrimSpace(parsed.ConversationID)
+	if conversationID == "" {
+		switch {
+		case strings.TrimSpace(scope.ConversationType) == "group" && strings.TrimSpace(scope.ConversationID) != "":
+			conversationID = strings.TrimSpace(scope.ConversationID)
+		case strings.TrimSpace(scope.ConversationType) == "topic" && strings.TrimSpace(scope.ParentConversationType) == "group" && strings.TrimSpace(scope.ParentConversationID) != "":
+			conversationID = strings.TrimSpace(scope.ParentConversationID)
+		default:
+			return mcpclient.ToolResult{}, fmt.Errorf("conversation_id is required outside a group conversation")
+		}
+	}
+	return requestTool(ctx, scope.Requester, methodAssistantGroupRename, renameGroupPayload{
+		ActorUserID: auth.ActorID, AuthorizationConversationID: scopeAuthorizationConversationID(scope),
+		ConversationID: conversationID, Mode: "explicit", Name: name,
+		TriggerMessageID: auth.TriggerMessageID,
+	})
 }
 
 func conversationLegacyUserInput(ctx context.Context, input conversationsInput) (json.RawMessage, error) {

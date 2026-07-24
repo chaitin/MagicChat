@@ -92,7 +92,7 @@ func contactsCapabilitySpec() capabilitySpec {
 }
 
 func conversationsCapabilitySpec() capabilitySpec {
-	toolDescription := "统一会话管理能力。支持查询会话、读取历史、回复当前会话、授权用户代发、发送选择、固定格式内部对象卡片和图表消息、等待新回复、创建群聊和添加成员。回复或代发时不要默认使用 text：明确候选项应使用 choice，主要内容是单个内部对象时尽量使用实体卡片，可信数字适合呈现趋势、比较、分布、占比、排名或多维评分时尽量使用图表；具体 operation 和参数通过全局 help 查询。"
+	toolDescription := "统一会话管理能力。支持查询会话、读取历史、回复当前会话、授权用户代发、发送选择、固定格式内部对象卡片和图表消息、等待新回复、创建群聊、添加成员和修改群名。回复或代发时不要默认使用 text：明确候选项应使用 choice，主要内容是单个内部对象时尽量使用实体卡片，可信数字适合呈现趋势、比较、分布、占比、排名或多维评分时尽量使用图表；具体 operation 和参数通过全局 help 查询。"
 	toolSchema := capabilityToolInputSchema([]string{
 		conversationsOperationSearch,
 		conversationsOperationRead,
@@ -103,9 +103,10 @@ func conversationsCapabilitySpec() capabilitySpec {
 		conversationsOperationWait,
 		conversationsOperationCreate,
 		conversationsOperationAdd,
+		conversationsOperationRename,
 	}, conversationPublicRunAsInputSchema())
 	return capabilitySpec{
-		Description: "提供最近会话查询、聊天历史读取、当前会话回复、授权用户代发、选择消息、内部对象卡片和图表消息发送、等待会话新回复，以及群聊创建和成员添加。回复或代发时不要习惯性选择 text：明确候选项应使用 choice，单个内部对象作为主要内容时尽量发实体卡片，可信数字适合可视化时尽量发图表。操作统一通过 conversations 工具执行；需要授权用户身份的操作在顶层传 runas。",
+		Description: "提供最近会话查询、聊天历史读取、当前会话回复、授权用户代发、选择消息、内部对象卡片和图表消息发送、等待会话新回复，以及群聊创建、成员添加和群名修改。回复或代发时不要习惯性选择 text：明确候选项应使用 choice，单个内部对象作为主要内容时尽量发实体卡片，可信数字适合可视化时尽量发图表。操作统一通过 conversations 工具执行；需要授权用户身份的操作在顶层传 runas。",
 		Name:        capabilityConversations,
 		Summary:     "管理会话、消息和群聊，并等待新回复。",
 		Operations: []operationSpec{
@@ -180,6 +181,14 @@ func conversationsCapabilitySpec() capabilitySpec {
 				Description:     "以授权用户身份向已有群聊添加用户成员。member_ids 为联系人用户 ID；当前会话是目标群聊时 conversation_id 可以省略。返回更新后的群聊信息。",
 				InputSchema:     conversationUserOperationInputSchema(conversationsOperationAdd, addMembersArgumentsSchema(), true),
 				Name:            conversationsOperationAdd,
+				ToolDescription: toolDescription,
+				ToolInputSchema: toolSchema,
+				ToolName:        conversationsToolName,
+			},
+			{
+				Description:     "以授权用户身份修改群聊名称，仅群主或管理员可以执行。name 为要使用的群名；当前群聊或其话题中 conversation_id 可以省略，话题会修改父群名称；私聊或应用会话中必须指定目标群聊 ID。返回改名结果。",
+				InputSchema:     conversationUserOperationInputSchema(conversationsOperationRename, renameGroupArgumentsSchema(), true),
+				Name:            conversationsOperationRename,
 				ToolDescription: toolDescription,
 				ToolInputSchema: toolSchema,
 				ToolName:        conversationsToolName,
@@ -846,6 +855,18 @@ func addMembersArgumentsSchema() map[string]any {
 				"type": "array", "minItems": 1, "uniqueItems": true,
 				"items": map[string]any{"type": "string", "minLength": 1},
 			},
+		},
+		"additionalProperties": false,
+	}
+}
+
+func renameGroupArgumentsSchema() map[string]any {
+	return map[string]any{
+		"type":     "object",
+		"required": []string{"name"},
+		"properties": map[string]any{
+			"conversation_id": map[string]any{"type": "string", "minLength": 1, "description": "目标群聊 ID；当前群聊或其话题中可省略。"},
+			"name":            map[string]any{"type": "string", "minLength": 1, "maxLength": 120, "description": "新的群聊名称。"},
 		},
 		"additionalProperties": false,
 	}

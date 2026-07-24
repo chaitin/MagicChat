@@ -24,6 +24,16 @@ type UpdateCommand struct {
 	OrganizationName string
 }
 
+type AssistantSettings struct {
+	AutoGroupNamingEnabled      bool
+	AutoGroupNamingMessageCount int
+}
+
+type UpdateAssistantSettingsCommand struct {
+	AutoGroupNamingEnabled      bool
+	AutoGroupNamingMessageCount int
+}
+
 type PasswordLoginSettings struct {
 	Enabled bool
 }
@@ -63,6 +73,8 @@ type UpdateEmailLoginCommand struct {
 type AdminService interface {
 	Get(context.Context) (Settings, error)
 	Update(context.Context, UpdateCommand) (Settings, error)
+	GetAssistant(context.Context) (AssistantSettings, error)
+	UpdateAssistant(context.Context, UpdateAssistantSettingsCommand) (AssistantSettings, error)
 }
 
 type PublicService interface {
