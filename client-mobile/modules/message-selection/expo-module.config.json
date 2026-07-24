@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["MessageSelectionModule"]
+  },
+  "android": {
+    "modules": ["cloud.baizhi.messageselection.MessageSelectionModule"]
+  }
+}

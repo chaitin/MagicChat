@@ -1,9 +1,16 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import {
+  type QueryClient,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query"
 
 import {
+  dismissConversation as dismissConversationRequest,
   joinGroupConversation,
   openAppConversation,
   openDirectConversation,
+  setConversationMuted as setConversationMutedRequest,
+  setConversationPinned as setConversationPinnedRequest,
 } from "@/data/conversations-api"
 import type { ClientContacts, ClientConversation } from "@/data/models"
 import { queryKeys, type AuthenticatedTarget } from "@/data/query"
@@ -46,6 +53,119 @@ export function useOpenEntityConversation(target: AuthenticatedTarget) {
   })
 }
 
+export function useSetConversationPinned(target: AuthenticatedTarget) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: { conversationId: string; pinned: boolean }) =>
+      setConversationPinnedRequest(
+        target.url,
+        input.conversationId,
+        input.pinned
+      ),
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({
+        exact: true,
+        queryKey: queryKeys.conversations(target),
+      })
+      const previous = queryClient.getQueryData<ClientConversation[]>(
+        queryKeys.conversations(target)
+      )
+      updateCachedConversation(queryClient, target, input.conversationId, {
+        pinned: input.pinned,
+      })
+      return { previous }
+    },
+    onError: (_error, _input, context) => {
+      queryClient.setQueryData(
+        queryKeys.conversations(target),
+        context?.previous
+      )
+    },
+    onSuccess: (result) => {
+      updateCachedConversation(queryClient, target, result.conversationId, {
+        pinned: result.pinned,
+      })
+    },
+    onSettled: () =>
+      queryClient.invalidateQueries({
+        exact: true,
+        queryKey: queryKeys.conversations(target),
+      }),
+  })
+}
+
+export function useSetConversationMuted(target: AuthenticatedTarget) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: { conversationId: string; muted: boolean }) =>
+      setConversationMutedRequest(
+        target.url,
+        input.conversationId,
+        input.muted
+      ),
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({
+        exact: true,
+        queryKey: queryKeys.conversations(target),
+      })
+      const previous = queryClient.getQueryData<ClientConversation[]>(
+        queryKeys.conversations(target)
+      )
+      updateCachedConversation(queryClient, target, input.conversationId, {
+        notificationMuted: input.muted,
+      })
+      return { previous }
+    },
+    onError: (_error, _input, context) => {
+      queryClient.setQueryData(
+        queryKeys.conversations(target),
+        context?.previous
+      )
+    },
+    onSuccess: (result) => {
+      updateCachedConversation(queryClient, target, result.conversationId, {
+        notificationMuted: result.muted,
+      })
+    },
+    onSettled: () =>
+      queryClient.invalidateQueries({
+        exact: true,
+        queryKey: queryKeys.conversations(target),
+      }),
+  })
+}
+
+export function useDismissConversation(target: AuthenticatedTarget) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (conversationId: string) =>
+      dismissConversationRequest(target.url, conversationId),
+    onSuccess: (result) => {
+      queryClient.setQueryData<ClientConversation[]>(
+        queryKeys.conversations(target),
+        (current) =>
+          current?.filter(
+            (conversation) => conversation.id !== result.conversationId
+          )
+      )
+      queryClient.removeQueries({
+        exact: true,
+        queryKey: queryKeys.conversationMessages(
+          target,
+          result.conversationId
+        ),
+      })
+      void queryClient.invalidateQueries({
+        exact: true,
+        queryKey: queryKeys.conversations(target),
+      })
+    },
+  })
+}
+
 function upsertConversation(
   conversations: ClientConversation[] | undefined,
   conversation: ClientConversation
@@ -62,6 +182,23 @@ function upsertConversation(
     nextConversation,
     ...(conversations ?? []).filter((item) => item.id !== conversation.id),
   ]
+}
+
+function updateCachedConversation(
+  queryClient: QueryClient,
+  target: AuthenticatedTarget,
+  conversationId: string,
+  updates: Partial<Pick<ClientConversation, "notificationMuted" | "pinned">>
+) {
+  queryClient.setQueryData<ClientConversation[]>(
+    queryKeys.conversations(target),
+    (current) =>
+      current?.map((conversation) =>
+        conversation.id === conversationId
+          ? { ...conversation, ...updates }
+          : conversation
+      )
+  )
 }
 
 function markGroupJoined(

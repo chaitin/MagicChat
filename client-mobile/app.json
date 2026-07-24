@@ -34,6 +34,7 @@
     },
     "plugins": [
       "expo-router",
+      "./plugins/with-message-selection-menu",
       "expo-notifications",
       [
         "expo-media-library",

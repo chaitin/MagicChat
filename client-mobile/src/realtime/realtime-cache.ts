@@ -137,6 +137,24 @@ export async function applyRealtimeEvent(
     return {}
   }
 
+  if (event === realtimeEvents.conversationMuteUpdated) {
+    const muteUpdate = normalizeConversationMuteUpdatedPayload(payload)
+
+    queryClient.setQueryData<ClientConversation[]>(
+      queryKeys.conversations(server),
+      (current) =>
+        current?.map((conversation) =>
+          conversation.id === muteUpdate.conversationId
+            ? {
+                ...conversation,
+                notificationMuted: muteUpdate.muted,
+              }
+            : conversation
+        )
+    )
+    return {}
+  }
+
   if (
     event === realtimeEvents.topicCreated ||
     event === realtimeEvents.topicParticipated ||
@@ -509,6 +527,23 @@ function normalizeConversationPinUpdatedPayload(payload: unknown) {
   return {
     conversationId: value.conversation_id,
     pinned: value.pinned,
+  }
+}
+
+function normalizeConversationMuteUpdatedPayload(payload: unknown) {
+  const value = asRecord(payload)
+  if (
+    !value ||
+    typeof value.conversation_id !== "string" ||
+    value.conversation_id.trim() === "" ||
+    typeof value.muted !== "boolean"
+  ) {
+    throw new Error("实时会话免打扰事件格式不正确")
+  }
+
+  return {
+    conversationId: value.conversation_id,
+    muted: value.muted,
   }
 }
 

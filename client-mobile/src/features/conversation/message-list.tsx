@@ -205,18 +205,13 @@ export function MessageList({
         keyboardShouldPersistTaps="handled"
         keyExtractor={(item) => item.key}
         ListFooterComponent={
-          hasOlder || isFetchingOlder ? (
-            <YStack items="center" pb="$3">
-              <Button
-                disabled={isFetchingOlder}
-                icon={isFetchingOlder ? <Spinner /> : undefined}
-                onPress={onLoadOlder}
-                size="$3"
-                variant="outlined"
-              >
-                {isFetchingOlder ? "正在加载" : "加载更早消息"}
-              </Button>
-            </YStack>
+          isFetchingOlder ? (
+            <XStack gap="$2" items="center" justify="center" pb="$3" py="$2">
+              <Spinner size="small" />
+              <SizableText color="$color10" size="$2">
+                正在加载
+              </SizableText>
+            </XStack>
           ) : null
         }
         maintainVisibleContentPosition={{

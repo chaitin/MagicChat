@@ -5,11 +5,13 @@ export function ListItemContent({
   meta,
   subtitle,
   subtitleLeading,
+  subtitleTrailing,
   title,
 }: {
   meta?: string
   subtitle: string
   subtitleLeading?: ReactNode
+  subtitleTrailing?: ReactNode
   title: string
 }) {
   return (
@@ -41,6 +43,7 @@ export function ListItemContent({
         >
           {subtitle}
         </SizableText>
+        {subtitleTrailing}
       </XStack>
     </YStack>
   )

@@ -80,6 +80,9 @@ export async function showBackgroundMessageNotification(
   const conversation = conversations?.find(
     (item) => item.id === message.conversationId
   )
+  if (conversation?.notificationMuted) {
+    return
+  }
   const resolveMentionLabel =
     contacts && conversation && currentUser
       ? createMessageMentionLabelResolver({

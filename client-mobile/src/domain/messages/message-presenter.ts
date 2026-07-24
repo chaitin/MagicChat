@@ -23,6 +23,7 @@ export type PresentedMessage = {
   author: string
   avatar: string
   body: ClientMessageBody
+  canRevoke: boolean
   createdAt: string
   delegatedByName: string
   id: string
@@ -100,6 +101,7 @@ export function buildPresentedMessages({
         appsById
       ),
       body: message.body,
+      canRevoke: canRevokeMessage(message, conversation, currentUser.id),
       createdAt: message.createdAt,
       delegatedByName: message.delegatedBy?.name ?? "",
       id: message.id,
@@ -168,6 +170,35 @@ export function buildPresentedMessages({
         : undefined,
     }
   })
+}
+
+function canRevokeMessage(
+  message: ClientMessage,
+  conversation: ClientConversation,
+  currentUserId: string
+) {
+  if (
+    message.sender.type === "system" ||
+    message.body.type === "revoked" ||
+    message.body.type === "unsupported" ||
+    conversation.topic?.archived
+  ) {
+    return false
+  }
+  if (message.sender.type === "user" && message.sender.id === currentUserId) {
+    return true
+  }
+  if (
+    conversation.type !== "group" &&
+    conversation.topic?.parentConversationType !== "group"
+  ) {
+    return false
+  }
+
+  const currentMember = conversation.members?.find(
+    (member) => member.id === currentUserId
+  )
+  return currentMember?.role === "owner" || currentMember?.role === "admin"
 }
 
 export function createMessageMentionLabelResolver({

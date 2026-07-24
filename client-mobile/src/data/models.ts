@@ -132,6 +132,7 @@ export type ClientConversation = {
   memberCount: number
   members?: ClientConversationMember[]
   name: string
+  notificationMuted: boolean
   pinned: boolean
   projects?: ClientConversationProject[]
   topic?: ClientConversationTopic

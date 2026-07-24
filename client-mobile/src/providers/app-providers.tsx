@@ -15,6 +15,7 @@ import { createClientQueryClient } from "@/data/query"
 import { AuthProvider } from "@/features/auth/auth-context"
 import { ServerProvider } from "@/features/servers/server-context"
 import { ClientDataProvider } from "@/providers/client-data-provider"
+import { AppBlurTargetProvider } from "@/providers/app-blur-target"
 import { RealtimeProvider } from "@/providers/realtime-provider"
 
 export function AppProviders({ children }: React.PropsWithChildren) {
@@ -39,15 +40,17 @@ export function AppProviders({ children }: React.PropsWithChildren) {
             defaultTheme={theme.tamaguiTheme}
           >
             <ToastProvider duration={3000} label="通知">
-              <YStack bg="$background" flex={1}>
-                <ServerProvider>
-                  <AuthProvider>
-                    <ClientDataProvider>
-                      <RealtimeProvider>{children}</RealtimeProvider>
-                    </ClientDataProvider>
-                  </AuthProvider>
-                </ServerProvider>
-              </YStack>
+              <AppBlurTargetProvider>
+                <YStack bg="$background" flex={1}>
+                  <ServerProvider>
+                    <AuthProvider>
+                      <ClientDataProvider>
+                        <RealtimeProvider>{children}</RealtimeProvider>
+                      </ClientDataProvider>
+                    </AuthProvider>
+                  </ServerProvider>
+                </YStack>
+              </AppBlurTargetProvider>
               <CurrentAppToast />
               <AppToastViewport />
             </ToastProvider>

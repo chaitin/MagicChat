@@ -9,7 +9,9 @@ import { useMemo } from "react"
 
 import {
   fetchConversationMessages,
+  forwardConversationMessages,
   markConversationRead,
+  revokeConversationMessage,
   sendConversationFileMessage,
   sendConversationImageMessage,
   sendConversationTextMessage,
@@ -88,7 +90,11 @@ export function useSendConversationTextMessage(
   return useSendConversationMessageMutation(
     server,
     conversationId,
-    (input: { clientMessageId: string; content: string }) =>
+    (input: {
+      clientMessageId: string
+      content: string
+      replyToMessageId?: string
+    }) =>
       sendConversationTextMessage(server.url, conversationId, input)
   )
 }
@@ -124,7 +130,11 @@ export function useSendConversationFileMessage(
   return useSendConversationMessageMutation(
     server,
     conversationId,
-    (input: { clientMessageId: string; file: ClientMessageUpload }) =>
+    (input: {
+      clientMessageId: string
+      file: ClientMessageUpload
+      replyToMessageId?: string
+    }) =>
       sendConversationFileMessage(server.url, conversationId, input)
   )
 }
@@ -136,7 +146,11 @@ export function useSendConversationImageMessage(
   return useSendConversationMessageMutation(
     server,
     conversationId,
-    (input: { clientMessageId: string; image: ClientMessageUpload }) =>
+    (input: {
+      clientMessageId: string
+      image: ClientMessageUpload
+      replyToMessageId?: string
+    }) =>
       sendConversationImageMessage(server.url, conversationId, input)
   )
 }
@@ -151,9 +165,75 @@ export function useSendConversationVoiceMessage(
     (input: {
       clientMessageId: string
       durationMS: number
+      replyToMessageId?: string
       voice: ClientMessageUpload
     }) => sendConversationVoiceMessage(server.url, conversationId, input)
   )
+}
+
+export function useRevokeConversationMessage(
+  server: AuthenticatedTarget,
+  conversationId: string
+) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (messageId: string) =>
+      revokeConversationMessage(server.url, conversationId, messageId),
+    onSuccess: ({ message, systemMessage }) => {
+      queryClient.setQueryData<InfiniteData<ClientMessageList, number | null>>(
+        queryKeys.conversationMessages(server, conversationId),
+        (current) => upsertMessages(current, [message, systemMessage])
+      )
+      updateCachedTopicSourcePreview(queryClient, server, message)
+      updateCachedTopicSourcePreview(queryClient, server, systemMessage)
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations(server),
+      })
+    },
+  })
+}
+
+export function useForwardConversationMessage(
+  server: AuthenticatedTarget,
+  sourceConversationId: string
+) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: {
+      clientForwardId: string
+      messageId: string
+      targetConversationIds: string[]
+    }) =>
+      forwardConversationMessages(
+        server.url,
+        sourceConversationId,
+        {
+          clientForwardId: input.clientForwardId,
+          messageIds: [input.messageId],
+          targetConversationIds: input.targetConversationIds,
+        }
+      ),
+    onSuccess: (result) => {
+      for (const target of result.results) {
+        if (target.status !== "sent") continue
+
+        queryClient.setQueryData<
+          InfiniteData<ClientMessageList, number | null>
+        >(
+          queryKeys.conversationMessages(server, target.conversationId),
+          (current) => upsertMessages(current, target.messages)
+        )
+        for (const message of target.messages) {
+          updateCachedTopicSourcePreview(queryClient, server, message)
+        }
+      }
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations(server),
+      })
+    },
+  })
 }
 
 function useSendConversationMessageMutation<TInput>(
@@ -168,7 +248,7 @@ function useSendConversationMessageMutation<TInput>(
     onSuccess: (message) => {
       queryClient.setQueryData<InfiniteData<ClientMessageList, number | null>>(
         queryKeys.conversationMessages(server, conversationId),
-        (current) => appendMessage(current, message)
+        (current) => upsertMessages(current, [message])
       )
       updateCachedTopicSourcePreview(queryClient, server, message)
       void queryClient.invalidateQueries({
@@ -289,25 +369,40 @@ function preserveNewerMessageReactions(
   return replaceEqualDeep(current, merged)
 }
 
-function appendMessage(
+function upsertMessages(
   current: InfiniteData<ClientMessageList, number | null> | undefined,
-  message: ClientMessage
+  messages: ClientMessage[]
 ) {
-  if (!current || current.pages.length === 0) {
+  if (!current || current.pages.length === 0 || messages.length === 0) {
     return current
   }
 
+  const updates = new Map(messages.map((message) => [message.id, message]))
+  const found = new Set<string>()
+  const pages = current.pages.map((page) => ({
+    ...page,
+    messages: page.messages.map((message) => {
+      const update = updates.get(message.id)
+      if (!update) return message
+
+      found.add(message.id)
+      return update
+    }),
+  }))
+  const missing = messages.filter((message) => !found.has(message.id))
+  const newestSeq = messages.reduce(
+    (currentNewest, message) => Math.max(currentNewest, message.seq),
+    pages[0]?.page.newestSeq ?? 0
+  )
+
   return {
     ...current,
-    pages: current.pages.map((page, index) =>
+    pages: pages.map((page, index) =>
       index === 0
         ? {
             ...page,
-            messages: mergeMessages([...page.messages, message]),
-            page: {
-              ...page.page,
-              newestSeq: Math.max(page.page.newestSeq, message.seq),
-            },
+            messages: mergeMessages([...page.messages, ...missing]),
+            page: { ...page.page, newestSeq },
           }
         : page
     ),

@@ -1,4 +1,6 @@
-import { FlatList, RefreshControl, StyleSheet } from "react-native"
+import * as Haptics from "expo-haptics"
+import { useRef } from "react"
+import { FlatList, Platform, RefreshControl, StyleSheet } from "react-native"
 import { ListItem, SizableText, useTheme } from "tamagui"
 
 import { ContentState } from "@/components/feedback/content-state"
@@ -7,12 +9,14 @@ import { ListItemContent } from "@/components/lists/list-item-content"
 import type { ServerTarget } from "@/data/query"
 import { ConversationAvatar } from "@/features/messages/conversation-avatar"
 import type { ConversationListItemModel } from "@/features/messages/conversation-list-model"
+import { ConversationPreferenceIndicators } from "@/features/messages/conversation-preference-indicators"
 
 export function ConversationList({
   errorMessage,
   hasKeyword,
   isRefreshing,
   items,
+  onConversationLongPress,
   onConversationPress,
   onRefresh,
   server,
@@ -21,6 +25,7 @@ export function ConversationList({
   hasKeyword: boolean
   isRefreshing: boolean
   items: ConversationListItemModel[]
+  onConversationLongPress: (item: ConversationListItemModel) => void
   onConversationPress: (conversationId: string) => void
   onRefresh: () => void
   server: ServerTarget
@@ -53,6 +58,7 @@ export function ConversationList({
       renderItem={({ item }) => (
         <ConversationListItem
           item={item}
+          onLongPress={() => onConversationLongPress(item)}
           onPress={() => onConversationPress(item.conversation.id)}
           server={server}
         />
@@ -65,14 +71,26 @@ export function ConversationList({
 
 function ConversationListItem({
   item,
+  onLongPress,
   onPress,
   server,
 }: {
   item: ConversationListItemModel
+  onLongPress: () => void
   onPress: () => void
   server: ServerTarget
 }) {
   const { conversation } = item
+  const didLongPressRef = useRef(false)
+
+  function handlePress() {
+    if (didLongPressRef.current) {
+      didLongPressRef.current = false
+      return
+    }
+
+    onPress()
+  }
 
   return (
     <ListItem
@@ -87,7 +105,15 @@ function ConversationListItem({
           }
         />
       }
-      onPress={onPress}
+      onLongPress={() => {
+        didLongPressRef.current = true
+        void performLongPressHaptic()
+        onLongPress()
+      }}
+      onPress={handlePress}
+      onPressIn={() => {
+        didLongPressRef.current = false
+      }}
       pressStyle={{ bg: "$backgroundPress" }}
       size="$4"
       title={
@@ -99,13 +125,33 @@ function ConversationListItem({
               <SizableText color="$red10" fontWeight="600" size="$2">
                 [有人 @ 我]
               </SizableText>
-            ) : undefined
+              ) : undefined
+          }
+          subtitleTrailing={
+            <ConversationPreferenceIndicators conversation={conversation} />
           }
           title={conversation.name}
         />
       }
     />
   )
+}
+
+async function performLongPressHaptic() {
+  if (Platform.OS === "web") return
+
+  try {
+    if (Platform.OS === "android") {
+      await Haptics.performAndroidHapticsAsync(
+        Haptics.AndroidHaptics.Long_Press
+      )
+      return
+    }
+
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+  } catch {
+    // Haptics are optional feedback and must not block opening the action sheet.
+  }
 }
 
 const styles = StyleSheet.create({

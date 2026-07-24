@@ -59,10 +59,15 @@ import {
 } from "@/features/conversation/message-upload-picker"
 import { MessageUploadDialog } from "@/features/conversation/message-upload-dialog"
 import { MessageVoiceDialog } from "@/features/conversation/message-voice-dialog"
+import {
+  MessageReplyPreview,
+  type MessageReplyTarget,
+} from "@/features/conversation/message-reply-preview"
 import { useVoiceMessageRecorder } from "@/features/conversation/use-voice-message-recorder"
 
 export type MessageComposerHandle = {
   dismissAccessory: () => void
+  focus: () => void
   insertMention: (target: MentionSelection) => void
 }
 
@@ -85,18 +90,22 @@ export const MessageComposer = forwardRef<
   {
     disabled: boolean
     mentionCandidates: MentionCandidate[]
+    onClearReply: () => void
     onSend: (content: string) => Promise<boolean>
     onSendUpload: (selection: PreparedClientMessageUpload) => Promise<boolean>
     onSendVoice: (recording: PreparedClientVoiceMessage) => Promise<boolean>
+    replyTarget: MessageReplyTarget | null
     server: ServerTarget
   }
 >(function MessageComposer(
   {
     disabled,
     mentionCandidates,
+    onClearReply,
     onSend,
     onSendUpload,
     onSendVoice,
+    replyTarget,
     server,
   },
   ref
@@ -193,6 +202,12 @@ export const MessageComposer = forwardRef<
   useImperativeHandle(ref, () => ({
     dismissAccessory() {
       setAccessoryMode(null)
+    },
+    focus() {
+      setVoiceMode(false)
+      setAccessoryMode(null)
+      setMentionPickerOpen(false)
+      focusInputAfterRender()
     },
     insertMention(target) {
       if (!disabled) insertMentionTarget(target)
@@ -491,6 +506,9 @@ export const MessageComposer = forwardRef<
   return (
     <>
       <YStack bg="$background">
+        {replyTarget ? (
+          <MessageReplyPreview onClear={onClearReply} target={replyTarget} />
+        ) : null}
         <XStack
           height={composerPanelHeight}
           items="center"

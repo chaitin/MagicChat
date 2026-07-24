@@ -2,6 +2,7 @@ export const REALTIME_PROTOCOL_VERSION = 1
 
 export const realtimeEvents = {
   conversationMemberMentioned: "conversation.member_mentioned",
+  conversationMuteUpdated: "conversation.mute_updated",
   conversationPinUpdated: "conversation.pin_updated",
   conversationRemoved: "conversation.removed",
   messageCreated: "message.created",

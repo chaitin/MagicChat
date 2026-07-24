@@ -80,6 +80,10 @@ export function MessageBubble({
     message.body.type === "markdown" ||
     message.body.type === "revoked" ||
     message.body.type === "unsupported"
+  const messageSelectionNativeId =
+    message.body.type === "text" || message.body.type === "markdown"
+      ? `magicchat-message:${message.canRevoke ? "1" : "0"}:${message.id}`
+      : undefined
   const sender = message.sender
   const flushImageBubble =
     message.body.type === "image" && !message.replyTo && !message.topic
@@ -152,6 +156,8 @@ export function MessageBubble({
         </XStack>
 
         <View
+          collapsable={false}
+          nativeID={messageSelectionNativeId}
           onTouchCancel={
             showsBubblePressFeedback
               ? () => setBubblePressed(false)
