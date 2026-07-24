@@ -108,6 +108,11 @@ func (s *Service) createGroup(ctx context.Context, actor store.User, name string
 		if err := tx.Create(&conversation).Error; err != nil {
 			return err
 		}
+		if s.autoNames != nil {
+			if err := s.autoNames.CreateTask(tx, conversation.ID, now); err != nil {
+				return err
+			}
+		}
 		systemMessageSeq := conversation.LastMessageSeq
 		if len(members)+len(apps) > 0 {
 			systemMessageSeq++

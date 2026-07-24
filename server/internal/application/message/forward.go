@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	fileapp "app/internal/application/file"
+	"app/internal/application/groupautoname"
 	"app/internal/store"
 
 	"github.com/google/uuid"
@@ -488,6 +489,7 @@ func (s *Service) createForwardedMessagesForTarget(ctx context.Context, user sto
 	var createdMessages []store.Message
 	var memberUserIDs []string
 	var appEvents []AppEvent
+	var autoNameEvent *groupautoname.Event
 	appEventLockHeld := false
 
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -569,17 +571,25 @@ func (s *Service) createForwardedMessagesForTarget(ctx context.Context, user sto
 				return err
 			}
 			memberUserIDs = ids
+			needsAppEventLock := conversation.Kind == store.ConversationKindApp || conversation.Kind == store.ConversationKindTopic ||
+				conversation.Kind == store.ConversationKindGroup && s.autoNames != nil
+			if needsAppEventLock && s.appEventLocker != nil {
+				s.appEventLocker.Lock()
+				appEventLockHeld = true
+			}
 			if conversation.Kind == store.ConversationKindApp || conversation.Kind == store.ConversationKindTopic {
-				if s.appEventLocker != nil {
-					s.appEventLocker.Lock()
-					appEventLockHeld = true
-				}
 				for _, message := range createdMessages {
 					events, err := createAppMessageEventOutbox(tx, access.Context, user, message)
 					if err != nil {
 						return err
 					}
 					appEvents = append(appEvents, events...)
+				}
+			}
+			if s.autoNames != nil {
+				autoNameEvent, err = s.autoNames.RecordMessages(tx, conversation, len(createdMessages), now)
+				if err != nil {
+					return err
 				}
 			}
 		}
@@ -620,6 +630,9 @@ func (s *Service) createForwardedMessagesForTarget(ctx context.Context, user sto
 	}
 	if s.appEvents != nil {
 		s.appEvents.DeliverAppEvents(ctx, appEvents)
+	}
+	if s.autoNames != nil {
+		s.autoNames.Deliver(ctx, autoNameEvent)
 	}
 	return messages, nil
 }

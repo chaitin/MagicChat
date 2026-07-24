@@ -28,6 +28,16 @@ type updateInfoSettingsRequest struct {
 	OrganizationName string `json:"organization_name" example:"长亭科技"`
 }
 
+type assistantSettingsResponse struct {
+	AutoGroupNamingEnabled      bool `json:"auto_group_naming_enabled" example:"true"`
+	AutoGroupNamingMessageCount int  `json:"auto_group_naming_message_count" example:"5"`
+}
+
+type updateAssistantSettingsRequest struct {
+	AutoGroupNamingEnabled      *bool `json:"auto_group_naming_enabled"`
+	AutoGroupNamingMessageCount int   `json:"auto_group_naming_message_count"`
+}
+
 type successEnvelope struct {
 	Success bool `json:"success" example:"true"`
 	Data    any  `json:"data"`
@@ -50,6 +60,54 @@ func NewSettingsAPI(settings settingsapp.AdminService) *SettingsAPI {
 func (a *SettingsAPI) RegisterRoutes(group *echo.Group) {
 	group.GET("/settings/info", a.getInfoSettings)
 	group.PUT("/settings/info", a.updateInfoSettings)
+	group.GET("/settings/assistant", a.getAssistantSettings)
+	group.PUT("/settings/assistant", a.updateAssistantSettings)
+}
+
+// getAssistantSettings godoc
+//
+// @Summary 获取茉莉设置
+// @Description 管理员读取群聊自动命名开关和消息条数。
+// @Tags 管理员设置
+// @Produce json
+// @Success 200 {object} successEnvelope{data=assistantSettingsResponse}
+// @Failure 401 {object} errorEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/admin/settings/assistant [get]
+func (a *SettingsAPI) getAssistantSettings(c echo.Context) error {
+	value, err := a.settings.GetAssistant(c.Request().Context())
+	if err != nil {
+		return writeSettingsError(c, err)
+	}
+	return writeSuccess(c, http.StatusOK, newAssistantSettingsResponse(value))
+}
+
+// updateAssistantSettings godoc
+//
+// @Summary 更新茉莉设置
+// @Description 管理员更新群聊自动命名开关和消息条数。
+// @Tags 管理员设置
+// @Accept json
+// @Produce json
+// @Param body body updateAssistantSettingsRequest true "茉莉设置"
+// @Success 200 {object} successEnvelope{data=assistantSettingsResponse}
+// @Failure 400 {object} errorEnvelope
+// @Failure 401 {object} errorEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/admin/settings/assistant [put]
+func (a *SettingsAPI) updateAssistantSettings(c echo.Context) error {
+	var req updateAssistantSettingsRequest
+	if err := c.Bind(&req); err != nil || req.AutoGroupNamingEnabled == nil {
+		return writeFailure(c, http.StatusBadRequest, string(settingsapp.CodeInvalidRequest), "请求格式错误")
+	}
+	value, err := a.settings.UpdateAssistant(c.Request().Context(), settingsapp.UpdateAssistantSettingsCommand{
+		AutoGroupNamingEnabled:      *req.AutoGroupNamingEnabled,
+		AutoGroupNamingMessageCount: req.AutoGroupNamingMessageCount,
+	})
+	if err != nil {
+		return writeSettingsError(c, err)
+	}
+	return writeSuccess(c, http.StatusOK, newAssistantSettingsResponse(value))
 }
 
 // getInfoSettings godoc
@@ -103,6 +161,13 @@ func newInfoSettingsResponse(value settingsapp.Settings) infoSettingsResponse {
 		AppName:             value.AppName,
 		OrganizationName:    value.OrganizationName,
 		ThirdPartyProviders: []publicThirdPartyProviderResponse{},
+	}
+}
+
+func newAssistantSettingsResponse(value settingsapp.AssistantSettings) assistantSettingsResponse {
+	return assistantSettingsResponse{
+		AutoGroupNamingEnabled:      value.AutoGroupNamingEnabled,
+		AutoGroupNamingMessageCount: value.AutoGroupNamingMessageCount,
 	}
 }
 

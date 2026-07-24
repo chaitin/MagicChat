@@ -111,6 +111,11 @@ func (s *Service) updateGroupField(db *gorm.DB, actor store.User, conversationID
 			if !canManage(current.Role) {
 				return ErrAccessDenied
 			}
+			if s.autoNames != nil {
+				if err := s.autoNames.SkipTask(tx, conversationID, s.now().UTC()); err != nil {
+					return err
+				}
+			}
 			if conversation.Name == value {
 				ids, err := loadActiveUserIDs(tx, conversationID)
 				if err != nil {
@@ -471,6 +476,11 @@ func (s *Service) dissolveAsMember(
 					"posting_policy": store.ConversationPostingPolicyMuted, "updated_at": now,
 				}).Error; err != nil {
 				return err
+			}
+			if s.autoNames != nil {
+				if err := s.autoNames.SkipTask(tx, conversationID, now); err != nil {
+					return err
+				}
 			}
 			return nil
 		})

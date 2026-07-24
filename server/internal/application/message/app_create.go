@@ -7,6 +7,7 @@ import (
 
 	appapp "app/internal/application/app"
 	"app/internal/application/conversationaccess"
+	"app/internal/application/groupautoname"
 	"app/internal/store"
 
 	"github.com/google/uuid"
@@ -22,19 +23,25 @@ func (s *Service) CreateAsApp(ctx context.Context, cmd CreateAsAppCommand) (Crea
 	memberUserIDs := []string{}
 	mentionedUserIDs := []string{}
 	choiceUserIDs := []string{}
+	var autoNameEvent *groupautoname.Event
+	appEventLockHeld := false
 
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		access, _, _, err := requireAppConversationAccess(tx, cmd.ConversationID, cmd.AppID, true, false)
+		if err != nil {
+			return err
+		}
+		conversation := access.Conversation
+		if conversation.Kind == store.ConversationKindGroup && s.autoNames != nil && s.appEventLocker != nil {
+			s.appEventLocker.Lock()
+			appEventLockHeld = true
+		}
 		if _, err := appapp.LockUsableApp(tx, cmd.AppID); err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return errConversationAccessDenied
 			}
 			return err
 		}
-		access, _, _, err := requireAppConversationAccess(tx, cmd.ConversationID, cmd.AppID, true, false)
-		if err != nil {
-			return err
-		}
-		conversation := access.Conversation
 		if err := validateAppConversationSendable(tx, access, cmd.AppID); err != nil {
 			return err
 		}
@@ -86,8 +93,17 @@ func (s *Service) CreateAsApp(ctx context.Context, cmd CreateAsAppCommand) (Crea
 			return err
 		}
 		created = true
+		if s.autoNames != nil {
+			autoNameEvent, err = s.autoNames.RecordMessages(tx, conversation, 1, now)
+			if err != nil {
+				return err
+			}
+		}
 		return nil
 	})
+	if appEventLockHeld {
+		defer s.appEventLocker.Unlock()
+	}
 	if err != nil {
 		return CreateResult{}, mapAppCreateError(err)
 	}
@@ -96,6 +112,9 @@ func (s *Service) CreateAsApp(ctx context.Context, cmd CreateAsAppCommand) (Crea
 		s.notifications.PublishSharedMessageCreated(ctx, memberUserIDs, converted)
 		s.notifications.PublishMembersMentioned(ctx, mentionedUserIDs, message.ConversationID, message.Seq)
 		s.notifications.PublishMembersChoiceReceived(ctx, choiceUserIDs, message.ConversationID, message.Seq)
+	}
+	if created && s.autoNames != nil {
+		s.autoNames.Deliver(ctx, autoNameEvent)
 	}
 	return CreateResult{Created: created, Message: converted}, nil
 }
@@ -109,6 +128,8 @@ func (s *Service) CreateDelegated(ctx context.Context, cmd CreateDelegatedComman
 	memberUserIDs := []string{}
 	mentionedUserIDs := []string{}
 	choiceUserIDs := []string{}
+	var autoNameEvent *groupautoname.Event
+	appEventLockHeld := false
 
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		access, err := loadUserConversationAccess(tx, cmd.ConversationID, cmd.AccountID, true)
@@ -167,8 +188,21 @@ func (s *Service) CreateDelegated(ctx context.Context, cmd CreateDelegatedComman
 			return err
 		}
 		created = true
+		if s.autoNames != nil {
+			if conversation.Kind == store.ConversationKindGroup && s.appEventLocker != nil {
+				s.appEventLocker.Lock()
+				appEventLockHeld = true
+			}
+			autoNameEvent, err = s.autoNames.RecordMessages(tx, conversation, 1, now)
+			if err != nil {
+				return err
+			}
+		}
 		return nil
 	})
+	if appEventLockHeld {
+		defer s.appEventLocker.Unlock()
+	}
 	if err != nil {
 		return CreateResult{}, mapAppCreateError(err)
 	}
@@ -177,6 +211,9 @@ func (s *Service) CreateDelegated(ctx context.Context, cmd CreateDelegatedComman
 		s.notifications.PublishSharedMessageCreated(ctx, memberUserIDs, converted)
 		s.notifications.PublishMembersMentioned(ctx, mentionedUserIDs, message.ConversationID, message.Seq)
 		s.notifications.PublishMembersChoiceReceived(ctx, choiceUserIDs, message.ConversationID, message.Seq)
+	}
+	if created && s.autoNames != nil {
+		s.autoNames.Deliver(ctx, autoNameEvent)
 	}
 	return CreateResult{Created: created, Message: converted}, nil
 }

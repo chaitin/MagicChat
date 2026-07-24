@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"app/internal/application/conversationaccess"
+	"app/internal/application/runastrigger"
 	"app/internal/store"
 
 	"gorm.io/gorm"
@@ -57,57 +58,19 @@ func (s *Service) AuthorizeAppConversationSend(ctx context.Context, cmd AppConve
 
 func (s *Service) AuthorizeRunAsTrigger(ctx context.Context, cmd RunAsTriggerCommand) error {
 	db := s.db.WithContext(ctx)
-	var conversationID string
-	triggerNotFound := false
-	if store.MessagePartitioningEnabled(db) {
-		var registry store.MessageRegistry
-		err := applyOnlineStoredMessageWindow(db).Select("conversation_id").First(
-			&registry,
-			"id = ? AND sender_type = ? AND sender_id = ? AND deleted_at IS NULL",
-			cmd.TriggerMessageID, cmd.ActorType, cmd.ActorID,
-		).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			triggerNotFound = true
-		} else if err != nil {
-			return internalError(err)
-		} else {
-			conversationID = registry.ConversationID
-		}
-	} else {
-		var trigger store.Message
-		err := applyOnlineStoredMessageWindow(db).Select("conversation_id").First(
-			&trigger,
-			"id = ? AND sender_type = ? AND sender_id = ? AND deleted_at IS NULL",
-			cmd.TriggerMessageID, cmd.ActorType, cmd.ActorID,
-		).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			triggerNotFound = true
-		} else if err != nil {
-			return internalError(err)
-		} else {
-			conversationID = trigger.ConversationID
-		}
+	result, err := runastrigger.Authorize(db, runastrigger.Command{
+		ActorID: cmd.ActorID, ActorType: cmd.ActorType,
+		AuthorizationConversationID: cmd.AuthorizationConversationID,
+		TriggerMessageID:            cmd.TriggerMessageID,
+	})
+	if errors.Is(err, runastrigger.ErrUnauthorized) {
+		return forbidden("触发消息无效", err)
 	}
-	if triggerNotFound && cmd.ActorType == store.MessageSenderTypeUser {
-		var response store.MessageChoiceResponse
-		err := db.Select("conversation_id").First(
-			&response, "id = ? AND user_id = ?", cmd.TriggerMessageID, cmd.ActorID,
-		).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return forbidden("触发消息无效", err)
-		}
-		if err != nil {
-			return internalError(err)
-		}
-		conversationID = response.ConversationID
-	} else if triggerNotFound {
-		return forbidden("触发消息无效", gorm.ErrRecordNotFound)
+	if err != nil {
+		return internalError(err)
 	}
-	if cmd.AuthorizationConversationID != "" && conversationID != cmd.AuthorizationConversationID {
-		return forbidden("触发消息无效", errConversationAccessDenied)
-	}
-	_, err := s.AuthorizeAppConversation(ctx, AppConversationAccessCommand{
-		AppID: cmd.AppID, ConversationID: conversationID,
+	_, err = s.AuthorizeAppConversation(ctx, AppConversationAccessCommand{
+		AppID: cmd.AppID, ConversationID: result.ConversationID,
 	})
 	return err
 }

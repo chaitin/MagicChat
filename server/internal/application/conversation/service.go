@@ -5,6 +5,7 @@ import (
 	"time"
 
 	fileapp "app/internal/application/file"
+	"app/internal/application/groupautoname"
 	"app/internal/config"
 	"app/internal/store"
 
@@ -19,6 +20,7 @@ type Dependencies struct {
 	Files          fileapp.PublicUploader
 	Projects       ProjectReader
 	Notifications  NotificationPort
+	AutoNames      *groupautoname.Service
 	Now            func() time.Time
 }
 
@@ -30,6 +32,7 @@ type Service struct {
 	files          fileapp.PublicUploader
 	projects       ProjectReader
 	notifications  NotificationPort
+	autoNames      *groupautoname.Service
 	now            func() time.Time
 }
 
@@ -41,7 +44,7 @@ func NewService(deps Dependencies) *Service {
 	return &Service{
 		appEvents: deps.AppEvents, appEventLocker: deps.AppEventLocker,
 		db: deps.DB, apps: deps.Apps, files: deps.Files, projects: deps.Projects,
-		notifications: deps.Notifications, now: now,
+		notifications: deps.Notifications, autoNames: deps.AutoNames, now: now,
 	}
 }
 

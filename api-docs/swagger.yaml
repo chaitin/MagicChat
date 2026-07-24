@@ -69,6 +69,15 @@ definitions:
         example: admin
         type: string
     type: object
+  admin.assistantSettingsResponse:
+    properties:
+      auto_group_naming_enabled:
+        example: true
+        type: boolean
+      auto_group_naming_message_count:
+        example: 5
+        type: integer
+    type: object
   admin.createUserRequest:
     properties:
       email:
@@ -307,6 +316,13 @@ definitions:
         type: integer
       type:
         type: string
+    type: object
+  admin.updateAssistantSettingsRequest:
+    properties:
+      auto_group_naming_enabled:
+        type: boolean
+      auto_group_naming_message_count:
+        type: integer
     type: object
   admin.updateEmailLoginSettingsRequest:
     properties:
@@ -2223,6 +2239,70 @@ paths:
       summary: 获取管理仪表盘统计
       tags:
       - 管理仪表盘
+  /api/admin/settings/assistant:
+    get:
+      description: 管理员读取群聊自动命名开关和消息条数。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/admin.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/admin.assistantSettingsResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/admin.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/admin.errorEnvelope'
+      summary: 获取茉莉设置
+      tags:
+      - 管理员设置
+    put:
+      consumes:
+      - application/json
+      description: 管理员更新群聊自动命名开关和消息条数。
+      parameters:
+      - description: 茉莉设置
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/admin.updateAssistantSettingsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/admin.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/admin.assistantSettingsResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/admin.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/admin.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/admin.errorEnvelope'
+      summary: 更新茉莉设置
+      tags:
+      - 管理员设置
   /api/admin/settings/email-login:
     get:
       description: 管理员读取邮箱验证码登录和完整 SMTP 设置，包括已保存的 SMTP 密码。

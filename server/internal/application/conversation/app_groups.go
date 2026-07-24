@@ -8,6 +8,8 @@ import (
 	"time"
 
 	appapp "app/internal/application/app"
+	"app/internal/application/runastrigger"
+	"app/internal/appregistry"
 	"app/internal/store"
 
 	"github.com/google/uuid"
@@ -55,6 +57,29 @@ type ApplicationGroupMembersResult struct {
 type ApplicationGroupMutationResult struct {
 	Conversation ApplicationGroupDetail
 	Message      *Message
+}
+
+const (
+	AssistantGroupRenameModeExplicit = "explicit"
+	AssistantGroupRenameModeAuto     = "auto"
+)
+
+type RenameGroupAsAssistantCommand struct {
+	AppID                       string
+	ActorUserID                 string
+	AuthorizationConversationID string
+	ConversationID              string
+	Mode                        string
+	Name                        string
+	TaskVersion                 int
+	TriggerMessageID            string
+}
+
+type AssistantGroupRenameResult struct {
+	Applied        bool
+	ConversationID string
+	Message        *Message
+	Name           string
 }
 
 type CreateGroupAsApplicationCommand struct {
@@ -169,6 +194,11 @@ func (s *Service) CreateGroupAsApplication(ctx context.Context, cmd CreateGroupA
 		}
 		if err := tx.Create(&conversation).Error; err != nil {
 			return err
+		}
+		if s.autoNames != nil {
+			if err := s.autoNames.CreateTask(tx, conversation.ID, now); err != nil {
+				return err
+			}
 		}
 		members := make([]store.ConversationMember, 0, len(users)+len(apps)+1)
 		members = append(members, store.ConversationMember{
@@ -618,6 +648,11 @@ func (s *Service) UpdateGroupNameAsApplication(ctx context.Context, cmd UpdateGr
 		if !canManage(current.Role) {
 			return ErrAccessDenied
 		}
+		if s.autoNames != nil {
+			if err := s.autoNames.SkipTask(tx, conversationID, s.now().UTC()); err != nil {
+				return err
+			}
+		}
 		if conversation.Name == name {
 			ids, err := loadActiveUserIDs(tx, conversationID)
 			if err != nil {
@@ -652,6 +687,145 @@ func (s *Service) UpdateGroupNameAsApplication(ctx context.Context, cmd UpdateGr
 		s.notifications.PublishConversationMessage(ctx, userIDs, newMessage(*storedMessage))
 	}
 	return s.loadApplicationGroupMutationResult(ctx, appID, conversationID, storedMessage)
+}
+
+func (s *Service) RenameGroupAsAssistant(ctx context.Context, cmd RenameGroupAsAssistantCommand) (AssistantGroupRenameResult, error) {
+	appID, conversationID, err := normalizeApplicationGroupSelector(cmd.AppID, cmd.ConversationID)
+	if err != nil {
+		return AssistantGroupRenameResult{}, err
+	}
+	if !appregistry.IsAIAssistantAppID(appID) {
+		return AssistantGroupRenameResult{}, forbidden("仅茉莉可以调用该能力", ErrAccessDenied)
+	}
+	name, err := normalizeGroupName(cmd.Name)
+	if err != nil {
+		return AssistantGroupRenameResult{}, invalidRequest(err.Error(), err)
+	}
+	mode := strings.TrimSpace(cmd.Mode)
+	if mode != AssistantGroupRenameModeExplicit && mode != AssistantGroupRenameModeAuto {
+		return AssistantGroupRenameResult{}, invalidRequest("改名模式错误", nil)
+	}
+
+	var actor store.App
+	var conversation store.Conversation
+	var storedMessage *store.Message
+	userIDs := []string{}
+	applied := false
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		actor, err = appapp.LockUsableApp(tx, appID)
+		if err != nil {
+			return err
+		}
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&conversation, "id = ?", conversationID).Error; err != nil {
+			if mode == AssistantGroupRenameModeAuto && errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil
+			}
+			return err
+		}
+		if conversation.Kind != store.ConversationKindGroup {
+			return ErrAccessDenied
+		}
+		if conversation.Status != store.ConversationStatusActive {
+			if mode == AssistantGroupRenameModeAuto {
+				return nil
+			}
+			return ErrAccessDenied
+		}
+
+		var task store.ConversationAutoNameTask
+		taskErr := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&task, "conversation_id = ?", conversationID).Error
+		if mode == AssistantGroupRenameModeAuto {
+			if taskErr != nil {
+				if errors.Is(taskErr, gorm.ErrRecordNotFound) {
+					return nil
+				}
+				return taskErr
+			}
+			if task.Status != store.ConversationAutoNameStatusPending || task.Version != cmd.TaskVersion || task.TriggeredVersion != cmd.TaskVersion {
+				return nil
+			}
+			var settings store.AppSettings
+			settingsErr := tx.Clauses(clause.Locking{Strength: "SHARE"}).Select("assistant_auto_group_naming_enabled").
+				First(&settings, "id = ?", store.AppSettingsID).Error
+			if settingsErr != nil && !errors.Is(settingsErr, gorm.ErrRecordNotFound) {
+				return settingsErr
+			}
+			if settingsErr == nil && !settings.AssistantAutoGroupNamingEnabled {
+				return nil
+			}
+		} else {
+			if _, err := runastrigger.Authorize(tx, runastrigger.Command{
+				ActorID: cmd.ActorUserID, ActorType: store.MessageSenderTypeUser,
+				AuthorizationConversationID: cmd.AuthorizationConversationID,
+				TriggerMessageID:            cmd.TriggerMessageID,
+			}); err != nil {
+				if errors.Is(err, runastrigger.ErrUnauthorized) {
+					return ErrAccessDenied
+				}
+				return err
+			}
+			var member store.ConversationMember
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where(
+				"conversation_id = ? AND member_type = ? AND member_id = ? AND left_at IS NULL",
+				conversationID, store.ConversationMemberTypeUser, strings.TrimSpace(cmd.ActorUserID),
+			).First(&member).Error; err != nil {
+				return err
+			}
+			if member.Role != store.ConversationMemberRoleOwner && member.Role != store.ConversationMemberRoleAdmin {
+				return ErrAccessDenied
+			}
+		}
+		if mode == AssistantGroupRenameModeExplicit && taskErr == nil {
+			if err := tx.Model(&store.ConversationAutoNameTask{}).Where("conversation_id = ?", conversationID).
+				Updates(map[string]any{"status": store.ConversationAutoNameStatusSkipped, "updated_at": s.now().UTC()}).Error; err != nil {
+				return err
+			}
+		} else if mode == AssistantGroupRenameModeExplicit && !errors.Is(taskErr, gorm.ErrRecordNotFound) {
+			return taskErr
+		}
+
+		now := s.now().UTC()
+		if conversation.Name == name {
+			if mode == AssistantGroupRenameModeAuto {
+				if err := tx.Model(&store.ConversationAutoNameTask{}).Where("conversation_id = ?", conversationID).
+					Updates(map[string]any{"status": store.ConversationAutoNameStatusCompleted, "updated_at": now}).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		if err := tx.Model(&store.Conversation{}).Where("id = ?", conversationID).
+			Updates(map[string]any{"name": name, "updated_at": now}).Error; err != nil {
+			return err
+		}
+		conversation.Name = name
+		conversation.UpdatedAt = now
+		created, err := createGroupNameUpdatedByApplicationSystemMessage(tx, &conversation, actor, name, now)
+		if err != nil {
+			return err
+		}
+		storedMessage = &created
+		applied = true
+		if mode == AssistantGroupRenameModeAuto {
+			if err := tx.Model(&store.ConversationAutoNameTask{}).Where("conversation_id = ?", conversationID).
+				Updates(map[string]any{"status": store.ConversationAutoNameStatusCompleted, "updated_at": now}).Error; err != nil {
+				return err
+			}
+		}
+		userIDs, err = loadActiveUserIDs(tx, conversationID)
+		return err
+	})
+	if err != nil {
+		return AssistantGroupRenameResult{}, mapApplicationGroupMutationError(err)
+	}
+	resultMessage := newOptionalMessage(storedMessage)
+	if resultMessage != nil && s.notifications != nil {
+		s.notifications.PublishConversationMessage(ctx, userIDs, *resultMessage)
+	}
+	return AssistantGroupRenameResult{
+		Applied: applied, ConversationID: conversationID,
+		Message: resultMessage, Name: name,
+	}, nil
 }
 
 func (s *Service) DissolveGroupAsApplication(ctx context.Context, cmd DissolveGroupAsApplicationCommand) (DissolveResult, error) {

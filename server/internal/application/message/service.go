@@ -1,6 +1,7 @@
 package message
 
 import (
+	"app/internal/application/groupautoname"
 	"app/internal/config"
 
 	"gorm.io/gorm"
@@ -20,6 +21,7 @@ type Dependencies struct {
 	AppEventLocker         AppEventLocker
 	BeforeAppEventLock     func(Message)
 	AfterUserMessageCommit func(Message)
+	AutoNames              *groupautoname.Service
 }
 
 type Service struct {
@@ -36,6 +38,7 @@ type Service struct {
 	appEventLocker         AppEventLocker
 	beforeAppEventLock     func(Message)
 	afterUserMessageCommit func(Message)
+	autoNames              *groupautoname.Service
 }
 
 func NewService(deps Dependencies) *Service {
@@ -44,9 +47,10 @@ func NewService(deps Dependencies) *Service {
 		taskNotificationBodies: deps.TaskNotificationBodies, taskReminderBodies: deps.TaskReminderBodies,
 		apps: deps.Apps, notifications: deps.Notifications,
 		reactionNotifications: deps.ReactionNotifications,
-		appEvents: deps.AppEvents, appEventLocker: deps.AppEventLocker,
+		appEvents:             deps.AppEvents, appEventLocker: deps.AppEventLocker,
 		beforeAppEventLock:     deps.BeforeAppEventLock,
 		afterUserMessageCommit: deps.AfterUserMessageCommit,
+		autoNames:              deps.AutoNames,
 	}
 }
 

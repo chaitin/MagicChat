@@ -4,6 +4,7 @@ import (
 	"context"
 
 	conversationapp "app/internal/application/conversation"
+	"app/internal/application/groupautoname"
 	"app/internal/realtime"
 )
 
@@ -59,6 +60,15 @@ func (s *Server) PublishTopicEvent(_ context.Context, userIDs []string, event co
 }
 
 func (s *Server) DeliverConversationAppEvents(_ context.Context, events []conversationapp.AppEvent) {
+	if s.appConnections == nil {
+		return
+	}
+	for _, event := range events {
+		s.appConnections.SendToApp(event.AppID, realtime.NewCursorEvent(event.Cursor, event.Event, event.Payload))
+	}
+}
+
+func (s *Server) DeliverGroupAutoNameEvents(_ context.Context, events []groupautoname.Event) {
 	if s.appConnections == nil {
 		return
 	}

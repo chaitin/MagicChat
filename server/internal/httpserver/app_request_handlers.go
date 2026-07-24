@@ -52,6 +52,8 @@ const (
 	appMethodProjectTasksUpdate         = "projects.tasks.update"
 	appMethodTemporaryFilesReadURLs     = "temporary_files.read_urls"
 	appMethodEventsAck                  = "events.ack"
+	appMethodAssistantGroupRename       = "assistant.group.rename"
+	appMethodAssistantGroupAutoNameFail = "assistant.group.auto_name.fail"
 	defaultAppConversationHistoryLimit  = 30
 	maxAppConversationHistoryLimit      = 100
 	defaultAppScopedHistoryReadLimit    = 20
@@ -137,6 +139,27 @@ type appCreateGroupConversationRequest struct {
 	MemberIDs                   []string `json:"member_ids"`
 	Name                        string   `json:"name"`
 	TriggerMessageID            string   `json:"trigger_message_id"`
+}
+
+type assistantRenameGroupRequest struct {
+	ActorUserID                 string `json:"actor_user_id"`
+	AuthorizationConversationID string `json:"authorization_conversation_id"`
+	ConversationID              string `json:"conversation_id"`
+	Mode                        string `json:"mode"`
+	Name                        string `json:"name"`
+	TaskVersion                 int    `json:"task_version"`
+	TriggerMessageID            string `json:"trigger_message_id"`
+}
+
+type assistantAutoNameFailRequest struct {
+	ConversationID string `json:"conversation_id"`
+	TaskVersion    int    `json:"task_version"`
+}
+
+type assistantRenameGroupResponse struct {
+	Applied        bool   `json:"applied"`
+	ConversationID string `json:"conversation_id"`
+	Name           string `json:"name"`
 }
 
 type appAddGroupConversationMembersRequest struct {
@@ -481,9 +504,70 @@ func (s *Server) handleAppRequest(appID string, request realtime.Envelope) realt
 			return appRequestErrorResponse(request.ID, err)
 		}
 		return realtime.NewResponse(request.ID, response)
+	case appMethodAssistantGroupRename:
+		response, err := s.handleAssistantRenameGroup(appID, request)
+		if err != nil {
+			return appRequestErrorResponse(request.ID, err)
+		}
+		return realtime.NewResponse(request.ID, response)
+	case appMethodAssistantGroupAutoNameFail:
+		response, err := s.handleAssistantAutoNameFail(appID, request)
+		if err != nil {
+			return appRequestErrorResponse(request.ID, err)
+		}
+		return realtime.NewResponse(request.ID, response)
 	default:
 		return realtime.NewErrorResponse(request.ID, "unknown_method", "未知应用方法")
 	}
+}
+
+func (s *Server) handleAssistantRenameGroup(appID string, request realtime.Envelope) (assistantRenameGroupResponse, error) {
+	if !appregistry.IsAIAssistantAppID(appID) {
+		return assistantRenameGroupResponse{}, newAppRequestFailure("forbidden", "当前应用无权调用该方法")
+	}
+	var req assistantRenameGroupRequest
+	if err := json.Unmarshal(request.Payload, &req); err != nil {
+		return assistantRenameGroupResponse{}, newAppRequestFailure("invalid_request", "请求格式错误")
+	}
+	req.ConversationID = strings.TrimSpace(req.ConversationID)
+	if _, err := uuid.Parse(req.ConversationID); err != nil {
+		return assistantRenameGroupResponse{}, newAppRequestFailure("invalid_request", "群聊 ID 格式错误")
+	}
+	if req.Mode == conversationapp.AssistantGroupRenameModeExplicit {
+		if err := s.requireAppSendAsUserTrigger(appID, req.ActorUserID, req.TriggerMessageID, req.AuthorizationConversationID); err != nil {
+			return assistantRenameGroupResponse{}, err
+		}
+	} else if req.Mode != conversationapp.AssistantGroupRenameModeAuto {
+		return assistantRenameGroupResponse{}, newAppRequestFailure("invalid_request", "改名模式错误")
+	}
+
+	result, err := s.conversations.RenameGroupAsAssistant(context.Background(), conversationapp.RenameGroupAsAssistantCommand{
+		AppID: appID, ActorUserID: req.ActorUserID, AuthorizationConversationID: req.AuthorizationConversationID,
+		ConversationID: req.ConversationID, Mode: req.Mode, Name: req.Name, TaskVersion: req.TaskVersion,
+		TriggerMessageID: req.TriggerMessageID,
+	})
+	if err != nil {
+		return assistantRenameGroupResponse{}, mapConversationApplicationErrorForApp(err)
+	}
+	return assistantRenameGroupResponse{Applied: result.Applied, ConversationID: result.ConversationID, Name: result.Name}, nil
+}
+
+func (s *Server) handleAssistantAutoNameFail(appID string, request realtime.Envelope) (map[string]bool, error) {
+	if !appregistry.IsAIAssistantAppID(appID) {
+		return nil, newAppRequestFailure("forbidden", "当前应用无权调用该方法")
+	}
+	var req assistantAutoNameFailRequest
+	if err := json.Unmarshal(request.Payload, &req); err != nil {
+		return nil, newAppRequestFailure("invalid_request", "请求格式错误")
+	}
+	req.ConversationID = strings.TrimSpace(req.ConversationID)
+	if _, err := uuid.Parse(req.ConversationID); err != nil || req.TaskVersion < 1 {
+		return nil, newAppRequestFailure("invalid_request", "自动命名任务参数错误")
+	}
+	if err := s.groupAutoNames.MarkFailed(context.Background(), req.ConversationID, req.TaskVersion); err != nil {
+		return nil, err
+	}
+	return map[string]bool{"ok": true}, nil
 }
 
 func isThirdPartyAppMethod(method string) bool {

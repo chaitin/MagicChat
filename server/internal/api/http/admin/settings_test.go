@@ -55,6 +55,14 @@ type fakeSettingsService struct {
 	updateCommand settingsapp.UpdateCommand
 }
 
+func (s *fakeSettingsService) GetAssistant(context.Context) (settingsapp.AssistantSettings, error) {
+	return settingsapp.AssistantSettings{AutoGroupNamingEnabled: true, AutoGroupNamingMessageCount: 5}, nil
+}
+
+func (s *fakeSettingsService) UpdateAssistant(_ context.Context, cmd settingsapp.UpdateAssistantSettingsCommand) (settingsapp.AssistantSettings, error) {
+	return settingsapp.AssistantSettings{AutoGroupNamingEnabled: cmd.AutoGroupNamingEnabled, AutoGroupNamingMessageCount: cmd.AutoGroupNamingMessageCount}, nil
+}
+
 func (s *fakeSettingsService) Get(context.Context) (settingsapp.Settings, error) {
 	s.getCalls++
 	return s.value, nil

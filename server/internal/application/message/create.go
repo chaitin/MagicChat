@@ -249,7 +249,19 @@ func (s *Service) createUserMessage(
 			lockHeld = true
 		}
 		events, err = createAppMessageEventOutbox(tx, access.Context, sender, message)
-		return err
+		if err != nil {
+			return err
+		}
+		if s.autoNames != nil {
+			autoEvent, err := s.autoNames.RecordMessage(tx, conversation, now)
+			if err != nil {
+				return err
+			}
+			if autoEvent != nil {
+				events = append(events, AppEvent{AppID: autoEvent.AppID, Cursor: autoEvent.Cursor, Event: autoEvent.Event, Payload: autoEvent.Payload})
+			}
+		}
+		return nil
 	})
 	return message, created, memberUserIDs, mentionedUserIDs, choiceUserIDs, events, lockHeld, err
 }

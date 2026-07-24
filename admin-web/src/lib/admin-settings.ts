@@ -27,6 +27,11 @@ type PasswordLoginSettingsResponse = {
   enabled?: boolean
 }
 
+type AssistantSettingsResponse = {
+  auto_group_naming_enabled?: boolean
+  auto_group_naming_message_count?: number
+}
+
 type EmailLoginSettingsResponse = {
   enabled?: boolean
   from_email?: string
@@ -60,6 +65,11 @@ export type InfoSettings = {
 
 export type PasswordLoginSettings = {
   enabled: boolean
+}
+
+export type AssistantSettings = {
+  autoGroupNamingEnabled: boolean
+  autoGroupNamingMessageCount: number
 }
 
 export type SMTPSecurity = "none" | "starttls" | "tls"
@@ -145,6 +155,60 @@ export async function getInfoSettings(
   )?.data
 
   return normalizeInfoSettings(data)
+}
+
+export async function getAssistantSettings(
+  fetcher: AdminSettingsFetch = adminFetch
+) {
+  const response = await fetcher("/api/admin/settings/assistant", {
+    credentials: "include",
+    method: "GET",
+  })
+  const payload = await readJson<
+    | AdminSettingsErrorEnvelope
+    | AdminSettingsSuccessEnvelope<AssistantSettingsResponse>
+  >(response)
+
+  if (!response.ok || payload?.success === false) {
+    throw createRequestError(payload, response, "加载茉莉设置失败")
+  }
+
+  const data = (
+    payload as
+      | AdminSettingsSuccessEnvelope<AssistantSettingsResponse>
+      | undefined
+  )?.data
+  return normalizeAssistantSettings(data)
+}
+
+export async function updateAssistantSettings(
+  input: AssistantSettings,
+  fetcher: AdminSettingsFetch = adminFetch
+) {
+  const response = await fetcher("/api/admin/settings/assistant", {
+    body: JSON.stringify({
+      auto_group_naming_enabled: input.autoGroupNamingEnabled,
+      auto_group_naming_message_count: input.autoGroupNamingMessageCount,
+    }),
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    method: "PUT",
+  })
+  const payload = await readJson<
+    | AdminSettingsErrorEnvelope
+    | AdminSettingsSuccessEnvelope<AssistantSettingsResponse>
+  >(response)
+
+  if (!response.ok || payload?.success === false) {
+    throw createRequestError(payload, response, "保存茉莉设置失败")
+  }
+
+  const data = (
+    payload as
+      | AdminSettingsSuccessEnvelope<AssistantSettingsResponse>
+      | undefined
+  )?.data
+  return normalizeAssistantSettings(data)
 }
 
 export async function updateInfoSettings(
@@ -546,6 +610,25 @@ function normalizeInfoSettings(
   return {
     appName: settings.app_name,
     organizationName: settings.organization_name,
+  }
+}
+
+function normalizeAssistantSettings(
+  settings: AssistantSettingsResponse | undefined
+): AssistantSettings {
+  if (
+    !settings ||
+    typeof settings.auto_group_naming_enabled !== "boolean" ||
+    typeof settings.auto_group_naming_message_count !== "number" ||
+    !Number.isInteger(settings.auto_group_naming_message_count) ||
+    settings.auto_group_naming_message_count < 1 ||
+    settings.auto_group_naming_message_count > 30
+  ) {
+    throw new AdminSettingsRequestError("茉莉设置响应格式不正确")
+  }
+  return {
+    autoGroupNamingEnabled: settings.auto_group_naming_enabled,
+    autoGroupNamingMessageCount: settings.auto_group_naming_message_count,
   }
 }
 

@@ -66,10 +66,16 @@ const (
 	AppVisibilityRestricted = "restricted"
 	AppVisibilityPublic     = "public"
 
-	AppSettingsID           = 1
-	DefaultAppName          = "即应"
-	DefaultOrganizationName = "长亭科技"
-	DefaultUserAvatar       = "/assets/avatars/builtin/01.webp"
+	AppSettingsID                               = 1
+	DefaultAppName                              = "即应"
+	DefaultOrganizationName                     = "长亭科技"
+	DefaultAssistantAutoGroupNamingMessageCount = 5
+	DefaultUserAvatar                           = "/assets/avatars/builtin/01.webp"
+
+	ConversationAutoNameStatusPending   = "pending"
+	ConversationAutoNameStatusCompleted = "completed"
+	ConversationAutoNameStatusSkipped   = "skipped"
+	ConversationAutoNameStatusFailed    = "failed"
 )
 
 type User struct {
@@ -427,20 +433,35 @@ func (AppEventAck) TableName() string {
 }
 
 type AppSettings struct {
-	ID                    int       `gorm:"primaryKey"`
-	AppName               string    `gorm:"size:120;not null"`
-	OrganizationName      string    `gorm:"size:160;not null"`
-	PasswordLoginEnabled  bool      `gorm:"not null;default:true"`
-	EmailCodeLoginEnabled bool      `gorm:"not null;default:false"`
-	SMTPHost              string    `gorm:"size:255;not null;default:''"`
-	SMTPPort              int       `gorm:"not null;default:465"`
-	SMTPSecurity          string    `gorm:"size:16;not null;default:tls"`
-	SMTPUsername          string    `gorm:"size:320;not null;default:''"`
-	SMTPPassword          string    `gorm:"not null;default:''"`
-	SMTPFromEmail         string    `gorm:"size:320;not null;default:''"`
-	SMTPFromName          string    `gorm:"size:120;not null;default:''"`
-	CreatedAt             time.Time `gorm:"not null"`
-	UpdatedAt             time.Time `gorm:"not null"`
+	ID                                   int       `gorm:"primaryKey"`
+	AppName                              string    `gorm:"size:120;not null"`
+	OrganizationName                     string    `gorm:"size:160;not null"`
+	PasswordLoginEnabled                 bool      `gorm:"not null;default:true"`
+	EmailCodeLoginEnabled                bool      `gorm:"not null;default:false"`
+	AssistantAutoGroupNamingEnabled      bool      `gorm:"not null;default:true"`
+	AssistantAutoGroupNamingMessageCount int       `gorm:"not null;default:5"`
+	SMTPHost                             string    `gorm:"size:255;not null;default:''"`
+	SMTPPort                             int       `gorm:"not null;default:465"`
+	SMTPSecurity                         string    `gorm:"size:16;not null;default:tls"`
+	SMTPUsername                         string    `gorm:"size:320;not null;default:''"`
+	SMTPPassword                         string    `gorm:"not null;default:''"`
+	SMTPFromEmail                        string    `gorm:"size:320;not null;default:''"`
+	SMTPFromName                         string    `gorm:"size:120;not null;default:''"`
+	CreatedAt                            time.Time `gorm:"not null"`
+	UpdatedAt                            time.Time `gorm:"not null"`
+}
+
+type ConversationAutoNameTask struct {
+	ConversationID    string       `gorm:"type:uuid;primaryKey"`
+	Conversation      Conversation `gorm:"constraint:OnDelete:CASCADE;"`
+	Status            string       `gorm:"size:32;not null;default:pending;index"`
+	MessageCount      int          `gorm:"not null;default:0"`
+	MessageLimit      int          `gorm:"not null"`
+	Version           int          `gorm:"not null;default:1"`
+	TriggeredVersion  int          `gorm:"not null;default:0"`
+	TriggerMessageSeq *int64
+	CreatedAt         time.Time `gorm:"not null"`
+	UpdatedAt         time.Time `gorm:"not null"`
 }
 
 type ThirdPartyLoginProvider struct {
