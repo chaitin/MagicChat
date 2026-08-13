@@ -16,6 +16,10 @@ assert(messageCacheWorkerName, "Main 未引用消息缓存 Worker 产物")
 const messageCacheWorker = await readFile(path.join(mainOutput, messageCacheWorkerName), "utf8")
 const rendererAssets = path.join(root, "out/renderer/assets")
 const rendererAssetNames = await readdir(rendererAssets)
+const rendererScriptNames = rendererAssetNames.filter((name) => /\.(?:c?js|mjs)$/.test(name))
+const rendererScripts = await Promise.all(
+  rendererScriptNames.map((name) => readFile(path.join(rendererAssets, name), "utf8")),
+)
 const documentChunkNames = rendererAssetNames.filter((name) =>
   /^(?:document-page|document-route)-.+\.js$/.test(name),
 )
@@ -25,6 +29,14 @@ const documentChunk = await readFile(path.join(rendererAssets, documentChunkName
 const indexScriptName = html.match(/src="\.\/assets\/([^"]+\.js)"/)?.[1]
 assert(indexScriptName, "Renderer 主入口脚本缺失")
 const indexScript = await readFile(path.join(rendererAssets, indexScriptName), "utf8")
+assert(
+  indexScript.includes("createJavaScriptRegexEngine"),
+  "Renderer 代码高亮未使用 JavaScript 引擎",
+)
+assert(
+  !rendererScripts.some((script) => script.includes("onig.wasm")),
+  "Renderer 仍包含 Oniguruma Wasm",
+)
 const rendererCssNames = [...html.matchAll(/href="\.\/assets\/([^"]+\.css)"/g)].map(
   (match) => match[1],
 )

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 
 import { MessageMarkdown } from "@/components/message-markdown"
@@ -44,5 +44,34 @@ describe("MessageMarkdown", () => {
     const fallback = container.querySelector("[data-math-error]")
     expect(fallback).toHaveTextContent("\\notARealCommand{x}")
     expect(fallback).toHaveAttribute("title", "LaTeX 公式无法解析")
+  })
+
+  it("使用 JavaScript 引擎高亮 Python 围栏代码", async () => {
+    const { container } = render(
+      <MessageMarkdown
+        content={"```python\ndef sieve_of_eratosthenes(n):\n  return [i for i in range(n)]\n```"}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(container.querySelector(".markdown-code-highlight .shiki")).not.toBeNull()
+    })
+    expect(container.querySelector(".markdown-code-highlight")).toHaveTextContent(
+      "def sieve_of_eratosthenes(n):",
+    )
+  })
+
+  it.each([
+    ["bash", "echo 'hello'"],
+    ["javascript", "const answer = 42"],
+    ["typescript", "const answer: number = 42"],
+    ["json", '{"answer": 42}'],
+  ])("高亮 %s 围栏代码", async (language, code) => {
+    const { container } = render(<MessageMarkdown content={`\`\`\`${language}\n${code}\n\`\`\``} />)
+
+    await waitFor(() => {
+      expect(container.querySelector(".markdown-code-highlight .shiki")).not.toBeNull()
+    })
+    expect(container.querySelector(".markdown-code-highlight")).toHaveTextContent(code)
   })
 })

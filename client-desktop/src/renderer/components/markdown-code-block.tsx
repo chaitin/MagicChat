@@ -1,5 +1,5 @@
 import * as React from "react"
-import type { BundledLanguage } from "shiki"
+import { highlightMarkdownCode } from "@/lib/markdown-code-highlighter"
 
 const HIGHLIGHT_CACHE_LIMIT = 200
 const MAX_HIGHLIGHT_CODE_LENGTH = 100_000
@@ -59,17 +59,7 @@ function highlightCode(cacheKey: string, code: string, language: string) {
     return cached
   }
 
-  const highlighted = import("shiki")
-    .then(({ codeToHtml }) =>
-      codeToHtml(code, {
-        lang: language as BundledLanguage,
-        themes: {
-          dark: "github-dark",
-          light: "github-light",
-        },
-      }),
-    )
-    .catch(() => null)
+  const highlighted = highlightMarkdownCode(code, language).catch(() => null)
 
   if (highlightCache.size >= HIGHLIGHT_CACHE_LIMIT) {
     const oldestKey = highlightCache.keys().next().value
