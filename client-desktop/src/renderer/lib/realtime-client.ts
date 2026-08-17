@@ -9,6 +9,8 @@ export type RealtimeSnapshot = {
   status: RealtimeConnectionStatus
 }
 
+export type RealtimeTransportState = RealtimeSnapshot
+
 export type RealtimeWebSocketLike = {
   close: () => void
   diagnosticContext?: () => DiagnosticContext | undefined
@@ -16,6 +18,8 @@ export type RealtimeWebSocketLike = {
   onerror: ((event: Event) => void) | null
   onmessage: ((event: MessageEvent) => void) | null
   onopen: ((event: Event) => void) | null
+  ontransportstatechange?: ((state: RealtimeTransportState) => void) | null
+  transportStateIsAuthoritative?: boolean
   readyState: number
   send: (data: string) => void
 }
@@ -172,6 +176,7 @@ export class RealtimeClient {
     const socket = this.createWebSocket(this.url)
     this.socket = socket
     socket.onopen = () => {
+      if (socket.transportStateIsAuthoritative) return
       const previousStatus = this.status
       this.reconnectAttempt = 0
       this.status = "connected"
@@ -185,6 +190,29 @@ export class RealtimeClient {
     socket.onclose = () => {
       void this.handleSocketClose(socket)
     }
+    socket.ontransportstatechange = (state) => {
+      this.handleTransportState(socket, state)
+    }
+  }
+
+  // Desktop 模式下 Main 持有真实 WebSocket 与重连循环；Renderer 仅镜像其状态。
+  private handleTransportState(socket: RealtimeWebSocketLike, state: RealtimeTransportState) {
+    if (this.socket !== socket) return
+
+    const previousReady = this.ready
+    const previousStatus = this.status
+    if (previousReady === state.ready && previousStatus === state.status) return
+
+    this.ready = state.ready
+    this.status = state.status
+    if (!state.ready)
+      this.rejectPendingRequests(
+        new Error("实时连接已断开"),
+        "network",
+        socket.diagnosticContext?.(),
+      )
+    this.recordState(previousStatus, previousReady, socket.diagnosticContext?.())
+    this.notify()
   }
 
   private async handleSocketClose(socket: RealtimeWebSocketLike) {

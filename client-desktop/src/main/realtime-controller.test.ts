@@ -284,6 +284,43 @@ describe("RealtimeController 诊断", () => {
     expect(opened[0].context.connectionInstanceId).not.toBe(opened[1].context.connectionInstanceId)
   })
 
+  it("状态快照使用单调版本，供 Renderer 忽略迟到 IPC", async () => {
+    const controller = createController()
+    const revisions: number[] = []
+    controller.on("snapshot", (snapshot) => revisions.push(snapshot.stateRevision))
+
+    await controller.connect(target)
+    const socket = socketMocks.FakeWebSocket.instances[0]
+    socket.open()
+    socket.emit("message", Buffer.from(JSON.stringify(systemReadyEvent())), false)
+    socket.emit("close", 1006, Buffer.from("network interrupted"))
+
+    expect(revisions).toEqual([1, 2, 3, 4])
+  })
+
+  it("同一认证目标重建连接后延续版本并忽略旧 socket 回调", async () => {
+    const controller = createController()
+    const snapshots: Array<{ connectionInstanceId?: string; stateRevision: number }> = []
+    controller.on("snapshot", (snapshot) => snapshots.push(snapshot))
+
+    await controller.connect(target)
+    const first = socketMocks.FakeWebSocket.instances[0]
+    first.open()
+    first.emit("message", Buffer.from(JSON.stringify(systemReadyEvent())), false)
+    const oldSnapshot = snapshots.at(-1)
+    if (!oldSnapshot) throw new Error("缺少旧连接快照")
+
+    controller.close(target)
+    const newSnapshot = await controller.connect(target)
+    const snapshotCount = snapshots.length
+
+    first.emit("message", Buffer.from(JSON.stringify(systemReadyEvent())), false)
+
+    expect(newSnapshot.stateRevision).toBeGreaterThan(oldSnapshot.stateRevision)
+    expect(newSnapshot.connectionInstanceId).not.toBe(oldSnapshot.connectionInstanceId)
+    expect(snapshots).toHaveLength(snapshotCount)
+  })
+
   it("聚合损坏帧和协议版本不匹配，避免逐条写入诊断日志", async () => {
     let eventSeq = 0
     recordEvent.mockImplementation(async () => ({ eventSeq: (eventSeq += 1) }))

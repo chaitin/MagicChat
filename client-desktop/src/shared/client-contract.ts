@@ -71,6 +71,8 @@ export type RealtimeSnapshot = Readonly<{
   connectionInstanceId?: string
   episodeId?: string
   ready: boolean
+  /** 同一认证目标的 Main 实时状态单调版本，用于丢弃迟到 IPC 快照。 */
+  stateRevision: number
   status: "connected" | "connecting" | "disconnected" | "reconnecting"
   targetKey: string
   targetScope?: string

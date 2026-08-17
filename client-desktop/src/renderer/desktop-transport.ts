@@ -5,7 +5,7 @@ import {
   type RealtimeSnapshot,
 } from "@shared/client-contract"
 import type { RealtimeDiagnosticContext } from "@shared/diagnostics-contract"
-import type { RealtimeWebSocketLike } from "@/lib/realtime-client"
+import type { RealtimeTransportState, RealtimeWebSocketLike } from "@/lib/realtime-client"
 import { randomUUID } from "./random-id"
 import { beginDiagnosticRequest } from "@/lib/runtime-diagnostics"
 import { recordRendererDiagnostic } from "@/lib/desktop-diagnostics"
@@ -190,12 +190,15 @@ export class DesktopWebSocket implements RealtimeWebSocketLike {
   onerror: ((event: Event) => void) | null = null
   onmessage: ((event: MessageEvent) => void) | null = null
   onopen: ((event: Event) => void) | null = null
+  readonly transportStateIsAuthoritative = true
   readyState = DesktopWebSocket.CONNECTING
   private readonly unsubscribe: () => void
   private readonly unsubscribeSnapshot: () => void
   private readonly unsubscribeUnauthorized: () => void
   private latestSnapshot?: RealtimeSnapshot
+  private latestStateRevision = -1
   private receivedSnapshot = false
+  private transportStateListener: ((state: RealtimeTransportState) => void) | null = null
 
   constructor(private readonly target: AuthenticatedTarget) {
     this.unsubscribe = window.desktop.realtime.subscribe((envelope) => this.receive(envelope))
@@ -218,8 +221,9 @@ export class DesktopWebSocket implements RealtimeWebSocketLike {
     void window.desktop.realtime
       .connect(target)
       .then((snapshot) => {
-        if (!this.receivedSnapshot) {
-          this.latestSnapshot = snapshot
+        const receivedSnapshot = this.receivedSnapshot
+        this.applySnapshot(snapshot)
+        if (!receivedSnapshot) {
           void recordRendererDiagnostic(
             "realtime-bridge.snapshot-missed",
             this.diagnosticContext(),
@@ -229,7 +233,6 @@ export class DesktopWebSocket implements RealtimeWebSocketLike {
           )
         }
         this.readyState = DesktopWebSocket.OPEN
-        this.recordState("connected")
         this.onopen?.(new Event("open"))
       })
       .catch(() => {
@@ -293,6 +296,16 @@ export class DesktopWebSocket implements RealtimeWebSocketLike {
       })
   }
 
+  set ontransportstatechange(listener: ((state: RealtimeTransportState) => void) | null) {
+    this.transportStateListener = listener
+    const snapshot = this.latestSnapshot
+    if (listener && snapshot) listener({ ready: snapshot.ready, status: snapshot.status })
+  }
+
+  get ontransportstatechange() {
+    return this.transportStateListener
+  }
+
   private receive(envelope: RealtimeEnvelope): void {
     if (
       envelope.targetKey &&
@@ -320,12 +333,23 @@ export class DesktopWebSocket implements RealtimeWebSocketLike {
   }
 
   private receiveSnapshot(snapshot: RealtimeSnapshot): void {
-    if (snapshot.targetKey !== targetKey(this.target)) return
+    if (!this.applySnapshot(snapshot)) return
     this.receivedSnapshot = true
-    this.latestSnapshot = snapshot
     void recordRendererDiagnostic("realtime-bridge.snapshot-received", this.diagnosticContext(), {
       ready: snapshot.ready,
       status: snapshot.status,
     })
+  }
+
+  private applySnapshot(snapshot: RealtimeSnapshot): boolean {
+    if (
+      snapshot.targetKey !== targetKey(this.target) ||
+      snapshot.stateRevision <= this.latestStateRevision
+    )
+      return false
+    this.latestSnapshot = snapshot
+    this.latestStateRevision = snapshot.stateRevision
+    this.transportStateListener?.({ ready: snapshot.ready, status: snapshot.status })
+    return true
   }
 }

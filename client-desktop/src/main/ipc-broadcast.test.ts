@@ -29,6 +29,7 @@ describe("broadcastToWindows", () => {
         connectionInstanceId: "connection-1",
         episodeId: "episode-1",
         ready: true,
+        stateRevision: 1,
         status: "connected",
         targetKey: "target",
         targetScope: "server-1",

@@ -1670,6 +1670,76 @@ describe("ClientDataProvider", () => {
     })
     expect(screen.getByTestId("conversation-ids")).toHaveTextContent("newest")
   })
+
+  it("会话列表发现持久游标缺口时自动从 after_seq 追赶", async () => {
+    vi.useFakeTimers()
+    const messageCache = createMessageCacheMock()
+    const generation = { conversation: 0, global: 0, server: 0, user: 0 }
+    messageCache.getSyncState.mockResolvedValue({
+      conversationId: "conversation-1",
+      generation,
+      hasMoreBefore: true,
+      httpSyncedThroughSeq: 299,
+      lastAccessedAt: 0,
+    })
+    messageCache.listSyncStates.mockResolvedValue([
+      {
+        conversationId: "conversation-1",
+        generation,
+        hasMoreBefore: true,
+        httpSyncedThroughSeq: 299,
+        lastAccessedAt: 0,
+      },
+    ])
+    messageCache.commitAfter.mockResolvedValue({ committed: true, committedSeq: 325, generation })
+    vi.stubGlobal("desktop", { messageCache })
+    const restoreTarget = configureMessageCacheTarget({
+      id: "server-1",
+      normalizedUrl: "https://chat.example.com",
+      userId: "user-1",
+    })
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === "/api/client/me")
+        return Promise.resolve(jsonResponse(createCurrentUserResponse()))
+      if (url === "/api/client/contacts")
+        return Promise.resolve(jsonResponse(createContactsResponse()))
+      if (url === "/api/client/conversations")
+        return Promise.resolve(
+          jsonResponse(
+            createConversationsResponse([
+              { ...createConversationResponse("conversation-1"), last_message_seq: 325 },
+            ]),
+          ),
+        )
+      if (url === "/api/client/projects?limit=100")
+        return Promise.resolve(jsonResponse(createProjectsResponse()))
+      if (url === "/api/client/conversations/conversation-1/messages?limit=20&after_seq=299")
+        return Promise.resolve(jsonResponse(createMessagesResponse(325)))
+      return Promise.reject(new Error(`unexpected request: ${url}`))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    render(
+      <MemoryRouter>
+        <ClientDataProvider>
+          <ConversationRefreshRaceProbe />
+        </ClientDataProvider>
+      </MemoryRouter>,
+    )
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000)
+    })
+    vi.useRealTimers()
+    act(() => screen.getByRole("button", { name: "refresh conversations" }).click())
+
+    await waitFor(() => expect(messageCache.listSyncStates).toHaveBeenCalled())
+    await waitFor(() => expect(messageCache.commitAfter).toHaveBeenCalledOnce())
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(
+      "/api/client/conversations/conversation-1/messages?limit=20&after_seq=299",
+    )
+    restoreTarget()
+  })
 })
 
 function ConversationCount() {
@@ -2085,6 +2155,7 @@ function createMessageCacheMock() {
   return {
     clearUser: vi.fn().mockResolvedValue(undefined),
     clearConversation: vi.fn().mockResolvedValue({ ...generation, conversation: 1 }),
+    commitAfter: vi.fn().mockResolvedValue({ committed: true, committedSeq: 0, generation }),
     commitBefore: vi.fn(),
     commitLatest: vi.fn().mockResolvedValue({
       committed: true,
@@ -2098,6 +2169,7 @@ function createMessageCacheMock() {
       httpSyncedThroughSeq: 0,
       lastAccessedAt: 0,
     }),
+    listSyncStates: vi.fn().mockResolvedValue([]),
     readRecent: vi.fn().mockResolvedValue({
       complete: true,
       hasMoreBefore: true,

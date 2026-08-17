@@ -54,6 +54,24 @@ describe("ClientConversationRealtimeSync", () => {
     expect(refreshConversations).not.toHaveBeenCalled()
   })
 
+  it("每次 system.ready 均在刷新会话列表后触发消息补偿", async () => {
+    render(
+      <MemoryRouter initialEntries={["/chat/conversation-1"]}>
+        <ClientConversationRealtimeSync />
+      </MemoryRouter>,
+    )
+    refreshConversations.mockClear()
+    syncLoadedConversationMessages.mockClear()
+
+    act(() => callbacks.get("system.ready")?.({}))
+
+    await waitFor(() => expect(refreshConversations).toHaveBeenCalledOnce())
+    await waitFor(() => expect(syncLoadedConversationMessages).toHaveBeenCalledOnce())
+    expect(refreshConversations.mock.invocationCallOrder[0]).toBeLessThan(
+      syncLoadedConversationMessages.mock.invocationCallOrder[0],
+    )
+  })
+
   it("applies conversation mute realtime events", () => {
     render(
       <MemoryRouter initialEntries={["/chat/conversation-1"]}>

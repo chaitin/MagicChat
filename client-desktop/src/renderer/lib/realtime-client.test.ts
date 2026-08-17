@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { RealtimeClient, type RealtimeWebSocketLike } from "@/lib/realtime-client"
+import {
+  RealtimeClient,
+  type RealtimeTransportState,
+  type RealtimeWebSocketLike,
+} from "@/lib/realtime-client"
 import type { DiagnosticContext } from "@shared/diagnostics-contract"
 
 class FakeWebSocket implements RealtimeWebSocketLike {
@@ -11,6 +15,8 @@ class FakeWebSocket implements RealtimeWebSocketLike {
   onerror: ((event: Event) => void) | null = null
   onmessage: ((event: MessageEvent) => void) | null = null
   onopen: ((event: Event) => void) | null = null
+  ontransportstatechange: ((state: RealtimeTransportState) => void) | null = null
+  transportStateIsAuthoritative = false
   readyState: number = WebSocket.CONNECTING
   sent: string[] = []
   throwOnSend = false
@@ -44,6 +50,10 @@ class FakeWebSocket implements RealtimeWebSocketLike {
         data: JSON.stringify(payload),
       }),
     )
+  }
+
+  receiveTransportState(state: RealtimeTransportState) {
+    this.ontransportstatechange?.(state)
   }
 
   failClose(code = 1006) {
@@ -135,6 +145,37 @@ describe("RealtimeClient", () => {
 
     FakeWebSocket.instances[0].failClose()
     expect(client.getSnapshot().ready).toBe(false)
+  })
+
+  it("镜像 Desktop 传输断线状态，但不启动 Renderer 重连", async () => {
+    const client = createClient()
+    client.connect()
+    const socket = FakeWebSocket.instances[0]
+    socket.open()
+    socket.receive({ v: 1, kind: "event", event: "system.ready", payload: {} })
+    const pending = client.sendRequest("message.create", { text: "hello" })
+
+    socket.receiveTransportState({ ready: false, status: "reconnecting" })
+
+    expect(client.getSnapshot()).toEqual({ ready: false, status: "reconnecting" })
+    await expect(pending).rejects.toThrow("实时连接已断开")
+    vi.advanceTimersByTime(1_000)
+    expect(FakeWebSocket.instances).toHaveLength(1)
+
+    socket.receive({ v: 1, kind: "event", event: "system.ready", payload: {} })
+    expect(client.getSnapshot()).toEqual({ ready: true, status: "reconnecting" })
+  })
+
+  it("权威传输的虚拟 open 不覆盖 Main 状态", () => {
+    const client = createClient()
+    client.connect()
+    const socket = FakeWebSocket.instances[0]
+    socket.transportStateIsAuthoritative = true
+    socket.receiveTransportState({ ready: false, status: "reconnecting" })
+
+    socket.open()
+
+    expect(client.getSnapshot()).toEqual({ ready: false, status: "reconnecting" })
   })
 
   it("sends request envelopes and resolves matching responses", async () => {

@@ -33,6 +33,7 @@ type Connection = {
   ready: boolean
   parseFailureWindow?: ParseFailureWindow
   preserveEpisodeForSocket?: WebSocket
+  stateRevision: number
   systemReadyCount: number
   socket?: WebSocket
   status: RealtimeSnapshot["status"]
@@ -51,6 +52,7 @@ const delays = [500, 1_000, 2_000, 5_000, 10_000, 30_000]
 
 export class RealtimeController extends EventEmitter {
   private readonly connections = new Map<string, Connection>()
+  private readonly stateRevisions = new Map<string, number>()
 
   constructor(
     private readonly profiles: ServerProfiles,
@@ -75,6 +77,7 @@ export class RealtimeController extends EventEmitter {
         intentionallyClosed: false,
         pending: new Map(),
         ready: false,
+        stateRevision: this.stateRevisions.get(key) ?? 0,
         status: "connecting",
         systemReadyCount: 0,
         target,
@@ -95,16 +98,25 @@ export class RealtimeController extends EventEmitter {
     if (!connection) return
     connection.intentionallyClosed = true
     if (connection.timer) clearTimeout(connection.timer)
-    if (connection.socket) connection.socket.close(1000, "target closed")
-    else {
-      const previousReady = connection.ready
-      const previousStatus = connection.status
-      connection.ready = false
-      connection.status = "disconnected"
-      this.emitStateSnapshot(connection, previousStatus, previousReady)
-    }
+    const socket = connection.socket
+    const previousReady = connection.ready
+    const previousStatus = connection.status
+    connection.ready = false
+    connection.status = "disconnected"
+    if (socket)
+      void this.record(connection, "realtime.socket-closed", {
+        closeCode: 1000,
+        closeReasonLength: "target closed".length,
+        previousReady,
+        previousStatus,
+        reason: "manual",
+        ready: false,
+        status: "disconnected",
+      })
     this.rejectPending(connection, new Error("实时连接已关闭"))
+    this.emitStateSnapshot(connection, previousStatus, previousReady)
     this.connections.delete(key)
+    socket?.close(1000, "target closed")
   }
 
   closeServer(serverId: string): void {
@@ -151,6 +163,7 @@ export class RealtimeController extends EventEmitter {
       connectionInstanceId: connection.connectionInstanceId,
       episodeId: connection.episodeId,
       ready: connection.ready,
+      stateRevision: connection.stateRevision,
       status: connection.status,
       targetKey: targetKey(connection.target),
       targetScope: connection.target.id,
@@ -158,7 +171,12 @@ export class RealtimeController extends EventEmitter {
   }
 
   private async open(connection: Connection): Promise<void> {
-    if (connection.intentionallyClosed || connection.socket) return
+    if (
+      connection.intentionallyClosed ||
+      !this.isCurrentConnection(connection) ||
+      connection.socket
+    )
+      return
     const profile = this.profiles.require(connection.target.id)
     const cookies = await this.sessions.for(profile).cookies.get({ url: profile.normalizedUrl })
     const cookieHeader = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ")
@@ -170,7 +188,12 @@ export class RealtimeController extends EventEmitter {
           withProxyCredentials(proxy, this.proxyAuth?.getCredentials(new URL(proxy).hostname)),
         )
       : undefined
-    if (connection.intentionallyClosed || connection.socket) return
+    if (
+      connection.intentionallyClosed ||
+      !this.isCurrentConnection(connection) ||
+      connection.socket
+    )
+      return
     if (connection.hasOpenedSocket) connection.connectionInstanceId = diagnosticId()
     const previousStatus = connection.status
     connection.status = connection.attempt === 0 ? "connecting" : "reconnecting"
@@ -185,6 +208,7 @@ export class RealtimeController extends EventEmitter {
     connection.socket = socket
     connection.hasOpenedSocket = true
     socket.on("open", () => {
+      if (!this.isCurrentConnection(connection) || connection.socket !== socket) return
       const previousStatus = connection.status
       connection.attempt = 0
       connection.status = "connected"
@@ -195,8 +219,11 @@ export class RealtimeController extends EventEmitter {
       })
       this.emitStateSnapshot(connection, previousStatus, connection.ready)
     })
-    socket.on("ping", (data) => socket.pong(data))
+    socket.on("ping", (data) => {
+      if (this.isCurrentConnection(connection) && connection.socket === socket) socket.pong(data)
+    })
     socket.on("message", (data, binary) => {
+      if (!this.isCurrentConnection(connection) || connection.socket !== socket) return
       const size = Array.isArray(data)
         ? data.reduce((total, item) => total + item.byteLength, 0)
         : data.byteLength
@@ -205,7 +232,9 @@ export class RealtimeController extends EventEmitter {
     })
     socket.on("error", () => undefined)
     socket.on("close", (closeCode, reason) => {
+      const isCurrentSocket = this.isCurrentConnection(connection) && connection.socket === socket
       if (connection.socket === socket) connection.socket = undefined
+      if (!isCurrentSocket) return
       void this.flushParseFailures(connection)
       const preservesEpisode = connection.preserveEpisodeForSocket === socket
       if (preservesEpisode) connection.preserveEpisodeForSocket = undefined
@@ -277,11 +306,13 @@ export class RealtimeController extends EventEmitter {
   }
 
   private async checkAuthorizedAndSchedule(connection: Connection): Promise<void> {
+    if (!this.isCurrentConnection(connection)) return
     const profile = this.profiles.require(connection.target.id)
     try {
       const response = await this.sessions
         .for(profile)
         .fetch(`${profile.normalizedUrl}/api/client/me`, { credentials: "include" })
+      if (!this.isCurrentConnection(connection)) return
       void this.record(connection, "realtime.authorization-checked", {
         responseStatus: Math.max(0, Math.min(999, response.status)),
       })
@@ -293,6 +324,7 @@ export class RealtimeController extends EventEmitter {
         return
       }
     } catch {
+      if (!this.isCurrentConnection(connection)) return
       // 离线和服务器重启时仍进入有上限退避，不将网络失败误判为退出登录。
       void this.record(connection, "realtime.authorization-checked", {
         error: { category: "network", phase: "authorization" },
@@ -305,6 +337,7 @@ export class RealtimeController extends EventEmitter {
     })
     connection.timer = setTimeout(() => {
       connection.timer = undefined
+      if (!this.isCurrentConnection(connection)) return
       void this.open(connection)
     }, delay)
   }
@@ -329,7 +362,15 @@ export class RealtimeController extends EventEmitter {
         ready: connection.ready,
         status: connection.status,
       })
+    const key = targetKey(connection.target)
+    connection.stateRevision =
+      Math.max(connection.stateRevision, this.stateRevisions.get(key) ?? 0) + 1
+    this.stateRevisions.set(key, connection.stateRevision)
     this.emit("snapshot", this.snapshot(connection))
+  }
+
+  private isCurrentConnection(connection: Connection): boolean {
+    return this.connections.get(targetKey(connection.target)) === connection
   }
 
   private record<Type extends Extract<DiagnosticType, `realtime.${string}`>>(

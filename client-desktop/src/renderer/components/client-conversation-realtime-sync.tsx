@@ -40,11 +40,31 @@ export function ClientConversationRealtimeSync() {
   // 初始化 previous，否则首次挂载会被误判为一次已经处理过的 ready 边沿。
   const hasSeenRealtimeReadyRef = React.useRef(false)
   const previousRealtimeReadyRef = React.useRef<boolean | null>(null)
+  const recoveryInProgressRef = React.useRef<Promise<void> | null>(null)
   const activeConversationId = React.useMemo(
     () => matchPath("/chat/:conversationId", location.pathname)?.params.conversationId ?? "",
     [location.pathname],
   )
   const visibleConversationId = foregroundConversationId || activeConversationId
+
+  const recoverAfterRealtimeReady = React.useCallback(() => {
+    if (recoveryInProgressRef.current) return
+    const recovery = refreshConversations()
+      .catch(() => undefined)
+      .then(() => {
+        // 会话列表刷新会按新摘要调度持久游标追赶；这里同时修复已加载内存时间线。
+        syncLoadedConversationMessages()
+      })
+    recoveryInProgressRef.current = recovery
+    void recovery.finally(() => {
+      if (recoveryInProgressRef.current === recovery) recoveryInProgressRef.current = null
+    })
+  }, [refreshConversations, syncLoadedConversationMessages])
+
+  React.useEffect(
+    () => subscribeRealtimeEvent("system.ready", recoverAfterRealtimeReady),
+    [recoverAfterRealtimeReady, subscribeRealtimeEvent],
+  )
 
   React.useEffect(() => {
     return subscribeRealtimeEvent("message.created", (payload) => {
@@ -222,12 +242,10 @@ export function ClientConversationRealtimeSync() {
       return
     }
 
-    if (hasSeenRealtimeReadyRef.current) {
-      void refreshConversations().catch(() => undefined)
-    }
+    if (hasSeenRealtimeReadyRef.current) recoverAfterRealtimeReady()
     hasSeenRealtimeReadyRef.current = true
     syncLoadedConversationMessages()
-  }, [realtimeReady, refreshConversations, syncLoadedConversationMessages])
+  }, [realtimeReady, recoverAfterRealtimeReady, syncLoadedConversationMessages])
 
   return null
 }
