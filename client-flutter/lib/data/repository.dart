@@ -335,6 +335,7 @@ class HttpMagicChatRepository implements MagicChatRepository {
   final Uri baseUri;
   final String sessionToken;
   final http.Client _client;
+  String? _currentUserId;
 
   @override
   Future<ChatConversation> createGroupConversation(String name,
@@ -496,7 +497,9 @@ class HttpMagicChatRepository implements MagicChatRepository {
     final value = data['user'];
     if (value is! Map<String, dynamic>)
       throw const FormatException('用户信息响应格式不正确');
-    return _userFromJson(value);
+    final user = _userFromJson(value);
+    _currentUserId = user.id;
+    return user;
   }
 
   @override
@@ -598,6 +601,7 @@ class HttpMagicChatRepository implements MagicChatRepository {
           final sender = item['sender'];
           final senderName =
               sender is Map<String, dynamic> ? sender['name'] : null;
+          final senderId = sender is Map<String, dynamic> ? sender['id'] : null;
           return ChatMessage(
               id: '${item['id'] ?? ''}',
               sequence: (item['seq'] as num?)?.toInt(),
@@ -606,6 +610,7 @@ class HttpMagicChatRepository implements MagicChatRepository {
               contentType: content.type,
               rawBody: content.raw,
               text: content.text,
+              mine: senderId is String && senderId == _currentUserId,
               reactions: _reactionsFromJson(item['reactions']));
         })
         .where((item) => item.id.isNotEmpty)
