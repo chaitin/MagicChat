@@ -17,6 +17,7 @@ import 'data/realtime_store.dart';
 import 'data/storage_service.dart';
 import 'data/push_service.dart';
 import 'data/local_notification_service.dart';
+import 'data/update_service.dart';
 import 'data/voice_recorder.dart';
 import 'data/avatar_processor.dart';
 import 'features/qr_scanner_page.dart';
@@ -2848,6 +2849,40 @@ class _SettingsPageState extends State<SettingsPage> {
             ));
   }
 
+  Future<void> _checkForUpdate() async {
+    try {
+      final release = await const UpdateService().check();
+      if (!mounted) return;
+      await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+                title: const Text('检查更新'),
+                content: Text(release == null
+                    ? '当前已是最新版本（${UpdateService.currentVersion}）'
+                    : '发现新版本 ${release.version}（${release.build}）'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialogContext),
+                      child: const Text('关闭')),
+                  if (release != null)
+                    FilledButton(
+                        onPressed: () async {
+                          await launchUrl(Uri.parse(release.url),
+                              mode: LaunchMode.externalApplication);
+                          if (dialogContext.mounted)
+                            Navigator.pop(dialogContext);
+                        },
+                        child: const Text('打开下载页')),
+                ],
+              ));
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('检查更新失败：$error')));
+      }
+    }
+  }
+
   Future<void> _editNickname(CurrentUser user) async {
     final controller = TextEditingController(text: user.nickname);
     final value = await showDialog<String>(
@@ -3145,6 +3180,12 @@ class _SettingsPageState extends State<SettingsPage> {
             subtitle: const Text('查看和清理本地缓存'),
             trailing: const Icon(Icons.chevron_right),
             onTap: _showStorage),
+        ListTile(
+            leading: const Icon(Icons.system_update_outlined),
+            title: const Text('检查更新'),
+            subtitle: const Text('检查 MagicChat 新版本'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _checkForUpdate),
         const ListTile(
             leading: Icon(Icons.info_outline), title: Text('关于 MagicChat')),
         if (widget.onLogout != null)
