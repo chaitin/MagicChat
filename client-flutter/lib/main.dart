@@ -738,6 +738,7 @@ class MessagesPage extends StatelessWidget {
                 child: _ConversationList(
                     repository: repository,
                     serverUrl: serverUrl,
+                    realtimeStore: realtimeStore,
                     selectedId: selectedId,
                     onSelect: onSelect)),
             if (split)
@@ -841,10 +842,12 @@ class _ConversationList extends StatefulWidget {
   const _ConversationList(
       {required this.repository,
       this.serverUrl,
+      this.realtimeStore,
       required this.selectedId,
       required this.onSelect});
   final MagicChatRepository repository;
   final String? serverUrl;
+  final RealtimeStore? realtimeStore;
   final String? selectedId;
   final ValueChanged<String> onSelect;
   @override
@@ -856,7 +859,18 @@ class _ConversationListState extends State<_ConversationList> {
   @override
   void initState() {
     super.initState();
+    widget.realtimeStore?.addListener(_onRealtimeChanged);
     _reload();
+  }
+
+  void _onRealtimeChanged() {
+    if (mounted) setState(_reload);
+  }
+
+  @override
+  void dispose() {
+    widget.realtimeStore?.removeListener(_onRealtimeChanged);
+    super.dispose();
   }
 
   void _reload() => _future = widget.repository.conversations();
