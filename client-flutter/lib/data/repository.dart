@@ -623,6 +623,7 @@ class HttpMagicChatRepository implements MagicChatRepository {
           return ChatMessage(
               id: '${item['id'] ?? ''}',
               sequence: (item['seq'] as num?)?.toInt(),
+              authorId: senderId is String ? senderId : null,
               author: '${senderName ?? '用户'}',
               conversationId: conversationId,
               contentType: content.type,
@@ -701,6 +702,9 @@ class HttpMagicChatRepository implements MagicChatRepository {
           final conversationName = conversation['name'];
           final chat = ChatMessage(
               id: '${message['id'] ?? ''}',
+              authorId: sender is Map<String, dynamic> && sender['id'] is String
+                  ? sender['id'] as String
+                  : null,
               author: name is String ? name : '用户',
               conversationId: conversationId is String ? conversationId : null,
               contentType: body.type,

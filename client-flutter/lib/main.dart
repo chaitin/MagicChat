@@ -1158,7 +1158,7 @@ class _ConversationViewState extends State<ConversationView> {
   void initState() {
     super.initState();
     _messagesFuture = _loadMessages();
-    _contactsFuture = widget.repository.contacts();
+    _contactsFuture = _loadConversationContacts();
     _scrollController.addListener(_onScroll);
     _controller.addListener(_persistDraft);
     widget.realtimeStore?.addListener(_onRealtimeChanged);
@@ -1194,9 +1194,117 @@ class _ConversationViewState extends State<ConversationView> {
     }));
   }
 
-  Future<List<ChatMessage>> _loadMessages() {
+  Future<List<Contact>> _loadConversationContacts() async {
+    final results = await Future.wait([
+      widget.repository.contacts(),
+      widget.repository.conversations(),
+    ]);
+    final contacts = <String, Contact>{
+      for (final contact in results[0] as List<Contact>) contact.id: contact,
+    };
     final id = widget.conversationId;
-    return id == null ? Future.value(const []) : widget.repository.messages(id);
+    if (id != null) {
+      for (final conversation in results[1] as List<ChatConversation>) {
+        if (conversation.id == id) {
+          for (final member in conversation.members) {
+            contacts[member.id] = member;
+          }
+          break;
+        }
+      }
+    }
+    return contacts.values.toList();
+  }
+
+  String _messageCacheKey(String id) => 'magicchat.messages.$id';
+
+  ChatMessage? _messageFromCache(Object? value) {
+    if (value is! Map<String, dynamic> || value['id'] is! String) return null;
+    final reactions = value['reactions'];
+    return ChatMessage(
+      id: value['id'] as String,
+      author: '${value['author'] ?? '用户'}',
+      authorId:
+          value['author_id'] is String ? value['author_id'] as String : null,
+      conversationId: value['conversation_id'] as String?,
+      sequence: (value['sequence'] as num?)?.toInt(),
+      contentType: '${value['content_type'] ?? 'text'}',
+      rawBody: value['raw_body'] is Map
+          ? Map<String, dynamic>.from(value['raw_body'] as Map)
+          : const {},
+      text: '${value['text'] ?? ''}',
+      mine: value['mine'] == true,
+      reactions: reactions is List
+          ? reactions
+              .whereType<Map<String, dynamic>>()
+              .map((item) => MessageReaction(
+                  text: '${item['text'] ?? ''}',
+                  count: (item['count'] as num?)?.toInt() ?? 0,
+                  reactedByMe: item['reacted_by_me'] == true))
+              .toList()
+          : const [],
+    );
+  }
+
+  Future<void> _cacheMessages(String id, List<ChatMessage> messages) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+        _messageCacheKey(id),
+        jsonEncode(messages
+            .map((message) => {
+                  'id': message.id,
+                  'author': message.author,
+                  'author_id': message.authorId,
+                  'conversation_id': message.conversationId,
+                  'sequence': message.sequence,
+                  'content_type': message.contentType,
+                  'raw_body': message.rawBody,
+                  'text': message.text,
+                  'mine': message.mine,
+                  'reactions': message.reactions
+                      .map((reaction) => {
+                            'text': reaction.text,
+                            'count': reaction.count,
+                            'reacted_by_me': reaction.reactedByMe,
+                          })
+                      .toList(),
+                })
+            .toList()));
+  }
+
+  Future<List<ChatMessage>> _readCachedMessages(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    final encoded = prefs.getString(_messageCacheKey(id));
+    if (encoded == null) return const [];
+    final decoded = jsonDecode(encoded);
+    return decoded is List
+        ? decoded.map(_messageFromCache).whereType<ChatMessage>().toList()
+        : const [];
+  }
+
+  Future<List<ChatMessage>> _loadMessages() async {
+    final id = widget.conversationId;
+    if (id == null) return const [];
+    final cached = await _readCachedMessages(id);
+    if (cached.isNotEmpty) unawaited(_refreshMessages(id));
+    if (cached.isNotEmpty) return cached;
+    final fresh = await widget.repository.messages(id);
+    unawaited(_cacheMessages(id, fresh));
+    return fresh;
+  }
+
+  Future<void> _refreshMessages(String id) async {
+    final fresh = await widget.repository.messages(id);
+    final merged = <String, ChatMessage>{
+      for (final message in await _readCachedMessages(id)) message.id: message,
+      for (final message in fresh) message.id: message,
+    }.values.toList()
+      ..sort((a, b) => (a.sequence ?? 0).compareTo(b.sequence ?? 0));
+    await _cacheMessages(id, merged);
+    if (!mounted || widget.conversationId != id) return;
+    setState(() {
+      _messagesFuture = Future.value(merged);
+    });
   }
 
   void _onRealtimeChanged() {
@@ -1243,6 +1351,7 @@ class _ConversationViewState extends State<ConversationView> {
             {..._olderMessages, ...snapshot}.map((item) => item.id).toSet();
         _olderMessages.insertAll(
             0, older.where((item) => !existing.contains(item.id)));
+        unawaited(_cacheMessages(id, [..._olderMessages, ...snapshot]));
         setState(() {});
       }
     } finally {
@@ -1261,6 +1370,7 @@ class _ConversationViewState extends State<ConversationView> {
       _olderMessages.clear();
       _lastReadSequence = 0;
       _messagesFuture = _loadMessages();
+      _contactsFuture = _loadConversationContacts();
       _controller.clear();
       unawaited(_restoreDraft());
     }
@@ -1737,9 +1847,22 @@ class _MessageBubble extends StatelessWidget {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         if (!mine)
-          Text(message.author,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: colors.primary, fontWeight: FontWeight.w600)),
+          FutureBuilder<List<Contact>>(
+              future: contactsFuture,
+              builder: (context, snapshot) {
+                final contactName = message.authorId == null
+                    ? null
+                    : snapshot.data
+                        ?.where((contact) => contact.id == message.authorId)
+                        .map((contact) => contact.name)
+                        .firstOrNull;
+                return Text(
+                    contactName?.isNotEmpty == true
+                        ? contactName!
+                        : message.author,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: colors.primary, fontWeight: FontWeight.w600));
+              }),
         Row(mainAxisSize: MainAxisSize.min, children: [
           if (prefix != null) Icon(prefix, size: 18),
           if (prefix != null) const SizedBox(width: 6),

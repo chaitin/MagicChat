@@ -31,6 +31,7 @@ class ChatMessage {
       {required this.id,
       required this.text,
       required this.author,
+      this.authorId,
       this.conversationId,
       this.sequence,
       this.contentType = 'text',
@@ -44,6 +45,7 @@ class ChatMessage {
   final Map<String, dynamic> rawBody;
   final String text;
   final String author;
+  final String? authorId;
   final bool mine;
   final List<MessageReaction> reactions;
 }
