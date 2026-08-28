@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
@@ -983,6 +984,8 @@ class _ConversationViewState extends State<ConversationView> {
   Future<List<Contact>>? _contactsFuture;
   final _olderMessages = <ChatMessage>[];
   bool _loadingOlder = false;
+  final _selectedMessageIds = <String>{};
+  List<ChatMessage> _visibleMessages = const [];
 
   @override
   void initState() {
@@ -1129,6 +1132,25 @@ class _ConversationViewState extends State<ConversationView> {
     if (conversationId == null) return const Center(child: Text('选择一个会话开始聊天'));
     return Column(
       children: [
+        if (_selectedMessageIds.isNotEmpty)
+          Material(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            child: Row(children: [
+              IconButton(
+                  tooltip: '取消多选',
+                  onPressed: () => setState(_selectedMessageIds.clear),
+                  icon: const Icon(Icons.close)),
+              Expanded(child: Text('已选择 ${_selectedMessageIds.length} 条消息')),
+              IconButton(
+                  tooltip: '复制',
+                  icon: const Icon(Icons.copy_outlined),
+                  onPressed: _copySelected),
+              IconButton(
+                  tooltip: '撤回所选',
+                  icon: const Icon(Icons.undo),
+                  onPressed: () => _revokeSelected(conversationId)),
+            ]),
+          ),
         Expanded(
           child: FutureBuilder<List<ChatMessage>>(
             future: _messagesFuture,
@@ -1151,6 +1173,7 @@ class _ConversationViewState extends State<ConversationView> {
                   result.add(message);
                 return result;
               });
+              _visibleMessages = allMessages;
               return ListView(
                 controller: _scrollController,
                 children: allMessages
@@ -1159,8 +1182,22 @@ class _ConversationViewState extends State<ConversationView> {
                               ? Alignment.centerRight
                               : Alignment.centerLeft,
                           child: GestureDetector(
-                            onLongPress: () =>
-                                _showMessageActions(conversationId, message),
+                            onTap: _selectedMessageIds.isEmpty
+                                ? null
+                                : () => setState(() {
+                                      if (!_selectedMessageIds
+                                          .remove(message.id)) {
+                                        _selectedMessageIds.add(message.id);
+                                      }
+                                    }),
+                            onLongPress: () {
+                              if (_selectedMessageIds.isNotEmpty) {
+                                setState(
+                                    () => _selectedMessageIds.add(message.id));
+                              } else {
+                                _showMessageActions(conversationId, message);
+                              }
+                            },
                             child: _MessageBubble(
                                 message: message,
                                 repository: widget.repository,
@@ -1232,6 +1269,30 @@ class _ConversationViewState extends State<ConversationView> {
         ),
       ],
     );
+  }
+
+  Future<void> _copySelected() async {
+    final text = _visibleMessages
+        .where((message) => _selectedMessageIds.contains(message.id))
+        .map((message) => message.text)
+        .join('\n');
+    if (text.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('已复制')));
+    }
+  }
+
+  Future<void> _revokeSelected(String conversationId) async {
+    final selected = _visibleMessages
+        .where((message) =>
+            _selectedMessageIds.contains(message.id) && message.mine)
+        .toList();
+    for (final message in selected) {
+      await widget.repository.revokeMessage(conversationId, message.id);
+    }
+    if (mounted) setState(_selectedMessageIds.clear);
   }
 
   Future<void> _pickMention() async {
@@ -1391,6 +1452,10 @@ class _ConversationViewState extends State<ConversationView> {
               onTap: () => Navigator.pop(context, 'revoke'),
             ),
           ListTile(
+              leading: const Icon(Icons.checklist),
+              title: const Text('多选'),
+              onTap: () => Navigator.pop(context, 'select')),
+          ListTile(
               leading: const Icon(Icons.forum_outlined),
               title: const Text('创建话题'),
               onTap: () => Navigator.pop(context, 'topic')),
@@ -1402,7 +1467,9 @@ class _ConversationViewState extends State<ConversationView> {
       ),
     );
     if (!mounted || action == null) return;
-    if (action == 'revoke') {
+    if (action == 'select') {
+      if (mounted) setState(() => _selectedMessageIds.add(message.id));
+    } else if (action == 'revoke') {
       await _confirmRevoke(conversationId, message);
     } else if (action == 'topic') {
       await widget.repository.createTopic(conversationId, message.id);
