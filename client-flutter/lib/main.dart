@@ -1097,6 +1097,7 @@ class _ConversationViewState extends State<ConversationView> {
   Future<List<Contact>>? _contactsFuture;
   final _olderMessages = <ChatMessage>[];
   bool _loadingOlder = false;
+  int _lastReadSequence = 0;
   final _selectedMessageIds = <String>{};
   List<ChatMessage> _visibleMessages = const [];
 
@@ -1149,6 +1150,20 @@ class _ConversationViewState extends State<ConversationView> {
     if (mounted) setState(() {});
   }
 
+  void _markLatestRead(List<ChatMessage> messages, String conversationId) {
+    final latest = messages
+        .where((message) => message.sequence != null)
+        .fold<int>(0, (value, message) => max(value, message.sequence!));
+    if (latest <= 0 || latest <= _lastReadSequence) return;
+    final atBottom = !_scrollController.hasClients ||
+        _scrollController.position.maxScrollExtent -
+                _scrollController.position.pixels <
+            48;
+    if (!atBottom) return;
+    _lastReadSequence = latest;
+    unawaited(widget.repository.markConversationRead(conversationId, latest));
+  }
+
   Future<void> _onScroll() async {
     if (_loadingOlder ||
         !_scrollController.hasClients ||
@@ -1191,6 +1206,7 @@ class _ConversationViewState extends State<ConversationView> {
     }
     if (oldWidget.conversationId != widget.conversationId) {
       _olderMessages.clear();
+      _lastReadSequence = 0;
       _messagesFuture = _loadMessages();
       _controller.clear();
       unawaited(_restoreDraft());
@@ -1287,6 +1303,7 @@ class _ConversationViewState extends State<ConversationView> {
                 return result;
               });
               _visibleMessages = allMessages;
+              _markLatestRead(allMessages, conversationId);
               return ListView(
                 controller: _scrollController,
                 padding: const EdgeInsets.fromLTRB(8, 16, 8, 12),
