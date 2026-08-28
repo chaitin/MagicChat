@@ -68,4 +68,24 @@ void main() {
     });
     expect(store.messages['m1']?.mine, isTrue);
   });
+
+  test('实时回应更新替换消息回应列表', () {
+    final store = RealtimeStore()..setCurrentUserId('me');
+    store.messages['m1'] =
+        const ChatMessage(id: 'm1', author: 'Alice', text: 'hi');
+    store.apply({
+      'event': 'message.reactions_updated',
+      'cursor': 1,
+      'payload': {
+        'message_id': 'm1',
+        'actor_user_id': 'me',
+        'actor_text': '👍',
+        'actor_reacted': true,
+        'reactions': [
+          {'text': '👍', 'count': 1}
+        ]
+      }
+    });
+    expect(store.messages['m1']?.reactions.single.reactedByMe, isTrue);
+  });
 }

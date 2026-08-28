@@ -25,6 +25,8 @@ class RealtimeStore extends ChangeNotifier {
       case 'message.created':
       case 'message.updated':
         _upsertMessage(payload);
+      case 'message.reactions_updated':
+        _patchReactions(payload);
       case 'conversation.removed':
         final id = payload['conversation_id'];
         if (id is String) conversations.remove(id);
@@ -50,6 +52,38 @@ class RealtimeStore extends ChangeNotifier {
           type: current.type,
           role: current.role);
     }
+  }
+
+  void _patchReactions(Map<String, dynamic> payload) {
+    final id = payload['message_id'];
+    if (id is! String) return;
+    final current = messages[id];
+    if (current == null) return;
+    final actorText = payload['actor_text'];
+    final actorReacted = payload['actor_reacted'] == true;
+    final actorUserId = payload['actor_user_id'];
+    final reactions = payload['reactions'];
+    if (reactions is! List) return;
+    messages[id] = ChatMessage(
+        id: current.id,
+        text: current.text,
+        author: current.author,
+        conversationId: current.conversationId,
+        sequence: current.sequence,
+        contentType: current.contentType,
+        rawBody: current.rawBody,
+        mine: current.mine,
+        reactions: reactions
+            .whereType<Map<String, dynamic>>()
+            .where((item) => item['text'] is String)
+            .map((item) => MessageReaction(
+                text: item['text'] as String,
+                count: (item['count'] as num?)?.toInt() ?? 0,
+                reactedByMe: actorUserId == currentUserId &&
+                    actorReacted &&
+                    actorText == item['text']))
+            .where((reaction) => reaction.count > 0)
+            .toList());
   }
 
   void _upsertMessage(Map<String, dynamic> payload) {
