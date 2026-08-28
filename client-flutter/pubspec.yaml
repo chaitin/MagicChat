@@ -1,0 +1,28 @@
+name: magicchat_client
+description: MagicChat 跨平台 Flutter 客户端
+publish_to: none
+version: 0.1.0+1
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.22.0"
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.2
+  web_socket_channel: ^3.0.1
+  shared_preferences: ^2.3.2
+  flutter_secure_storage: ^9.2.2
+  file_picker: ^8.1.2
+  cupertino_icons: ^1.0.8
+  url_launcher: ^6.3.1
+  path_provider: ^2.1.4
+  record: ^6.1.0
+  image: ^4.5.4
+  mobile_scanner: ^7.0.1
+  flutter_markdown_plus: ^1.0.12
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+flutter:
+  uses-material-design: true
