@@ -38,3 +38,19 @@ class MessageContent {
     }
   }
 }
+
+/// 将服务端提及 token 渲染为用户可读文本，同时保留未知用户的安全占位。
+String formatMentionText(
+    String content, Iterable<({String id, String name})> contacts) {
+  final names = {
+    for (final contact in contacts) contact.id.toLowerCase(): contact.name
+  };
+  return content.replaceAllMapped(RegExp(r'\{\(@(user|app)/([^}]+)\)\}'),
+      (match) {
+    final type = match.group(1);
+    final id = match.group(2)!.toLowerCase();
+    if (type == 'user' && id == 'all') return '@所有人';
+    final name = names[id];
+    return '@${name?.isNotEmpty == true ? name : type == 'app' ? '应用' : '用户'}';
+  });
+}

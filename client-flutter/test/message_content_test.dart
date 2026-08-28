@@ -9,4 +9,14 @@ void main() {
     expect(image.raw['file_id'], 'f1');
     expect(MessageContent.parse({'type': 'chart'}).text, '[图表]');
   });
+
+  test('提及 token 按联系人名称渲染', () {
+    expect(
+      formatMentionText(
+        '你好 {(@user/ABC)} {(@user/all)} {(@app/XYZ)}',
+        [(id: 'abc', name: '小明')],
+      ),
+      '你好 @小明 @所有人 @应用',
+    );
+  });
 }

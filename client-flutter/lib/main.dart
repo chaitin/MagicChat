@@ -19,6 +19,7 @@ import 'data/voice_recorder.dart';
 import 'data/avatar_processor.dart';
 import 'features/qr_scanner_page.dart';
 import 'domain/models.dart';
+import 'domain/message_content.dart';
 
 Uri? _resolveAssetUri(String? serverUrl, String value) {
   final parsed = Uri.tryParse(value);
@@ -979,6 +980,7 @@ class _ConversationViewState extends State<ConversationView> {
   Future<List<ChatMessage>>? _messagesFuture;
   bool _sendingFile = false;
   bool _recording = false;
+  Future<List<Contact>>? _contactsFuture;
   final _olderMessages = <ChatMessage>[];
   bool _loadingOlder = false;
 
@@ -986,6 +988,7 @@ class _ConversationViewState extends State<ConversationView> {
   void initState() {
     super.initState();
     _messagesFuture = _loadMessages();
+    _contactsFuture = widget.repository.contacts();
     _scrollController.addListener(_onScroll);
     _controller.addListener(_persistDraft);
     widget.realtimeStore?.addListener(_onRealtimeChanged);
@@ -1161,7 +1164,8 @@ class _ConversationViewState extends State<ConversationView> {
                             child: _MessageBubble(
                                 message: message,
                                 repository: widget.repository,
-                                conversationId: conversationId),
+                                conversationId: conversationId,
+                                contactsFuture: _contactsFuture),
                           ),
                         ))
                     .toList(),
@@ -1174,6 +1178,11 @@ class _ConversationViewState extends State<ConversationView> {
             padding: const EdgeInsets.all(8),
             child: Row(
               children: [
+                IconButton(
+                  icon: const Icon(Icons.alternate_email),
+                  tooltip: '提及成员',
+                  onPressed: _sendingFile ? null : _pickMention,
+                ),
                 IconButton(
                   icon: const Icon(Icons.attach_file),
                   tooltip: '发送文件',
@@ -1223,6 +1232,48 @@ class _ConversationViewState extends State<ConversationView> {
         ),
       ],
     );
+  }
+
+  Future<void> _pickMention() async {
+    final contacts = await (_contactsFuture ??= widget.repository.contacts());
+    if (!mounted) return;
+    final selected = await showModalBottomSheet<Contact>(
+        context: context,
+        showDragHandle: true,
+        builder: (context) => SafeArea(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.campaign_outlined),
+                    title: const Text('所有人'),
+                    onTap: () => Navigator.pop(
+                        context, const Contact(id: 'all', name: '所有人')),
+                  ),
+                  ...contacts.map((contact) => ListTile(
+                        leading: CircleAvatar(
+                            child: Text(contact.name.isEmpty
+                                ? '?'
+                                : contact.name.substring(0, 1))),
+                        title: Text(contact.name),
+                        subtitle: Text(contact.online ? '在线' : '离线'),
+                        onTap: () => Navigator.pop(context, contact),
+                      )),
+                ],
+              ),
+            ));
+    if (selected == null || !mounted) return;
+    final token = selected.id == 'all'
+        ? '{(@user/all)}'
+        : '{(@${selected.type}/${selected.id})}';
+    final value = _controller.value;
+    final text = value.text;
+    final start = value.selection.isValid ? value.selection.start : text.length;
+    final end = value.selection.isValid ? value.selection.end : start;
+    final next = text.replaceRange(start, end, '$token ');
+    _controller.value = TextEditingValue(
+        text: next,
+        selection: TextSelection.collapsed(offset: start + token.length + 1));
   }
 
   Future<void> _pickAndSendFile(String conversationId) async {
@@ -1390,10 +1441,12 @@ class _MessageBubble extends StatelessWidget {
   const _MessageBubble(
       {required this.message,
       required this.repository,
-      required this.conversationId});
+      required this.conversationId,
+      this.contactsFuture});
   final ChatMessage message;
   final MagicChatRepository repository;
   final String conversationId;
+  final Future<List<Contact>>? contactsFuture;
 
   @override
   Widget build(BuildContext context) {
@@ -1440,8 +1493,16 @@ class _MessageBubble extends StatelessWidget {
                           launchUrl(uri, mode: LaunchMode.externalApplication);
                         }
                       })
-                  : Text(message.text,
-                      style: TextStyle(color: mine ? colors.onPrimary : null))),
+                  : FutureBuilder<List<Contact>>(
+                      future: contactsFuture,
+                      builder: (context, snapshot) {
+                        final contacts = snapshot.data ?? const <Contact>[];
+                        return Text(
+                            formatMentionText(message.text,
+                                contacts.map((c) => (id: c.id, name: c.name))),
+                            style: TextStyle(
+                                color: mine ? colors.onPrimary : null));
+                      })),
         ]),
         if ((message.contentType == 'image' ||
                 message.contentType == 'voice' ||
