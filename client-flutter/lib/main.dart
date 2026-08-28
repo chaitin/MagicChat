@@ -3285,7 +3285,8 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   @override
-  Widget build(BuildContext context) => ListView(children: [
+  Widget build(BuildContext context) =>
+      ListView(padding: const EdgeInsets.fromLTRB(12, 12, 12, 24), children: [
         FutureBuilder<CurrentUser>(
             future: _userFuture,
             builder: (context, snapshot) {
@@ -3315,65 +3316,79 @@ class _SettingsPageState extends State<SettingsPage> {
                   trailing: const Icon(Icons.edit_outlined),
                   onTap: () => _editNickname(user));
             }),
-        const Divider(),
-        ListTile(
-            leading: const Icon(Icons.manage_accounts_outlined),
-            title: const Text('账户'),
-            subtitle: const Text('切换已保存的登录账户'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: _chooseAccount),
-        ListTile(
-            leading: const Icon(Icons.qr_code_scanner),
-            title: const Text('扫描二维码'),
-            subtitle: const Text('扫描链接或查看二维码文本'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const QrScannerPage()))),
-        ListTile(
-            leading: Icon(Icons.dns),
-            title: Text('服务器'),
-            subtitle: Text('配置 MagicChat Server 地址'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: _editServer),
-        ListTile(
-            leading: const Icon(Icons.palette_outlined),
-            title: const Text('外观'),
-            subtitle: const Text('主题设置'),
-            trailing: DropdownButton<ThemeMode>(
-                value: widget.themeMode,
-                onChanged: (mode) {
-                  if (mode != null) widget.onThemeChanged?.call(mode);
-                },
-                items: const [
-                  DropdownMenuItem(
-                      value: ThemeMode.system, child: Text('跟随系统')),
-                  DropdownMenuItem(value: ThemeMode.light, child: Text('浅色')),
-                  DropdownMenuItem(value: ThemeMode.dark, child: Text('深色')),
-                ])),
-        SwitchListTile(
-            secondary: const Icon(Icons.notifications_outlined),
-            title: const Text('通知'),
-            subtitle: const Text('接收新消息和系统通知'),
-            value: _notificationsEnabled,
-            onChanged: _setNotifications),
-        ListTile(
-            leading: const Icon(Icons.storage_outlined),
-            title: const Text('存储空间'),
-            subtitle: const Text('查看和清理本地缓存'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: _showStorage),
-        ListTile(
-            leading: const Icon(Icons.system_update_outlined),
-            title: const Text('检查更新'),
-            subtitle: const Text('检查 MagicChat 新版本'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: _checkForUpdate),
-        const ListTile(
-            leading: Icon(Icons.info_outline), title: Text('关于 MagicChat')),
-        if (widget.onLogout != null)
+        const SizedBox(height: 12),
+        Card(
+            child: Column(children: [
           ListTile(
-              leading: const Icon(Icons.logout),
-              title: const Text('退出登录'),
-              onTap: widget.onLogout)
+              leading: const Icon(Icons.manage_accounts_outlined),
+              title: const Text('账户'),
+              subtitle: const Text('切换已保存的登录账户'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _chooseAccount),
+          ListTile(
+              leading: const Icon(Icons.qr_code_scanner),
+              title: const Text('扫描二维码'),
+              subtitle: const Text('扫描链接或查看二维码文本'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const QrScannerPage()))),
+          ListTile(
+              leading: Icon(Icons.dns),
+              title: Text('服务器'),
+              subtitle: Text('配置 MagicChat Server 地址'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _editServer),
+        ])),
+        const SizedBox(height: 12),
+        Card(
+            child: Column(children: [
+          ListTile(
+              leading: const Icon(Icons.palette_outlined),
+              title: const Text('外观'),
+              subtitle: const Text('主题设置'),
+              trailing: DropdownButton<ThemeMode>(
+                  value: widget.themeMode,
+                  onChanged: (mode) {
+                    if (mode != null) widget.onThemeChanged?.call(mode);
+                  },
+                  items: const [
+                    DropdownMenuItem(
+                        value: ThemeMode.system, child: Text('跟随系统')),
+                    DropdownMenuItem(value: ThemeMode.light, child: Text('浅色')),
+                    DropdownMenuItem(value: ThemeMode.dark, child: Text('深色')),
+                  ])),
+          SwitchListTile(
+              secondary: const Icon(Icons.notifications_outlined),
+              title: const Text('通知'),
+              subtitle: const Text('接收新消息和系统通知'),
+              value: _notificationsEnabled,
+              onChanged: _setNotifications),
+        ])),
+        const SizedBox(height: 12),
+        Card(
+            child: Column(children: [
+          ListTile(
+              leading: const Icon(Icons.storage_outlined),
+              title: const Text('存储空间'),
+              subtitle: const Text('查看和清理本地缓存'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _showStorage),
+          ListTile(
+              leading: const Icon(Icons.system_update_outlined),
+              title: const Text('检查更新'),
+              subtitle: const Text('检查 MagicChat 新版本'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _checkForUpdate),
+          const ListTile(
+              leading: Icon(Icons.info_outline), title: Text('关于 MagicChat')),
+        ])),
+        if (widget.onLogout != null)
+          Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Card(
+                  child: ListTile(
+                      leading: const Icon(Icons.logout),
+                      title: const Text('退出登录'),
+                      onTap: widget.onLogout)))
       ]);
 }
