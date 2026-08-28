@@ -87,6 +87,8 @@ class RealtimeStore extends ChangeNotifier {
   }
 
   void _upsertMessage(Map<String, dynamic> payload) {
+    final nested = payload['message'];
+    if (nested is Map<String, dynamic>) payload = nested;
     final id = payload['id'];
     if (id is! String || id.isEmpty) return;
     final body = MessageContent.parse(payload['body']);

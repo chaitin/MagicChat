@@ -88,4 +88,20 @@ void main() {
     });
     expect(store.messages['m1']?.reactions.single.reactedByMe, isTrue);
   });
+
+  test('兼容服务端 message envelope 包装', () {
+    final store = RealtimeStore();
+    store.apply({
+      'event': 'message.created',
+      'cursor': 1,
+      'payload': {
+        'message': {
+          'id': 'm2',
+          'sender': {'id': 'u2', 'name': 'Bob'},
+          'body': {'type': 'text', 'content': 'envelope'}
+        }
+      }
+    });
+    expect(store.messages['m2']?.text, 'envelope');
+  });
 }
