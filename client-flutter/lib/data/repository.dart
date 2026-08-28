@@ -791,6 +791,29 @@ class HttpMagicChatRepository implements MagicChatRepository {
           type:
               '${value['type'] ?? (apps.contains(value) ? 'app' : 'group')}'));
     }
+    final userIds = data['user_ids'];
+    if (userIds is List) {
+      final ids =
+          userIds.whereType<String>().where((id) => id.isNotEmpty).toList();
+      if (ids.isNotEmpty) {
+        final resolved = _data(await _request(
+            'POST', '/api/client/users/resolve',
+            body: {'user_ids': ids.take(100).toList()}))['users'];
+        if (resolved is List) {
+          for (final value in resolved) {
+            if (value is Map<String, dynamic> &&
+                value['id'] is String &&
+                value['name'] is String) {
+              result.add(Contact(
+                  id: value['id'] as String,
+                  name: value['name'] as String,
+                  online: value['online'] == true,
+                  type: 'user'));
+            }
+          }
+        }
+      }
+    }
     return result;
   }
 
