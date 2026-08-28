@@ -6,7 +6,8 @@ plugins {
 
 android {
     namespace = "com.example.magicchat_client"
-    compileSdk = flutter.compileSdkVersion
+    // file_picker's current Android lifecycle dependency requires API 36.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

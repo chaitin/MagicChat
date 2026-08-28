@@ -883,17 +883,12 @@ class _ConversationListState extends State<_ConversationList> {
       await widget.repository
           .setGroupVisibility(conversation.id, !conversation.isPublic);
     } else if (action == 'avatar') {
-      final result = await FilePicker.platform
-          .pickFiles(type: FileType.image, withData: true);
+      final result =
+          await FilePicker.pickFiles(type: FileType.image, withData: true);
       if (result == null || !context.mounted) return;
       final file = result.files.single;
-      if (file.bytes == null && file.path == null) return;
       final rawBytes = file.bytes;
-      if (rawBytes == null) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('当前平台无法处理群头像，请重试')));
-        return;
-      }
+      if (rawBytes == null) return;
       final processed = const AvatarProcessor().process(rawBytes);
       await widget.repository.uploadConversationAvatar(
           conversation.id,
@@ -1231,7 +1226,7 @@ class _ConversationViewState extends State<ConversationView> {
   }
 
   Future<void> _pickAndSendFile(String conversationId) async {
-    final result = await FilePicker.platform.pickFiles(withData: false);
+    final result = await FilePicker.pickFiles(withData: false);
     if (!mounted || result == null || result.files.single.path == null) {
       if (mounted && result != null) {
         ScaffoldMessenger.of(context)
@@ -2735,8 +2730,8 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _pickAvatar() async {
-    final result = await FilePicker.platform
-        .pickFiles(type: FileType.image, withData: true);
+    final result =
+        await FilePicker.pickFiles(type: FileType.image, withData: true);
     if (result == null || !mounted) return;
     final file = result.files.single;
     final bytes = file.bytes;
