@@ -2109,8 +2109,11 @@ class _ContactsPageState extends State<ContactsPage> {
                                   final conversation = c.type == 'app'
                                       ? await widget.repository
                                           .createAppConversation(c.id)
-                                      : ChatConversation(
-                                          id: c.id, title: c.name);
+                                      : c.type == 'user'
+                                          ? await widget.repository
+                                              .createDirectConversation(c.id)
+                                          : ChatConversation(
+                                              id: c.id, title: c.name);
                                   if (context.mounted)
                                     widget.onOpenConversation
                                         ?.call(conversation.id);
