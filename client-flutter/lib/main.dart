@@ -1362,6 +1362,8 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final mine = message.mine;
     final prefix = switch (message.contentType) {
       'image' => Icons.image_outlined,
       'file' => Icons.attach_file,
@@ -1372,97 +1374,108 @@ class _MessageBubble extends StatelessWidget {
       _ => null,
     };
     final options = message.rawBody['options'];
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(message.author, style: Theme.of(context).textTheme.labelMedium),
-          Row(mainAxisSize: MainAxisSize.min, children: [
-            if (prefix != null) Icon(prefix, size: 18),
-            if (prefix != null) const SizedBox(width: 6),
-            Flexible(
-                child: message.contentType == 'markdown'
-                    ? MarkdownBody(
-                        data: message.text,
-                        onTapLink: (text, href, title) {
-                          final uri = href == null ? null : Uri.tryParse(href);
-                          if (uri != null) {
-                            launchUrl(uri,
-                                mode: LaunchMode.externalApplication);
-                          }
-                        })
-                    : Text(message.text)),
-          ]),
-          if ((message.contentType == 'image' ||
-                  message.contentType == 'voice' ||
-                  message.contentType == 'file') &&
-              message.rawBody['file_id'] is String)
-            FutureBuilder<Uri?>(
-              future: repository
-                  .attachmentUrl(message.rawBody['file_id'] as String),
-              builder: (context, snapshot) {
-                final uri = snapshot.data;
-                if (uri == null) return const SizedBox.shrink();
-                if (message.contentType == 'image') {
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: GestureDetector(
-                      onTap: () => showDialog<void>(
-                        context: context,
-                        builder: (context) => Dialog(
-                          child: InteractiveViewer(
-                              child: Image.network(uri.toString(),
-                                  fit: BoxFit.contain)),
-                        ),
-                      ),
-                      child: ConstrainedBox(
-                          constraints: const BoxConstraints(
-                              maxWidth: 320, maxHeight: 240),
-                          child: Image.network(uri.toString(),
-                              fit: BoxFit.contain)),
-                    ),
-                  );
-                }
-                return TextButton.icon(
-                    onPressed: () =>
-                        launchUrl(uri, mode: LaunchMode.externalApplication),
-                    icon: Icon(message.contentType == 'voice'
-                        ? Icons.play_circle_outline
-                        : Icons.download_outlined),
-                    label:
-                        Text(message.contentType == 'voice' ? '播放语音' : '打开附件'));
-              },
-            ),
-          if (message.contentType == 'choice' && options is List)
-            ...options.whereType<Map<String, dynamic>>().map((option) {
-              final id = option['id'];
-              final label = option['label'] ?? option['text'];
-              return id is String && label is String
-                  ? TextButton(
-                      onPressed: () => repository
-                          .submitChoice(conversationId, message.id, [id]),
-                      child: Align(
-                          alignment: Alignment.centerLeft, child: Text(label)),
-                    )
-                  : const SizedBox.shrink();
-            }),
-          if (message.contentType == 'chart')
-            _ChartPreview(body: message.rawBody),
-          if (message.contentType == 'object' || message.contentType == 'chart')
-            ExpansionTile(
-                tilePadding: EdgeInsets.zero,
-                title:
-                    Text(message.contentType == 'chart' ? '查看图表数据' : '查看对象详情'),
-                children: [
-                  Align(
-                      alignment: Alignment.centerLeft,
-                      child: SelectableText(
-                          const JsonEncoder.withIndent('  ')
-                              .convert(message.rawBody),
-                          style: Theme.of(context).textTheme.bodySmall))
-                ]),
-        ]),
+    return Container(
+      margin: EdgeInsets.only(
+          left: mine ? 56 : 12, right: mine ? 12 : 56, bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      decoration: BoxDecoration(
+        color: mine ? colors.primary : colors.surfaceContainerHighest,
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(18),
+          topRight: const Radius.circular(18),
+          bottomLeft: Radius.circular(mine ? 18 : 4),
+          bottomRight: Radius.circular(mine ? 4 : 18),
+        ),
       ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (!mine)
+          Text(message.author,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: colors.primary, fontWeight: FontWeight.w600)),
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          if (prefix != null) Icon(prefix, size: 18),
+          if (prefix != null) const SizedBox(width: 6),
+          Flexible(
+              child: message.contentType == 'markdown'
+                  ? MarkdownBody(
+                      data: message.text,
+                      onTapLink: (text, href, title) {
+                        final uri = href == null ? null : Uri.tryParse(href);
+                        if (uri != null) {
+                          launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      })
+                  : Text(message.text,
+                      style: TextStyle(color: mine ? colors.onPrimary : null))),
+        ]),
+        if ((message.contentType == 'image' ||
+                message.contentType == 'voice' ||
+                message.contentType == 'file') &&
+            message.rawBody['file_id'] is String)
+          FutureBuilder<Uri?>(
+            future:
+                repository.attachmentUrl(message.rawBody['file_id'] as String),
+            builder: (context, snapshot) {
+              final uri = snapshot.data;
+              if (uri == null) return const SizedBox.shrink();
+              if (message.contentType == 'image') {
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: GestureDetector(
+                    onTap: () => showDialog<void>(
+                      context: context,
+                      builder: (context) => Dialog(
+                        child: InteractiveViewer(
+                            child: Image.network(uri.toString(),
+                                fit: BoxFit.contain)),
+                      ),
+                    ),
+                    child: ConstrainedBox(
+                        constraints:
+                            const BoxConstraints(maxWidth: 320, maxHeight: 240),
+                        child:
+                            Image.network(uri.toString(), fit: BoxFit.contain)),
+                  ),
+                );
+              }
+              return TextButton.icon(
+                  onPressed: () =>
+                      launchUrl(uri, mode: LaunchMode.externalApplication),
+                  icon: Icon(message.contentType == 'voice'
+                      ? Icons.play_circle_outline
+                      : Icons.download_outlined),
+                  label:
+                      Text(message.contentType == 'voice' ? '播放语音' : '打开附件'));
+            },
+          ),
+        if (message.contentType == 'choice' && options is List)
+          ...options.whereType<Map<String, dynamic>>().map((option) {
+            final id = option['id'];
+            final label = option['label'] ?? option['text'];
+            return id is String && label is String
+                ? TextButton(
+                    onPressed: () => repository
+                        .submitChoice(conversationId, message.id, [id]),
+                    child: Align(
+                        alignment: Alignment.centerLeft, child: Text(label)),
+                  )
+                : const SizedBox.shrink();
+          }),
+        if (message.contentType == 'chart')
+          _ChartPreview(body: message.rawBody),
+        if (message.contentType == 'object' || message.contentType == 'chart')
+          ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: Text(message.contentType == 'chart' ? '查看图表数据' : '查看对象详情'),
+              children: [
+                Align(
+                    alignment: Alignment.centerLeft,
+                    child: SelectableText(
+                        const JsonEncoder.withIndent('  ')
+                            .convert(message.rawBody),
+                        style: Theme.of(context).textTheme.bodySmall))
+              ]),
+      ]),
     );
   }
 }
