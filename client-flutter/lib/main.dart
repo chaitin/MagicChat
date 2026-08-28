@@ -125,6 +125,7 @@ class _MagicChatAppState extends State<MagicChatApp> {
 
   Future<void> _registerPush(String server, String token) async {
     try {
+      await const LocalNotificationService().requestPermission();
       await PushService().registerPlatformGrant(
           serverUrl: server,
           sessionToken: token,
