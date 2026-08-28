@@ -3050,6 +3050,9 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _setNotifications(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('magicchat.notifications.enabled', value);
+    if (value) {
+      await const LocalNotificationService().requestPermission();
+    }
     if (mounted) setState(() => _notificationsEnabled = value);
   }
 
