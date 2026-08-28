@@ -196,13 +196,53 @@ class _MagicChatAppState extends State<MagicChatApp> {
         title: 'MagicChat',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
-            colorScheme:
-                ColorScheme.fromSeed(seedColor: const Color(0xff3478f6)),
+            colorScheme: ColorScheme.fromSeed(
+                seedColor: const Color(0xff3a76f0),
+                brightness: Brightness.light),
+            scaffoldBackgroundColor: const Color(0xfff7f8fa),
+            appBarTheme: const AppBarTheme(
+                backgroundColor: Color(0xfff7f8fa),
+                surfaceTintColor: Colors.transparent,
+                elevation: 0,
+                centerTitle: false),
+            inputDecorationTheme: InputDecorationTheme(
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(12)),
+                    borderSide: BorderSide.none),
+                enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(12)),
+                    borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(12)),
+                    borderSide:
+                        BorderSide(color: Color(0xff3a76f0), width: 1.5)),
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 14, vertical: 12)),
+            cardTheme: const CardThemeData(
+                elevation: 0,
+                margin: EdgeInsets.zero,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(16)))),
             useMaterial3: true),
         darkTheme: ThemeData(
             colorScheme: ColorScheme.fromSeed(
-                seedColor: const Color(0xff3478f6),
+                seedColor: const Color(0xff3a76f0),
                 brightness: Brightness.dark),
+            scaffoldBackgroundColor: const Color(0xff17191c),
+            appBarTheme: const AppBarTheme(
+                surfaceTintColor: Colors.transparent, elevation: 0),
+            inputDecorationTheme: const InputDecorationTheme(
+                filled: true,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(12)),
+                    borderSide: BorderSide.none)),
+            cardTheme: const CardThemeData(
+                elevation: 0,
+                margin: EdgeInsets.zero,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(16)))),
             useMaterial3: true),
         themeMode: _themeMode,
         home: _loading
@@ -520,15 +560,21 @@ class _AppShellState extends State<AppShell> {
           label: '设置'),
     ];
     return Scaffold(
-      appBar: AppBar(title: const Text('MagicChat'), actions: [
-        IconButton(
-            onPressed: () => _showSearch(context),
-            icon: const Icon(Icons.search),
-            tooltip: '搜索')
-      ]),
+      appBar: AppBar(
+          title: const Text('MagicChat',
+              style:
+                  TextStyle(fontWeight: FontWeight.w700, letterSpacing: -.2)),
+          actions: [
+            IconButton(
+                onPressed: () => _showSearch(context),
+                icon: const Icon(Icons.search),
+                tooltip: '搜索')
+          ]),
       body: Row(children: [
         if (wide)
           NavigationRail(
+              backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+              useIndicator: true,
               selectedIndex: _index,
               onDestinationSelected: (i) => setState(() => _index = i),
               labelType: NavigationRailLabelType.all,
@@ -543,6 +589,8 @@ class _AppShellState extends State<AppShell> {
       bottomNavigationBar: wide
           ? null
           : NavigationBar(
+              backgroundColor: Theme.of(context).colorScheme.surface,
+              elevation: 0,
               selectedIndex: _index,
               onDestinationSelected: (i) => setState(() => _index = i),
               destinations: destinations),
@@ -795,13 +843,23 @@ class _ConversationListState extends State<_ConversationList> {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        return ListView.builder(
+        return ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             itemCount: snapshot.data!.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 2),
             itemBuilder: (context, i) {
               final c = snapshot.data![i];
               return ListTile(
+                  minVerticalPadding: 10,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
                   selected: c.id == widget.selectedId,
+                  selectedTileColor:
+                      Theme.of(context).colorScheme.primaryContainer,
                   leading: CircleAvatar(
+                      radius: 23,
                       backgroundImage:
                           _resolveAssetUri(widget.serverUrl, c.avatar) == null
                               ? null
@@ -812,15 +870,17 @@ class _ConversationListState extends State<_ConversationList> {
                           ? Text(
                               c.title.isEmpty ? '?' : c.title.substring(0, 1))
                           : null),
-                  title: Text(c.title),
+                  title: Text(c.title,
+                      style: TextStyle(
+                          fontWeight: c.unread > 0
+                              ? FontWeight.w700
+                              : FontWeight.w500)),
                   subtitle: Text(
-                      c.announcement.isNotEmpty
-                          ? '公告：${c.announcement}'
-                          : c.preview,
+                      c.announcement.isNotEmpty ? '公告：${c.announcement}' : c.preview,
                       maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                  trailing:
-                      c.unread == 0 ? null : Badge(label: Text('${c.unread}')),
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontWeight: c.unread > 0 ? FontWeight.w600 : null)),
+                  trailing: c.unread == 0 ? null : Badge(label: Text('${c.unread}')),
                   onTap: () async {
                     widget.onSelect(c.id);
                     if (c.unread > 0 && c.lastMessageSeq > 0) {
@@ -1229,6 +1289,7 @@ class _ConversationViewState extends State<ConversationView> {
               _visibleMessages = allMessages;
               return ListView(
                 controller: _scrollController,
+                padding: const EdgeInsets.fromLTRB(8, 16, 8, 12),
                 children: allMessages
                     .map((message) => Align(
                           alignment: message.mine
@@ -1265,7 +1326,7 @@ class _ConversationViewState extends State<ConversationView> {
         ),
         SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
             child: Row(
               children: [
                 IconButton(
@@ -1291,10 +1352,19 @@ class _ConversationViewState extends State<ConversationView> {
                 Expanded(
                     child: TextField(
                         controller: _controller,
+                        minLines: 1,
+                        maxLines: 5,
+                        textInputAction: TextInputAction.newline,
                         decoration: const InputDecoration(
-                            hintText: '输入消息', border: OutlineInputBorder()))),
-                IconButton(
-                  icon: const Icon(Icons.send),
+                            hintText: '输入消息…',
+                            prefixIcon: Icon(Icons.emoji_emotions_outlined),
+                            isDense: true))),
+                const SizedBox(width: 6),
+                IconButton.filled(
+                  icon: const Icon(Icons.send_rounded),
+                  style: IconButton.styleFrom(
+                      minimumSize: const Size(46, 46),
+                      shape: const CircleBorder()),
                   tooltip: '发送',
                   onPressed: () async {
                     final text = _controller.text.trim();
@@ -1607,6 +1677,22 @@ class _MessageBubble extends StatelessWidget {
               child: message.contentType == 'markdown'
                   ? MarkdownBody(
                       data: message.text,
+                      styleSheet: MarkdownStyleSheet.fromTheme(
+                              Theme.of(context))
+                          .copyWith(
+                              p: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                      color: mine ? colors.onPrimary : null),
+                              a: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                      color: mine
+                                          ? colors.onPrimary
+                                          : colors.primary,
+                                      decoration: TextDecoration.underline)),
                       onTapLink: (text, href, title) {
                         final uri = href == null ? null : Uri.tryParse(href);
                         if (uri != null) {
