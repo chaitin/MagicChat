@@ -1063,7 +1063,14 @@ class _ConversationListState extends State<_ConversationList> {
                 children: conversation.members
                     .map((item) => SimpleDialogOption(
                         onPressed: () => Navigator.pop(dialogContext, item),
-                        child: Text(item.name)))
+                        child: Row(children: [
+                          Expanded(child: Text(item.name)),
+                          if (item.role != 'member')
+                            Chip(
+                                label:
+                                    Text(item.role == 'owner' ? '群主' : '管理员'),
+                                visualDensity: VisualDensity.compact)
+                        ])))
                     .toList(),
               ));
       if (member != null && context.mounted) {

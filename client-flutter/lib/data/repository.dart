@@ -482,7 +482,11 @@ class HttpMagicChatRepository implements MagicChatRepository {
           .map((item) => Contact(
               id: item['id'] as String,
               name: item['name'] as String,
-              online: item['online'] == true))
+              online: item['online'] == true,
+              type: item['type'] == 'app' ? 'app' : 'user',
+              role: item['role'] == 'owner' || item['role'] == 'admin'
+                  ? item['role'] as String
+                  : 'member'))
           .toList()
       : const [];
 
@@ -808,7 +812,10 @@ class HttpMagicChatRepository implements MagicChatRepository {
                   id: value['id'] as String,
                   name: value['name'] as String,
                   online: value['online'] == true,
-                  type: 'user'));
+                  type: 'user',
+                  role: value['role'] == 'owner' || value['role'] == 'admin'
+                      ? value['role'] as String
+                      : 'member'));
             }
           }
         }

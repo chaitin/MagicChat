@@ -81,11 +81,13 @@ class Contact {
       {required this.id,
       required this.name,
       this.online = false,
-      this.type = 'user'});
+      this.type = 'user',
+      this.role = 'member'});
   final String id;
   final String name;
   final bool online;
   final String type;
+  final String role;
 }
 
 class Project {

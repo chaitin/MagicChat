@@ -42,7 +42,8 @@ class RealtimeStore extends ChangeNotifier {
           id: current.id,
           name: current.name,
           online: online,
-          type: current.type);
+          type: current.type,
+          role: current.role);
     }
   }
 
