@@ -35,7 +35,8 @@ class ChatMessage {
       this.sequence,
       this.contentType = 'text',
       this.rawBody = const {},
-      this.mine = false});
+      this.mine = false,
+      this.reactions = const []});
   final String id;
   final String? conversationId;
   final int? sequence;
@@ -44,6 +45,7 @@ class ChatMessage {
   final String text;
   final String author;
   final bool mine;
+  final List<MessageReaction> reactions;
 }
 
 class MessageSearchResult {

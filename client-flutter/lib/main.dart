@@ -1843,6 +1843,24 @@ class _MessageBubble extends StatelessWidget {
                             .convert(message.rawBody),
                         style: Theme.of(context).textTheme.bodySmall))
               ]),
+        if (message.reactions.isNotEmpty)
+          Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: message.reactions
+                      .map((reaction) => ActionChip(
+                          label: Text('${reaction.text} ${reaction.count}'),
+                          visualDensity: VisualDensity.compact,
+                          backgroundColor: reaction.reactedByMe
+                              ? colors.primaryContainer
+                              : null,
+                          onPressed: () => repository.setReaction(
+                              conversationId, message.id,
+                              text: reaction.text,
+                              reacted: !reaction.reactedByMe)))
+                      .toList()))
       ]),
     );
   }

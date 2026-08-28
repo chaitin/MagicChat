@@ -17,7 +17,7 @@ Flutter 工程与现有客户端并行演进，页面层通过 `MagicChatReposit
 | 二维码 | `QrScannerPage` | Android/iOS/macOS/Web 相机扫码、HTTP(S) 链接打开、文本结果展示及桌面粘贴兜底已接入 |
 | 项目、任务视图 | 项目及任务抽屉 | 项目创建、编辑、删除、列表/看板/日历时间线/甘特、`/tasks`、任务创建、编辑（描述/负责人/状态/优先级/日期/标签/一次性与周期提醒）、状态更新、删除和评论已接入 |
 | 文档协作 | 项目 → 文档、`DocumentRealtime`、`DocumentEditorPage` | 项目文档/目录列表、创建、创建目录、重命名、移动到根目录或其他目录和删除、编辑器界面（Markdown 编辑/预览、标题保存、本地草稿恢复）、二进制协作 WebSocket 桥接已接入；正文服务端协同持久化与协议帧解释待迁移 |
-| 图片、文件、语音、选择、对象卡片、图表 | `_MessageBubble`、`flutter_markdown_plus`、文件选择器、`VoiceRecorder`、`_ChartPreview` | 文件选择与 multipart 发送、Markdown 渲染及链接、图片/音频按 MIME 分流、图片交互预览、附件打开/语音播放入口、麦克风录制发送、类型摘要、折线/柱状/饼图/雷达图专用预览、对象展开、图标和 choice 选项响应已接入 |
+| 图片、文件、语音、选择、对象卡片、图表、回应 | `_MessageBubble`、`flutter_markdown_plus`、文件选择器、`VoiceRecorder`、`_ChartPreview` | 文件选择与 multipart 发送、Markdown 渲染及链接、图片/音频按 MIME 分流、图片交互预览、附件打开/语音播放入口、麦克风录制发送、类型摘要、折线/柱状/饼图/雷达图专用预览、对象展开、图标、choice 选项响应和 reaction 胶囊已接入 |
 | 推送、系统通知、平台文件能力 | Flutter platform channels | 待按平台接入 |
 
 ## 迁移顺序

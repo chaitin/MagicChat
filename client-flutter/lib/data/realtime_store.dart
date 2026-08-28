@@ -68,8 +68,21 @@ class RealtimeStore extends ChangeNotifier {
         contentType: body.type,
         rawBody: body.raw,
         text: body.text,
-        mine: senderId is String && senderId == currentUserId);
+        mine: senderId is String && senderId == currentUserId,
+        reactions: _reactions(payload['reactions']));
   }
+
+  List<MessageReaction> _reactions(Object? value) => value is List
+      ? value
+          .whereType<Map<String, dynamic>>()
+          .where((item) => item['text'] is String)
+          .map((item) => MessageReaction(
+              text: item['text'] as String,
+              count: (item['count'] as num?)?.toInt() ?? 0,
+              reactedByMe: item['reacted_by_me'] == true))
+          .where((reaction) => reaction.count > 0)
+          .toList()
+      : const [];
 
   void _patchConversation(Map<String, dynamic> payload) {
     final id = payload['conversation_id'];

@@ -605,11 +605,24 @@ class HttpMagicChatRepository implements MagicChatRepository {
               conversationId: conversationId,
               contentType: content.type,
               rawBody: content.raw,
-              text: content.text);
+              text: content.text,
+              reactions: _reactionsFromJson(item['reactions']));
         })
         .where((item) => item.id.isNotEmpty)
         .toList();
   }
+
+  List<MessageReaction> _reactionsFromJson(Object? value) => value is List
+      ? value
+          .whereType<Map<String, dynamic>>()
+          .where((item) => item['text'] is String)
+          .map((item) => MessageReaction(
+              text: item['text'] as String,
+              count: (item['count'] as num?)?.toInt() ?? 0,
+              reactedByMe: item['reacted_by_me'] == true))
+          .where((reaction) => reaction.count > 0)
+          .toList()
+      : const [];
 
   @override
   Future<void> sendMessage(String conversationId, String text) async =>
