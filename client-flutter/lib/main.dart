@@ -502,17 +502,19 @@ class _AppShellState extends State<AppShell> {
     if (event['event'] != 'message.created') return;
     final payload = event['payload'];
     if (payload is! Map<String, dynamic>) return;
-    final conversationId = payload['conversation_id'];
+    final message = payload['message'];
+    final data = message is Map<String, dynamic> ? message : payload;
+    final conversationId = data['conversation_id'];
     if (conversationId is! String || conversationId == _selectedConversation) {
       return;
     }
     final prefs = await SharedPreferences.getInstance();
     if (!(prefs.getBool('magicchat.notifications.enabled') ?? true)) return;
-    final sender = payload['sender'];
+    final sender = data['sender'];
     final title = sender is Map<String, dynamic> && sender['name'] is String
         ? sender['name'] as String
         : '新消息';
-    final body = MessageContent.parse(payload['body']).text;
+    final body = MessageContent.parse(data['body']).text;
     await _notifications.showMessage(
         conversationId: conversationId, title: title, body: body);
   }
