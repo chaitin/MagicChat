@@ -483,7 +483,8 @@ class _AppShellState extends State<AppShell> {
           serverUrl: widget.serverUrl,
           realtimeStore: widget.realtimeStore,
           selectedId: _selectedConversation,
-          onSelect: (id) => setState(() => _selectedConversation = id)),
+          onSelect: (id) =>
+              setState(() => _selectedConversation = id.isEmpty ? null : id)),
       ContactsPage(
           repository: _repository,
           onOpenConversation: (id) => setState(() {
@@ -630,6 +631,33 @@ class MessagesPage extends StatelessWidget {
   Widget build(BuildContext context) =>
       LayoutBuilder(builder: (context, constraints) {
         final split = constraints.maxWidth >= 700;
+        // 移动端使用单列导航：选择会话后进入聊天，返回按钮回到列表。
+        if (!split && selectedId != null) {
+          return Column(children: [
+            Material(
+              color: Theme.of(context).colorScheme.surfaceContainer,
+              child: SizedBox(
+                height: 52,
+                child: Row(children: [
+                  IconButton(
+                    tooltip: '返回会话列表',
+                    onPressed: () => onSelect(''),
+                    icon: const Icon(Icons.arrow_back),
+                  ),
+                  const Text('聊天',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                ]),
+              ),
+            ),
+            Expanded(
+              child: ConversationView(
+                repository: repository,
+                realtimeStore: realtimeStore,
+                conversationId: selectedId,
+              ),
+            ),
+          ]);
+        }
         return Stack(children: [
           Row(children: [
             SizedBox(
