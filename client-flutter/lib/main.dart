@@ -565,6 +565,7 @@ class _AppShellState extends State<AppShell> {
       ProjectsPage(repository: _repository),
       SettingsPage(
           repository: _repository,
+          realtimeStore: widget.realtimeStore,
           serverUrl: widget.serverUrl,
           onServerChanged: widget.onServerChanged,
           onAccountSwitch: widget.onAccountSwitch,
@@ -3183,6 +3184,7 @@ class ProjectsPage extends StatelessWidget {
 class SettingsPage extends StatefulWidget {
   const SettingsPage(
       {required this.repository,
+      this.realtimeStore,
       required this.serverUrl,
       this.onServerChanged,
       this.onAccountSwitch,
@@ -3192,6 +3194,7 @@ class SettingsPage extends StatefulWidget {
       super.key});
   final Future<void> Function()? onLogout;
   final MagicChatRepository repository;
+  final RealtimeStore? realtimeStore;
   final String? serverUrl;
   final ValueChanged<String>? onServerChanged;
   final ValueChanged<StoredAccount>? onAccountSwitch;
@@ -3207,12 +3210,24 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
+    widget.realtimeStore?.addListener(_onRealtimeChanged);
     _userFuture = widget.repository.currentUser();
     SharedPreferences.getInstance().then((prefs) {
       if (mounted)
         setState(() => _notificationsEnabled =
             prefs.getBool('magicchat.notifications.enabled') ?? true);
     });
+  }
+
+  void _onRealtimeChanged() {
+    if (widget.realtimeStore?.lastEvent != 'user.profile.updated') return;
+    if (mounted) setState(() => _userFuture = widget.repository.currentUser());
+  }
+
+  @override
+  void dispose() {
+    widget.realtimeStore?.removeListener(_onRealtimeChanged);
+    super.dispose();
   }
 
   Future<void> _setNotifications(bool value) async {

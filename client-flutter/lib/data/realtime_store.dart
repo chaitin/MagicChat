@@ -8,6 +8,7 @@ class RealtimeStore extends ChangeNotifier {
   final messages = <String, ChatMessage>{};
   final contacts = <String, Contact>{};
   String? currentUserId;
+  String? lastEvent;
   int cursor = 0;
 
   void setCurrentUserId(String? id) {
@@ -21,6 +22,7 @@ class RealtimeStore extends ChangeNotifier {
     final event = envelope['event'];
     final payload = envelope['payload'];
     if (payload is! Map<String, dynamic> || event is! String) return;
+    lastEvent = event;
     switch (event) {
       case 'message.created':
       case 'message.updated':
