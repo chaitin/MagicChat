@@ -992,7 +992,38 @@ class _ConversationViewState extends State<ConversationView> {
     super.initState();
     _messagesFuture = _loadMessages();
     _scrollController.addListener(_onScroll);
+    _controller.addListener(_persistDraft);
     widget.realtimeStore?.addListener(_onRealtimeChanged);
+    unawaited(_restoreDraft());
+  }
+
+  String? get _draftKey => widget.conversationId == null
+      ? null
+      : 'magicchat.conversation.${widget.conversationId}.draft';
+
+  Future<void> _restoreDraft() async {
+    final key = _draftKey;
+    if (key == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final draft = prefs.getString(key);
+    if (draft != null && mounted && _controller.text.isEmpty) {
+      _controller.value = TextEditingValue(
+          text: draft,
+          selection: TextSelection.collapsed(offset: draft.length));
+    }
+  }
+
+  void _persistDraft() {
+    final key = _draftKey;
+    if (key == null) return;
+    unawaited(SharedPreferences.getInstance().then((prefs) async {
+      final draft = _controller.text;
+      if (draft.trim().isEmpty) {
+        await prefs.remove(key);
+      } else {
+        await prefs.setString(key, draft);
+      }
+    }));
   }
 
   Future<List<ChatMessage>> _loadMessages() {
@@ -1047,12 +1078,16 @@ class _ConversationViewState extends State<ConversationView> {
     if (oldWidget.conversationId != widget.conversationId) {
       _olderMessages.clear();
       _messagesFuture = _loadMessages();
+      _controller.clear();
+      unawaited(_restoreDraft());
     }
   }
 
   @override
   void dispose() {
     widget.realtimeStore?.removeListener(_onRealtimeChanged);
+    _persistDraft();
+    _controller.removeListener(_persistDraft);
     _controller.dispose();
     _scrollController.dispose();
     _voiceRecorder.dispose();
@@ -1173,6 +1208,11 @@ class _ConversationViewState extends State<ConversationView> {
                     try {
                       await widget.repository.sendMessage(conversationId, text);
                       _controller.clear();
+                      final key = _draftKey;
+                      if (key != null) {
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.remove(key);
+                      }
                       setState(() {});
                     } catch (error) {
                       if (mounted) {
