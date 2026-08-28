@@ -45,6 +45,7 @@ abstract interface class MagicChatRepository {
   Future<void> submitChoice(
       String conversationId, String messageId, List<String> optionIds);
   Future<List<Contact>> contacts({String keyword = ''});
+  Future<void> createFriendRequest(String userId);
   Future<List<Project>> projects();
   Future<Project> createProject(String name, {String description = ''});
   Future<Project> updateProject(String projectId,
@@ -220,6 +221,9 @@ class DemoRepository implements MagicChatRepository {
         Contact(id: '1', name: '小助手', online: true),
         Contact(id: '2', name: '团队成员'),
       ];
+
+  @override
+  Future<void> createFriendRequest(String userId) async {}
 
   @override
   Future<List<Project>> projects() async => const [
@@ -840,6 +844,12 @@ class HttpMagicChatRepository implements MagicChatRepository {
       }
     }
     return result;
+  }
+
+  @override
+  Future<void> createFriendRequest(String userId) async {
+    await _request('POST', '/api/client/friend-requests',
+        body: {'user_id': userId});
   }
 
   @override

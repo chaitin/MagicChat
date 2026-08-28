@@ -2265,8 +2265,16 @@ class _ContactsPageState extends State<ContactsPage> {
                 decoration: InputDecoration(
                     hintText: '搜索联系人、应用或群组',
                     prefixIcon: const Icon(Icons.search),
-                    suffixIcon: IconButton(
-                        onPressed: _load, icon: const Icon(Icons.refresh))))),
+                    suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
+                      IconButton(
+                          tooltip: '添加联系人',
+                          onPressed: _addFriend,
+                          icon: const Icon(Icons.person_add_alt_1_outlined)),
+                      IconButton(
+                          tooltip: '刷新',
+                          onPressed: _load,
+                          icon: const Icon(Icons.refresh))
+                    ])))),
         Expanded(
             child: FutureBuilder<List<Contact>>(
                 future: _contactsFuture,
@@ -2329,6 +2337,40 @@ class _ContactsPageState extends State<ContactsPage> {
                         }).toList())
                     : const Center(child: CircularProgressIndicator())))
       ]);
+
+  Future<void> _addFriend() async {
+    final contacts = await (_contactsFuture ??= widget.repository.contacts());
+    if (!mounted) return;
+    final users = contacts.where((contact) => contact.type == 'user').toList();
+    final selected = await showDialog<Contact>(
+        context: context,
+        builder: (dialogContext) => SimpleDialog(
+              title: const Text('发送好友申请'),
+              children: users.isEmpty
+                  ? [
+                      const Padding(
+                          padding: EdgeInsets.all(20), child: Text('暂无可添加的联系人'))
+                    ]
+                  : users
+                      .map((contact) => SimpleDialogOption(
+                          onPressed: () =>
+                              Navigator.pop(dialogContext, contact),
+                          child: Text(contact.name)))
+                      .toList(),
+            ));
+    if (selected == null || !mounted) return;
+    try {
+      await widget.repository.createFriendRequest(selected.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('已向 ${selected.name} 发送好友申请')));
+      }
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('发送失败：$error')));
+    }
+  }
 }
 
 class ProjectsPage extends StatelessWidget {
