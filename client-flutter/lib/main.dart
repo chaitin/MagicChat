@@ -300,6 +300,7 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.surface,
       body: Center(
           child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
@@ -307,12 +308,35 @@ class _LoginPageState extends State<LoginPage> {
                   padding: const EdgeInsets.all(24),
                   child: Card(
                       child: Padding(
-                          padding: const EdgeInsets.all(24),
+                          padding: const EdgeInsets.fromLTRB(28, 28, 28, 24),
                           child:
                               Column(mainAxisSize: MainAxisSize.min, children: [
+                            Container(
+                                width: 64,
+                                height: 64,
+                                decoration: BoxDecoration(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .primaryContainer,
+                                    shape: BoxShape.circle),
+                                child: Icon(Icons.forum_rounded,
+                                    size: 32,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onPrimaryContainer)),
+                            const SizedBox(height: 16),
                             Text('登录 MagicChat',
                                 style:
                                     Theme.of(context).textTheme.headlineSmall),
+                            const SizedBox(height: 6),
+                            Text('安全、私密地连接你的团队',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant)),
                             const SizedBox(height: 24),
                             TextField(
                                 controller: _server,
