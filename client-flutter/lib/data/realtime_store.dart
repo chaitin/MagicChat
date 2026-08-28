@@ -6,6 +6,7 @@ import '../domain/models.dart';
 class RealtimeStore extends ChangeNotifier {
   final conversations = <String, ChatConversation>{};
   final messages = <String, ChatMessage>{};
+  final contacts = <String, Contact>{};
   int cursor = 0;
 
   void apply(Map<String, dynamic> envelope) {
@@ -25,8 +26,24 @@ class RealtimeStore extends ChangeNotifier {
       case 'conversation.pin_updated':
       case 'conversation.mute_updated':
         _patchConversation(payload);
+      case 'user.presence.updated':
+        _patchPresence(payload);
     }
     notifyListeners();
+  }
+
+  void _patchPresence(Map<String, dynamic> payload) {
+    final id = payload['user_id'];
+    final online = payload['online'];
+    if (id is! String || online is! bool) return;
+    final current = contacts[id];
+    if (current != null) {
+      contacts[id] = Contact(
+          id: current.id,
+          name: current.name,
+          online: online,
+          type: current.type);
+    }
   }
 
   void _upsertMessage(Map<String, dynamic> payload) {

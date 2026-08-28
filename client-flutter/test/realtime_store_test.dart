@@ -42,4 +42,16 @@ void main() {
     });
     expect(store.conversations['c1']?.muted, isTrue);
   });
+
+  test('投影用户在线状态事件', () {
+    final store = RealtimeStore();
+    store.contacts['u1'] =
+        const Contact(id: 'u1', name: 'Alice', online: false);
+    store.apply({
+      'event': 'user.presence.updated',
+      'cursor': 1,
+      'payload': {'user_id': 'u1', 'online': true}
+    });
+    expect(store.contacts['u1']?.online, isTrue);
+  });
 }

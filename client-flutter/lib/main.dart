@@ -527,6 +527,7 @@ class _AppShellState extends State<AppShell> {
               setState(() => _selectedConversation = id.isEmpty ? null : id)),
       ContactsPage(
           repository: _repository,
+          realtimeStore: widget.realtimeStore,
           onOpenConversation: (id) => setState(() {
                 _selectedConversation = id;
                 _index = 0;
@@ -2151,8 +2152,12 @@ class _DocumentEditorPageState extends State<DocumentEditorPage> {
 
 class ContactsPage extends StatefulWidget {
   const ContactsPage(
-      {required this.repository, this.onOpenConversation, super.key});
+      {required this.repository,
+      this.realtimeStore,
+      this.onOpenConversation,
+      super.key});
   final MagicChatRepository repository;
+  final RealtimeStore? realtimeStore;
   final ValueChanged<String>? onOpenConversation;
   @override
   State<ContactsPage> createState() => _ContactsPageState();
@@ -2164,13 +2169,19 @@ class _ContactsPageState extends State<ContactsPage> {
   @override
   void initState() {
     super.initState();
+    widget.realtimeStore?.addListener(_onRealtimeChanged);
     _load();
+  }
+
+  void _onRealtimeChanged() {
+    if (mounted) setState(() {});
   }
 
   void _load() => setState(() => _contactsFuture =
       widget.repository.contacts(keyword: _searchController.text.trim()));
   @override
   void dispose() {
+    widget.realtimeStore?.removeListener(_onRealtimeChanged);
     _searchController.dispose();
     super.dispose();
   }
@@ -2193,35 +2204,34 @@ class _ContactsPageState extends State<ContactsPage> {
                 future: _contactsFuture,
                 builder: (context, s) => s.hasData
                     ? ListView(
-                        children: s.data!
-                            .map((c) => ListTile(
-                                leading: CircleAvatar(
-                                    child: Text(c.name.isEmpty
-                                        ? '?'
-                                        : c.name.substring(0, 1))),
-                                title: Text(c.name),
-                                subtitle: Text(c.online ? '在线' : '离线'),
-                                trailing: Icon(
-                                    c.online
-                                        ? Icons.circle
-                                        : Icons.circle_outlined,
-                                    color:
-                                        c.online ? Colors.green : Colors.grey,
-                                    size: 12),
-                                onTap: () async {
-                                  final conversation = c.type == 'app'
+                        children: s.data!.map((raw) {
+                        final c = widget.realtimeStore?.contacts[raw.id] ?? raw;
+                        widget.realtimeStore?.contacts[c.id] = c;
+                        return ListTile(
+                            leading: CircleAvatar(
+                                child: Text(c.name.isEmpty
+                                    ? '?'
+                                    : c.name.substring(0, 1))),
+                            title: Text(c.name),
+                            subtitle: Text(c.online ? '在线' : '离线'),
+                            trailing: Icon(
+                                c.online ? Icons.circle : Icons.circle_outlined,
+                                color: c.online ? Colors.green : Colors.grey,
+                                size: 12),
+                            onTap: () async {
+                              final conversation = c.type == 'app'
+                                  ? await widget.repository
+                                      .createAppConversation(c.id)
+                                  : c.type == 'user'
                                       ? await widget.repository
-                                          .createAppConversation(c.id)
-                                      : c.type == 'user'
-                                          ? await widget.repository
-                                              .createDirectConversation(c.id)
-                                          : ChatConversation(
-                                              id: c.id, title: c.name);
-                                  if (context.mounted)
-                                    widget.onOpenConversation
-                                        ?.call(conversation.id);
-                                }))
-                            .toList())
+                                          .createDirectConversation(c.id)
+                                      : ChatConversation(
+                                          id: c.id, title: c.name);
+                              if (context.mounted)
+                                widget.onOpenConversation
+                                    ?.call(conversation.id);
+                            });
+                      }).toList())
                     : const Center(child: CircularProgressIndicator())))
       ]);
 }
