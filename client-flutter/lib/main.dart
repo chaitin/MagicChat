@@ -2276,6 +2276,10 @@ class _ContactsPageState extends State<ContactsPage> {
                           onPressed: _showFriendRequests,
                           icon: const Icon(Icons.mail_outline)),
                       IconButton(
+                          tooltip: '已发送申请',
+                          onPressed: _showOutgoingFriendRequests,
+                          icon: const Icon(Icons.outbox_outlined)),
+                      IconButton(
                           tooltip: '刷新',
                           onPressed: _load,
                           icon: const Icon(Icons.refresh))
@@ -2431,6 +2435,47 @@ class _ContactsPageState extends State<ContactsPage> {
               ],
             ));
     if (mounted) _load();
+  }
+
+  Future<void> _showOutgoingFriendRequests() async {
+    final requests =
+        await widget.repository.friendRequests(direction: 'outgoing');
+    if (!mounted) return;
+    final contacts = await widget.repository.contacts();
+    if (!mounted) return;
+    final names = {for (final contact in contacts) contact.id: contact.name};
+    await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+              title: const Text('已发送申请'),
+              content: SizedBox(
+                  width: 380,
+                  child: requests.isEmpty
+                      ? const Text('暂无待处理申请')
+                      : ListView(
+                          shrinkWrap: true,
+                          children: requests
+                              .map((request) => ListTile(
+                                    title: Text(names[request.userId] ??
+                                        request.userId),
+                                    subtitle: const Text('等待对方处理'),
+                                    trailing: IconButton(
+                                        tooltip: '取消申请',
+                                        icon: const Icon(Icons.close),
+                                        onPressed: () async {
+                                          await widget.repository
+                                              .cancelFriendRequest(request.id);
+                                          if (dialogContext.mounted)
+                                            Navigator.pop(dialogContext);
+                                        }),
+                                  ))
+                              .toList())),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('关闭'))
+              ],
+            ));
   }
 }
 

@@ -49,6 +49,7 @@ abstract interface class MagicChatRepository {
   Future<List<FriendRequest>> friendRequests({String direction = 'incoming'});
   Future<void> acceptFriendRequest(String requestId);
   Future<void> rejectFriendRequest(String requestId);
+  Future<void> cancelFriendRequest(String requestId);
   Future<List<Project>> projects();
   Future<Project> createProject(String name, {String description = ''});
   Future<Project> updateProject(String projectId,
@@ -235,6 +236,8 @@ class DemoRepository implements MagicChatRepository {
   Future<void> acceptFriendRequest(String requestId) async {}
   @override
   Future<void> rejectFriendRequest(String requestId) async {}
+  @override
+  Future<void> cancelFriendRequest(String requestId) async {}
 
   @override
   Future<List<Project>> projects() async => const [
@@ -891,6 +894,10 @@ class HttpMagicChatRepository implements MagicChatRepository {
   @override
   Future<void> rejectFriendRequest(String requestId) async => _request('POST',
       '/api/client/friend-requests/${Uri.encodeComponent(requestId)}/reject');
+
+  @override
+  Future<void> cancelFriendRequest(String requestId) async => _request('DELETE',
+      '/api/client/friend-requests/${Uri.encodeComponent(requestId)}');
 
   @override
   Future<List<Project>> projects() async {
