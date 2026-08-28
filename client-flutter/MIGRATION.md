@@ -9,7 +9,7 @@ Flutter 工程与现有客户端并行演进，页面层通过 `MagicChatReposit
 | 多账户 | 设置页、`SessionStore` | 安全存储多个 Server 账户、切换和长按删除、需重新登录账户的密码认证 UI 已接入 |
 | 本地存储 | 设置页、`StorageService` | 跨平台缓存占用统计、路径展示和清理已接入 |
 | 私聊、群聊、应用会话 | 消息 → 会话 → 消息面板 | 私聊/群聊创建、应用会话打开、联系人打开会话、成员多选/添加/移除、群头像/公告/名称/公开状态修改、会话移除、话题创建、消息转发、消息面板和顶部历史分页已接入；成员角色权限管理待迁移 |
-| WebSocket 实时同步 | `MagicChatRealtime`、`RealtimeSession`、`RealtimeStore` | cursor/envelope、退避重连、dispose、消息/会话事件幂等投影、消息视图监听及会话列表实时刷新已接入 |
+| WebSocket 实时同步 | `MagicChatRealtime`、`RealtimeSession`、`RealtimeStore` | cursor/envelope、退避重连、dispose、消息归属与会话事件幂等投影、消息视图监听及会话列表实时刷新已接入 |
 | 联系人、在线状态 | 联系人 | `/api/client/contacts` 关键词查询、用户资料批量解析、在线状态展示、应用/群组打开会话已接入；`user.presence.updated` 实时投影已接入 |
 | 聊天记录搜索 | AppBar 搜索 | `/api/client/search/messages` 已接入，支持跳转会话 |
 | 会话管理 | 会话长按菜单 | 置顶、免打扰 API 与 UI 已接入；打开会话或停留在底部时按最新序号同步已读 |

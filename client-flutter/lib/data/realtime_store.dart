@@ -7,7 +7,12 @@ class RealtimeStore extends ChangeNotifier {
   final conversations = <String, ChatConversation>{};
   final messages = <String, ChatMessage>{};
   final contacts = <String, Contact>{};
+  String? currentUserId;
   int cursor = 0;
+
+  void setCurrentUserId(String? id) {
+    currentUserId = id;
+  }
 
   void apply(Map<String, dynamic> envelope) {
     final value = envelope['cursor'];
@@ -53,6 +58,7 @@ class RealtimeStore extends ChangeNotifier {
     final body = MessageContent.parse(payload['body']);
     final sender = payload['sender'];
     final name = sender is Map<String, dynamic> ? sender['name'] : null;
+    final senderId = sender is Map<String, dynamic> ? sender['id'] : null;
     final conversationId = payload['conversation_id'];
     messages[id] = ChatMessage(
         id: id,
@@ -61,7 +67,8 @@ class RealtimeStore extends ChangeNotifier {
         author: name is String ? name : '用户',
         contentType: body.type,
         rawBody: body.raw,
-        text: body.text);
+        text: body.text,
+        mine: senderId is String && senderId == currentUserId);
   }
 
   void _patchConversation(Map<String, dynamic> payload) {

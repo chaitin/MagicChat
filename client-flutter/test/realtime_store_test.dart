@@ -54,4 +54,18 @@ void main() {
     });
     expect(store.contacts['u1']?.online, isTrue);
   });
+
+  test('按当前用户 ID 标记实时消息归属', () {
+    final store = RealtimeStore()..setCurrentUserId('me');
+    store.apply({
+      'event': 'message.created',
+      'cursor': 1,
+      'payload': {
+        'id': 'm1',
+        'sender': {'id': 'me', 'name': '我'},
+        'body': {'type': 'text', 'content': '自己的消息'}
+      }
+    });
+    expect(store.messages['m1']?.mine, isTrue);
+  });
 }

@@ -486,6 +486,9 @@ class _AppShellState extends State<AppShell> {
     final realtime = widget.realtime;
     final store = widget.realtimeStore;
     if (realtime != null && store != null) {
+      unawaited(widget.repository.currentUser().then((user) {
+        store.setCurrentUserId(user.id);
+      }).catchError((_) {}));
       _realtimeSubscription = realtime.events.listen((event) {
         store.apply(event);
         _notifyIncomingMessage(event);
