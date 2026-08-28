@@ -12,7 +12,7 @@ Flutter 工程与现有客户端并行演进，页面层通过 `MagicChatReposit
 | WebSocket 实时同步 | `MagicChatRealtime`、`RealtimeSession`、`RealtimeStore` | cursor/envelope、退避重连、dispose、消息/会话事件幂等投影及消息视图监听已接入 |
 | 联系人、在线状态 | 联系人 | `/api/client/contacts` 关键词查询、在线状态展示、应用/群组打开会话已接入，在线事件实时投影待补 |
 | 聊天记录搜索 | AppBar 搜索 | `/api/client/search/messages` 已接入，支持跳转会话 |
-| 会话管理 | 会话长按菜单 | 置顶、免打扰 API 与 UI 已接入，已读同步待绑定滚动状态 |
+| 会话管理 | 会话长按菜单 | 置顶、免打扰 API 与 UI 已接入；打开会话或停留在底部时按最新序号同步已读 |
 | 推送授权与通知路由 | `PushService`、`PushTokenProvider`、设置页、`AppShell` | 私有 Server grant 注册/撤销、启动路由解析、通知总开关持久化、Android/iOS 通知权限声明及原生令牌桥接契约已接入；APNs/JPush 厂商 SDK 实现待补 |
 | 二维码 | `QrScannerPage` | Android/iOS/macOS/Web 相机扫码、HTTP(S) 链接打开、文本结果展示及桌面粘贴兜底已接入 |
 | 项目、任务视图 | 项目及任务抽屉 | 项目创建、编辑、删除、列表/看板/日历时间线/甘特、`/tasks`、任务创建、编辑（描述/负责人/状态/优先级/日期/标签/一次性与周期提醒）、状态更新、删除和评论已接入 |
