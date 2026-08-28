@@ -2383,100 +2383,113 @@ class _ContactsPageState extends State<ContactsPage> {
   }
 
   Future<void> _showFriendRequests() async {
-    final requests = await widget.repository.friendRequests();
-    if (!mounted) return;
-    final contacts = await widget.repository.contacts();
-    if (!mounted) return;
-    final names = {for (final contact in contacts) contact.id: contact.name};
-    await showDialog<void>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-              title: const Text('好友申请'),
-              content: SizedBox(
-                  width: 380,
-                  child: requests.isEmpty
-                      ? const Text('暂无待处理申请')
-                      : ListView(
-                          shrinkWrap: true,
-                          children: requests
-                              .map((request) => ListTile(
-                                    leading: const CircleAvatar(
-                                        child: Icon(Icons.person_outline)),
-                                    title: Text(names[request.userId] ??
-                                        request.userId),
-                                    subtitle: const Text('请求添加你为好友'),
-                                    trailing: Wrap(children: [
-                                      IconButton(
-                                          tooltip: '接受',
-                                          icon: const Icon(Icons.check),
+    try {
+      final requests = await widget.repository.friendRequests();
+      if (!mounted) return;
+      final contacts = await widget.repository.contacts();
+      if (!mounted) return;
+      final names = {for (final contact in contacts) contact.id: contact.name};
+      await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+                title: const Text('好友申请'),
+                content: SizedBox(
+                    width: 380,
+                    child: requests.isEmpty
+                        ? const Text('暂无待处理申请')
+                        : ListView(
+                            shrinkWrap: true,
+                            children: requests
+                                .map((request) => ListTile(
+                                      leading: const CircleAvatar(
+                                          child: Icon(Icons.person_outline)),
+                                      title: Text(names[request.userId] ??
+                                          request.userId),
+                                      subtitle: const Text('请求添加你为好友'),
+                                      trailing: Wrap(children: [
+                                        IconButton(
+                                            tooltip: '接受',
+                                            icon: const Icon(Icons.check),
+                                            onPressed: () async {
+                                              await widget.repository
+                                                  .acceptFriendRequest(
+                                                      request.id);
+                                              if (dialogContext.mounted)
+                                                Navigator.pop(dialogContext);
+                                            }),
+                                        IconButton(
+                                            tooltip: '拒绝',
+                                            icon: const Icon(Icons.close),
+                                            onPressed: () async {
+                                              await widget.repository
+                                                  .rejectFriendRequest(
+                                                      request.id);
+                                              if (dialogContext.mounted)
+                                                Navigator.pop(dialogContext);
+                                            })
+                                      ]),
+                                    ))
+                                .toList())),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialogContext),
+                      child: const Text('关闭'))
+                ],
+              ));
+      if (mounted) _load();
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('加载好友申请失败：$error')));
+    }
+  }
+
+  Future<void> _showOutgoingFriendRequests() async {
+    try {
+      final requests =
+          await widget.repository.friendRequests(direction: 'outgoing');
+      if (!mounted) return;
+      final contacts = await widget.repository.contacts();
+      if (!mounted) return;
+      final names = {for (final contact in contacts) contact.id: contact.name};
+      await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+                title: const Text('已发送申请'),
+                content: SizedBox(
+                    width: 380,
+                    child: requests.isEmpty
+                        ? const Text('暂无待处理申请')
+                        : ListView(
+                            shrinkWrap: true,
+                            children: requests
+                                .map((request) => ListTile(
+                                      title: Text(names[request.userId] ??
+                                          request.userId),
+                                      subtitle: const Text('等待对方处理'),
+                                      trailing: IconButton(
+                                          tooltip: '取消申请',
+                                          icon: const Icon(Icons.close),
                                           onPressed: () async {
                                             await widget.repository
-                                                .acceptFriendRequest(
+                                                .cancelFriendRequest(
                                                     request.id);
                                             if (dialogContext.mounted)
                                               Navigator.pop(dialogContext);
                                           }),
-                                      IconButton(
-                                          tooltip: '拒绝',
-                                          icon: const Icon(Icons.close),
-                                          onPressed: () async {
-                                            await widget.repository
-                                                .rejectFriendRequest(
-                                                    request.id);
-                                            if (dialogContext.mounted)
-                                              Navigator.pop(dialogContext);
-                                          })
-                                    ]),
-                                  ))
-                              .toList())),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(dialogContext),
-                    child: const Text('关闭'))
-              ],
-            ));
-    if (mounted) _load();
-  }
-
-  Future<void> _showOutgoingFriendRequests() async {
-    final requests =
-        await widget.repository.friendRequests(direction: 'outgoing');
-    if (!mounted) return;
-    final contacts = await widget.repository.contacts();
-    if (!mounted) return;
-    final names = {for (final contact in contacts) contact.id: contact.name};
-    await showDialog<void>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-              title: const Text('已发送申请'),
-              content: SizedBox(
-                  width: 380,
-                  child: requests.isEmpty
-                      ? const Text('暂无待处理申请')
-                      : ListView(
-                          shrinkWrap: true,
-                          children: requests
-                              .map((request) => ListTile(
-                                    title: Text(names[request.userId] ??
-                                        request.userId),
-                                    subtitle: const Text('等待对方处理'),
-                                    trailing: IconButton(
-                                        tooltip: '取消申请',
-                                        icon: const Icon(Icons.close),
-                                        onPressed: () async {
-                                          await widget.repository
-                                              .cancelFriendRequest(request.id);
-                                          if (dialogContext.mounted)
-                                            Navigator.pop(dialogContext);
-                                        }),
-                                  ))
-                              .toList())),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(dialogContext),
-                    child: const Text('关闭'))
-              ],
-            ));
+                                    ))
+                                .toList())),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialogContext),
+                      child: const Text('关闭'))
+                ],
+              ));
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('加载已发送申请失败：$error')));
+    }
   }
 }
 
