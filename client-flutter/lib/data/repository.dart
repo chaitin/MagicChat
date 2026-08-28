@@ -46,6 +46,9 @@ abstract interface class MagicChatRepository {
       String conversationId, String messageId, List<String> optionIds);
   Future<List<Contact>> contacts({String keyword = ''});
   Future<void> createFriendRequest(String userId);
+  Future<List<FriendRequest>> friendRequests({String direction = 'incoming'});
+  Future<void> acceptFriendRequest(String requestId);
+  Future<void> rejectFriendRequest(String requestId);
   Future<List<Project>> projects();
   Future<Project> createProject(String name, {String description = ''});
   Future<Project> updateProject(String projectId,
@@ -224,6 +227,14 @@ class DemoRepository implements MagicChatRepository {
 
   @override
   Future<void> createFriendRequest(String userId) async {}
+  @override
+  Future<List<FriendRequest>> friendRequests(
+          {String direction = 'incoming'}) async =>
+      const [];
+  @override
+  Future<void> acceptFriendRequest(String requestId) async {}
+  @override
+  Future<void> rejectFriendRequest(String requestId) async {}
 
   @override
   Future<List<Project>> projects() async => const [
@@ -851,6 +862,35 @@ class HttpMagicChatRepository implements MagicChatRepository {
     await _request('POST', '/api/client/friend-requests',
         body: {'user_id': userId});
   }
+
+  @override
+  Future<List<FriendRequest>> friendRequests(
+      {String direction = 'incoming'}) async {
+    final query = Uri(queryParameters: {'direction': direction}).query;
+    final values =
+        _data(await _request('GET', '/api/client/friend-requests?$query'))[
+            'requests'];
+    if (values is! List) throw const FormatException('好友申请响应格式不正确');
+    return values
+        .whereType<Map<String, dynamic>>()
+        .where((item) => item['id'] is String)
+        .map((item) => FriendRequest(
+            id: item['id'] as String,
+            userId: direction == 'incoming'
+                ? '${item['requester_user_id'] ?? ''}'
+                : '${item['addressee_user_id'] ?? ''}',
+            status: '${item['status'] ?? ''}'))
+        .where((item) => item.userId.isNotEmpty)
+        .toList();
+  }
+
+  @override
+  Future<void> acceptFriendRequest(String requestId) async => _request('POST',
+      '/api/client/friend-requests/${Uri.encodeComponent(requestId)}/accept');
+
+  @override
+  Future<void> rejectFriendRequest(String requestId) async => _request('POST',
+      '/api/client/friend-requests/${Uri.encodeComponent(requestId)}/reject');
 
   @override
   Future<List<Project>> projects() async {

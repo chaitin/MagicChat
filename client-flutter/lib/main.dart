@@ -2271,6 +2271,10 @@ class _ContactsPageState extends State<ContactsPage> {
                           onPressed: _addFriend,
                           icon: const Icon(Icons.person_add_alt_1_outlined)),
                       IconButton(
+                          tooltip: '好友申请',
+                          onPressed: _showFriendRequests,
+                          icon: const Icon(Icons.mail_outline)),
+                      IconButton(
                           tooltip: '刷新',
                           onPressed: _load,
                           icon: const Icon(Icons.refresh))
@@ -2370,6 +2374,62 @@ class _ContactsPageState extends State<ContactsPage> {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('发送失败：$error')));
     }
+  }
+
+  Future<void> _showFriendRequests() async {
+    final requests = await widget.repository.friendRequests();
+    if (!mounted) return;
+    final contacts = await widget.repository.contacts();
+    if (!mounted) return;
+    final names = {for (final contact in contacts) contact.id: contact.name};
+    await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+              title: const Text('好友申请'),
+              content: SizedBox(
+                  width: 380,
+                  child: requests.isEmpty
+                      ? const Text('暂无待处理申请')
+                      : ListView(
+                          shrinkWrap: true,
+                          children: requests
+                              .map((request) => ListTile(
+                                    leading: const CircleAvatar(
+                                        child: Icon(Icons.person_outline)),
+                                    title: Text(names[request.userId] ??
+                                        request.userId),
+                                    subtitle: const Text('请求添加你为好友'),
+                                    trailing: Wrap(children: [
+                                      IconButton(
+                                          tooltip: '接受',
+                                          icon: const Icon(Icons.check),
+                                          onPressed: () async {
+                                            await widget.repository
+                                                .acceptFriendRequest(
+                                                    request.id);
+                                            if (dialogContext.mounted)
+                                              Navigator.pop(dialogContext);
+                                          }),
+                                      IconButton(
+                                          tooltip: '拒绝',
+                                          icon: const Icon(Icons.close),
+                                          onPressed: () async {
+                                            await widget.repository
+                                                .rejectFriendRequest(
+                                                    request.id);
+                                            if (dialogContext.mounted)
+                                              Navigator.pop(dialogContext);
+                                          })
+                                    ]),
+                                  ))
+                              .toList())),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('关闭'))
+              ],
+            ));
+    if (mounted) _load();
   }
 }
 

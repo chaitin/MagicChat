@@ -92,6 +92,14 @@ class Contact {
   final String role;
 }
 
+class FriendRequest {
+  const FriendRequest(
+      {required this.id, required this.userId, required this.status});
+  final String id;
+  final String userId;
+  final String status;
+}
+
 class Project {
   const Project(
       {required this.id,
