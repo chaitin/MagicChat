@@ -2204,34 +2204,61 @@ class _ContactsPageState extends State<ContactsPage> {
                 future: _contactsFuture,
                 builder: (context, s) => s.hasData
                     ? ListView(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 8),
                         children: s.data!.map((raw) {
-                        final c = widget.realtimeStore?.contacts[raw.id] ?? raw;
-                        widget.realtimeStore?.contacts[c.id] = c;
-                        return ListTile(
-                            leading: CircleAvatar(
-                                child: Text(c.name.isEmpty
-                                    ? '?'
-                                    : c.name.substring(0, 1))),
-                            title: Text(c.name),
-                            subtitle: Text(c.online ? '在线' : '离线'),
-                            trailing: Icon(
-                                c.online ? Icons.circle : Icons.circle_outlined,
-                                color: c.online ? Colors.green : Colors.grey,
-                                size: 12),
-                            onTap: () async {
-                              final conversation = c.type == 'app'
-                                  ? await widget.repository
-                                      .createAppConversation(c.id)
-                                  : c.type == 'user'
-                                      ? await widget.repository
-                                          .createDirectConversation(c.id)
-                                      : ChatConversation(
-                                          id: c.id, title: c.name);
-                              if (context.mounted)
-                                widget.onOpenConversation
-                                    ?.call(conversation.id);
-                            });
-                      }).toList())
+                          final c =
+                              widget.realtimeStore?.contacts[raw.id] ?? raw;
+                          widget.realtimeStore?.contacts[c.id] = c;
+                          return ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 4),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14)),
+                              leading: CircleAvatar(
+                                  radius: 22,
+                                  backgroundColor: c.type == 'app'
+                                      ? Theme.of(context)
+                                          .colorScheme
+                                          .secondaryContainer
+                                      : Theme.of(context)
+                                          .colorScheme
+                                          .primaryContainer,
+                                  child: Text(c.name.isEmpty
+                                      ? '?'
+                                      : c.name.substring(0, 1))),
+                              title: Text(c.name),
+                              subtitle: Text(c.online ? '在线' : '离线',
+                                  style: TextStyle(
+                                      color: c.online
+                                          ? Colors.green.shade700
+                                          : Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant)),
+                              trailing: Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: BoxDecoration(
+                                      color: c.online
+                                          ? Colors.green
+                                          : Theme.of(context)
+                                              .colorScheme
+                                              .outlineVariant,
+                                      shape: BoxShape.circle)),
+                              onTap: () async {
+                                final conversation = c.type == 'app'
+                                    ? await widget.repository
+                                        .createAppConversation(c.id)
+                                    : c.type == 'user'
+                                        ? await widget.repository
+                                            .createDirectConversation(c.id)
+                                        : ChatConversation(
+                                            id: c.id, title: c.name);
+                                if (context.mounted)
+                                  widget.onOpenConversation
+                                      ?.call(conversation.id);
+                              });
+                        }).toList())
                     : const Center(child: CircularProgressIndicator())))
       ]);
 }
@@ -2247,17 +2274,28 @@ class ProjectsPage extends StatelessWidget {
               if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
               }
-              return ListView(
-                children: snapshot.data!
-                    .map((project) => ListTile(
-                          leading: const Icon(Icons.folder),
-                          title: Text(project.name),
-                          subtitle: Text('${project.taskCount} 个任务'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _showTasks(context, project),
-                          onLongPress: () => _projectActions(context, project),
-                        ))
-                    .toList(),
+              return ListView.separated(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                itemCount: snapshot.data!.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 2),
+                itemBuilder: (context, index) {
+                  final project = snapshot.data![index];
+                  return ListTile(
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                    leading: CircleAvatar(
+                        backgroundColor:
+                            Theme.of(context).colorScheme.secondaryContainer,
+                        child: const Icon(Icons.folder_outlined)),
+                    title: Text(project.name),
+                    subtitle: Text('${project.taskCount} 个任务'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _showTasks(context, project),
+                    onLongPress: () => _projectActions(context, project),
+                  );
+                },
               );
             }),
         Positioned(
