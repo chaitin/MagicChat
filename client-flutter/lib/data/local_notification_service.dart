@@ -8,12 +8,23 @@ class LocalNotificationService {
       : _channel = channel;
   final MethodChannel _channel;
 
+  Future<void> requestPermission() async {
+    try {
+      await _channel.invokeMethod<void>('requestPermission');
+    } on MissingPluginException {
+      // Platforms without a native notification adapter remain usable.
+    } on PlatformException {
+      // Permission denial is represented by the platform and is non-fatal.
+    }
+  }
+
   Future<void> showMessage({
     required String conversationId,
     required String title,
     required String body,
   }) async {
     try {
+      await requestPermission();
       await _channel.invokeMethod<void>('showMessage', {
         'conversation_id': conversationId,
         'title': title,
