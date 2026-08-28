@@ -16,6 +16,7 @@ import 'data/realtime.dart';
 import 'data/realtime_store.dart';
 import 'data/storage_service.dart';
 import 'data/push_service.dart';
+import 'data/local_notification_service.dart';
 import 'data/voice_recorder.dart';
 import 'data/avatar_processor.dart';
 import 'features/qr_scanner_page.dart';
@@ -412,6 +413,7 @@ class _AppShellState extends State<AppShell> {
   int _index = 0;
   String? _selectedConversation;
   StreamSubscription<Map<String, dynamic>>? _realtimeSubscription;
+  final _notifications = const LocalNotificationService();
 
   @override
   void initState() {
@@ -419,10 +421,32 @@ class _AppShellState extends State<AppShell> {
     final realtime = widget.realtime;
     final store = widget.realtimeStore;
     if (realtime != null && store != null) {
-      _realtimeSubscription = realtime.events.listen(store.apply);
+      _realtimeSubscription = realtime.events.listen((event) {
+        store.apply(event);
+        _notifyIncomingMessage(event);
+      });
       realtime.connect();
     }
     _resolveNotificationRoute();
+  }
+
+  Future<void> _notifyIncomingMessage(Map<String, dynamic> event) async {
+    if (event['event'] != 'message.created') return;
+    final payload = event['payload'];
+    if (payload is! Map<String, dynamic>) return;
+    final conversationId = payload['conversation_id'];
+    if (conversationId is! String || conversationId == _selectedConversation) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    if (!(prefs.getBool('magicchat.notifications.enabled') ?? true)) return;
+    final sender = payload['sender'];
+    final title = sender is Map<String, dynamic> && sender['name'] is String
+        ? sender['name'] as String
+        : '新消息';
+    final body = MessageContent.parse(payload['body']).text;
+    await _notifications.showMessage(
+        conversationId: conversationId, title: title, body: body);
   }
 
   Future<void> _resolveNotificationRoute() async {
