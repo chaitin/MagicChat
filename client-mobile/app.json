@@ -2,14 +2,14 @@
   "expo": {
     "name": "即应",
     "slug": "magicchat-mobile",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "magicchat",
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "cloud.baizhi.chat",
-      "buildNumber": "10",
+      "buildNumber": "11",
       "icon": "./assets/images/icon.png",
       "infoPlist": {
         "NSAppTransportSecurity": {
@@ -21,7 +21,7 @@
     },
     "android": {
       "package": "cloud.baizhi.chat",
-      "versionCode": 10,
+      "versionCode": 11,
       "permissions": [
         "android.permission.REQUEST_INSTALL_PACKAGES"
       ],
