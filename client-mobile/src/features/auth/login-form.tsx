@@ -7,8 +7,11 @@ import IconEyeOff from "@tabler/icons-react-native/IconEyeOff"
 import IconRefresh from "@tabler/icons-react-native/IconRefresh"
 import { useEffect, useRef, useState } from "react"
 import {
+  Alert,
+  Linking,
   Pressable,
   StyleSheet,
+  Text,
   TextInput,
   View,
 } from "react-native"
@@ -46,6 +49,8 @@ const ACCOUNT_INPUT_ID = "login-account"
 const EMAIL_CODE_INPUT_ID = "login-email-code"
 const PASSWORD_INPUT_ID = "login-password"
 const EMAIL_CODE_RETRY_SECONDS = 15
+const USER_AGREEMENT_URL = "https://jiying.chat/user-agreement/"
+const PRIVACY_POLICY_URL = "https://jiying.chat/privacy-policy/"
 
 type LoginFormState = {
   account: string
@@ -104,6 +109,7 @@ export function LoginForm({
     serverKey: "",
   })
   const [passwordVisible, setPasswordVisible] = useState(false)
+  const [legalConsentAccepted, setLegalConsentAccepted] = useState(false)
   const [isLoginInitializing, setIsLoginInitializing] = useState(false)
   const isCurrentServer = formState.serverKey === serverKey
   const account = isCurrentServer ? formState.account : ""
@@ -265,6 +271,14 @@ export function LoginForm({
     ) {
       return
     }
+    if (!legalConsentAccepted) {
+      toast.show({
+        message: "请先阅读并同意用户协议和隐私政策",
+        modal: false,
+        type: "text",
+      })
+      return
+    }
 
     toast.show({
       duration: 0,
@@ -387,10 +401,15 @@ export function LoginForm({
                     variant="warn-strong"
                   />
                 ) : null}
+                <LegalConsent
+                  accepted={legalConsentAccepted}
+                  onAcceptedChange={setLegalConsentAccepted}
+                />
                 <LoginButton
                   disabled={isSignInDisabled}
                   isLoading={emailCodeLoginMutation.isPending}
                   onPress={() => void handleSignIn("email-code")}
+                  showDisabledAppearance={!legalConsentAccepted}
                   testID="email-code-login-submit-button"
                 />
               </YStack>
@@ -459,10 +478,15 @@ export function LoginForm({
                     variant="warn-strong"
                   />
                 ) : null}
+                <LegalConsent
+                  accepted={legalConsentAccepted}
+                  onAcceptedChange={setLegalConsentAccepted}
+                />
                 <LoginButton
                   disabled={isSignInDisabled}
                   isLoading={passwordLoginMutation.isPending}
                   onPress={() => void handleSignIn("password")}
+                  showDisabledAppearance={!legalConsentAccepted}
                   testID="password-login-submit-button"
                 />
               </YStack>
@@ -495,6 +519,63 @@ async function attemptLoginRequest<T>(operation: () => Promise<T>) {
   }
 
   throw lastError
+}
+
+function LegalConsent({
+  accepted,
+  onAcceptedChange,
+}: {
+  accepted: boolean
+  onAcceptedChange: (accepted: boolean) => void
+}) {
+  const { colors } = useXGUITheme()
+
+  return (
+    <View style={styles.legalConsent}>
+      <Pressable
+        accessibilityLabel="同意用户协议和隐私政策"
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: accepted }}
+        hitSlop={8}
+        onPress={() => onAcceptedChange(!accepted)}
+        style={[
+          styles.legalCheckbox,
+          {
+            backgroundColor: accepted ? colors.brand : "transparent",
+            borderColor: accepted ? colors.brand : colors.foreground2,
+          },
+        ]}
+      >
+        {accepted ? (
+          <Text style={[styles.legalCheckmark, { color: colors.textOnColor }]}>✓</Text>
+        ) : null}
+      </Pressable>
+      <Text style={[styles.legalCopy, { color: colors.textSecondary }]}>
+        我已阅读并同意
+        <Text
+          accessibilityRole="link"
+          onPress={() => openLegalDocument(USER_AGREEMENT_URL)}
+          style={{ color: colors.link }}
+        >
+          《用户协议》
+        </Text>
+        和
+        <Text
+          accessibilityRole="link"
+          onPress={() => openLegalDocument(PRIVACY_POLICY_URL)}
+          style={{ color: colors.link }}
+        >
+          《隐私政策》
+        </Text>
+      </Text>
+    </View>
+  )
+}
+
+function openLegalDocument(url: string) {
+  void Linking.openURL(url).catch(() => {
+    Alert.alert("无法打开", "暂时无法打开协议页面，请稍后重试。")
+  })
 }
 
 function EmailCodeAction({
@@ -561,20 +642,34 @@ function LoginButton({
   disabled,
   isLoading,
   onPress,
+  showDisabledAppearance,
   testID,
 }: {
   disabled: boolean
   isLoading: boolean
   onPress: () => void
+  showDisabledAppearance: boolean
   testID: string
 }) {
+  const { colors } = useXGUITheme()
+
   return (
     <XGUIButton
       accessibilityLabel="登录"
       disabled={disabled}
       loading={isLoading}
       onPress={onPress}
+      style={
+        showDisabledAppearance && !disabled
+          ? { backgroundColor: colors.foreground5 }
+          : undefined
+      }
       testID={testID}
+      textStyle={
+        showDisabledAppearance && !disabled
+          ? { color: colors.foreground4 }
+          : undefined
+      }
     >
       {isLoading ? "登录中…" : "登录"}
     </XGUIButton>
@@ -596,6 +691,31 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     paddingHorizontal: 8,
     width: 92,
+  },
+  legalCheckbox: {
+    alignItems: "center",
+    borderRadius: 7,
+    borderWidth: 1,
+    height: 14,
+    justifyContent: "center",
+    marginTop: 3,
+    width: 14,
+  },
+  legalCheckmark: {
+    fontSize: 10,
+    fontWeight: "700",
+    lineHeight: 12,
+  },
+  legalConsent: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 8,
+  },
+  legalCopy: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 20,
   },
   passwordAction: {
     alignItems: "center",
