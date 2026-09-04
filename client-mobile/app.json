@@ -14,7 +14,9 @@
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
-        }
+        },
+        "NSPhotoLibraryAddUsageDescription": "即应需要将您主动保存的聊天图片写入相册，例如将联系人发送的图片保存到系统“照片”。",
+        "NSPhotoLibraryUsageDescription": "即应需要访问您选择的照片，用于在聊天中发送图片，例如从相册选择产品截图并发送给联系人或群聊。"
       }
     },
     "android": {
@@ -52,8 +54,8 @@
         "expo-media-library",
         {
           "granularPermissions": ["photo"],
-          "photosPermission": "允许即应访问相册",
-          "savePhotosPermission": "允许即应将图片保存到相册"
+          "photosPermission": "即应需要访问您选择的照片，用于在聊天中发送图片，例如从相册选择产品截图并发送给联系人或群聊。",
+          "savePhotosPermission": "即应需要将您主动保存的聊天图片写入相册，例如将联系人发送的图片保存到系统“照片”。"
         }
       ],
       [
@@ -61,7 +63,7 @@
         {
           "cameraPermission": "允许即应使用相机拍摄并发送图片",
           "microphonePermission": "允许即应使用麦克风录制并发送语音消息",
-          "photosPermission": "允许即应从相册选择并发送图片"
+          "photosPermission": "即应需要访问您选择的照片，用于在聊天中发送图片，例如从相册选择产品截图并发送给联系人或群聊。"
         }
       ],
       [
