@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { useState } from "react"
 import { MemoryRouter, Route, Routes, useLocation } from "react-router"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -12,6 +13,7 @@ import type {
   ClientUser,
 } from "@/lib/client-data-api"
 import { ClientDataContext, type ClientDataContextValue } from "@/lib/client-data-context"
+import { createConversationMessageState } from "@/lib/client-data-state"
 import { readLastConversationId, writeLastConversationId } from "@/lib/last-conversation"
 import { RealtimeContext } from "@/lib/realtime-context"
 
@@ -363,6 +365,59 @@ describe("ChatPage last conversation", () => {
       expect(screen.getByTestId("chat-location")).toHaveTextContent("/chat/conversation-1"),
     )
     expect(overrides.ensureConversationMessages).toHaveBeenCalledWith("conversation-1")
+  })
+
+  it("reloads messages when the active conversation state disappears", async () => {
+    const user = userEvent.setup()
+    const conversation = createConversation("conversation-1", "产品群")
+    const message = createSourceMessage(conversation.id)
+    const ensureConversationMessages = vi.fn()
+
+    function MessageStateHarness() {
+      const [messageState, setMessageState] = useState({
+        ...createConversationMessageState(),
+        loaded: true,
+        messages: [message],
+      })
+      return (
+        <ClientDataContext.Provider
+          value={createClientDataValue({
+            ...createConversationOverrides([conversation]),
+            ensureConversationMessages,
+            getConversationMessageState: () => messageState,
+          })}
+        >
+          <button onClick={() => setMessageState(createConversationMessageState())} type="button">
+            clear message state
+          </button>
+          <ChatPage />
+        </ClientDataContext.Provider>
+      )
+    }
+
+    render(
+      <MemoryRouter initialEntries={[`/chat/${conversation.id}`]}>
+        <RealtimeContext.Provider
+          value={{
+            ready: true,
+            sendRealtimeRequest: vi.fn(),
+            status: "connected",
+            subscribeRealtimeEvent: vi.fn(() => vi.fn()),
+          }}
+        >
+          <Routes>
+            <Route path="/chat/:conversationId?" element={<MessageStateHarness />} />
+          </Routes>
+        </RealtimeContext.Provider>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText("讨论发布计划")).toBeVisible()
+    expect(ensureConversationMessages).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole("button", { name: "clear message state" }))
+
+    await waitFor(() => expect(ensureConversationMessages).toHaveBeenCalledWith(conversation.id))
   })
 
   it("clears a stored conversation that is no longer available", async () => {

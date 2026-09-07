@@ -659,6 +659,7 @@ function TopicDrawerContent({ conversationId, onOpenChange, open }: TopicDrawerP
               </>
             }
             historyError={messageState?.error ?? null}
+            onRetryHistory={() => ensureConversationMessages(conversation.id)}
             historyFocus={messageState?.focus ?? null}
             historyLoading={Boolean(messageState && !messageState.loaded && !messageState.error)}
             historyLoadingAfter={Boolean(messageState?.loadingAfter)}

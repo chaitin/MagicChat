@@ -1,11 +1,12 @@
 import * as React from "react"
 import {
   ArrowLeft,
-  Building2,
+  ChevronDown,
   Circle,
   CircleCheckBig,
   CircleDot,
   CircleX,
+  ListTodo,
   Loader2,
   Plus,
   Search,
@@ -14,6 +15,7 @@ import { useNavigate, useParams } from "react-router"
 import { toast } from "sonner"
 
 import { CreateProjectTaskDialog } from "@/components/projects/create-project-task-dialog"
+import { ProjectAvatar } from "@/components/projects/project-avatar"
 import {
   AssigneeFilter,
   PriorityFilter,
@@ -30,12 +32,13 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useLocale } from "@/components/locale-provider"
 import { useOptionalClientData } from "@/lib/client-data-context"
 import {
@@ -303,14 +306,15 @@ function LoadedTaskWorkspace({ projectId, taskId }: { projectId: string; taskId:
   }
 
   return (
-    <main className="flex h-svh min-w-0 overflow-hidden bg-background pt-10">
+    <main className="flex h-svh min-w-0 gap-3 overflow-hidden bg-muted p-3 pt-10">
       <aside
+        aria-label={t("taskWorkspace.taskList")}
         className={cn(
-          "flex h-full w-full shrink-0 flex-col overflow-hidden border-r bg-background md:w-80",
-          taskId && "hidden md:flex",
+          "flex h-full w-full shrink-0 flex-col overflow-hidden rounded-xl border bg-background shadow-xs md:w-80",
+          taskId ? "hidden md:flex" : "flex",
         )}
       >
-        <div className="flex h-14 shrink-0 items-center gap-1 px-3">
+        <div className="mx-2 mt-2 flex items-center gap-1">
           <Button
             aria-label={t("taskWorkspace.backToChat")}
             onClick={() => navigate("/chat")}
@@ -321,47 +325,56 @@ function LoadedTaskWorkspace({ projectId, taskId }: { projectId: string; taskId:
           >
             <ArrowLeft />
           </Button>
-          <div className="min-w-0 flex-1">
-            <Select
-              onValueChange={(nextProjectId) => {
-                if (nextProjectId === "__load_more_projects__") {
-                  void loadMoreProjects()
-                  return
-                }
-                navigate(`/tasks/${encodeURIComponent(nextProjectId)}`)
-              }}
-              value={projectId}
-            >
-              <SelectTrigger
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
                 aria-label={t("taskWorkspace.switchProject")}
-                className="h-10 w-full border-0 shadow-none"
+                className="h-10 min-w-0 flex-1 justify-start gap-2 px-2 font-semibold"
+                type="button"
+                variant="ghost"
               >
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary">
-                  <Building2 className="size-4" />
-                </span>
-                <SelectValue
-                  placeholder={
-                    projectOptions.find((project) => project.id === projectId)?.name ||
-                    t("taskWorkspace.selectProject")
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {projectOptions.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
-                {projectsNextCursor && (
-                  <SelectItem disabled={projectsLoadingMore} value="__load_more_projects__">
-                    {projectsLoadingMore
-                      ? t("taskWorkspace.loadingMoreProjects")
-                      : t("taskWorkspace.loadMoreProjects")}
-                  </SelectItem>
+                {currentProject && (
+                  <ProjectAvatar
+                    className="size-7"
+                    project={currentProject}
+                    user={clientData?.me}
+                  />
                 )}
-              </SelectContent>
-            </Select>
-          </div>
+                <span className="min-w-0 flex-1 truncate text-left">
+                  {currentProject?.name || t("taskWorkspace.selectProject")}
+                </span>
+                <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuRadioGroup
+                onValueChange={(nextProjectId) =>
+                  navigate(`/tasks/${encodeURIComponent(nextProjectId)}`)
+                }
+                value={projectId}
+              >
+                {projectOptions.map((project) => (
+                  <DropdownMenuRadioItem key={project.id} value={project.id}>
+                    <ProjectAvatar className="size-5" project={project} user={clientData?.me} />
+                    <span className="truncate">{project.name}</span>
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+              {projectsNextCursor && (
+                <DropdownMenuItem
+                  disabled={projectsLoadingMore}
+                  onSelect={(event) => {
+                    event.preventDefault()
+                    void loadMoreProjects()
+                  }}
+                >
+                  {projectsLoadingMore
+                    ? t("taskWorkspace.loadingMoreProjects")
+                    : t("taskWorkspace.loadMoreProjects")}
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <div className="grid shrink-0 gap-2 px-3 pb-3">
           <div className="flex gap-2">
@@ -455,9 +468,10 @@ function LoadedTaskWorkspace({ projectId, taskId }: { projectId: string; taskId:
         </div>
       </aside>
       <section
+        aria-label={t("taskWorkspace.taskContent")}
         className={cn(
-          "min-w-0 flex-1 overflow-auto bg-background p-4",
-          !taskId && "hidden md:flex",
+          "min-w-0 flex-1 overflow-hidden rounded-xl border bg-background shadow-xs md:flex",
+          taskId ? "flex" : "hidden",
         )}
       >
         {taskId && hydratedDisplayedTask ? (
@@ -475,8 +489,11 @@ function LoadedTaskWorkspace({ projectId, taskId }: { projectId: string; taskId:
         ) : taskId ? (
           <WorkspaceState loading message={t("taskWorkspace.loadingTask")} />
         ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-            {t("taskWorkspace.selectTask")}
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
+            <span className="flex size-12 items-center justify-center rounded-xl bg-muted">
+              <ListTodo className="size-6" />
+            </span>
+            <p className="text-sm">{t("taskWorkspace.selectTask")}</p>
           </div>
         )}
       </section>

@@ -88,6 +88,7 @@ type ConversationPanelProps = {
   onSendVoice: (voice: VoiceMessageRecording) => Promise<ClientMessage | null>
   onLoadAfterMessages?: () => void
   onLoadBeforeMessages: () => void
+  onRetryHistory?: () => void
   onOpenTopic?: (conversationId: string) => void
   onReturnToLatestMessages?: () => void
   onRichTextModeChange: (richTextMode: boolean) => void
@@ -141,6 +142,7 @@ export function ConversationPanel({
   onSendVoice,
   onLoadAfterMessages,
   onLoadBeforeMessages,
+  onRetryHistory,
   onOpenTopic,
   onReturnToLatestMessages,
   onRichTextModeChange,
@@ -328,6 +330,7 @@ export function ConversationPanel({
             onCreateTopic={onCreateTopic}
             onLoadAfterMessages={onLoadAfterMessages}
             onLoadBeforeMessages={onLoadBeforeMessages}
+            onRetry={onRetryHistory}
             onStartMessageSelection={onStartMessageSelection}
             onInsertMention={insertComposerMention}
             onOpenTopic={onOpenTopic}
