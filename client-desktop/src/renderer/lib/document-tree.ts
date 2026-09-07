@@ -1,4 +1,5 @@
 import type { ClientDocument } from "@/lib/document-data-api"
+import { createPinyinSearchText, normalizePinyinSearchQuery } from "@/lib/pinyin-search"
 
 export const MAX_DOCUMENT_TREE_DEPTH = 64
 
@@ -44,13 +45,18 @@ export function filterDocumentTree(
   tree: ReadonlyArray<DocumentTreeNode>,
   keyword: string,
 ): ReadonlyArray<DocumentTreeNode> {
-  const query = keyword.trim().toLocaleLowerCase()
+  const query = normalizePinyinSearchQuery(keyword)
   if (!query) return tree
   const filter = (nodes: ReadonlyArray<DocumentTreeNode>): ReadonlyArray<DocumentTreeNode> =>
     nodes.flatMap((node) => {
       const filteredChildren = filter(node.children)
-      if (!node.title.toLocaleLowerCase().includes(query) && filteredChildren.length === 0)
-        return []
+      const matches = createPinyinSearchText([
+        node.title,
+        node.creator.name,
+        node.updatedBy.name,
+        node.kind === "folder" ? "目录" : "文档",
+      ]).includes(query)
+      if (!matches && filteredChildren.length === 0) return []
       return [Object.freeze({ ...node, children: Object.freeze(filteredChildren) })]
     })
   return Object.freeze(filter(tree))

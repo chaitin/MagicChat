@@ -835,6 +835,7 @@ const zhCN = {
   "credentials.wsUrl": "WebSocket 地址",
   "credentials.secret": "连接密钥",
   "credentials.resetAction": "重置连接密钥",
+  "credentials.docs": "开发文档",
   "credentials.close": "关闭",
   "credentials.resetConfirm": "重置连接密钥",
   "credentials.resetDesc":
@@ -1178,6 +1179,8 @@ const zhCN = {
   "taskWorkspace.moreTasksLoadFailed": "加载更多任务失败",
   "taskWorkspace.loadingTask": "正在加载任务详情",
   "taskWorkspace.selectTask": "从左侧选择一个任务查看详情",
+  "taskWorkspace.taskList": "任务列表工作区",
+  "taskWorkspace.taskContent": "任务内容工作区",
   "taskWorkspace.filters": "任务筛选",
   "taskWorkspace.allStatuses": "全部状态",
   "taskWorkspace.allPriorities": "全部优先级",
@@ -2394,6 +2397,7 @@ const en: Record<TranslationKey, string> = {
   "credentials.wsUrl": "WebSocket URL",
   "credentials.secret": "Connection secret",
   "credentials.resetAction": "Reset connection secret",
+  "credentials.docs": "Developer docs",
   "credentials.close": "Close",
   "credentials.resetConfirm": "Reset connection secret",
   "credentials.resetDesc":
@@ -2738,6 +2742,8 @@ const en: Record<TranslationKey, string> = {
   "taskWorkspace.moreTasksLoadFailed": "Failed to load more tasks",
   "taskWorkspace.loadingTask": "Loading task details",
   "taskWorkspace.selectTask": "Select a task from the left to view its details",
+  "taskWorkspace.taskList": "Task list workspace",
+  "taskWorkspace.taskContent": "Task content workspace",
   "taskWorkspace.filters": "Task filters",
   "taskWorkspace.allStatuses": "All statuses",
   "taskWorkspace.allPriorities": "All priorities",
