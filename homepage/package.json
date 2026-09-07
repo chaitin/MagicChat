@@ -7,7 +7,7 @@
     "dev": "astro dev",
     "build": "npm run check && astro build",
     "check": "astro check",
-    "test": "node --test tests/release-downloads.test.mjs",
+    "test": "node --test tests/*.test.mjs",
     "preview": "astro preview"
   },
   "dependencies": {

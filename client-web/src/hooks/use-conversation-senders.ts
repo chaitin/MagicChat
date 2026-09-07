@@ -25,6 +25,7 @@ import type { VoiceMessageRecording } from "@/lib/voice-message"
 export function useConversationSenders({
   currentUserId,
   conversationMessageStatesRef,
+  getConversationAccountGeneration,
   mergeIncomingConversationMessage,
   updateConversationMessageState,
 }: {
@@ -32,6 +33,7 @@ export function useConversationSenders({
   conversationMessageStatesRef: RefObject<
     Record<string, ClientConversationMessageState>
   >
+  getConversationAccountGeneration: () => number
   mergeIncomingConversationMessage: ClientDataContextValue["mergeIncomingConversationMessage"]
   updateConversationMessageState: (
     conversationId: string,
@@ -61,6 +63,7 @@ export function useConversationSenders({
           failureText
         )
       attemptsRef.current.add(clientMessageId)
+      const accountGeneration = getConversationAccountGeneration()
       const state = conversationMessageStatesRef.current[conversationId]
       const temporary = {
         body,
@@ -83,9 +86,11 @@ export function useConversationSenders({
       mergeIncomingConversationMessage(temporary, { markLoaded: true })
       try {
         const message = await request()
+        if (accountGeneration !== getConversationAccountGeneration()) return null
         mergeIncomingConversationMessage(message, { markLoaded: true })
         return message
       } catch (error) {
+        if (accountGeneration !== getConversationAccountGeneration()) return null
         mergeIncomingConversationMessage(
           { ...temporary, deliveryStatus: "failed" },
           { markLoaded: true }
@@ -99,6 +104,7 @@ export function useConversationSenders({
     [
       conversationMessageStatesRef,
       currentUserId,
+      getConversationAccountGeneration,
       mergeIncomingConversationMessage,
     ]
   )
@@ -177,6 +183,7 @@ export function useConversationSenders({
       }
 
       const clientMessageId = createClientMessageId()
+      const accountGeneration = getConversationAccountGeneration()
       updateConversationMessageState(conversationId, (currentState) => ({
         ...currentState,
         sending: true,
@@ -198,20 +205,26 @@ export function useConversationSenders({
                 title: card.title.trim(),
                 url: card.url.trim(),
               })
+        if (accountGeneration !== getConversationAccountGeneration()) return null
         mergeIncomingConversationMessage(message, { markLoaded: true })
         return message
       } catch (error: unknown) {
-        toast.error(getClientDataErrorMessage(error, "发送卡片失败"))
+        if (accountGeneration === getConversationAccountGeneration()) {
+          toast.error(getClientDataErrorMessage(error, "发送卡片失败"))
+        }
         return null
       } finally {
-        updateConversationMessageState(conversationId, (currentState) => ({
-          ...currentState,
-          sending: false,
-        }))
+        if (accountGeneration === getConversationAccountGeneration()) {
+          updateConversationMessageState(conversationId, (currentState) => ({
+            ...currentState,
+            sending: false,
+          }))
+        }
       }
     },
     [
       conversationMessageStatesRef,
+      getConversationAccountGeneration,
       mergeIncomingConversationMessage,
       updateConversationMessageState,
     ]
@@ -229,6 +242,7 @@ export function useConversationSenders({
       }
 
       const clientMessageId = createClientMessageId()
+      const accountGeneration = getConversationAccountGeneration()
       updateConversationMessageState(conversationId, (currentState) => ({
         ...currentState,
         sending: true,
@@ -240,20 +254,26 @@ export function useConversationSenders({
           file,
           replyToMessageId: options.replyToMessageId,
         })
+        if (accountGeneration !== getConversationAccountGeneration()) return null
         mergeIncomingConversationMessage(message, { markLoaded: true })
         return message
       } catch (error: unknown) {
-        toast.error(getClientDataErrorMessage(error, "发送文件失败"))
+        if (accountGeneration === getConversationAccountGeneration()) {
+          toast.error(getClientDataErrorMessage(error, "发送文件失败"))
+        }
         return null
       } finally {
-        updateConversationMessageState(conversationId, (currentState) => ({
-          ...currentState,
-          sending: false,
-        }))
+        if (accountGeneration === getConversationAccountGeneration()) {
+          updateConversationMessageState(conversationId, (currentState) => ({
+            ...currentState,
+            sending: false,
+          }))
+        }
       }
     },
     [
       conversationMessageStatesRef,
+      getConversationAccountGeneration,
       mergeIncomingConversationMessage,
       updateConversationMessageState,
     ]
@@ -271,6 +291,7 @@ export function useConversationSenders({
       }
 
       const clientMessageId = createClientMessageId()
+      const accountGeneration = getConversationAccountGeneration()
       updateConversationMessageState(conversationId, (currentState) => ({
         ...currentState,
         sending: true,
@@ -284,20 +305,26 @@ export function useConversationSenders({
           image,
           replyToMessageId: options.replyToMessageId,
         })
+        if (accountGeneration !== getConversationAccountGeneration()) return null
         mergeIncomingConversationMessage(message, { markLoaded: true })
         return message
       } catch (error: unknown) {
-        toast.error(getClientDataErrorMessage(error, "发送图片失败"))
+        if (accountGeneration === getConversationAccountGeneration()) {
+          toast.error(getClientDataErrorMessage(error, "发送图片失败"))
+        }
         return null
       } finally {
-        updateConversationMessageState(conversationId, (currentState) => ({
-          ...currentState,
-          sending: false,
-        }))
+        if (accountGeneration === getConversationAccountGeneration()) {
+          updateConversationMessageState(conversationId, (currentState) => ({
+            ...currentState,
+            sending: false,
+          }))
+        }
       }
     },
     [
       conversationMessageStatesRef,
+      getConversationAccountGeneration,
       mergeIncomingConversationMessage,
       updateConversationMessageState,
     ]
@@ -315,6 +342,7 @@ export function useConversationSenders({
       }
 
       const clientMessageId = createClientMessageId()
+      const accountGeneration = getConversationAccountGeneration()
       updateConversationMessageState(conversationId, (currentState) => ({
         ...currentState,
         sending: true,
@@ -328,20 +356,26 @@ export function useConversationSenders({
           transcript: voice.transcript,
           voice: voice.blob,
         })
+        if (accountGeneration !== getConversationAccountGeneration()) return null
         mergeIncomingConversationMessage(message, { markLoaded: true })
         return message
       } catch (error: unknown) {
-        toast.error(getClientDataErrorMessage(error, "发送语音失败"))
+        if (accountGeneration === getConversationAccountGeneration()) {
+          toast.error(getClientDataErrorMessage(error, "发送语音失败"))
+        }
         return null
       } finally {
-        updateConversationMessageState(conversationId, (currentState) => ({
-          ...currentState,
-          sending: false,
-        }))
+        if (accountGeneration === getConversationAccountGeneration()) {
+          updateConversationMessageState(conversationId, (currentState) => ({
+            ...currentState,
+            sending: false,
+          }))
+        }
       }
     },
     [
       conversationMessageStatesRef,
+      getConversationAccountGeneration,
       mergeIncomingConversationMessage,
       updateConversationMessageState,
     ]

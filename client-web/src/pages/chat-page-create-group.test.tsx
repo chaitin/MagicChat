@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter, Route, Routes, useLocation } from "react-router"
@@ -284,6 +285,57 @@ describe("ChatPage last conversation", () => {
     )
     expect(overrides.ensureConversationMessages).toHaveBeenCalledWith(
       "conversation-1"
+    )
+  })
+
+  it("reloads messages when the active conversation state disappears", async () => {
+    const user = userEvent.setup()
+    const conversation = createConversation("conversation-1", "产品群")
+    const message = createSourceMessage(conversation.id)
+    const ensureConversationMessages = vi.fn()
+
+    function MessageStateHarness() {
+      const [messageState, setMessageState] = useState({
+        ...createConversationMessageState(),
+        loaded: true,
+        messages: [message],
+      })
+      return (
+        <ClientDataContext.Provider
+          value={createClientDataValue({
+            ...createConversationOverrides([conversation]),
+            ensureConversationMessages,
+            getConversationMessageState: () => messageState,
+          })}
+        >
+          <button
+            onClick={() => setMessageState(createConversationMessageState())}
+            type="button"
+          >
+            clear message state
+          </button>
+          <ChatPage />
+        </ClientDataContext.Provider>
+      )
+    }
+
+    render(
+      <MemoryRouter initialEntries={[`/chat/${conversation.id}`]}>
+        <RealtimeContext.Provider value={createRealtimeValue()}>
+          <Routes>
+            <Route path="/chat/:conversationId?" element={<MessageStateHarness />} />
+          </Routes>
+        </RealtimeContext.Provider>
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByText("讨论发布计划")).toBeVisible()
+    expect(ensureConversationMessages).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole("button", { name: "clear message state" }))
+
+    await waitFor(() =>
+      expect(ensureConversationMessages).toHaveBeenCalledWith(conversation.id)
     )
   })
 

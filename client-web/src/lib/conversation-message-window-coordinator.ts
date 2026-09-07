@@ -15,6 +15,24 @@ export class ConversationMessageWindowCoordinator {
   >()
   private readonly requestVersions = new Map<string, number>()
 
+  invalidateAllRequests() {
+    const conversationIds = new Set(this.requestVersions.keys())
+    for (const requests of this.inFlightRequests.values()) {
+      for (const conversationId of requests.keys()) {
+        conversationIds.add(conversationId)
+      }
+    }
+    for (const conversationId of conversationIds) {
+      this.requestVersions.set(
+        conversationId,
+        this.getRequestVersion(conversationId) + 1
+      )
+    }
+    this.desiredModes.clear()
+    this.inFlightRequests.clear()
+    this.committedConversationIds.clear()
+  }
+
   beginWindowRequest(
     conversationId: string,
     mode: ConversationMessageWindowMode

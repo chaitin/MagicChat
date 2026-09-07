@@ -7,8 +7,10 @@ import {
   createConversationMessageState,
   isConversationTopicVisibleInList,
   isLatestConversationSnapshot,
+  mergeBootstrapConversationMessageStates,
   mergeConversationMessages,
   mergeConversationSnapshot,
+  mergeLatestCachedMessages,
   orderConversations,
   shouldReplaceConversationSnapshot,
 } from "@/lib/client-data-state"
@@ -52,6 +54,100 @@ describe("compactConversationMessageState", () => {
     }
 
     expect(compactConversationMessageState(state)).toBe(state)
+  })
+})
+
+describe("mergeBootstrapConversationMessageStates", () => {
+  it("retains loaded and in-flight windows when the same account bootstraps again", () => {
+    const retained = {
+      ...createConversationMessageState(),
+      loaded: true,
+      messages: [createMessage("retained-message", 10)],
+    }
+    const loading = {
+      ...createConversationMessageState(),
+      loading: true,
+    }
+    const preloaded = {
+      ...createConversationMessageState(),
+      loaded: true,
+      messages: [createMessage("preloaded-message", 20)],
+    }
+
+    const result = mergeBootstrapConversationMessageStates(
+      { loading, retained },
+      { preloaded },
+      false
+    )
+
+    expect(result).toEqual({ loading, preloaded, retained })
+    expect(result.retained).toBe(retained)
+    expect(result.loading).toBe(loading)
+  })
+
+  it("drops the previous account's message windows", () => {
+    const previous = {
+      ...createConversationMessageState(),
+      loaded: true,
+      messages: [createMessage("previous-message", 10)],
+    }
+    const preloaded = {
+      ...createConversationMessageState(),
+      loaded: true,
+      messages: [createMessage("next-message", 20)],
+    }
+
+    expect(
+      mergeBootstrapConversationMessageStates(
+        { previous },
+        { preloaded },
+        true
+      )
+    ).toEqual({ preloaded })
+  })
+})
+
+describe("mergeLatestCachedMessages", () => {
+  it("accepts an authoritative update for the same message sequence", () => {
+    const current = createMessage("message-10", 10, "原内容")
+    const revoked = {
+      ...createMessage("message-10", 10),
+      body: { type: "revoked" as const },
+    }
+
+    expect(
+      mergeLatestCachedMessages(
+        { "conversation-1": current },
+        { "conversation-1": revoked }
+      )
+    ).toEqual({ "conversation-1": revoked })
+  })
+
+  it("does not replace a newer cached message with an older preload", () => {
+    const current = createMessage("message-11", 11)
+    const stale = createMessage("message-10", 10)
+
+    expect(
+      mergeLatestCachedMessages(
+        { "conversation-1": current },
+        { "conversation-1": stale }
+      )
+    ).toEqual({ "conversation-1": current })
+  })
+
+  it("does not restore a revoked cache entry from a stale same-seq preload", () => {
+    const revoked = {
+      ...createMessage("message-10", 10),
+      body: { type: "revoked" as const },
+    }
+    const stale = createMessage("message-10", 10, "撤回前内容")
+
+    expect(
+      mergeLatestCachedMessages(
+        { "conversation-1": revoked },
+        { "conversation-1": stale }
+      )
+    ).toEqual({ "conversation-1": revoked })
   })
 })
 

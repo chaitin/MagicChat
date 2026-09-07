@@ -178,6 +178,30 @@ describe("useConversationMessageWindow", () => {
     )
   })
 
+  it("ignores an in-flight message response after account requests are invalidated", async () => {
+    const stalePage = createDeferred<ClientMessageList>()
+    mocks.listConversationMessages.mockReturnValue(stalePage.promise)
+    const { result } = renderHook(useMessageWindowHarness)
+
+    act(() => result.current.actions.ensureConversationMessages("conversation-1"))
+    act(() => {
+      result.current.actions.invalidateConversationMessageRequests()
+      result.current.updateState(() => ({
+        ...createConversationMessageState(),
+        loaded: true,
+        messages: [createMessage(300)],
+      }))
+    })
+    await act(async () => {
+      stalePage.resolve(createPage(1, 20, false, false))
+      await stalePage.promise
+    })
+
+    expect(result.current.state.messages.map((message) => message.seq)).toEqual([
+      300,
+    ])
+  })
+
   it("deduplicates concurrent requests for newer history messages", async () => {
     mocks.listConversationMessages.mockImplementation(
       (

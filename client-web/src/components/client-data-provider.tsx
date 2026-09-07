@@ -61,8 +61,10 @@ import {
   applyMessageReactionsUpdate,
   getMessageSummary,
   getNewestMessageSeq,
+  mergeBootstrapConversationMessageStates,
   mergeConversationMessages,
   mergeConversationSnapshot,
+  mergeLatestCachedMessages,
   isLatestConversationSnapshot,
   orderConversations,
   shouldReplaceConversationSnapshot,
@@ -219,6 +221,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
   )
   const conversationSnapshotSequenceRef = useRef(0)
   const conversationAccountIdRef = useRef<string | null>(null)
+  const conversationAccountGenerationRef = useRef(0)
   const mountedRef = useRef(true)
   const bootstrapGenerationRef = useRef(0)
   const refreshingReactionSnapshotKeysRef = useRef<Set<string>>(new Set())
@@ -906,6 +909,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
   const {
     ensureConversationMessages,
     focusConversationMessage,
+    invalidateConversationMessageRequests,
     loadAfterConversationMessages,
     loadBeforeConversationMessages,
     returnToLatestConversationMessages,
@@ -1603,6 +1607,11 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     syncAfterConversationMessages,
   ])
 
+  const getConversationAccountGeneration = useCallback(
+    () => conversationAccountGenerationRef.current,
+    []
+  )
+
   const {
     sendConversationFile,
     sendConversationImage,
@@ -1614,6 +1623,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
   } = useConversationSenders({
     currentUserId: me?.id ?? "",
     conversationMessageStatesRef,
+    getConversationAccountGeneration,
     mergeIncomingConversationMessage,
     updateConversationMessageState,
   })
@@ -1779,6 +1789,8 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
       )
       if (accountChanged) {
         conversationAccountIdRef.current = nextMe.id
+        conversationAccountGenerationRef.current += 1
+        invalidateConversationMessageRequests()
         clearConversationRemovalState(
           removedConversationIdsRef.current,
           removedConversationsRef.current
@@ -1799,8 +1811,21 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
           )
         )
       }
-      setConversationMessageStates(preloadedMessageStates)
-      setLatestCachedMessages(preloadedLatestMessages)
+      setConversationMessageStates((currentStates) =>
+        mergeBootstrapConversationMessageStates(
+          currentStates,
+          preloadedMessageStates,
+          accountChanged
+        )
+      )
+      setLatestCachedMessages((currentMessages) =>
+        accountChanged
+          ? preloadedLatestMessages
+          : mergeLatestCachedMessages(
+              currentMessages,
+              preloadedLatestMessages
+            )
+      )
       setPersonalProject(nextProjects.personalProject)
       setProjects(nextProjects.projects)
       setProjectsNextCursor(nextProjects.nextCursor)
@@ -1827,6 +1852,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     cacheUserProfiles,
     ensureUsers,
     handleError,
+    invalidateConversationMessageRequests,
     refreshFriendRequests,
     shouldLoadConversations,
   ])

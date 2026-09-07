@@ -50,6 +50,10 @@ export function useConversationMessageWindow({
     coordinator.synchronizeDesiredModes(conversationMessageStates)
   }, [conversationMessageStates, coordinator])
 
+  const invalidateConversationMessageRequests = useCallback(() => {
+    coordinator.invalidateAllRequests()
+  }, [coordinator])
+
   const ensureConversationMessages = useCallback(
     (conversationId: string) => {
       if (!conversationId) {
@@ -546,6 +550,7 @@ export function useConversationMessageWindow({
 
   return {
     ensureConversationMessages,
+    invalidateConversationMessageRequests,
     focusConversationMessage,
     loadAfterConversationMessages,
     loadBeforeConversationMessages,

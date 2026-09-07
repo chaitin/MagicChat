@@ -481,12 +481,29 @@ export function ChatPage() {
   )
 
   React.useEffect(() => {
-    if (!activeConversationId) {
+    if (
+      !activeConversationId ||
+      activeMessageState?.loaded ||
+      activeMessageState?.loading ||
+      activeMessageState?.error
+    ) {
       return
     }
 
-    ensureConversationMessages(activeConversationId)
-  }, [activeConversationId, ensureConversationMessages])
+    let active = true
+    queueMicrotask(() => {
+      if (active) ensureConversationMessages(activeConversationId)
+    })
+    return () => {
+      active = false
+    }
+  }, [
+    activeConversationId,
+    activeMessageState?.error,
+    activeMessageState?.loaded,
+    activeMessageState?.loading,
+    ensureConversationMessages,
+  ])
 
   React.useEffect(() => {
     if (

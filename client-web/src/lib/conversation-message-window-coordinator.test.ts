@@ -30,6 +30,21 @@ describe("ConversationMessageWindowCoordinator", () => {
     expect(coordinator.getDesiredMode("conversation-1")).toBeUndefined()
   })
 
+  it("invalidates every in-flight request when the account changes", () => {
+    const coordinator = new ConversationMessageWindowCoordinator()
+    const version = coordinator.getRequestVersion("conversation-1")
+    expect(
+      coordinator.tryBeginRequest("initial", "conversation-1")
+    ).not.toBeNull()
+
+    coordinator.invalidateAllRequests()
+
+    expect(coordinator.requestIsCurrent("conversation-1", version)).toBe(false)
+    expect(
+      coordinator.tryBeginRequest("initial", "conversation-1")
+    ).not.toBeNull()
+  })
+
   it("does not let a stale request release a newer request lock", () => {
     const coordinator = new ConversationMessageWindowCoordinator()
     const staleToken = coordinator.tryBeginRequest("after", "conversation-1")

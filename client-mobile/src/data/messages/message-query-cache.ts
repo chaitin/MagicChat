@@ -44,16 +44,11 @@ export async function hydrateConversationMessagesQuery(
   limit: number
 ) {
   const queryKey = queryKeys.conversationMessages(target, conversationId)
-  const current = queryClient.getQueryData<ConversationMessagesData>(queryKey)
-  if (current?.pages.length && current.pages.length > 1) {
-    queryClient.setQueryData<ConversationMessagesData>(
-      queryKey,
-      compactConversationMessagesData
-    )
-  }
 
   // Query presence only means a snapshot was cached. Runtime/SQLite may have
   // advanced since then (including bootstrap work that finished after timeout).
+  // The messages tab can hydrate while a conversation screen remains mounted
+  // above it, so hydration must preserve every history page already in use.
   const page = await messageManager.readLatestPage(
     target,
     conversationId,

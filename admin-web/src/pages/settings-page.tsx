@@ -1048,6 +1048,7 @@ function areEmailLoginSettingsEqual(
 ) {
   return (
     first.enabled === second.enabled &&
+    first.registrationEnabled === second.registrationEnabled &&
     first.fromEmail.trim() === second.fromEmail.trim() &&
     first.fromName.trim() === second.fromName.trim() &&
     first.smtpHost.trim() === second.smtpHost.trim() &&

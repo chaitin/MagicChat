@@ -164,6 +164,39 @@ export function createConversationMessageState(): ClientConversationMessageState
   }
 }
 
+export function mergeBootstrapConversationMessageStates(
+  currentStates: Record<string, ClientConversationMessageState>,
+  preloadedStates: Record<string, ClientConversationMessageState>,
+  accountChanged: boolean
+) {
+  if (accountChanged) {
+    return preloadedStates
+  }
+
+  return { ...preloadedStates, ...currentStates }
+}
+
+export function mergeLatestCachedMessages(
+  currentMessages: Record<string, ClientMessage>,
+  preloadedMessages: Record<string, ClientMessage>
+) {
+  const mergedMessages = { ...currentMessages }
+  for (const [conversationId, message] of Object.entries(preloadedMessages)) {
+    const currentMessage = currentMessages[conversationId]
+    if (
+      !currentMessage ||
+      message.seq > currentMessage.seq ||
+      (message.seq === currentMessage.seq &&
+        message.id === currentMessage.id &&
+        currentMessage.body.type !== "revoked" &&
+        message.body.type === "revoked")
+    ) {
+      mergedMessages[conversationId] = message
+    }
+  }
+  return mergedMessages
+}
+
 export function compactConversationMessageState(
   state: ClientConversationMessageState,
   limit = conversationMessageRetentionLimit
