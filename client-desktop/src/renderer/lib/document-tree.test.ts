@@ -75,6 +75,10 @@ describe("document tree", () => {
     expect(filterDocumentTree(tree, "   ")).toBe(tree)
     expect(filterDocumentTree(tree, "sjsm")[0]?.children[0]?.id).toBe("child")
     expect(filterDocumentTree(tree, "shejishuoming")[0]?.children[0]?.id).toBe("child")
+    expect(filterDocumentTree(tree, "文档")).toEqual([])
+    expect(filterDocumentTree(tree, "目录")).toEqual([])
+    expect(filterDocumentTree(tree, "wd")).toEqual([])
+    expect(filterDocumentTree(tree, "用户")).toEqual([])
   })
 
   it("解析拖动目标并拒绝循环移动", () => {

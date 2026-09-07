@@ -55,9 +55,12 @@ export function AppCredentialsDialog({
   if (!credentials) {
     return null
   }
+  if (!target) {
+    throw new Error("开发指南缺少认证服务器")
+  }
 
   const { app, connectionSecret } = credentials
-  const webSocketURL = target ? buildAppWebSocketURL(new URL(target.normalizedUrl)) : ""
+  const webSocketURL = buildAppWebSocketURL(new URL(target.normalizedUrl))
 
   async function handleResetSecret() {
     if (resetting) {

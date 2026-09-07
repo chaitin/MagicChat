@@ -166,6 +166,14 @@ describe("ConversationPanelHistory", () => {
     expect(screen.queryByText(/条新消息/)).not.toBeInTheDocument()
   })
 
+  it("retries loading when the empty history error action is clicked", () => {
+    const onRetry = vi.fn()
+    render(<ConversationPanelHistory {...createProps([])} error="加载消息失败" onRetry={onRetry} />)
+
+    fireEvent.click(screen.getByRole("button", { name: "重试" }))
+    expect(onRetry).toHaveBeenCalledOnce()
+  })
+
   it("stays at the bottom when existing message content grows", () => {
     const props = createProps([createMessage("message-1", "other")])
     render(<ConversationPanelHistory {...props} />)

@@ -50,12 +50,7 @@ export function filterDocumentTree(
   const filter = (nodes: ReadonlyArray<DocumentTreeNode>): ReadonlyArray<DocumentTreeNode> =>
     nodes.flatMap((node) => {
       const filteredChildren = filter(node.children)
-      const matches = createPinyinSearchText([
-        node.title,
-        node.creator.name,
-        node.updatedBy.name,
-        node.kind === "folder" ? "目录" : "文档",
-      ]).includes(query)
+      const matches = createPinyinSearchText([node.title]).includes(query)
       if (!matches && filteredChildren.length === 0) return []
       return [Object.freeze({ ...node, children: Object.freeze(filteredChildren) })]
     })

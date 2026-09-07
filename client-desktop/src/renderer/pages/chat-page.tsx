@@ -1202,6 +1202,9 @@ export function ChatPage() {
         onSendVoice={sendVoiceMessage}
         onLoadAfterMessages={loadAfterMessages}
         onLoadBeforeMessages={loadBeforeMessages}
+        onRetryHistory={
+          activeConversationId ? () => ensureConversationMessages(activeConversationId) : undefined
+        }
         onOpenTopic={openTopicDrawer}
         onReturnToLatestMessages={returnToLatestMessages}
         onSendMessage={sendMessage}
