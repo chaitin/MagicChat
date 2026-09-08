@@ -26,7 +26,7 @@ describe("ConversationSidebar", () => {
     vi.useRealTimers()
   })
 
-  it("matches the Web search and filter header", () => {
+  it("显示桌面端完整搜索入口和筛选栏", () => {
     render(
       <SidebarProvider>
         <ConversationSidebar
@@ -44,7 +44,7 @@ describe("ConversationSidebar", () => {
       </SidebarProvider>,
     )
 
-    expect(screen.getByRole("button", { name: "全局搜索" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "搜索消息、联系人、会话" })).toBeInTheDocument()
     expect(screen.getByRole("tablist", { name: "会话类型" })).toBeInTheDocument()
     expect(screen.queryByRole("combobox", { name: "搜索消息" })).not.toBeInTheDocument()
     const header = screen

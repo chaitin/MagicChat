@@ -5,6 +5,8 @@
   --workspace-chrome: color-mix(in oklab, var(--primary) 5%, var(--background));
   --workspace-selected: color-mix(in oklab, var(--primary) 12%, var(--background));
   --workspace-ink: color-mix(in oklab, var(--primary) 40%, var(--foreground));
+  --workspace-navigation-width: max(72px, 4.5rem);
+  --desktop-macos-navigation-rail-width: var(--workspace-navigation-width);
   --workspace-line: color-mix(in oklab, var(--foreground) 9%, var(--background));
 }
 
@@ -22,19 +24,24 @@
 }
 
 .workspace-shell .app-navigation-rail {
-  width: 64px;
-  gap: 16px;
+  width: var(--workspace-navigation-width);
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  gap: 1rem;
   background: var(--workspace-rail);
   border-right: 1px solid var(--workspace-line);
-  padding-bottom: 16px;
+  padding-bottom: 1rem;
 }
 
 .workspace-shell .workspace-nav-item {
-  width: 44px;
-  height: 54px;
+  width: 3.25rem;
+  flex-shrink: 0;
+  height: 3.75rem;
   flex-direction: column;
-  gap: 5px;
-  border-radius: 8px;
+  gap: 0.3125rem;
+  border-radius: 0.5rem;
   background: transparent;
   color: var(--muted-foreground);
   box-shadow: none;
@@ -51,52 +58,58 @@
 }
 
 .workspace-nav-label {
-  font-size: 10px;
-  font-weight: 550;
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 500;
   line-height: 1;
 }
 
 .workspace-page-layout {
+  --workspace-sidebar-width: 17.5rem;
   overflow: hidden;
   background: var(--workspace-chrome);
 }
 
 .workspace-page-layout .workspace-section-sidebar {
-  width: 280px;
+  width: var(--sidebar-width);
   min-width: 0;
   flex-shrink: 0;
   border: 0;
   background: var(--workspace-chrome);
-  padding: 0 6px;
+  padding: 0 0.375rem;
 }
 
 .workspace-section-heading {
-  height: 64px;
+  height: 4rem;
 }
 
 .workspace-section-heading h1 {
-  font-size: 18px;
-  font-weight: 650;
+  font-size: 1.125rem;
+  font-weight: 600;
   letter-spacing: -0.03em;
 }
 
 .workspace-search-row {
-  padding: 0 10px 16px;
+  padding: 0 0.625rem 1rem;
 }
 
 .workspace-search-trigger {
   display: flex;
   width: 100%;
   min-width: 0;
-  height: 36px;
+  height: 2.25rem;
   justify-content: flex-start;
-  gap: 9px;
-  padding: 0 10px;
+  gap: 0.5625rem;
+  padding: 0 0.625rem;
   border: 1px solid var(--workspace-line, var(--border));
-  border-radius: 6px;
+  border-radius: 0.375rem;
   background: color-mix(in oklab, var(--background) 62%, transparent);
   color: var(--muted-foreground);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 400;
   box-shadow: none;
 }
@@ -108,20 +121,20 @@
 }
 
 .workspace-conversation-filters {
-  padding: 0 10px 12px;
+  padding: 0 0.625rem 0.75rem;
 }
 
 .workspace-section-sidebar [role="tablist"] {
-  height: 30px;
+  height: 1.875rem;
   padding: 0;
-  gap: 2px;
+  gap: 0.125rem;
   background: transparent;
 }
 
 .workspace-section-sidebar [role="tab"] {
   border: 0;
-  border-radius: 5px;
-  font-size: 12px;
+  border-radius: 0.3125rem;
+  font-size: 0.75rem;
   color: var(--muted-foreground);
   box-shadow: none;
 }
@@ -132,7 +145,7 @@
 }
 
 .workspace-conversation-sidebar .workspace-conversation-row {
-  border-radius: 7px;
+  border-radius: 0.4375rem;
   background: transparent;
 }
 
@@ -144,113 +157,118 @@
   background: var(--workspace-selected);
 }
 
-.workspace-page-layout > .workspace-conversation-panel,
+.workspace-chat-layout > .workspace-conversation-panel,
 .workspace-page-layout > [data-slot="sidebar-inset"] {
-  margin: 8px 10px 10px 0;
+  margin: 0.5rem 0.625rem 0.625rem 0;
   overflow: hidden;
   border: 1px solid var(--workspace-line);
-  border-radius: 10px;
-  background: var(--background);
-  box-shadow: 0 2px 6px color-mix(in oklab, var(--foreground) 3%, transparent);
+  border-radius: 0.625rem;
+  box-shadow: 0 2px 0.375rem color-mix(in oklab, var(--foreground) 3%, transparent);
 }
 
-.workspace-conversation-panel .conversation-panel-header-surface {
-  height: 64px;
+.workspace-chat-layout > .workspace-conversation-panel .conversation-panel-header-surface {
+  height: 4rem;
   border-bottom: 1px solid var(--border);
   background: var(--background);
   box-shadow: none;
 }
 
-.workspace-conversation-panel .conversation-panel-header-surface h2 {
-  font-size: 15px;
+.workspace-chat-layout > .workspace-conversation-panel .conversation-panel-header-surface h2 {
+  font-size: 0.9375rem;
   font-weight: 600;
 }
 
-.workspace-conversation-panel .conversation-panel-composer-surface {
-  padding: 12px 20px 18px;
+.workspace-chat-layout > .workspace-conversation-panel .conversation-panel-composer-surface {
+  padding: 0.75rem 1.25rem 1.125rem;
   background: var(--background);
   box-shadow: none;
 }
 
-.workspace-conversation-panel .workspace-composer-editor {
+.workspace-chat-layout > .workspace-conversation-panel .workspace-composer-editor {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: color-mix(in oklab, var(--muted) 24%, var(--background));
   box-shadow: none;
 }
 
-.workspace-composer-editor textarea {
-  min-height: 80px;
-  padding: 14px 14px 8px;
+.workspace-chat-layout > .workspace-conversation-panel .workspace-composer-editor textarea {
+  min-height: 5rem;
+  padding: 0.875rem 0.875rem 0.5rem;
 }
 
-.workspace-composer-editor [data-align="block-end"] {
-  padding: 6px 10px 10px;
+.workspace-chat-layout
+  > .workspace-conversation-panel
+  .workspace-composer-editor
+  [data-align="block-end"] {
+  padding: 0.375rem 0.625rem 0.625rem;
   flex-wrap: wrap;
 }
 
-.workspace-conversation-panel .workspace-send-button {
-  border-radius: 6px;
+.workspace-chat-layout > .workspace-conversation-panel .workspace-send-button {
+  border-radius: 0.375rem;
   background: color-mix(in oklab, var(--primary) 68%, var(--foreground));
   color: var(--background);
 }
 
-.workspace-conversation-panel .workspace-message-bubble {
+.workspace-chat-layout > .workspace-conversation-panel .workspace-message-bubble {
   background: color-mix(in oklab, var(--muted) 62%, var(--background));
   box-shadow: none;
 }
 
-.workspace-conversation-panel .workspace-message-bubble[data-own-message="true"] {
+.workspace-chat-layout
+  > .workspace-conversation-panel
+  .workspace-message-bubble[data-own-message="true"] {
   background: color-mix(in oklab, var(--primary) 10%, var(--background));
 }
 
-.workspace-conversation-panel .workspace-message-bubble:hover,
-.workspace-conversation-panel .workspace-message-bubble[data-state="open"] {
+.workspace-chat-layout > .workspace-conversation-panel .workspace-message-bubble:hover,
+.workspace-chat-layout
+  > .workspace-conversation-panel
+  .workspace-message-bubble[data-state="open"] {
   outline: 1px solid var(--border);
 }
 
 @media (max-width: 1000px) {
+  .workspace-page-layout {
+    --workspace-sidebar-width: 14.75rem;
+  }
+
   .workspace-page-layout .workspace-section-sidebar {
-    width: 236px;
-    padding: 0 2px;
+    padding: 0 0.125rem;
   }
 
-  .workspace-page-layout > .workspace-conversation-panel,
+  .workspace-chat-layout > .workspace-conversation-panel,
   .workspace-page-layout > [data-slot="sidebar-inset"] {
-    margin-right: 6px;
+    margin-right: 0.375rem;
   }
 
-  .workspace-conversation-panel .conversation-panel-header-surface {
-    padding-inline: 12px;
+  .workspace-chat-layout > .workspace-conversation-panel .conversation-panel-header-surface {
+    padding-inline: 0.75rem;
   }
 
-  .workspace-conversation-panel .conversation-panel-composer-surface {
-    padding: 10px 12px 12px;
+  .workspace-chat-layout > .workspace-conversation-panel .conversation-panel-composer-surface {
+    padding: 0.625rem 0.75rem 0.75rem;
   }
 }
 
 @media (max-width: 800px) {
-  .workspace-page-layout .workspace-section-sidebar {
-    width: 216px;
+  .workspace-page-layout {
+    --workspace-sidebar-width: 13.5rem;
   }
 
   .workspace-section-heading {
-    padding-inline: 10px;
+    padding-inline: 0.625rem;
   }
 }
 
 /* 标题栏与工作区连续，原生窗口控制键仍由 Electron 管理。 */
 .desktop-frame:has(.workspace-shell) .desktop-titlebar-drag-region {
-  background: var(--workspace-rail);
+  background: var(--workspace-chrome);
   box-shadow: none;
 }
 
-.workspace-page-layout .workspace-contact-detail {
-  background: var(--background);
-}
-
 .workspace-section-sidebar [data-slot="sidebar-input"] {
-  height: 36px;
+  height: 2.25rem;
   border-color: var(--workspace-line);
   background: color-mix(in oklab, var(--background) 62%, transparent);
   box-shadow: none;
@@ -268,5 +286,6 @@
 }
 
 .desktop-frame[data-platform="darwin"]:has(.workspace-shell) .desktop-titlebar-drag-region {
+  background: var(--workspace-rail);
   border-right: 1px solid var(--workspace-line);
 }

@@ -222,9 +222,6 @@ export function ConversationSidebar({
             className={cn(
               "workspace-conversation-row h-16 gap-3 py-2 data-active:bg-primary/10 data-active:hover:bg-primary/10 dark:data-active:bg-primary/15 dark:data-active:hover:bg-primary/15",
               nested && "ml-4 h-14 w-[calc(100%-1rem)] py-1.5",
-              !nested &&
-                conversation.pinned &&
-                "bg-neutral-100 hover:bg-neutral-100 dark:bg-neutral-900 dark:hover:bg-neutral-900",
             )}
             isActive={selected}
             onClick={() => onSelectConversation(conversation.id)}

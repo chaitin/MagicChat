@@ -204,7 +204,7 @@ export const MessageBubble = React.memo(function MessageBubble({
   const messageBody = (
     <div
       className={cn(
-        "workspace-message-bubble group/message-bubble min-w-0 rounded-md text-sm leading-relaxed",
+        "workspace-message-bubble group/message-bubble min-w-0 rounded-md text-sm leading-relaxed shadow-sm",
         message.body.type === "text" && !message.topic ? "max-w-120" : "max-w-full",
         flushImageBubble ? "overflow-hidden p-0" : "p-3",
         fromMe

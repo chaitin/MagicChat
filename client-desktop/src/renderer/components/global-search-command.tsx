@@ -274,15 +274,15 @@ export function GlobalSearchCommand({
   return (
     <>
       <Button
-        aria-label={t("search.button")}
+        aria-label={t(expanded ? "search.workspacePlaceholder" : "search.button")}
         className={expanded ? "workspace-search-trigger" : undefined}
         onClick={() => setOpen(true)}
         size={expanded ? "default" : "icon-sm"}
-        title={t("search.button")}
+        title={t(expanded ? "search.workspacePlaceholder" : "search.button")}
         type="button"
         variant="ghost"
       >
-        <Search className="size-4 shrink-0" />
+        <Search aria-hidden="true" className="size-4 shrink-0" />
         {expanded && <span>{t("search.workspacePlaceholder")}</span>}
       </Button>
       <Dialog open={open} onOpenChange={(next) => (next ? setOpen(true) : close())}>

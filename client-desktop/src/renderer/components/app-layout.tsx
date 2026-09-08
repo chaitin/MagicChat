@@ -13,7 +13,7 @@ import {
   UserRound,
 } from "lucide-react"
 import { useEffect, useMemo, useState, type ReactNode } from "react"
-import { NavLink, Outlet, useMatch, useNavigate } from "react-router"
+import { NavLink, Outlet, useNavigate } from "react-router"
 import { toast } from "sonner"
 
 import { ProfileSettingsDialog } from "@/components/profile-settings-dialog"
@@ -410,7 +410,6 @@ function MainNavItem({
   showNotification: boolean
 }) {
   const { t } = useLocale()
-  const active = Boolean(useMatch({ path: item.to, end: false }))
   const Icon = item.icon
   const label = t(item.label)
   const accessibleLabel = notificationAccessibleLabel ?? label
@@ -418,9 +417,9 @@ function MainNavItem({
   return (
     <Button
       asChild
-      variant={active ? "default" : "ghost"}
+      variant="ghost"
       size="icon-sm"
-      className="workspace-nav-item relative"
+      className="workspace-nav-item relative focus-visible:border-transparent focus-visible:ring-0"
     >
       <NavLink to={item.to} aria-label={accessibleLabel} title={label}>
         <Icon

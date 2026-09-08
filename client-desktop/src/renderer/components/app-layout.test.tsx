@@ -11,6 +11,7 @@ import { AppInfoContext } from "@/lib/app-info-context"
 import { configureDesktopHost } from "@/lib/desktop-host"
 
 const mocks = vi.hoisted(() => ({
+  locale: "zh-CN" as "zh-CN" | "en",
   clientData: {
     clearMessageScope: vi.fn(),
     conversations: [] as Array<{ unreadCount: number }>,
@@ -38,6 +39,7 @@ const mocks = vi.hoisted(() => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.locale = "zh-CN"
   mocks.clientData.conversations = []
   mocks.clientData.incomingFriendRequests = []
 })
@@ -61,9 +63,9 @@ vi.mock("@/components/locale-provider", async () => {
       createElement(Fragment, null, children),
     useLocale: () => ({
       fontScale: "normal",
-      locale: "zh-CN",
+      locale: mocks.locale,
       t: (key: string, params?: Record<string, string | number>) =>
-        translate("zh-CN", key as never, params),
+        translate(mocks.locale, key as never, params),
     }),
   }
 })
@@ -78,6 +80,27 @@ vi.mock("@/lib/client-data-api", () => ({
 }))
 
 describe("AppLayout", () => {
+  it("英文导航保留完整名称，路由选中态统一使用 ghost 外观", async () => {
+    mocks.locale = "en"
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={["/chat"]}>
+        <AppLayout />
+      </MemoryRouter>,
+    )
+    const chats = screen.getByRole("link", { name: "Chats" })
+    const contacts = screen.getByRole("link", { name: "Contacts" })
+    const projects = screen.getByRole("link", { name: "Projects" })
+    for (const link of [chats, contacts, projects]) {
+      expect(link).toHaveAttribute("data-variant", "ghost")
+      expect(link).toHaveAttribute("title", link.textContent)
+    }
+    expect(chats).toHaveAttribute("aria-current", "page")
+    await user.click(contacts)
+    expect(contacts).toHaveAttribute("aria-current", "page")
+    expect(chats).not.toHaveAttribute("aria-current")
+  })
+
   it("保留三列布局所需的应用导航栏锚点", () => {
     render(
       <MemoryRouter initialEntries={["/chat"]}>

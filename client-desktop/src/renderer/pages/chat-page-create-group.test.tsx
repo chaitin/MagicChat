@@ -297,7 +297,7 @@ describe("ChatPage global search navigation", () => {
       `/chat/${existingConversation.id}`,
     )
 
-    await user.click(screen.getByRole("button", { name: "全局搜索" }))
+    await user.click(screen.getByRole("button", { name: "搜索消息、联系人、会话" }))
     await user.type(screen.getByRole("combobox", { name: "搜索所有内容" }), "Bob")
     const bobOption = await screen.findByRole("option", { name: /Bob/ })
     await user.click(bobOption)
@@ -307,7 +307,7 @@ describe("ChatPage global search navigation", () => {
       `/chat/${existingConversation.id}`,
     )
 
-    await user.click(screen.getByRole("button", { name: "全局搜索" }))
+    await user.click(screen.getByRole("button", { name: "搜索消息、联系人、会话" }))
     await user.type(screen.getByRole("combobox", { name: "搜索所有内容" }), "Bob")
     await user.click(await screen.findByRole("option", { name: /Bob/ }))
     await waitFor(() => expect(openDirectConversation).toHaveBeenCalledTimes(2))
@@ -327,7 +327,7 @@ describe("ChatPage global search navigation", () => {
       `/chat/${existingConversation.id}`,
     )
 
-    await user.click(screen.getByRole("button", { name: "全局搜索" }))
+    await user.click(screen.getByRole("button", { name: "搜索消息、联系人、会话" }))
     await user.type(screen.getByRole("combobox", { name: "搜索所有内容" }), "Bob")
     await user.click(screen.getByRole("option", { name: /Bob/ }))
     expect(openDirectConversation).toHaveBeenCalledWith("user-2")

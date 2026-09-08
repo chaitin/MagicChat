@@ -283,7 +283,7 @@ export function ContactsPage() {
       className="workspace-page-layout min-h-0 min-w-0 flex-1"
       style={
         {
-          "--sidebar-width": "18rem",
+          "--sidebar-width": "var(--workspace-sidebar-width)",
         } as React.CSSProperties
       }
     >
@@ -319,7 +319,7 @@ export function ContactsPage() {
         <DesktopWorkspaceDragRegion />
         <div
           className={cn(
-            "workspace-contact-detail flex min-h-0 min-w-0 flex-1 items-start justify-center overflow-hidden px-6",
+            "flex min-h-0 min-w-0 flex-1 items-start justify-center overflow-hidden px-6",
             activeItem ? "bg-background" : "bg-muted",
           )}
           data-testid="contact-detail-shell"
