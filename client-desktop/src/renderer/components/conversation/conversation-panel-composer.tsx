@@ -722,7 +722,7 @@ export const ConversationPanelComposer = React.forwardRef<
           </div>
         )}
         <div className="relative" data-testid="conversation-panel-editor-row">
-          <InputGroup>
+          <InputGroup className="workspace-composer-editor">
             <InputGroupTextarea
               ref={textareaRef}
               value={draft}
@@ -819,7 +819,7 @@ export const ConversationPanelComposer = React.forwardRef<
                 </InputGroupButton>
                 <InputGroupButton
                   aria-label={t("composer.send")}
-                  className="h-8 px-3"
+                  className="workspace-send-button h-8 px-3"
                   disabled={sending}
                   onClick={handleSendMessage}
                   size="sm"

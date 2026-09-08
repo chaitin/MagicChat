@@ -13,7 +13,7 @@ import {
   UserRound,
 } from "lucide-react"
 import { useEffect, useMemo, useState, type ReactNode } from "react"
-import { NavLink, Outlet, useMatch, useNavigate } from "react-router"
+import { NavLink, Outlet, useNavigate } from "react-router"
 import { toast } from "sonner"
 
 import { ProfileSettingsDialog } from "@/components/profile-settings-dialog"
@@ -128,7 +128,7 @@ export function AppLayout({ footerAction }: { footerAction?: ReactNode }) {
   }
 
   return (
-    <div className="app-layout-shell flex h-svh min-h-0 bg-background text-foreground">
+    <div className="app-layout-shell workspace-shell flex h-svh min-h-0 bg-background text-foreground">
       <aside className="app-navigation-rail flex w-12 shrink-0 flex-col items-center border-r bg-sidebar py-3">
         <UserAvatarMenu clearMessageScope={clearMessageScope} user={me} refreshMe={refreshMe} />
         <nav aria-label={t("nav.main")} className="flex flex-1 flex-col gap-2">
@@ -410,7 +410,6 @@ function MainNavItem({
   showNotification: boolean
 }) {
   const { t } = useLocale()
-  const active = Boolean(useMatch({ path: item.to, end: false }))
   const Icon = item.icon
   const label = t(item.label)
   const accessibleLabel = notificationAccessibleLabel ?? label
@@ -418,19 +417,18 @@ function MainNavItem({
   return (
     <Button
       asChild
-      variant={active ? "default" : "ghost"}
+      variant="ghost"
       size="icon-sm"
-      className={
-        active
-          ? "relative rounded-full"
-          : "relative rounded-full text-primary hover:bg-primary/10 hover:text-primary dark:hover:bg-primary/15 dark:hover:text-primary"
-      }
+      className="workspace-nav-item relative focus-visible:border-transparent focus-visible:ring-0"
     >
       <NavLink to={item.to} aria-label={accessibleLabel} title={label}>
         <Icon
           className="size-5 [stroke-width:2] transition-[stroke-width] group-hover/button:[stroke-width:2.5]"
           strokeWidth={2}
         />
+        <span className="workspace-nav-label" aria-hidden="true">
+          {label}
+        </span>
         {showNotification && (
           <NotificationDot
             key={notificationAnimationVersion}

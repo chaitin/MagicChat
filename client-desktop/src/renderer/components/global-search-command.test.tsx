@@ -2,6 +2,10 @@ import { act, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { LocaleProvider } from "@/components/locale-provider"
+
+vi.unmock("@/components/locale-provider")
+
 import { GlobalSearchCommand } from "@/components/global-search-command"
 import { getConversationDefaultDescription } from "@/lib/conversation-search-description"
 import type {
@@ -18,6 +22,30 @@ import type { MessageSearchProvider } from "@/lib/client-search"
 describe("GlobalSearchCommand", () => {
   afterEach(() => {
     delete (window as { desktop?: unknown }).desktop
+  })
+
+  it("从完整搜索入口使用键盘打开搜索并选择会话", async () => {
+    const user = userEvent.setup()
+    const onSelect = vi.fn()
+    renderSearch([createConversation({ name: "设计讨论" })], onSelect, { expanded: true })
+    expect(screen.getByText("搜索消息、联系人、会话")).toBeInTheDocument()
+    screen.getByRole("button", { name: "搜索消息、联系人、会话" }).focus()
+    await user.keyboard("{Enter}")
+    await user.type(screen.getByRole("combobox", { name: "搜索所有内容" }), "设计")
+    await user.click(screen.getByRole("option", { name: /设计讨论/ }))
+    expect(onSelect).toHaveBeenCalled()
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+  })
+
+  it("英文完整搜索入口的可访问名称与可见文案一致", async () => {
+    Object.defineProperty(window, "desktop", {
+      configurable: true,
+      value: { settings: { get: async () => ({ language: "en", fontScale: "normal" }) } },
+    })
+    renderSearch([], vi.fn(), { expanded: true })
+    const trigger = await screen.findByRole("button", { name: "Search messages, people, chats" })
+    expect(trigger).toHaveTextContent("Search messages, people, chats")
+    expect(trigger).toHaveAttribute("title", "Search messages, people, chats")
   })
 
   it("订阅全局搜索事件并打开搜索框", async () => {
@@ -220,6 +248,7 @@ function renderSearch(
     onSelectDirectoryItem = vi.fn(),
     onSelectMessageResult,
     searchDebounceMs,
+    expanded,
   }: {
     contactApps?: ContactApp[]
     contactGroups?: ContactGroup[]
@@ -228,22 +257,26 @@ function renderSearch(
     onSelectDirectoryItem?: (item: DirectorySearchItem) => void
     onSelectMessageResult?: (result: ClientMessageSearchResult) => void
     searchDebounceMs?: number
+    expanded?: boolean
   } = {},
 ) {
   return render(
-    <GlobalSearchCommand
-      contactApps={contactApps}
-      contactGroups={contactGroups}
-      contacts={contacts}
-      conversations={conversations}
-      currentUserId="current-user"
-      getConversationDescription={(conversation) => conversation.lastMessageSummary}
-      messageSearch={messageSearch}
-      onSelectDirectoryItem={onSelectDirectoryItem}
-      onSelectMessageResult={onSelectMessageResult}
-      onSelectConversation={onSelectConversation}
-      searchDebounceMs={searchDebounceMs}
-    />,
+    <LocaleProvider>
+      <GlobalSearchCommand
+        contactApps={contactApps}
+        contactGroups={contactGroups}
+        contacts={contacts}
+        conversations={conversations}
+        currentUserId="current-user"
+        getConversationDescription={(conversation) => conversation.lastMessageSummary}
+        messageSearch={messageSearch}
+        onSelectDirectoryItem={onSelectDirectoryItem}
+        onSelectMessageResult={onSelectMessageResult}
+        onSelectConversation={onSelectConversation}
+        searchDebounceMs={searchDebounceMs}
+        expanded={expanded}
+      />
+    </LocaleProvider>,
   )
 }
 

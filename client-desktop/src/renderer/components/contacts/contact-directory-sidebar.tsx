@@ -100,9 +100,12 @@ export function ContactDirectorySidebar({
   const publicGroups = groups.filter((group) => group.visibility === "public")
 
   return (
-    <Sidebar className="border-r bg-background" collapsible="none">
+    <Sidebar className="workspace-section-sidebar border-r bg-background" collapsible="none">
       <SidebarHeader className="gap-0 p-0">
-        <div className="flex h-14 items-center justify-between px-4">
+        <div
+          className="workspace-section-heading flex h-14 items-center justify-between px-4"
+          data-desktop-drag-region="true"
+        >
           <h1 className="text-base font-medium">
             {directoryMode === "friends" ? t("contacts.friendsTitle") : t("contacts.title")}
           </h1>

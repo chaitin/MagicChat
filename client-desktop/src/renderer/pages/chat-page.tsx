@@ -1122,10 +1122,10 @@ export function ChatPage() {
 
   return (
     <SidebarProvider
-      className="min-h-0 min-w-0 flex-1"
+      className="workspace-page-layout workspace-chat-layout min-h-0 min-w-0 flex-1"
       style={
         {
-          "--sidebar-width": "18rem",
+          "--sidebar-width": "var(--workspace-sidebar-width)",
         } as React.CSSProperties
       }
     >
