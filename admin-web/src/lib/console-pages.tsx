@@ -1,5 +1,6 @@
 import {
   AppWindowIcon,
+  FlagIcon,
   LayoutDashboardIcon,
   SettingsIcon,
   UsersRoundIcon,
@@ -36,6 +37,12 @@ export const consolePages: ConsolePage[] = [
     path: "/apps",
     title: "应用管理",
     icon: <AppWindowIcon />,
+  },
+  {
+    label: "举报记录",
+    path: "/reports",
+    title: "举报记录",
+    icon: <FlagIcon />,
   },
   {
     label: "设置",

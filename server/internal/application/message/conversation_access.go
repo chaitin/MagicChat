@@ -126,6 +126,9 @@ func (s *Service) validateUserDirectFriendship(db *gorm.DB, value userConversati
 		return nil
 	}
 	if err := s.directMessaging.Require(db, userID, otherUserID); err != nil {
+		if errors.Is(err, directmessagepolicy.ErrRecipientUnavailable) {
+			return errDirectMessageUnavailable
+		}
 		if errors.Is(err, directmessagepolicy.ErrFriendshipRequired) {
 			return errDirectFriendshipRequired
 		}

@@ -63,6 +63,24 @@ definitions:
       admin:
         $ref: '#/definitions/admin.adminResponse'
     type: object
+  admin.adminReportResponse:
+    properties:
+      conversation_id:
+        type: string
+      created_at:
+        format: date-time
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      reason:
+        type: string
+      reported_user:
+        $ref: '#/definitions/admin.reportUserResponse'
+      reporter_user:
+        $ref: '#/definitions/admin.reportUserResponse'
+    type: object
   admin.adminResponse:
     properties:
       email:
@@ -189,6 +207,19 @@ definitions:
           $ref: '#/definitions/admin.adminAppResponse'
         type: array
     type: object
+  admin.listAdminReportsResponse:
+    properties:
+      page:
+        type: integer
+      page_size:
+        type: integer
+      reports:
+        items:
+          $ref: '#/definitions/admin.adminReportResponse'
+        type: array
+      total:
+        type: integer
+    type: object
   admin.listThirdPartyProvidersResponse:
     properties:
       providers:
@@ -240,6 +271,23 @@ definitions:
         type: string
       name:
         example: 企业 SSO
+        type: string
+    type: object
+  admin.reportUserResponse:
+    properties:
+      avatar:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      nickname:
+        type: string
+      phone:
+        type: string
+      status:
         type: string
     type: object
   admin.resetUserPasswordResponse:
@@ -946,6 +994,20 @@ definitions:
     properties:
       file:
         $ref: '#/definitions/client.temporaryFileResponse'
+    type: object
+  client.createUserReportRequest:
+    properties:
+      description:
+        example: 对方持续发送辱骂内容。
+        type: string
+      reason:
+        example: harassment_or_abuse
+        type: string
+    type: object
+  client.createUserReportResponse:
+    properties:
+      report:
+        $ref: '#/definitions/client.userReportResponse'
     type: object
   client.deactivationCodeResponse:
     properties:
@@ -2229,6 +2291,32 @@ definitions:
         example: 完成发布检查
         type: string
     type: object
+  client.userBlockStatusResponse:
+    properties:
+      blocked:
+        type: boolean
+      blocked_at:
+        format: date-time
+        type: string
+      user_id:
+        type: string
+    type: object
+  client.userReportResponse:
+    properties:
+      conversation_id:
+        type: string
+      created_at:
+        format: date-time
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      reason:
+        type: string
+      reported_user_id:
+        type: string
+    type: object
   httpserver.errorBody:
     properties:
       code:
@@ -2623,6 +2711,48 @@ paths:
       summary: 获取管理仪表盘统计
       tags:
       - 管理仪表盘
+  /api/admin/reports:
+    get:
+      description: 管理员按提交时间倒序查看全部私聊用户举报记录。
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        maximum: 100
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/admin.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/admin.listAdminReportsResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/admin.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/admin.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/admin.errorEnvelope'
+      summary: 列出用户举报
+      tags:
+      - 管理员举报
   /api/admin/settings/email-login:
     get:
       description: 管理员读取邮箱验证码登录和完整 SMTP 设置，包括已保存的 SMTP 密码。
@@ -4007,6 +4137,127 @@ paths:
       summary: 发起第三方登录
       tags:
       - 客户端认证
+  /api/client/blocked-users/{user_id}:
+    delete:
+      parameters:
+      - description: 目标用户 ID
+        in: path
+        name: user_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/client.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.userBlockStatusResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+      security:
+      - BearerAuth: []
+      - CookieAuth: []
+      summary: 将用户移出黑名单
+      tags:
+      - 客户端黑名单
+    get:
+      parameters:
+      - description: 目标用户 ID
+        in: path
+        name: user_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/client.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.userBlockStatusResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+      security:
+      - BearerAuth: []
+      - CookieAuth: []
+      summary: 查询用户黑名单状态
+      tags:
+      - 客户端黑名单
+    put:
+      description: 加入后，对方不能再向当前用户发送私聊消息；当前用户仍可向对方发送消息。
+      parameters:
+      - description: 目标用户 ID
+        in: path
+        name: user_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/client.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.userBlockStatusResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+      security:
+      - BearerAuth: []
+      - CookieAuth: []
+      summary: 将用户加入黑名单
+      tags:
+      - 客户端黑名单
   /api/client/contacts:
     get:
       description: 普通用户获取统一通讯录。返回对当前用户可见的应用、启用用户，以及当前用户已加入或公开的 active 群组。
@@ -5363,6 +5614,61 @@ paths:
       summary: 标记会话已读
       tags:
       - 客户端会话
+  /api/client/conversations/{conversation_id}/reports:
+    post:
+      consumes:
+      - application/json
+      description: 当前用户举报私聊中的另一名用户；被举报用户由服务端根据会话成员推导。
+      parameters:
+      - description: 私聊 ID
+        in: path
+        name: conversation_id
+        required: true
+        type: string
+      - description: 举报信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/client.createUserReportRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/client.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.createUserReportResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+      security:
+      - BearerAuth: []
+      - CookieAuth: []
+      summary: 举报私聊用户
+      tags:
+      - 客户端举报
   /api/client/conversations/{conversation_id}/restore:
     post:
       description: 用户主动打开一个之前从列表移除的会话时恢复它，不影响消息、成员关系和免打扰状态。

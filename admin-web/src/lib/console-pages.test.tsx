@@ -14,6 +14,7 @@ describe("console pages", () => {
       "仪表盘",
       "成员",
       "应用",
+      "举报记录",
       "设置",
     ])
     expect(getConsolePage("/settings").page.title).toBe("系统设置")

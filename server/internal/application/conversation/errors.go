@@ -5,13 +5,14 @@ import "errors"
 type ErrorCode string
 
 const (
-	CodeInvalidRequest  ErrorCode = "invalid_request"
-	CodeForbidden                 ErrorCode = "forbidden"
+	CodeInvalidRequest           ErrorCode = "invalid_request"
+	CodeForbidden                ErrorCode = "forbidden"
 	CodeDirectFriendshipRequired ErrorCode = "direct_friendship_required"
-	CodeNotFound        ErrorCode = "not_found"
-	CodeConflict        ErrorCode = "conflict"
-	CodeRequestTooLarge ErrorCode = "request_too_large"
-	CodeInternal        ErrorCode = "internal_error"
+	CodeDirectMessageUnavailable ErrorCode = "direct_message_unavailable"
+	CodeNotFound                 ErrorCode = "not_found"
+	CodeConflict                 ErrorCode = "conflict"
+	CodeRequestTooLarge          ErrorCode = "request_too_large"
+	CodeInternal                 ErrorCode = "internal_error"
 )
 
 type Error struct {

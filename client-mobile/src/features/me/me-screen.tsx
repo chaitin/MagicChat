@@ -6,6 +6,8 @@ import IconDatabase from "@tabler/icons-react-native/IconDatabase"
 // eslint-disable-next-line import/no-unresolved
 import IconDeviceDesktop from "@tabler/icons-react-native/IconDeviceDesktop"
 // eslint-disable-next-line import/no-unresolved
+import IconHelpCircle from "@tabler/icons-react-native/IconHelpCircle"
+// eslint-disable-next-line import/no-unresolved
 import IconLogout from "@tabler/icons-react-native/IconLogout"
 // eslint-disable-next-line import/no-unresolved
 import IconMoon from "@tabler/icons-react-native/IconMoon"
@@ -237,6 +239,12 @@ export function MeScreen() {
     }
   }
 
+  function openHelpCenter() {
+    void Linking.openURL(appConfig.helpCenterUrl).catch(() => {
+      Alert.alert("无法打开帮助中心", "请稍后重试。")
+    })
+  }
+
   async function handleCheckForUpdates() {
     toast.show({ duration: 0, message: "正在检查更新", type: "loading" })
     try {
@@ -336,7 +344,13 @@ export function MeScreen() {
 
             <XGUIList size="large">
               <XGUIListItem
+                icon={({ size, strokeWidth }) => <IconHelpCircle color={colors.brand} size={size} strokeWidth={strokeWidth} />}
+                onPress={openHelpCenter}
+                title="帮助与反馈"
+              />
+              <XGUIListItem
                 disabled={appUpdate.status !== "idle"}
+                separator
                 icon={({ size, strokeWidth }) => <IconRefresh color={colors.brand} size={size} strokeWidth={strokeWidth} />}
                 onPress={
                   appUpdate.status === "idle"

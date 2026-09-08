@@ -8,6 +8,7 @@ import AppsPage from "@/pages/apps-page"
 import DashboardPage from "@/pages/dashboard-page"
 import LoginPage from "@/pages/login-page"
 import MembersPage from "@/pages/members-page"
+import ReportsPage from "@/pages/reports-page"
 import SettingsPage from "@/pages/settings-page"
 
 export function App() {
@@ -36,6 +37,7 @@ export function App() {
         <Route element={<DashboardPage />} path="dashboard" />
         <Route element={<MembersPage />} path="members" />
         <Route element={<AppsPage />} path="apps" />
+        <Route element={<ReportsPage />} path="reports" />
         <Route element={<SettingsPage />} path="settings" />
       </Route>
       <Route

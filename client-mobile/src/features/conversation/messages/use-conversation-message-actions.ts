@@ -122,8 +122,19 @@ export function useConversationMessageActions({
       else if (descriptor.kind === "image") await sendImageMutation.mutateAsync({ clientMessageId: descriptor.clientMessageId, image: descriptor.upload, replyToMessageId: descriptor.replyToMessageId })
       else if (descriptor.kind === "file") await sendFileMutation.mutateAsync({ clientMessageId: descriptor.clientMessageId, file: descriptor.upload, replyToMessageId: descriptor.replyToMessageId })
       else await sendVoiceMutation.mutateAsync({ clientMessageId: descriptor.clientMessageId, durationMS: descriptor.durationMS, replyToMessageId: descriptor.replyToMessageId, transcript: descriptor.transcript, voice: descriptor.upload })
-    } catch {
+    } catch (error: unknown) {
       setOptimisticMessages((current) => markOptimisticMessageFailed(current, descriptor.clientMessageId, confirmedMessagesRef.current))
+      if (
+        error instanceof ApiRequestError &&
+        error.code === "direct_message_unavailable"
+      ) {
+        toast.show({
+          duration: 1_500,
+          message: error.message,
+          modal: false,
+          type: "error",
+        })
+      }
     } finally {
       retryingIdsRef.current.delete(descriptor.clientMessageId)
     }

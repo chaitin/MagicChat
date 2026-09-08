@@ -1,5 +1,7 @@
 // Tabler exposes per-icon runtime entry points without per-icon declarations.
 // eslint-disable-next-line import/no-unresolved
+import IconCheck from "@tabler/icons-react-native/IconCheck"
+// eslint-disable-next-line import/no-unresolved
 import IconEye from "@tabler/icons-react-native/IconEye"
 // eslint-disable-next-line import/no-unresolved
 import IconEyeOff from "@tabler/icons-react-native/IconEyeOff"
@@ -547,7 +549,7 @@ function LegalConsent({
         ]}
       >
         {accepted ? (
-          <Text style={[styles.legalCheckmark, { color: colors.textOnColor }]}>✓</Text>
+          <IconCheck color={colors.textOnColor} size={11} strokeWidth={3} />
         ) : null}
       </Pressable>
       <Text style={[styles.legalCopy, { color: colors.textSecondary }]}>
@@ -694,20 +696,14 @@ const styles = StyleSheet.create({
   },
   legalCheckbox: {
     alignItems: "center",
-    borderRadius: 7,
+    borderRadius: 8,
     borderWidth: 1,
-    height: 14,
+    height: 16,
     justifyContent: "center",
-    marginTop: 3,
-    width: 14,
-  },
-  legalCheckmark: {
-    fontSize: 10,
-    fontWeight: "700",
-    lineHeight: 12,
+    width: 16,
   },
   legalConsent: {
-    alignItems: "flex-start",
+    alignItems: "center",
     flexDirection: "row",
     gap: 8,
     paddingHorizontal: 8,

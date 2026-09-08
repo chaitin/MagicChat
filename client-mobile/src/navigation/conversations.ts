@@ -39,6 +39,13 @@ export function buildConversationDetailsHref(
   } as unknown as Href
 }
 
+export function buildConversationReportHref(conversationId: string): Href {
+  return {
+    params: { conversationId },
+    pathname: "/(app)/conversation/[conversationId]/report",
+  } as unknown as Href
+}
+
 export type GroupConversationEditField = "announcement" | "name"
 
 export function buildGroupConversationEditHref(

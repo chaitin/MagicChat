@@ -631,6 +631,9 @@ func newForwardTargetFailure(conversationID string, err error) ForwardTargetResu
 	code := "internal_error"
 	message := "转发失败"
 	switch {
+	case errors.Is(err, errDirectMessageUnavailable):
+		code = string(CodeDirectMessageUnavailable)
+		message = "当前无法向该用户发送消息"
 	case errors.Is(err, errDirectFriendshipRequired):
 		code = string(CodeDirectFriendshipRequired)
 		message = "仅好友之间可以发送私聊消息"

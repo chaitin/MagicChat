@@ -105,6 +105,25 @@ type UserFriendship struct {
 	CreatedAt  time.Time `gorm:"not null"`
 }
 
+type UserBlock struct {
+	BlockerUserID string    `gorm:"type:uuid;primaryKey"`
+	BlockedUserID string    `gorm:"type:uuid;primaryKey"`
+	CreatedAt     time.Time `gorm:"not null"`
+}
+
+type UserReport struct {
+	ID             string       `gorm:"type:uuid;primaryKey"`
+	ReporterUserID string       `gorm:"type:uuid;not null;index"`
+	ReporterUser   User         `gorm:"foreignKey:ReporterUserID;constraint:OnDelete:RESTRICT;"`
+	ReportedUserID string       `gorm:"type:uuid;not null;index"`
+	ReportedUser   User         `gorm:"foreignKey:ReportedUserID;constraint:OnDelete:RESTRICT;"`
+	ConversationID string       `gorm:"type:uuid;not null;index"`
+	Conversation   Conversation `gorm:"constraint:OnDelete:RESTRICT;"`
+	Reason         string       `gorm:"size:64;not null"`
+	Description    string       `gorm:"size:500;not null"`
+	CreatedAt      time.Time    `gorm:"not null;index"`
+}
+
 type UserFriendRequest struct {
 	ID              string    `gorm:"type:uuid;primaryKey"`
 	RequesterUserID string    `gorm:"type:uuid;not null;index"`

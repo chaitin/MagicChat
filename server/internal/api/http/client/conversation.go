@@ -1242,7 +1242,7 @@ func writeConversationError(c echo.Context, err error) error {
 	switch conversationapp.ErrorCodeOf(err) {
 	case conversationapp.CodeInvalidRequest:
 		status = http.StatusBadRequest
-	case conversationapp.CodeForbidden, conversationapp.CodeDirectFriendshipRequired:
+	case conversationapp.CodeForbidden, conversationapp.CodeDirectFriendshipRequired, conversationapp.CodeDirectMessageUnavailable:
 		status = http.StatusForbidden
 	case conversationapp.CodeNotFound:
 		status = http.StatusNotFound

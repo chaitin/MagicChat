@@ -28,9 +28,11 @@ import (
 	messagecontentapp "app/internal/application/messagecontent"
 	mobilepushapp "app/internal/application/mobilepush"
 	projectapp "app/internal/application/project"
+	reportapp "app/internal/application/report"
 	searchapp "app/internal/application/search"
 	settingsapp "app/internal/application/settings"
 	taskapp "app/internal/application/task"
+	userblockapp "app/internal/application/userblock"
 	"app/internal/application/usermanagement"
 	"app/internal/config"
 	externalauthinfra "app/internal/infrastructure/externalauth"
@@ -77,6 +79,11 @@ type Server struct {
 	clientPush          *clientapi.PushAPI
 	searches            *searchapp.Service
 	clientSearch        *clientapi.SearchAPI
+	reports             *reportapp.Service
+	clientReports       *clientapi.ReportAPI
+	adminReports        *adminapi.ReportAPI
+	userBlocks          *userblockapp.Service
+	clientUserBlocks    *clientapi.UserBlockAPI
 	settings            *settingsapp.Service
 	clientInfo          *clientapi.InfoAPI
 	adminSettings       *adminapi.SettingsAPI
@@ -190,6 +197,11 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 		NicknamePolicy:  server.settings,
 	})
 	server.clientConversations = clientapi.NewConversationAPI(server.conversations, server.projects)
+	server.reports = reportapp.NewService(reportapp.Dependencies{DB: db})
+	server.clientReports = clientapi.NewReportAPI(server.reports)
+	server.adminReports = adminapi.NewReportAPI(server.reports)
+	server.userBlocks = userblockapp.NewService(userblockapp.Dependencies{DB: db})
+	server.clientUserBlocks = clientapi.NewUserBlockAPI(server.userBlocks)
 	server.tasks = taskapp.NewService(taskapp.Dependencies{
 		DB:            db,
 		Notifications: server,
@@ -294,6 +306,8 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 	server.clientDocuments.RegisterRoutes(client)
 	server.clientTasks.RegisterRoutes(client)
 	server.clientConversations.RegisterRoutes(client)
+	server.clientReports.RegisterRoutes(client)
+	server.clientUserBlocks.RegisterRoutes(client)
 	server.clientContacts.RegisterRoutes(client)
 	server.clientMessages.RegisterRoutes(client)
 	server.clientPush.RegisterRoutes(client)
@@ -308,6 +322,7 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 	server.adminDashboard.RegisterRoutes(admin)
 	server.adminApps.RegisterRoutes(admin)
 	server.adminUsers.RegisterRoutes(admin)
+	server.adminReports.RegisterRoutes(admin)
 	server.adminProviders.RegisterRoutes(admin)
 	if workerContext != nil {
 		go server.tasks.RunReminderWorker(workerContext)

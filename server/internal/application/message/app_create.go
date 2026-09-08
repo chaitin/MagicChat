@@ -204,6 +204,8 @@ func mapAppCreateError(err error) error {
 	switch {
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		return NotFoundError("会话不存在", err)
+	case errors.Is(err, errDirectMessageUnavailable):
+		return &Error{Code: CodeDirectMessageUnavailable, Message: "当前无法向该用户发送消息", Cause: err}
 	case errors.Is(err, errDirectFriendshipRequired):
 		return &Error{Code: CodeDirectFriendshipRequired, Message: "仅好友之间可以发送私聊消息", Cause: err}
 	case errors.Is(err, errConversationAccessDenied):

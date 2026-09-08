@@ -28,8 +28,13 @@ import {
   useConversationTopic,
 } from "@/data/conversations/topic-hooks"
 import {
+  useSetUserBlocked,
+  useUserBlockStatus,
+} from "@/data/user-blocks/user-block-hooks"
+import {
   buildAddGroupMembersHref,
   buildCreateGroupConversationHref,
+  buildConversationReportHref,
   buildGroupConversationEditHref,
 } from "@/navigation/conversations"
 import { buildEntityDetailHref } from "@/navigation/entity-details"
@@ -42,6 +47,7 @@ import {
 import {
   XGUIActionSheet,
   XGUIButton,
+  XGUIDialog,
   XGUIList,
   XGUIListItem,
   XGUISwitch,
@@ -119,6 +125,7 @@ export function ConversationDetailsScreen() {
   )
   const [groupActionSheetOpen, setGroupActionSheetOpen] = useState(false)
   const [topicArchiveDialogOpen, setTopicArchiveDialogOpen] = useState(false)
+  const [blockDialogOpen, setBlockDialogOpen] = useState(false)
 
   const currentMember = conversation?.members?.find(
     (member) =>
@@ -133,13 +140,24 @@ export function ConversationDetailsScreen() {
     muteMutation.isPending || pinMutation.isPending
   const topicArchived = Boolean(conversation?.topic?.archived)
   const canArchiveTopic = Boolean(topicQuery.data?.canArchive) && !topicArchived
-  const directContactId =
+  const directContact =
     conversation?.type === "direct"
       ? conversation.members?.find(
           (member) =>
             member.type === "user" && !idsMatch(member.id, session.userId)
-        )?.id
+        )
       : undefined
+  const directContactId = directContact?.id
+  const directContactName =
+    directContact?.nickname.trim() || directContact?.name.trim() || "该用户"
+  const blockStatusQuery = useUserBlockStatus(
+    session,
+    directContactId ?? "",
+    Boolean(directContactId)
+  )
+  const blockMutation = useSetUserBlocked(session)
+  const blockActionPending =
+    blockStatusQuery.isPending || blockMutation.isPending
 
   if (!conversation) {
     const loading = !isReady || (expectsTopic && topicQuery.isPending)
@@ -191,6 +209,28 @@ export function ConversationDetailsScreen() {
     } catch (error) {
       toast.hide()
       showError(error, pinned ? "置顶对话失败" : "取消置顶失败")
+    }
+  }
+
+  async function setBlocked(blocked: boolean) {
+    if (!directContactId || blockMutation.isPending) return
+    if (blocked) setBlockDialogOpen(false)
+    toast.show({
+      duration: 0,
+      message: blocked ? "正在加入黑名单…" : "正在解除黑名单…",
+      type: "loading",
+    })
+    try {
+      await blockMutation.mutateAsync({ blocked, userId: directContactId })
+      toast.hide()
+      toast.show({
+        message: blocked ? "已加入黑名单" : "已解除黑名单",
+        modal: false,
+        type: "success",
+      })
+    } catch (error) {
+      toast.hide()
+      showError(error, blocked ? "加入黑名单失败" : "解除黑名单失败")
     }
   }
 
@@ -373,6 +413,35 @@ export function ConversationDetailsScreen() {
           </View>
         ) : null}
 
+        {conversation.type === "direct" && directContactId ? (
+          <View style={styles.section}>
+            <XGUIList size="large">
+              <XGUIListItem
+                title="黑名单"
+                trailing={
+                  <XGUISwitch
+                    accessibilityLabel="黑名单"
+                    disabled={blockActionPending || blockStatusQuery.isError}
+                    dimWhenDisabled={false}
+                    onValueChange={(value) => {
+                      if (value) setBlockDialogOpen(true)
+                      else void setBlocked(false)
+                    }}
+                    value={blockStatusQuery.data?.blocked ?? false}
+                  />
+                }
+              />
+              <XGUIListItem
+                onPress={() =>
+                  router.push(buildConversationReportHref(conversationId))
+                }
+                separator
+                title="举报"
+              />
+            </XGUIList>
+          </View>
+        ) : null}
+
         {conversation.type === "topic" && canArchiveTopic ? (
           <View style={styles.actionSection}>
             <XGUIButton
@@ -407,6 +476,25 @@ export function ConversationDetailsScreen() {
           title={isGroupOwner ? "确认解散群聊？" : "确认退出群聊？"}
         />
       ) : null}
+
+      <XGUIDialog
+        actions={[
+          {
+            label: "取消",
+            onPress: () => setBlockDialogOpen(false),
+          },
+          {
+            disabled: blockMutation.isPending,
+            label: blockMutation.isPending ? "正在加入…" : "加入黑名单",
+            onPress: () => void setBlocked(true),
+            variant: "destructive",
+          },
+        ]}
+        description={`加入黑名单后，${directContactName}将无法再向你发送私聊消息，但你仍可向对方发送消息。`}
+        onOpenChange={setBlockDialogOpen}
+        open={blockDialogOpen}
+        title={`将${directContactName}加入黑名单？`}
+      />
 
       <TopicArchiveDialog
         onConfirm={() => void archiveTopic()}

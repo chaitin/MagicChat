@@ -10,6 +10,9 @@ const loginForm = await readFile(
 test("登录前必须主动同意用户协议和隐私政策", () => {
   assert.match(loginForm, /accessibilityRole="checkbox"/)
   assert.match(loginForm, /accessibilityState=\{\{ checked: accepted \}\}/)
+  assert.match(loginForm, /<IconCheck color=\{colors\.textOnColor\} size=\{11\}/)
+  assert.match(loginForm, /legalConsent: \{\s*alignItems: "center"/)
+  assert.doesNotMatch(loginForm, />✓<|legalCheckmark/)
   assert.match(loginForm, /我已阅读并同意/)
   assert.match(loginForm, /https:\/\/jiying\.chat\/user-agreement\//)
   assert.match(loginForm, /https:\/\/jiying\.chat\/privacy-policy\//)

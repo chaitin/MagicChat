@@ -2174,7 +2174,7 @@ func mapMessageApplicationErrorForApp(err error) error {
 		return newAppRequestFailure("not_found", messageErr.Message)
 	case messageapp.CodeForbidden:
 		return newAppRequestFailure("forbidden", messageErr.Message)
-	case messageapp.CodeDirectFriendshipRequired:
+	case messageapp.CodeDirectFriendshipRequired, messageapp.CodeDirectMessageUnavailable:
 		return newAppRequestFailure(string(messageErr.Code), messageErr.Message)
 	case messageapp.CodeInvalidRequest:
 		return newAppRequestFailure("invalid_request", messageErr.Message)

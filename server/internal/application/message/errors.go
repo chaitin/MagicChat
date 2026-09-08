@@ -5,16 +5,17 @@ import "errors"
 type ErrorCode string
 
 const (
-	CodeInvalidRequest     ErrorCode = "invalid_request"
-	CodeForbidden                 ErrorCode = "forbidden"
+	CodeInvalidRequest           ErrorCode = "invalid_request"
+	CodeForbidden                ErrorCode = "forbidden"
 	CodeDirectFriendshipRequired ErrorCode = "direct_friendship_required"
-	CodeNotFound           ErrorCode = "not_found"
-	CodeConflict           ErrorCode = "conflict"
-	CodeRequestTooLarge    ErrorCode = "request_too_large"
-	CodeSourceUnavailable  ErrorCode = "source_unavailable"
-	CodeUnsupportedMessage ErrorCode = "unsupported_message"
-	CodeContentUnavailable ErrorCode = "content_unavailable"
-	CodeInternal           ErrorCode = "internal_error"
+	CodeDirectMessageUnavailable ErrorCode = "direct_message_unavailable"
+	CodeNotFound                 ErrorCode = "not_found"
+	CodeConflict                 ErrorCode = "conflict"
+	CodeRequestTooLarge          ErrorCode = "request_too_large"
+	CodeSourceUnavailable        ErrorCode = "source_unavailable"
+	CodeUnsupportedMessage       ErrorCode = "unsupported_message"
+	CodeContentUnavailable       ErrorCode = "content_unavailable"
+	CodeInternal                 ErrorCode = "internal_error"
 )
 
 type Error struct {
@@ -81,7 +82,8 @@ var (
 	errConversationAccessDenied  = errors.New("conversation access denied")
 	errConversationNotSendable   = errors.New("conversation not sendable")
 	errAppDirectAccessDenied     = errors.New("app direct access denied")
-	errDirectFriendshipRequired = errors.New("direct friendship required")
+	errDirectFriendshipRequired  = errors.New("direct friendship required")
+	errDirectMessageUnavailable  = errors.New("direct message unavailable")
 	errReplyToMessageInvalid     = errors.New("reply_to_message_id invalid")
 	ErrForwardUnsupportedMessage = errors.New("forward unsupported message")
 )

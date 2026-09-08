@@ -31,6 +31,9 @@ func (s *Service) CreateDirect(ctx context.Context, cmd CreateDirectCommand) (Op
 	}
 	if s.directMessaging != nil {
 		if err := s.directMessaging.Require(db, current.ID, target.ID); err != nil {
+			if errors.Is(err, directmessagepolicy.ErrRecipientUnavailable) {
+				return OpenResult{}, &Error{Code: CodeDirectMessageUnavailable, Message: "当前无法向该用户发送消息", Cause: err}
+			}
 			if errors.Is(err, directmessagepolicy.ErrFriendshipRequired) {
 				return OpenResult{}, &Error{Code: CodeDirectFriendshipRequired, Message: "仅好友之间可以发送私聊消息", Cause: err}
 			}

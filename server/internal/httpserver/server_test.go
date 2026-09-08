@@ -97,6 +97,7 @@ func migrateTestSchema(db *gorm.DB) error {
 		&store.MobilePushEvent{},
 		&store.MobilePushJob{},
 		&store.UserFriendship{},
+		&store.UserBlock{},
 		&store.UserFriendRequest{},
 		&store.Conversation{},
 		&store.ConversationMember{},
@@ -4529,6 +4530,63 @@ func TestFriendModeBlocksNonFriendDirectMessaging(t *testing.T) {
 	}, aliceCookie)
 	if allowedResp.StatusCode != http.StatusCreated {
 		t.Fatalf("friend send status = %d, body = %#v", allowedResp.StatusCode, allowedBody)
+	}
+}
+
+func TestUserBlockPreventsOnlyBlockedUserFromSendingDirectMessages(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+	now := time.Date(2026, 9, 8, 8, 0, 0, 0, time.UTC)
+	alice := insertTestUser(t, db, "alice-user-block@example.com", "Alice", store.UserStatusActive, now)
+	bob := insertTestUser(t, db, "bob-user-block@example.com", "Bob", store.UserStatusActive, now)
+	aliceCookie := loginAsUser(t, server, alice.Email)
+	bobCookie := loginAsUser(t, server, bob.Email)
+
+	createResp, createBody := postJSON(t, server, "/api/client/conversations/direct", map[string]any{"user_id": bob.ID}, aliceCookie)
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create direct status = %d, body = %#v", createResp.StatusCode, createBody)
+	}
+	conversationID := requireSuccess(t, createBody)["conversation"].(map[string]any)["id"].(string)
+
+	blockResp, blockBody := putJSON(t, server, "/api/client/blocked-users/"+bob.ID, map[string]any{}, aliceCookie)
+	if blockResp.StatusCode != http.StatusOK {
+		t.Fatalf("block status = %d, body = %#v", blockResp.StatusCode, blockBody)
+	}
+	if requireSuccess(t, blockBody)["blocked"] != true {
+		t.Fatalf("block body = %#v", blockBody)
+	}
+	statusResp, statusBody := getJSON(t, server, "/api/client/blocked-users/"+bob.ID, aliceCookie)
+	if statusResp.StatusCode != http.StatusOK || requireSuccess(t, statusBody)["blocked"] != true {
+		t.Fatalf("block status response = %d, body = %#v", statusResp.StatusCode, statusBody)
+	}
+
+	blockedResp, blockedBody := postJSON(t, server, "/api/client/conversations/"+conversationID+"/messages", map[string]any{
+		"client_message_id": "blocked-user-message",
+		"body":              map[string]any{"type": "text", "content": "不能发送"},
+	}, bobCookie)
+	if blockedResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("blocked send status = %d, body = %#v", blockedResp.StatusCode, blockedBody)
+	}
+	requireError(t, blockedBody, "direct_message_unavailable")
+
+	allowedResp, allowedBody := postJSON(t, server, "/api/client/conversations/"+conversationID+"/messages", map[string]any{
+		"client_message_id": "blocker-message",
+		"body":              map[string]any{"type": "text", "content": "仍可发送"},
+	}, aliceCookie)
+	if allowedResp.StatusCode != http.StatusCreated {
+		t.Fatalf("blocker send status = %d, body = %#v", allowedResp.StatusCode, allowedBody)
+	}
+
+	unblockResp, unblockBody := requestJSON(t, server, http.MethodDelete, "/api/client/blocked-users/"+bob.ID, map[string]any{}, aliceCookie)
+	if unblockResp.StatusCode != http.StatusOK {
+		t.Fatalf("unblock status = %d, body = %#v", unblockResp.StatusCode, unblockBody)
+	}
+	unblockedResp, unblockedBody := postJSON(t, server, "/api/client/conversations/"+conversationID+"/messages", map[string]any{
+		"client_message_id": "unblocked-user-message",
+		"body":              map[string]any{"type": "text", "content": "恢复发送"},
+	}, bobCookie)
+	if unblockedResp.StatusCode != http.StatusCreated {
+		t.Fatalf("unblocked send status = %d, body = %#v", unblockedResp.StatusCode, unblockedBody)
 	}
 }
 

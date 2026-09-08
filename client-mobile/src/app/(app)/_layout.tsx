@@ -24,6 +24,7 @@ export default function AppStackLayout() {
       <Stack.Screen name="create-group" />
       <Stack.Screen name="conversation/[conversationId]" />
       <Stack.Screen name="conversation/[conversationId]/details" />
+      <Stack.Screen name="conversation/[conversationId]/report" />
       <Stack.Screen name="conversation/[conversationId]/add-members" />
       <Stack.Screen name="conversation/[conversationId]/edit-group/[field]" />
       <Stack.Screen
