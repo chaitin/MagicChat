@@ -143,16 +143,19 @@ export function ProjectsPage() {
 
   return (
     <SidebarProvider
-      className="min-h-0 min-w-0 flex-1"
+      className="workspace-page-layout min-h-0 min-w-0 flex-1"
       style={
         {
           "--sidebar-width": "18rem",
         } as React.CSSProperties
       }
     >
-      <Sidebar className="border-r bg-background" collapsible="none">
+      <Sidebar className="workspace-section-sidebar border-r bg-background" collapsible="none">
         <SidebarHeader className="gap-0 p-0">
-          <div className="flex h-14 items-center justify-between px-4">
+          <div
+            className="workspace-section-heading flex h-14 items-center justify-between px-4"
+            data-desktop-drag-region="true"
+          >
             <h1 className="text-base font-medium">项目</h1>
             <Button
               aria-label="新建项目"

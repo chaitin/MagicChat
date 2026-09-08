@@ -204,7 +204,7 @@ export const MessageBubble = React.memo(function MessageBubble({
   const messageBody = (
     <div
       className={cn(
-        "group/message-bubble min-w-0 rounded-md text-sm leading-relaxed shadow-sm",
+        "workspace-message-bubble group/message-bubble min-w-0 rounded-md text-sm leading-relaxed",
         message.body.type === "text" && !message.topic ? "max-w-120" : "max-w-full",
         flushImageBubble ? "overflow-hidden p-0" : "p-3",
         fromMe
@@ -215,6 +215,7 @@ export const MessageBubble = React.memo(function MessageBubble({
             ? "hover:bg-primary/15 data-[state=open]:bg-primary/15 hover:dark:bg-primary/20 dark:data-[state=open]:bg-primary/20"
             : "hover:bg-zinc-200/60 data-[state=open]:bg-zinc-200 hover:dark:bg-zinc-700/60 dark:data-[state=open]:bg-zinc-700"),
       )}
+      data-own-message={fromMe}
       data-message-action-trigger={!selectionMode && !unavailable ? "" : undefined}
       onContextMenu={!selectionMode && !unavailable ? handleMessageContextMenu : undefined}
       ref={bubbleRef}

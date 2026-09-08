@@ -220,7 +220,7 @@ export function ConversationSidebar({
           <SidebarMenuButton
             aria-selected={selected}
             className={cn(
-              "h-16 gap-3 py-2 data-active:bg-primary/10 data-active:hover:bg-primary/10 dark:data-active:bg-primary/15 dark:data-active:hover:bg-primary/15",
+              "workspace-conversation-row h-16 gap-3 py-2 data-active:bg-primary/10 data-active:hover:bg-primary/10 dark:data-active:bg-primary/15 dark:data-active:hover:bg-primary/15",
               nested && "ml-4 h-14 w-[calc(100%-1rem)] py-1.5",
               !nested &&
                 conversation.pinned &&
@@ -279,21 +279,17 @@ export function ConversationSidebar({
   }
 
   return (
-    <Sidebar className="border-r bg-background" collapsible="none">
+    <Sidebar
+      className="workspace-section-sidebar workspace-conversation-sidebar border-r bg-background"
+      collapsible="none"
+    >
       <SidebarHeader className="conversation-sidebar-header-surface gap-0 p-0">
-        <div className="flex h-14 items-center justify-between px-4">
+        <div
+          className="workspace-section-heading flex h-14 items-center justify-between px-4"
+          data-desktop-drag-region="true"
+        >
           <h1 className="text-base font-medium">{t("sidebar.title")}</h1>
           <div className="flex items-center gap-1">
-            <GlobalSearchCommand
-              contactApps={contactApps}
-              contactGroups={contactGroups}
-              contacts={contacts}
-              conversations={conversations}
-              currentUserId={currentUser.id}
-              onSelectConversation={onSelectConversation}
-              onSelectDirectoryItem={onSelectDirectoryItem}
-              onSelectMessageResult={onSelectMessageResult}
-            />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -319,7 +315,20 @@ export function ConversationSidebar({
             </DropdownMenu>
           </div>
         </div>
-        <div className="px-4 pb-3">
+        <div className="workspace-search-row px-4 pb-3">
+          <GlobalSearchCommand
+            expanded
+            contactApps={contactApps}
+            contactGroups={contactGroups}
+            contacts={contacts}
+            conversations={conversations}
+            currentUserId={currentUser.id}
+            onSelectConversation={onSelectConversation}
+            onSelectDirectoryItem={onSelectDirectoryItem}
+            onSelectMessageResult={onSelectMessageResult}
+          />
+        </div>
+        <div className="workspace-conversation-filters px-4 pb-3">
           <Tabs
             className="gap-0"
             onValueChange={(value) => setConversationFilter(value as ConversationFilter)}

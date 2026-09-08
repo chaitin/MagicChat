@@ -1,0 +1,272 @@
+/* 桌面工作区：导航退后、内容突出。仅改变呈现，复用现有主题与业务组件。 */
+.desktop-frame:has(.workspace-shell),
+.workspace-shell {
+  --workspace-rail: color-mix(in oklab, var(--primary) 10%, var(--background));
+  --workspace-chrome: color-mix(in oklab, var(--primary) 5%, var(--background));
+  --workspace-selected: color-mix(in oklab, var(--primary) 12%, var(--background));
+  --workspace-ink: color-mix(in oklab, var(--primary) 40%, var(--foreground));
+  --workspace-line: color-mix(in oklab, var(--foreground) 9%, var(--background));
+}
+
+.workspace-shell {
+  --sidebar: var(--workspace-rail);
+  background: var(--workspace-chrome);
+}
+
+.dark .desktop-frame:has(.workspace-shell),
+.dark .workspace-shell {
+  --workspace-rail: color-mix(in oklab, var(--primary) 7%, var(--background));
+  --workspace-chrome: color-mix(in oklab, var(--primary) 3%, var(--background));
+  --workspace-selected: color-mix(in oklab, var(--primary) 17%, var(--background));
+  --workspace-ink: color-mix(in oklab, var(--primary) 28%, var(--foreground));
+}
+
+.workspace-shell .app-navigation-rail {
+  width: 64px;
+  gap: 16px;
+  background: var(--workspace-rail);
+  border-right: 1px solid var(--workspace-line);
+  padding-bottom: 16px;
+}
+
+.workspace-shell .workspace-nav-item {
+  width: 44px;
+  height: 54px;
+  flex-direction: column;
+  gap: 5px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted-foreground);
+  box-shadow: none;
+}
+
+.workspace-shell .workspace-nav-item:hover {
+  background: var(--workspace-selected);
+  color: var(--workspace-ink);
+}
+
+.workspace-shell .workspace-nav-item[aria-current="page"] {
+  background: color-mix(in oklab, var(--primary) 18%, var(--background));
+  color: var(--workspace-ink);
+}
+
+.workspace-nav-label {
+  font-size: 10px;
+  font-weight: 550;
+  line-height: 1;
+}
+
+.workspace-page-layout {
+  overflow: hidden;
+  background: var(--workspace-chrome);
+}
+
+.workspace-page-layout .workspace-section-sidebar {
+  width: 280px;
+  min-width: 0;
+  flex-shrink: 0;
+  border: 0;
+  background: var(--workspace-chrome);
+  padding: 0 6px;
+}
+
+.workspace-section-heading {
+  height: 64px;
+}
+
+.workspace-section-heading h1 {
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+
+.workspace-search-row {
+  padding: 0 10px 16px;
+}
+
+.workspace-search-trigger {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  justify-content: flex-start;
+  gap: 9px;
+  padding: 0 10px;
+  border: 1px solid var(--workspace-line, var(--border));
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--background) 62%, transparent);
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 400;
+  box-shadow: none;
+}
+
+.workspace-search-trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-conversation-filters {
+  padding: 0 10px 12px;
+}
+
+.workspace-section-sidebar [role="tablist"] {
+  height: 30px;
+  padding: 0;
+  gap: 2px;
+  background: transparent;
+}
+
+.workspace-section-sidebar [role="tab"] {
+  border: 0;
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--muted-foreground);
+  box-shadow: none;
+}
+
+.workspace-section-sidebar [role="tab"][data-state="active"] {
+  background: var(--workspace-selected);
+  color: var(--workspace-ink);
+}
+
+.workspace-conversation-sidebar .workspace-conversation-row {
+  border-radius: 7px;
+  background: transparent;
+}
+
+.workspace-conversation-sidebar .workspace-conversation-row:hover {
+  background: color-mix(in oklab, var(--foreground) 4%, transparent);
+}
+
+.workspace-conversation-sidebar .workspace-conversation-row[data-active="true"] {
+  background: var(--workspace-selected);
+}
+
+.workspace-page-layout > .workspace-conversation-panel,
+.workspace-page-layout > [data-slot="sidebar-inset"] {
+  margin: 8px 10px 10px 0;
+  overflow: hidden;
+  border: 1px solid var(--workspace-line);
+  border-radius: 10px;
+  background: var(--background);
+  box-shadow: 0 2px 6px color-mix(in oklab, var(--foreground) 3%, transparent);
+}
+
+.workspace-conversation-panel .conversation-panel-header-surface {
+  height: 64px;
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+  box-shadow: none;
+}
+
+.workspace-conversation-panel .conversation-panel-header-surface h2 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.workspace-conversation-panel .conversation-panel-composer-surface {
+  padding: 12px 20px 18px;
+  background: var(--background);
+  box-shadow: none;
+}
+
+.workspace-conversation-panel .workspace-composer-editor {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--muted) 24%, var(--background));
+  box-shadow: none;
+}
+
+.workspace-composer-editor textarea {
+  min-height: 80px;
+  padding: 14px 14px 8px;
+}
+
+.workspace-composer-editor [data-align="block-end"] {
+  padding: 6px 10px 10px;
+  flex-wrap: wrap;
+}
+
+.workspace-conversation-panel .workspace-send-button {
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--primary) 68%, var(--foreground));
+  color: var(--background);
+}
+
+.workspace-conversation-panel .workspace-message-bubble {
+  background: color-mix(in oklab, var(--muted) 62%, var(--background));
+  box-shadow: none;
+}
+
+.workspace-conversation-panel .workspace-message-bubble[data-own-message="true"] {
+  background: color-mix(in oklab, var(--primary) 10%, var(--background));
+}
+
+.workspace-conversation-panel .workspace-message-bubble:hover,
+.workspace-conversation-panel .workspace-message-bubble[data-state="open"] {
+  outline: 1px solid var(--border);
+}
+
+@media (max-width: 1000px) {
+  .workspace-page-layout .workspace-section-sidebar {
+    width: 236px;
+    padding: 0 2px;
+  }
+
+  .workspace-page-layout > .workspace-conversation-panel,
+  .workspace-page-layout > [data-slot="sidebar-inset"] {
+    margin-right: 6px;
+  }
+
+  .workspace-conversation-panel .conversation-panel-header-surface {
+    padding-inline: 12px;
+  }
+
+  .workspace-conversation-panel .conversation-panel-composer-surface {
+    padding: 10px 12px 12px;
+  }
+}
+
+@media (max-width: 800px) {
+  .workspace-page-layout .workspace-section-sidebar {
+    width: 216px;
+  }
+
+  .workspace-section-heading {
+    padding-inline: 10px;
+  }
+}
+
+/* 标题栏与工作区连续，原生窗口控制键仍由 Electron 管理。 */
+.desktop-frame:has(.workspace-shell) .desktop-titlebar-drag-region {
+  background: var(--workspace-rail);
+  box-shadow: none;
+}
+
+.workspace-page-layout .workspace-contact-detail {
+  background: var(--background);
+}
+
+.workspace-section-sidebar [data-slot="sidebar-input"] {
+  height: 36px;
+  border-color: var(--workspace-line);
+  background: color-mix(in oklab, var(--background) 62%, transparent);
+  box-shadow: none;
+}
+
+.workspace-section-sidebar [data-slot="sidebar-menu-button"][data-active="true"] {
+  background: var(--workspace-selected);
+}
+
+.workspace-shell .workspace-nav-item:focus-visible,
+.workspace-search-trigger:focus-visible,
+.workspace-section-sidebar [data-slot="sidebar-input"]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.desktop-frame[data-platform="darwin"]:has(.workspace-shell) .desktop-titlebar-drag-region {
+  border-right: 1px solid var(--workspace-line);
+}

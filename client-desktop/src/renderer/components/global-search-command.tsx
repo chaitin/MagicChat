@@ -62,6 +62,7 @@ export function GlobalSearchCommand({
   onSelectMessageResult,
   onSelectConversation,
   searchDebounceMs = 500,
+  expanded = false,
 }: {
   contactApps: ContactApp[]
   contactGroups: ContactGroup[]
@@ -74,6 +75,7 @@ export function GlobalSearchCommand({
   onSelectMessageResult?: (result: ClientMessageSearchResult) => void
   onSelectConversation: (conversationId: string) => void
   searchDebounceMs?: number
+  expanded?: boolean
 }) {
   const { t } = useLocale()
   const inputRef = React.useRef<HTMLInputElement | null>(null)
@@ -273,13 +275,15 @@ export function GlobalSearchCommand({
     <>
       <Button
         aria-label={t("search.button")}
+        className={expanded ? "workspace-search-trigger" : undefined}
         onClick={() => setOpen(true)}
-        size="icon-sm"
+        size={expanded ? "default" : "icon-sm"}
         title={t("search.button")}
         type="button"
         variant="ghost"
       >
-        <Search className="size-4" />
+        <Search className="size-4 shrink-0" />
+        {expanded && <span>{t("search.workspacePlaceholder")}</span>}
       </Button>
       <Dialog open={open} onOpenChange={(next) => (next ? setOpen(true) : close())}>
         <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-xl" showCloseButton={false}>

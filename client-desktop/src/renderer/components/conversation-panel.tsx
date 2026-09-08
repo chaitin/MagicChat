@@ -285,7 +285,7 @@ export function ConversationPanel({
   return (
     <main
       className={cn(
-        "relative flex min-h-0 min-w-0 flex-1 flex-col",
+        "workspace-conversation-panel relative flex min-h-0 min-w-0 flex-1 flex-col",
         conversation ? "bg-background" : "bg-muted",
       )}
       data-testid="chat-detail-shell"

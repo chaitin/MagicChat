@@ -147,7 +147,7 @@ body,
   padding-top: var(--desktop-titlebar-height);
 }
 .desktop-frame[data-platform="darwin"]:has(.app-layout-shell) .desktop-titlebar-drag-region {
-  background: var(--sidebar);
+  background: var(--workspace-rail, var(--sidebar));
   box-shadow: none;
   right: auto;
   width: var(--desktop-macos-navigation-rail-width);

@@ -280,7 +280,7 @@ export function ContactsPage() {
 
   return (
     <SidebarProvider
-      className="min-h-0 min-w-0 flex-1"
+      className="workspace-page-layout min-h-0 min-w-0 flex-1"
       style={
         {
           "--sidebar-width": "18rem",
@@ -319,7 +319,7 @@ export function ContactsPage() {
         <DesktopWorkspaceDragRegion />
         <div
           className={cn(
-            "flex min-h-0 min-w-0 flex-1 items-start justify-center overflow-hidden px-6",
+            "workspace-contact-detail flex min-h-0 min-w-0 flex-1 items-start justify-center overflow-hidden px-6",
             activeItem ? "bg-background" : "bg-muted",
           )}
           data-testid="contact-detail-shell"

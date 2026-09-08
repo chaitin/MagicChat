@@ -20,6 +20,19 @@ describe("GlobalSearchCommand", () => {
     delete (window as { desktop?: unknown }).desktop
   })
 
+  it("从完整搜索入口使用键盘打开搜索并选择会话", async () => {
+    const user = userEvent.setup()
+    const onSelect = vi.fn()
+    renderSearch([createConversation({ name: "设计讨论" })], onSelect, { expanded: true })
+    expect(screen.getByText("搜索消息、联系人、会话")).toBeInTheDocument()
+    screen.getByRole("button", { name: "全局搜索" }).focus()
+    await user.keyboard("{Enter}")
+    await user.type(screen.getByRole("combobox", { name: "搜索所有内容" }), "设计")
+    await user.click(screen.getByRole("option", { name: /设计讨论/ }))
+    expect(onSelect).toHaveBeenCalled()
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+  })
+
   it("订阅全局搜索事件并打开搜索框", async () => {
     const listeners: Array<() => void> = []
     Object.defineProperty(window, "desktop", {
@@ -220,6 +233,7 @@ function renderSearch(
     onSelectDirectoryItem = vi.fn(),
     onSelectMessageResult,
     searchDebounceMs,
+    expanded,
   }: {
     contactApps?: ContactApp[]
     contactGroups?: ContactGroup[]
@@ -228,6 +242,7 @@ function renderSearch(
     onSelectDirectoryItem?: (item: DirectorySearchItem) => void
     onSelectMessageResult?: (result: ClientMessageSearchResult) => void
     searchDebounceMs?: number
+    expanded?: boolean
   } = {},
 ) {
   return render(
@@ -243,6 +258,7 @@ function renderSearch(
       onSelectMessageResult={onSelectMessageResult}
       onSelectConversation={onSelectConversation}
       searchDebounceMs={searchDebounceMs}
+      expanded={expanded}
     />,
   )
 }
