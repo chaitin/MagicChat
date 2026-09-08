@@ -30,9 +30,14 @@ jobs:
           cache-dependency-path: |
             server/go.sum
             assistant/go.sum
+            push-gateway/go.sum
 
       - name: Test server
         working-directory: server
+        run: go test ./...
+
+      - name: Test Push Gateway
+        working-directory: push-gateway
         run: go test ./...
 
       - name: Test MagicChat AI assistant
@@ -101,23 +106,32 @@ jobs:
       matrix:
         include:
           - image: server
+            context: .
             dockerfile: server/Dockerfile
             build_args: ""
           - image: assistant
+            context: .
             dockerfile: assistant/Dockerfile
             build_args: ""
           - image: document-server
+            context: .
             dockerfile: document-server/Dockerfile
             build_args: ""
           - image: caddy
+            context: .
             dockerfile: deploy/caddy/Dockerfile
             build_args: CLIENT_BUILD_COMMIT=${{ github.sha }}
           - image: homepage
+            context: .
             dockerfile: homepage/Dockerfile
             build_args: |
               SITE_URL=https://jiying.chat
               PUBLIC_BASE_PATH=/
               PUBLIC_GA_ID=${{ vars.HOMEPAGE_GA_ID }}
+          - image: push-gateway
+            context: push-gateway
+            dockerfile: push-gateway/Dockerfile
+            build_args: ""
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -149,7 +163,7 @@ jobs:
       - name: Build and push image
         uses: docker/build-push-action@v7
         with:
-          context: .
+          context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           build-args: ${{ matrix.build_args }}
           push: true
