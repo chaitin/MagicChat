@@ -271,17 +271,7 @@ function ServerTableRow({
         </Badge>
       </TableCell>
       <TableCell>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3 text-xs">
-            <span className="font-medium tabular-nums">
-              {formatCount(server.todayUsage)}
-            </span>
-            <span className="text-muted-foreground tabular-nums">
-              {percent}%
-            </span>
-          </div>
-          <Progress value={percent} />
-        </div>
+        <Progress value={percent} />
       </TableCell>
       <TableCell className="font-mono text-sm tabular-nums">
         {formatCount(server.dailyLimit)} 次/日
