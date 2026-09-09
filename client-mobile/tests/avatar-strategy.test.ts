@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { GROUP_AVATAR_OUTPUT_SIZE } from "@/components/avatar/group-avatar-cache"
 import { getAvatarFallbackColor, getAvatarFallbackIconSize, getGroupAvatarFallbackIconSize, getGroupAvatarGridSize, selectGroupAvatarMembers, type AvatarMember } from "@/components/avatar/avatar-strategy"
 
 const member = (name: string, role: AvatarMember["role"] = "member"): AvatarMember => ({ avatar: "", name, nickname: name, role })
@@ -26,7 +27,7 @@ test("fallback icons match contact entry proportions without overflowing grid ti
   assert.equal(getAvatarFallbackIconSize(44), 26)
   assert.equal(getAvatarFallbackIconSize(96), 32)
   assert.ok(getAvatarFallbackIconSize(40 / 3) < 40 / 3)
-  const generatedAt40 = getGroupAvatarFallbackIconSize(40 / 3) * (288 / 40)
-  const generatedAt48 = getGroupAvatarFallbackIconSize(48 / 3) * (288 / 48)
+  const generatedAt40 = getGroupAvatarFallbackIconSize(40 / 3) * (GROUP_AVATAR_OUTPUT_SIZE / 40)
+  const generatedAt48 = getGroupAvatarFallbackIconSize(48 / 3) * (GROUP_AVATAR_OUTPUT_SIZE / 48)
   assert.ok(Math.abs(generatedAt40 - generatedAt48) < Number.EPSILON * 100)
 })

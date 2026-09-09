@@ -9,7 +9,7 @@ import {
   requestPermissionForUserAction,
 } from "@/features/permissions/media-permission"
 
-export const FILE_MESSAGE_MAX_BYTES = 20 * 1024 * 1024
+export const FILE_MESSAGE_MAX_BYTES = 500 * 1024 * 1024
 
 export async function pickCameraImageMessage() {
   const permission = await requestPermissionForUserAction(
@@ -66,7 +66,7 @@ export async function pickFileMessage(): Promise<PreparedClientMessageUpload | n
   const file = new File(asset.uri)
   const sizeBytes = asset.size ?? file.size
   if (sizeBytes > FILE_MESSAGE_MAX_BYTES) {
-    throw new Error("文件大于 20MB，无法上传")
+    throw new Error("文件大于 500MiB，无法上传")
   }
 
   return {

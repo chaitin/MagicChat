@@ -16,6 +16,7 @@ import { migrateLegacyLoginAssistance } from "@/data/auth/credential-store"
 import { runAccountSignOutTransaction, selectRecentReadyAccount } from "@/data/auth/sign-out-transaction"
 import { runInstallAccountTransaction } from "@/data/auth/install-account-transaction"
 import { fetchStoredCurrentUser } from "@/data/users/current-user-api"
+import { queryKeys } from "@/data/query"
 import type { PushAccountIdentity } from "@/notifications/push-types"
 import { usePushCoordinator } from "@/providers/push-coordinator-provider"
 
@@ -77,20 +78,28 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
     generation: snapshot.generation,
     target: snapshot.target,
   })
-  const bootstrapBeforeCommit = useCallback(async (account: AccountRecord) => {
+  const beginBootstrap = useCallback((account: AccountRecord) => {
     const target = targetOf(account)
     const preparation = { accountId: account.id, target, generation: stateRef.current.generation + 1 }
     accountAuthRuntime.prepare(preparation)
     sessionBootstrapCoordinator.invalidate(target)
+    const completion = sessionBootstrapCoordinator.start(
+      target,
+      createSessionBootstrapOperations({ queryClient, target })
+    )
+    return { completion, preparation }
+  }, [queryClient])
+  const bootstrapBeforeCommit = useCallback(async (account: AccountRecord) => {
+    const { completion, preparation } = beginBootstrap(account)
     try {
-      await sessionBootstrapCoordinator.start(target, createSessionBootstrapOperations({ queryClient, target }))
+      await completion
       return preparation
     } catch (error) {
-      sessionBootstrapCoordinator.invalidate(target)
+      sessionBootstrapCoordinator.invalidate(preparation.target)
       accountAuthRuntime.cancelPreparation(preparation)
       throw error
     }
-  }, [queryClient])
+  }, [beginBootstrap])
 
   useEffect(() => {
     let mounted = true
@@ -100,12 +109,30 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
       if (!mounted) return
       const account = next.accounts.find((item) => item.id === next.activeAccountId && item.status === "ready")
       if (!account) { publish(next, null, "anonymous"); return }
-      const preparation = await bootstrapBeforeCommit(account)
-      const snapshot = { accountId: account.id, account, target: targetOf(account), generation: preparation.generation }
+      const credential = await accountStore.getCredential(account.id)
+      if (credential.status !== "valid") {
+        publish(next, null, "anonymous")
+        return
+      }
+
+      const target = targetOf(account)
+      queryClient.setQueryData(queryKeys.currentUser(target), {
+        avatar: account.avatar ?? "",
+        email: account.email ?? "",
+        id: account.userId,
+        name: account.name,
+      })
+      const { completion, preparation } = beginBootstrap(account)
+      const snapshot = { accountId: account.id, account, target, generation: preparation.generation }
       publish(next, snapshot, "authenticated")
+      void queryClient.invalidateQueries({
+        exact: true,
+        queryKey: queryKeys.currentUser(target),
+      })
+      void completion.catch(() => undefined)
     })().catch(async () => { if (mounted) publish(await accountStore.hydrate().catch(() => EMPTY), null, "degraded") }).finally(() => { if (mounted) setHydrated(true) })
     return () => { mounted = false; accountAuthRuntime.setUnauthorizedHandler(null) }
-  }, [bootstrapBeforeCommit, publish])
+  }, [beginBootstrap, publish, queryClient])
 
   const markReauthRequired = useCallback((accountId: string) => serialize(async () => {
     await accountStore.markReauthRequired(accountId)

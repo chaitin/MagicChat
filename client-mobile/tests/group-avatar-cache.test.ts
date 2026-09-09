@@ -3,6 +3,9 @@ import test from "node:test"
 
 import {
   createGroupAvatarIdentity,
+  GroupAvatarGenerationLimiter,
+  GROUP_AVATAR_GENERATOR_VERSION,
+  GROUP_AVATAR_OUTPUT_SIZE,
   GroupAvatarGenerationEpoch,
   GroupAvatarMemoryCache,
 } from "@/components/avatar/group-avatar-cache"
@@ -28,6 +31,30 @@ test("group avatar identity is stable, short, and visually sensitive", () => {
   assert.notEqual(identity(), identity({ theme: "dark" }))
   assert.notEqual(identity(), identity({ tokens: { ...tokens, background1: "#000" } }))
   assert.notEqual(identity(), identity({ version: 99 }))
+})
+
+test("group avatar output uses a bounded cache-friendly size", () => {
+  assert.equal(GROUP_AVATAR_OUTPUT_SIZE, 192)
+  assert.ok(GROUP_AVATAR_GENERATOR_VERSION >= 9)
+})
+
+test("group avatar generation limiter bounds work and releases cancelled owners", () => {
+  const limiter = new GroupAvatarGenerationLimiter(2)
+  const started: number[] = []
+  const releases: (() => void)[] = []
+  const cancels = [1, 2, 3, 4].map((id) =>
+    limiter.schedule((release) => {
+      started.push(id)
+      releases.push(release)
+    })
+  )
+
+  assert.deepEqual(started, [1, 2])
+  cancels[2]?.()
+  cancels[0]?.()
+  assert.deepEqual(started, [1, 2, 4])
+  releases[1]?.()
+  releases[2]?.()
 })
 
 test("grid threshold and role ordering remain deterministic", () => {

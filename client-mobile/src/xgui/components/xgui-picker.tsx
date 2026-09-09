@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react"
 import {
-  Animated,
   FlatList,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -11,6 +9,7 @@ import {
   type NativeSyntheticEvent,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { Sheet } from "tamagui"
 
 import { useXGUITheme } from "@/xgui/theme/use-xgui-theme"
 
@@ -168,27 +167,15 @@ export function XGUIPicker<T extends XGUIPickerValue>({
 }: XGUIPickerProps<T>) {
   const { colors } = useXGUITheme()
   const insets = useSafeAreaInsets()
-  const [backdropOpacity] = useState(() => new Animated.Value(0))
-  const [panelTranslateY] = useState(() => new Animated.Value(400))
+  const closeRequestedRef = useRef(false)
+  const pendingCloseActionRef = useRef<(() => void) | null>(null)
   const selection = useMemo(() => selectionFor(columns, value), [columns, value])
 
   useEffect(() => {
     if (!open) return
-    backdropOpacity.setValue(0)
-    panelTranslateY.setValue(400)
-    Animated.parallel([
-      Animated.timing(backdropOpacity, {
-        duration: 300,
-        toValue: 1,
-        useNativeDriver: true,
-      }),
-      Animated.timing(panelTranslateY, {
-        duration: 300,
-        toValue: 0,
-        useNativeDriver: true,
-      }),
-    ]).start()
-  }, [backdropOpacity, open, panelTranslateY])
+    closeRequestedRef.current = false
+    pendingCloseActionRef.current = null
+  }, [open])
 
   const selectedItems = useMemo(
     () => columns.flatMap((column, index) => column[selection[index]] ?? []),
@@ -197,9 +184,21 @@ export function XGUIPicker<T extends XGUIPickerValue>({
   const selectedValues = useMemo(() => selectedItems.map((item) => item.value), [selectedItems])
   const canConfirm = columns.length > 0 && selectedItems.length === columns.length
 
-  const cancel = () => {
+  const close = (afterClose?: () => void) => {
+    if (closeRequestedRef.current) return
+    closeRequestedRef.current = true
+    pendingCloseActionRef.current = afterClose ?? null
     onOpenChange(false)
-    onCancel?.()
+  }
+
+  const cancel = () => close(onCancel)
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && !closeRequestedRef.current) {
+      closeRequestedRef.current = true
+      pendingCloseActionRef.current = onCancel ?? null
+    }
+    onOpenChange(nextOpen)
   }
 
   const select = (columnIndex: number, itemIndex: number) => {
@@ -211,28 +210,28 @@ export function XGUIPicker<T extends XGUIPickerValue>({
   }
 
   return (
-    <Modal
-      animationType="none"
-      onRequestClose={cancel}
-      statusBarTranslucent
-      transparent
-      visible={open}
+    <Sheet
+      dismissOnOverlayPress
+      dismissOnSnapToBottom
+      modal
+      onAnimationComplete={({ open: animationOpen }) => {
+        if (animationOpen) return
+        const pendingCloseAction = pendingCloseActionRef.current
+        pendingCloseActionRef.current = null
+        pendingCloseAction?.()
+      }}
+      onOpenChange={handleOpenChange}
+      open={open}
+      snapPointsMode="fit"
     >
-      <View style={styles.modal}>
-        <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
-          <Pressable accessibilityRole="button" onPress={cancel} style={StyleSheet.absoluteFill} />
-        </Animated.View>
-        <Animated.View
-          accessibilityViewIsModal
-          style={[
-            styles.panel,
-            {
-              backgroundColor: colors.background2,
-              paddingBottom: Math.max(insets.bottom, 8),
-              transform: [{ translateY: panelTranslateY }],
-            },
-          ]}
-        >
+      <Sheet.Overlay backgroundColor="rgba(0,0,0,0.5)" />
+      <Sheet.Frame
+        bg={colors.background2}
+        borderTopLeftRadius={12}
+        borderTopRightRadius={12}
+        overflow="hidden"
+      >
+        <View style={{ paddingBottom: Math.max(insets.bottom, 8) }}>
           <View style={[styles.header, { borderBottomColor: colors.separator }]}>
             <Pressable accessibilityRole="button" onPress={cancel} style={styles.headerButton}>
               <Text style={[styles.headerButtonText, { color: colors.textSecondary }]}>{cancelLabel}</Text>
@@ -245,8 +244,7 @@ export function XGUIPicker<T extends XGUIPickerValue>({
               accessibilityState={{ disabled: !canConfirm }}
               disabled={!canConfirm}
               onPress={() => {
-                onConfirm(selectedValues, selectedItems)
-                onOpenChange(false)
+                close(() => onConfirm(selectedValues, selectedItems))
               }}
               style={styles.headerButton}
             >
@@ -265,14 +263,13 @@ export function XGUIPicker<T extends XGUIPickerValue>({
               />
             ))}
           </View>
-        </Animated.View>
-      </View>
-    </Modal>
+        </View>
+      </Sheet.Frame>
+    </Sheet>
   )
 }
 
 const styles = StyleSheet.create({
-  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(0,0,0,0.5)" },
   columns: { flexDirection: "row", height: WHEEL_HEIGHT, overflow: "hidden" },
   header: { alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", minHeight: 56 },
   headerButton: { alignItems: "center", justifyContent: "center", minHeight: 56, minWidth: 72, paddingHorizontal: 16 },
@@ -280,8 +277,6 @@ const styles = StyleSheet.create({
   item: { alignItems: "center", height: ITEM_HEIGHT, justifyContent: "center", paddingHorizontal: 8 },
   itemContent: { alignItems: "center", flexDirection: "row", gap: 8 },
   itemText: { fontSize: 17, lineHeight: 24, textAlign: "center" },
-  modal: { flex: 1, justifyContent: "flex-end" },
-  panel: { borderTopLeftRadius: 12, borderTopRightRadius: 12, overflow: "hidden" },
   selection: { borderBottomWidth: StyleSheet.hairlineWidth, borderTopWidth: StyleSheet.hairlineWidth, height: ITEM_HEIGHT, left: 8, position: "absolute", right: 8, top: ITEM_HEIGHT * 2 },
   title: { flex: 1, fontSize: 17, fontWeight: "600", lineHeight: 24, textAlign: "center" },
   wheel: { flex: 1, height: WHEEL_HEIGHT },

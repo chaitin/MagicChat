@@ -8,7 +8,7 @@ import {
   useRouter,
 } from "expo-router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Alert, Platform } from "react-native"
+import { Alert, Keyboard, Platform } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { SizableText, YStack } from "tamagui"
 
@@ -378,8 +378,8 @@ export function ConversationScreen() {
   const handleSelectionForward = useCallback(
     (target: ScopedMessageActionTarget) => {
       setForwardMessage(target)
-      setForwardSheetOpen(true)
       composerRef.current?.dismissAccessory()
+      requestAnimationFrame(() => setForwardSheetOpen(true))
     },
     []
   )
@@ -626,9 +626,10 @@ export function ConversationScreen() {
                   : undefined
               }
               onAvatarPress={handleAvatarPress}
-              onContentTouch={() =>
+              onContentTouch={() => {
                 composerRef.current?.dismissAccessory()
-              }
+                Keyboard.dismiss()
+              }}
               onImagePress={handleImagePress}
               onLoadOlder={handleLoadOlder}
               onMessageLongPress={handleMessageLongPress}
@@ -700,7 +701,7 @@ export function ConversationScreen() {
                 ]
               : []),
             {
-              deferUntilClosed: false,
+              deferUntilClosed: true,
               label: "转发",
               onPress: () => handleSelectionForward(messageActionTarget),
             },

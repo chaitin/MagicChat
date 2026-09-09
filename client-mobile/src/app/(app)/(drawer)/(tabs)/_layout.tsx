@@ -81,11 +81,11 @@ export default function AppTabsLayout() {
 
   return (
     <RouterTabs
-      detachInactiveScreens={false}
       tabBar={(props) => (
         <AppTabBar {...props} unreadMessageCount={unreadMessageCount} />
       )}
       screenOptions={{
+        animation: "fade",
         freezeOnBlur: true,
         headerShown: true,
         sceneStyle: {
@@ -107,7 +107,6 @@ export default function AppTabsLayout() {
         name="contacts"
         options={{
           header: () => <AppTabHeader title="通讯录" />,
-          lazy: false,
           title: "通讯录",
         }}
       />

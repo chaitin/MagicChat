@@ -1,4 +1,5 @@
 import { FileText } from "lucide-react-native"
+import { useRef, useState } from "react"
 import { Image, StyleSheet, Text, View } from "react-native"
 
 import type { PreparedClientMessageUpload } from "@/data/messages/message-upload"
@@ -17,14 +18,38 @@ export function MessageUploadDialog({
   sending: boolean
 }) {
   const { colors } = useXGUITheme()
-  if (selections.length === 0) return null
+  const [presentation, setPresentation] = useState(() => ({
+    displaySelections: selections,
+    open: selections.length > 0,
+    sourceSelections: selections,
+  }))
+  const cancelAfterCloseRef = useRef(false)
 
-  const isImage = selections.every((selection) => selection.kind === "image")
-  const firstSelection = selections[0]
+  const selectionsChanged =
+    presentation.sourceSelections.length !== selections.length ||
+    selections.some(
+      (selection, index) => presentation.sourceSelections[index] !== selection
+    )
+  if (selectionsChanged) {
+    setPresentation({
+      displaySelections:
+        selections.length > 0 ? selections : presentation.displaySelections,
+      open: selections.length > 0,
+      sourceSelections: selections,
+    })
+  }
+
+  const { displaySelections } = presentation
+  if (displaySelections.length === 0) return null
+
+  const isImage = displaySelections.every(
+    (selection) => selection.kind === "image"
+  )
+  const firstSelection = displaySelections[0]
   if (!firstSelection) return null
   const title = isImage
-    ? selections.length > 1
-      ? `发送 ${selections.length} 张图片`
+    ? displaySelections.length > 1
+      ? `发送 ${displaySelections.length} 张图片`
       : "发送图片"
     : "发送文件"
 
@@ -40,23 +65,40 @@ export function MessageUploadDialog({
         },
       ]}
       cancelDisabled={sending}
-      onOpenChange={(open) => {
-        if (!open && !sending) onCancel()
+      onAnimationComplete={(open) => {
+        if (open) {
+          cancelAfterCloseRef.current = false
+          return
+        }
+        setPresentation((current) => ({
+          ...current,
+          displaySelections: [],
+        }))
+        if (!cancelAfterCloseRef.current) return
+        cancelAfterCloseRef.current = false
+        onCancel()
       }}
-      open
+      onOpenChange={(open) => {
+        if (open || sending) return
+        cancelAfterCloseRef.current = true
+        setPresentation((current) => ({ ...current, open: false }))
+      }}
+      open={presentation.open}
       title={title}
     >
       <View style={styles.content}>
         {isImage ? (
           <View style={styles.imageRow}>
-            {selections.map((selection, index) => (
+            {displaySelections.map((selection, index) => (
               <Image
                 accessibilityLabel={`待发送图片 ${index + 1}`}
                 key={`${selection.upload.uri}-${index}`}
                 resizeMode="contain"
                 source={{ uri: selection.upload.uri }}
                 style={[
-                  selections.length === 1 ? styles.image : styles.thumbnail,
+                  displaySelections.length === 1
+                    ? styles.image
+                    : styles.thumbnail,
                   { backgroundColor: colors.background1 },
                 ]}
               />

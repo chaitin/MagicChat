@@ -235,6 +235,7 @@ function ConversationListItem({
   const content = (
     <Pressable
       accessibilityLabel={`打开会话 ${conversation.name}`}
+      delayLongPress={500}
       onLongPress={() => {
         didLongPressRef.current = true
         if (conversation.type === "topic") return

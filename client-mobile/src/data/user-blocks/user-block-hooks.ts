@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import type { AuthenticatedTarget } from "@/core/server-target"
+import { ApiRequestError } from "@/data/api-client"
 import {
   blockUser,
   getUserBlockStatus,
@@ -24,6 +25,9 @@ export function useUserBlockStatus(
     enabled,
     queryFn: () => getUserBlockStatus(target, userId),
     queryKey: userBlockStatusQueryKey(target, userId),
+    retry: (failureCount, error) =>
+      !(error instanceof ApiRequestError && error.status === 404) &&
+      failureCount < 1,
   })
 }
 

@@ -8,6 +8,8 @@ import { captureRef, releaseCapture } from "react-native-view-shot"
 import { CachedAvatarTileImage } from "@/components/avatar/cached-avatar-image"
 import {
   createGroupAvatarIdentity,
+  GroupAvatarGenerationLimiter,
+  GROUP_AVATAR_OUTPUT_SIZE,
   GroupAvatarGenerationEpoch,
   GroupAvatarMemoryCache,
   type GroupAvatarGenerationSnapshot,
@@ -36,6 +38,7 @@ type GroupAvatarTask = {
   snapshot: GroupAvatarGenerationSnapshot
 }
 const tasks = new Map<string, GroupAvatarTask>()
+const generationLimiter = new GroupAvatarGenerationLimiter(2)
 let captureQueue = Promise.resolve()
 subscribeResourceCacheCleared((server) => {
   epochs.invalidate(server)
@@ -75,6 +78,7 @@ export function useGroupAvatarComposite({ entries, server, theme, tokens }: {
   const [attempt, setAttempt] = useState(0)
   const resolver = useRef<((resource: ResolvedResource) => void) | null>(null)
   const rejecter = useRef<((error: unknown) => void) | null>(null)
+  const releaseGenerationRef = useRef<(() => void) | null>(null)
   const serverRef = useRef(server)
   useEffect(() => {
     serverRef.current = server
@@ -92,6 +96,7 @@ export function useGroupAvatarComposite({ entries, server, theme, tokens }: {
       return () => { active = false }
     }
     let taskRecord = tasks.get(memoryKey)
+    let cancelScheduledGeneration: (() => void) | null = null
     let rejectOwnedTask: ((error: unknown) => void) | null = null
     if (!taskRecord) {
       const snapshot = epochs.capture(activeServer)
@@ -105,8 +110,16 @@ export function useGroupAvatarComposite({ entries, server, theme, tokens }: {
           } else if (disk) {
             resolve(disk)
           } else if (active) {
-            setGenerationSnapshot(snapshot)
-            setGenerate(true)
+            cancelScheduledGeneration = generationLimiter.schedule((release) => {
+              if (!active || !epochs.isCurrent(activeServer, snapshot)) {
+                release()
+                reject(new GroupAvatarGenerationInvalidatedError())
+                return
+              }
+              releaseGenerationRef.current = release
+              setGenerationSnapshot(snapshot)
+              setGenerate(true)
+            })
           } else {
             reject(new GroupAvatarOwnerUnmountedError())
           }
@@ -139,9 +152,16 @@ export function useGroupAvatarComposite({ entries, server, theme, tokens }: {
     )
     return () => {
       active = false
+      cancelScheduledGeneration?.()
+      releaseGenerationRef.current = null
       rejectOwnedTask?.(new GroupAvatarOwnerUnmountedError())
     }
   }, [attempt, identity, memoryKey])
+
+  const releaseGeneration = useCallback(() => {
+    releaseGenerationRef.current?.()
+    releaseGenerationRef.current = null
+  }, [])
 
   const complete = useCallback(
     (value: ResolvedResource) => {
@@ -155,14 +175,16 @@ export function useGroupAvatarComposite({ entries, server, theme, tokens }: {
       } else {
         resolver.current?.(value)
       }
+      releaseGeneration()
       setGenerate(false)
     },
-    [generationSnapshot, identity]
+    [generationSnapshot, identity, releaseGeneration]
   )
   const fail = useCallback((error: unknown) => {
     rejecter.current?.(error)
+    releaseGeneration()
     setGenerate(false)
-  }, [])
+  }, [releaseGeneration])
   const invalidate = useCallback(() => {
     const activeServer = serverRef.current
     memory.delete(memoryKey)
@@ -217,7 +239,13 @@ export function GroupAvatarGenerator({ complete, entries, fail, identity, server
       if (!epochs.isCurrent(activeServer, snapshot)) {
         throw new GroupAvatarGenerationInvalidatedError()
       }
-      const uri = await captureRef(ref, { format: "png", height: 288, quality: 1, result: "tmpfile", width: 288 })
+      const uri = await captureRef(ref, {
+        format: "png",
+        height: GROUP_AVATAR_OUTPUT_SIZE,
+        quality: 1,
+        result: "tmpfile",
+        width: GROUP_AVATAR_OUTPUT_SIZE,
+      })
       let target: Awaited<ReturnType<typeof createResourceCacheTarget>> | null = null
       try {
         ensureActive()

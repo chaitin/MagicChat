@@ -5,9 +5,8 @@ import { useEffect, useState } from "react"
 import { AppProviders } from "@/providers/app-providers"
 import { useAuth } from "@/providers/auth-provider"
 import { useServers } from "@/providers/server-provider"
-import { useClientDataStatus } from "@/providers/client-data-provider"
 
-const MINIMUM_SPLASH_TIME_MS = 2_000
+const MINIMUM_SPLASH_TIME_MS = 500
 
 void SplashScreen.preventAutoHideAsync().catch(() => undefined)
 
@@ -36,7 +35,6 @@ function NativeSplashController() {
   const pathname = usePathname()
   const { isAuthenticated, isHydrated: isAuthHydrated } = useAuth()
   const { isHydrated: areServersHydrated } = useServers()
-  const { isMessageBootstrapComplete } = useClientDataStatus()
   const [minimumTimeElapsed, setMinimumTimeElapsed] = useState(false)
 
   useEffect(() => {
@@ -52,7 +50,6 @@ function NativeSplashController() {
       !isAuthHydrated ||
       !areServersHydrated ||
       !minimumTimeElapsed ||
-      (isAuthenticated && !isMessageBootstrapComplete) ||
       pathname === "/" ||
       pathname === "/init"
     ) {
@@ -72,7 +69,6 @@ function NativeSplashController() {
     areServersHydrated,
     isAuthenticated,
     isAuthHydrated,
-    isMessageBootstrapComplete,
     minimumTimeElapsed,
     pathname,
   ])

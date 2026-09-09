@@ -137,7 +137,6 @@ export function MentionPickerSheet({
         title="选择提醒的人"
       >
         <HalfScreenSearchInput
-          autoFocus
           onChangeText={setKeyword}
           placeholder="搜索成员"
           value={keyword}

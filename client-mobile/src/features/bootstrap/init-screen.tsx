@@ -4,9 +4,11 @@ import { View } from "react-native"
 
 import { useAuth } from "@/providers/auth-provider"
 import { useServers } from "@/providers/server-provider"
+import { useXGUITheme } from "@/xgui/theme/use-xgui-theme"
 
 export function InitScreen() {
   const router = useRouter()
+  const { colors } = useXGUITheme()
   const {
     invalidateSession,
     isHydrated: isAuthHydrated,
@@ -58,5 +60,5 @@ export function InitScreen() {
     session,
   ])
 
-  return <View style={{ backgroundColor: "#04C9BD", flex: 1 }} />
+  return <View style={{ backgroundColor: colors.background0, flex: 1 }} />
 }

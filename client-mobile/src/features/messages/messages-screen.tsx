@@ -1,7 +1,6 @@
 import { type InfiniteData, useQueries, useQueryClient } from "@tanstack/react-query"
 import { useRouter } from "expo-router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { InteractionManager } from "react-native"
 
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
 import {
@@ -156,12 +155,12 @@ export function MessagesScreen() {
   )
 
   useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => {
+    const task = requestIdleCallback(() => {
       for (const item of items.slice(0, PREWARM_CONVERSATION_COUNT)) {
         void prepareConversationMessages(item.conversation.id)
       }
     })
-    return () => task.cancel()
+    return () => cancelIdleCallback(task)
   }, [items, prepareConversationMessages])
 
   const handleConversationsVisible = useCallback(
@@ -335,19 +334,10 @@ export function MessagesScreen() {
         onMutedChange={(muted) => {
           if (actionItem) void handleMutedChange(actionItem, muted)
         }}
-        onMutedChangeStart={(muted) =>
-          showLoadingToast(
-            toast,
-            muted ? "正在开启免打扰" : "正在取消免打扰"
-          )
-        }
         onOpenChange={setActionSheetOpen}
         onPinnedChange={(pinned) => {
           if (actionItem) void handlePinnedChange(actionItem, pinned)
         }}
-        onPinnedChangeStart={(pinned) =>
-          showLoadingToast(toast, pinned ? "正在置顶" : "正在取消置顶")
-        }
         open={actionSheetOpen}
       />
 

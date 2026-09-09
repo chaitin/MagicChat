@@ -2,7 +2,58 @@ import type { AvatarMember } from "@/components/avatar/avatar-strategy"
 import type { ServerTarget } from "@/core/server-target"
 import { resolveServerAssetUrl } from "@/lib/server-asset-url"
 
-export const GROUP_AVATAR_GENERATOR_VERSION = 7
+export const GROUP_AVATAR_GENERATOR_VERSION = 9
+export const GROUP_AVATAR_OUTPUT_SIZE = 192
+
+type PendingGeneration = {
+  cancelled: boolean
+  release: (() => void) | null
+  start: (release: () => void) => void
+}
+
+export class GroupAvatarGenerationLimiter {
+  private active = 0
+  private readonly maximum: number
+  private readonly pending: PendingGeneration[] = []
+
+  constructor(maximum = 2) {
+    this.maximum = Math.max(1, maximum)
+  }
+
+  schedule(start: PendingGeneration["start"]) {
+    const generation: PendingGeneration = {
+      cancelled: false,
+      release: null,
+      start,
+    }
+    this.pending.push(generation)
+    this.drain()
+
+    return () => {
+      if (generation.cancelled) return
+      generation.cancelled = true
+      generation.release?.()
+    }
+  }
+
+  private drain() {
+    while (this.active < this.maximum) {
+      const generation = this.pending.shift()
+      if (!generation) return
+      if (generation.cancelled) continue
+
+      this.active += 1
+      let released = false
+      generation.release = () => {
+        if (released) return
+        released = true
+        this.active -= 1
+        this.drain()
+      }
+      generation.start(generation.release)
+    }
+  }
+}
 
 export type GroupAvatarVisualTokens = {
   background1: string

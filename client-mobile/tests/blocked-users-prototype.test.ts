@@ -38,6 +38,14 @@ test("私聊详情接入真实黑名单状态和操作", () => {
   assert.match(detailsScreen, /useSetUserBlocked/)
   assert.match(detailsScreen, /value=\{blockStatusQuery\.data\?\.blocked \?\? false\}/)
   assert.match(detailsScreen, /blockMutation\.mutateAsync/)
+  assert.match(detailsScreen, /disabled=\{blockActionPending\}/)
+  assert.match(detailsScreen, /onValueChange=\{changeBlocked\}/)
+  assert.match(detailsScreen, /if \(blocked\) setBlockDialogOpen\(true\)/)
+  assert.doesNotMatch(
+    detailsScreen,
+    /disabled=\{[^}]*blockStatusQuery\.isError/
+  )
+  assert.doesNotMatch(detailsScreen, /BLACKLIST_STATUS_STATE/)
   assert.match(detailsScreen, /将无法再向你发送私聊消息/)
   assert.match(detailsScreen, /你仍可向对方发送消息/)
   assert.doesNotMatch(detailsScreen, /当前为交互预览，尚未加入黑名单/)
@@ -52,6 +60,10 @@ test("黑名单客户端提供状态、拉黑和解除请求", () => {
   assert.match(userBlockHooks, /getUserBlockStatus/)
   assert.match(userBlockHooks, /blockUser/)
   assert.match(userBlockHooks, /unblockUser/)
+  assert.match(
+    userBlockHooks,
+    /error instanceof ApiRequestError && error\.status === 404/
+  )
 })
 
 test("被拉黑用户发送失败时直接提示服务端错误", () => {

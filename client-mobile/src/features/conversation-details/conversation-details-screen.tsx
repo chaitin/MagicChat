@@ -157,7 +157,7 @@ export function ConversationDetailsScreen() {
   )
   const blockMutation = useSetUserBlocked(session)
   const blockActionPending =
-    blockStatusQuery.isPending || blockMutation.isPending
+    blockStatusQuery.isFetching || blockMutation.isPending
 
   if (!conversation) {
     const loading = !isReady || (expectsTopic && topicQuery.isPending)
@@ -210,6 +210,11 @@ export function ConversationDetailsScreen() {
       toast.hide()
       showError(error, pinned ? "置顶对话失败" : "取消置顶失败")
     }
+  }
+
+  function changeBlocked(blocked: boolean) {
+    if (blocked) setBlockDialogOpen(true)
+    else void setBlocked(false)
   }
 
   async function setBlocked(blocked: boolean) {
@@ -421,12 +426,8 @@ export function ConversationDetailsScreen() {
                 trailing={
                   <XGUISwitch
                     accessibilityLabel="黑名单"
-                    disabled={blockActionPending || blockStatusQuery.isError}
-                    dimWhenDisabled={false}
-                    onValueChange={(value) => {
-                      if (value) setBlockDialogOpen(true)
-                      else void setBlocked(false)
-                    }}
+                    disabled={blockActionPending}
+                    onValueChange={changeBlocked}
                     value={blockStatusQuery.data?.blocked ?? false}
                   />
                 }

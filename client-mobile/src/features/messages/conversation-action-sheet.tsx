@@ -4,16 +4,16 @@ import { XGUIActionSheet } from "@/xgui"
 
 export type ConversationAction = "mute" | "pin" | null
 
+const ACTION_POST_CLOSE_DELAY_MS = 100
+
 export function ConversationActionSheet({
   activeAction,
   item,
   onAnimationComplete,
   onDelete,
   onMutedChange,
-  onMutedChangeStart,
   onOpenChange,
   onPinnedChange,
-  onPinnedChangeStart,
   open,
 }: {
   activeAction: ConversationAction
@@ -21,10 +21,8 @@ export function ConversationActionSheet({
   onAnimationComplete: (open: boolean) => void
   onDelete: () => void
   onMutedChange: (muted: boolean) => void
-  onMutedChangeStart: (muted: boolean) => void
   onOpenChange: (open: boolean) => void
   onPinnedChange: (pinned: boolean) => void
-  onPinnedChangeStart: (pinned: boolean) => void
   open: boolean
 }) {
   const conversation = item?.conversation
@@ -38,9 +36,12 @@ export function ConversationActionSheet({
                 deferUntilClosed: true,
                 disabled: busy,
                 label: conversation.pinned ? "取消置顶" : "置顶",
-                onBeforePress: () =>
-                  onPinnedChangeStart(!conversation.pinned),
-                onPress: () => onPinnedChange(!conversation.pinned),
+                onPress: () => {
+                  setTimeout(
+                    () => onPinnedChange(!conversation.pinned),
+                    ACTION_POST_CLOSE_DELAY_MS
+                  )
+                },
               },
             ]
           : []),
@@ -48,9 +49,12 @@ export function ConversationActionSheet({
           deferUntilClosed: true,
           disabled: busy,
           label: conversation.notificationMuted ? "取消免打扰" : "免打扰",
-          onBeforePress: () =>
-            onMutedChangeStart(!conversation.notificationMuted),
-          onPress: () => onMutedChange(!conversation.notificationMuted),
+          onPress: () => {
+            setTimeout(
+              () => onMutedChange(!conversation.notificationMuted),
+              ACTION_POST_CLOSE_DELAY_MS
+            )
+          }
         },
         {
           destructive: true,

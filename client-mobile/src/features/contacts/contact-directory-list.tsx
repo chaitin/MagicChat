@@ -107,8 +107,9 @@ export function ContactDirectoryList({
             <InlineError message={errorMessage} />
           </View>
         }
-        maxToRenderPerBatch={32}
-        removeClippedSubviews={false}
+        initialNumToRender={12}
+        maxToRenderPerBatch={8}
+        removeClippedSubviews={Platform.OS === "android"}
         renderItem={({ item: row }) => (
           <DirectoryListItem
             item={row.item}
@@ -119,8 +120,8 @@ export function ContactDirectoryList({
         )}
         showsVerticalScrollIndicator={false}
         style={[styles.list, { backgroundColor: colors.background0 }]}
-        updateCellsBatchingPeriod={16}
-        windowSize={51}
+        updateCellsBatchingPeriod={32}
+        windowSize={7}
       />}
       </ElasticOverscroll>
     </View>
