@@ -61,7 +61,7 @@ import {
   usePushCoordinator,
   usePushSynchronizationState,
 } from "@/providers/push-coordinator-provider"
-import { XGUIActionSheet, XGUIList, XGUIListItem, XGUIPicker, useXGUITheme, useXGUIToast, type XGUIPickerItem } from "@/xgui"
+import { XGUIActionSheet, XGUIDialog, XGUIList, XGUIListItem, XGUIPicker, useXGUITheme, useXGUIToast, type XGUIDialogAction, type XGUIPickerItem } from "@/xgui"
 
 const THEME_OPTIONS = [
   { icon: ({ color, size, strokeWidth }) => <IconDeviceDesktop color={color} size={size} strokeWidth={strokeWidth} />, label: "跟随系统", value: "system" },
@@ -74,6 +74,14 @@ const THEME_LABELS: Record<ThemePreference, string> = {
   light: "浅色主题",
   system: "跟随系统",
 }
+
+type PushDialogKind =
+  | "consent"
+  | "permission"
+  | "disable"
+  | "device_limit"
+  | "server_disabled"
+  | "unauthorized"
 
 export function MeScreen() {
   const { colors } = useXGUITheme()
@@ -96,6 +104,9 @@ export function MeScreen() {
     setPreference: setThemePreference,
   } = useAppTheme()
   const [themePickerOpen, setThemePickerOpen] = useState(false)
+  const [pushDialog, setPushDialog] = useState<PushDialogKind | null>(null)
+  const [pushDialogError, setPushDialogError] = useState("")
+  const [pushDialogPending, setPushDialogPending] = useState(false)
   const [logoutSheetOpen, setLogoutSheetOpen] = useState(false)
   const [completedLogoutAccountId, setCompletedLogoutAccountId] = useState<string | null>(null)
   const [pendingTheme, setPendingTheme] = useState<ThemePreference>(themePreference)
@@ -125,6 +136,15 @@ export function MeScreen() {
       })
     })
   }
+
+  useEffect(() => {
+    if (pushDialog !== "permission" || pushState !== "registered") return
+    const timer = setTimeout(() => {
+      setPushDialogError("")
+      setPushDialog(null)
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [pushDialog, pushState])
 
   useEffect(
     () => () => {
@@ -174,106 +194,157 @@ export function MeScreen() {
   }
 
   function handlePushStatusPress() {
+    setPushDialogError("")
     switch (pushStatus.action) {
       case "enable_jpush":
-        Alert.alert(
-          "启用手机通知",
-          "Android 通知由极光推送提供。启用后，极光 SDK 会处理完成通知投递所需的设备、系统、网络和应用标识信息；不会收到聊天账号、服务器地址或消息内容。",
-          [
-            {
-              onPress: () => {
-                void updatePushReminderState((current) =>
-                  recordPushReminder(
-                    current,
-                    "consent",
-                    pushReminderAppVersion
-                  )
-                ).catch(() => undefined)
-              },
-              style: "cancel",
-              text: "暂不启用",
-            },
-            {
-              onPress: () => {
-                void Promise.all([
-                  saveJPushConsent(true),
-                  updatePushReminderState((current) =>
-                    clearPushReminder(
-                      setPushReminderExplicitlyDisabled(current, false),
-                      "consent"
-                    )
-                  ),
-                ])
-                  .then(() => {
-                    pushCoordinator.triggerSynchronization()
-                  })
-                  .catch(() => {
-                    Alert.alert("启用失败", "无法保存通知授权，请稍后重试。")
-                  })
-              },
-              text: "同意并启用",
-            },
-          ]
-        )
+        setPushDialog("consent")
         return
       case "open_settings":
-        void Linking.openSettings().catch(() => {
-          Alert.alert("无法打开系统设置", "请在系统设置中允许即应发送通知。")
-        })
+        setPushDialog("permission")
         return
       case "retry":
         pushCoordinator.triggerSynchronization()
         toast.show({ message: "正在重新同步通知", modal: false, type: "text" })
         return
       case "show_device_limit":
-        Alert.alert(
-          "通知设备数量已达上限",
-          "当前账号最多启用 10 台通知设备。请先在其他设备退出登录，或联系服务器管理员处理。"
-        )
+        setPushDialog("device_limit")
         return
       case "show_server_disabled":
-        Alert.alert("服务器未启用通知", "当前私有服务器没有开启公共推送功能。")
+        setPushDialog("server_disabled")
         return
       case "show_unauthorized":
-        Alert.alert("需要重新登录", "当前登录状态已失效，请切换账号后重新登录。")
+        setPushDialog("unauthorized")
         return
       case "none":
-        if (Platform.OS !== "android" || pushState !== "registered") return
-        Alert.alert(
-          "关闭手机通知",
-          "关闭后将撤销当前账号的远程通知授权，并停止极光推送服务。",
-          [
-            { style: "cancel", text: "取消" },
-            {
-              onPress: () => {
-                void (async () => {
-                  if (active) {
-                    await pushCoordinator
-                      .deactivate({
-                        accountId: active.accountId,
-                        generation: active.generation,
-                        target: active.target,
-                      })
-                      .catch(() => undefined)
-                  }
-                  await Promise.all([
-                    saveJPushConsent(false),
-                    updatePushReminderState((current) =>
-                      setPushReminderExplicitlyDisabled(current, true)
-                    ),
-                  ])
-                  await stopJPush().catch(() => undefined)
-                  pushCoordinator.triggerSynchronization()
-                })()
-              },
-              style: "destructive",
-              text: "关闭",
-            },
-          ]
-        )
+        if (Platform.OS === "android" && pushState === "registered") {
+          setPushDialog("disable")
+        }
         return
     }
   }
+
+  function dismissPushDialog() {
+    if (pushDialogPending) return
+    if (pushDialog === "consent" || pushDialog === "permission") {
+      void updatePushReminderState((current) =>
+        recordPushReminder(
+          current,
+          pushDialog,
+          pushReminderAppVersion
+        )
+      ).catch(() => undefined)
+    }
+    setPushDialogError("")
+    setPushDialog(null)
+  }
+
+  function enablePushFromDialog() {
+    setPushDialogPending(true)
+    setPushDialogError("")
+    void Promise.all([
+      saveJPushConsent(true),
+      updatePushReminderState((current) =>
+        clearPushReminder(
+          setPushReminderExplicitlyDisabled(current, false),
+          "consent"
+        )
+      ),
+    ])
+      .then(() => {
+        setPushDialog(null)
+        pushCoordinator.triggerSynchronization()
+      })
+      .catch(() => {
+        setPushDialogError("无法保存通知授权，请稍后重试。")
+      })
+      .finally(() => setPushDialogPending(false))
+  }
+
+  function openPushSettings() {
+    setPushDialogError("")
+    void updatePushReminderState((current) =>
+      recordPushReminder(
+        current,
+        "permission",
+        pushReminderAppVersion
+      )
+    ).catch(() => undefined)
+    void Linking.openSettings().catch(() => {
+      setPushDialogError(
+        "无法打开系统设置，请手动进入系统设置并允许即应发送通知。"
+      )
+    })
+  }
+
+  function disablePushFromDialog() {
+    setPushDialogPending(true)
+    setPushDialogError("")
+    void (async () => {
+      if (active) {
+        await pushCoordinator
+          .deactivate({
+            accountId: active.accountId,
+            generation: active.generation,
+            target: active.target,
+          })
+          .catch(() => undefined)
+      }
+      await Promise.all([
+        saveJPushConsent(false),
+        updatePushReminderState((current) =>
+          setPushReminderExplicitlyDisabled(current, true)
+        ),
+      ])
+      await stopJPush().catch(() => undefined)
+      setPushDialog(null)
+      pushCoordinator.triggerSynchronization()
+    })()
+      .catch(() => {
+        setPushDialogError("暂时无法关闭手机通知，请稍后重试。")
+      })
+      .finally(() => setPushDialogPending(false))
+  }
+
+  const pushDialogContent = getPushDialogContent(pushDialog)
+  const pushDialogActions: XGUIDialogAction[] =
+    pushDialog === "consent"
+      ? [
+          {
+            disabled: pushDialogPending,
+            label: "暂不启用",
+            onPress: dismissPushDialog,
+          },
+          {
+            disabled: pushDialogPending,
+            label: pushDialogPending ? "正在启用…" : "同意并启用",
+            onPress: enablePushFromDialog,
+            variant: "primary",
+          },
+        ]
+      : pushDialog === "permission"
+        ? [
+            { label: "暂不提醒", onPress: dismissPushDialog },
+            {
+              label: "去设置",
+              onPress: openPushSettings,
+              variant: "primary",
+            },
+          ]
+        : pushDialog === "disable"
+          ? [
+              {
+                disabled: pushDialogPending,
+                label: "取消",
+                onPress: dismissPushDialog,
+              },
+              {
+                disabled: pushDialogPending,
+                label: pushDialogPending ? "正在关闭…" : "关闭",
+                onPress: disablePushFromDialog,
+                variant: "destructive",
+              },
+            ]
+          : [{ label: "知道了", onPress: dismissPushDialog, variant: "primary" }]
 
   function openHelpCenter() {
     void Linking.openURL(appConfig.helpCenterUrl).catch(() => {
@@ -421,6 +492,17 @@ export function MeScreen() {
         </YStack>
       </KeyboardAwareScreen>
 
+      <XGUIDialog
+        actions={pushDialogActions}
+        description={pushDialogError || pushDialogContent.description}
+        dismissible={!pushDialogPending}
+        onOpenChange={(open) => {
+          if (!open) dismissPushDialog()
+        }}
+        open={pushDialog !== null}
+        title={pushDialogContent.title}
+      />
+
       <XGUIPicker
         columns={[THEME_OPTIONS]}
         onChange={([value]) => {
@@ -483,4 +565,45 @@ export function MeScreen() {
       />
     </>
   )
+}
+
+function getPushDialogContent(kind: PushDialogKind | null) {
+  switch (kind) {
+    case "consent":
+      return {
+        description:
+          "Android 通知由极光推送提供。启用后，极光 SDK 会处理完成通知投递所需的设备、系统、网络和应用标识信息；不会收到聊天账号、服务器地址或消息内容。",
+        title: "启用手机通知",
+      }
+    case "permission":
+      return {
+        description:
+          "系统通知权限或“消息通知”渠道尚未开启，开启后才能在后台收到新消息提醒。",
+        title: "开启系统通知",
+      }
+    case "disable":
+      return {
+        description:
+          "关闭后将撤销当前账号的远程通知授权，并停止极光推送服务。",
+        title: "关闭手机通知",
+      }
+    case "device_limit":
+      return {
+        description:
+          "当前账号最多启用 10 台通知设备。请先在其他设备退出登录，或联系服务器管理员处理。",
+        title: "通知设备数量已达上限",
+      }
+    case "server_disabled":
+      return {
+        description: "当前私有服务器没有开启公共推送功能。",
+        title: "服务器未启用通知",
+      }
+    case "unauthorized":
+      return {
+        description: "当前登录状态已失效，请切换账号后重新登录。",
+        title: "需要重新登录",
+      }
+    default:
+      return { description: "", title: "手机通知" }
+  }
 }

@@ -81,7 +81,7 @@ test("a new app version can remind again while an explicit disable remains respe
 })
 
 test("mobile lifecycle installs the reminder and checks Android message channels", async () => {
-  const [provider, notifications, settings] = await Promise.all([
+  const [provider, notifications, reminder, settings] = await Promise.all([
     readFile(
       new URL("../src/providers/push-provider.tsx", import.meta.url),
       "utf8"
@@ -91,14 +91,21 @@ test("mobile lifecycle installs the reminder and checks Android message channels
       "utf8"
     ),
     readFile(
+      new URL("../src/notifications/use-push-reminder.tsx", import.meta.url),
+      "utf8"
+    ),
+    readFile(
       new URL("../src/features/me/me-screen.tsx", import.meta.url),
       "utf8"
     ),
   ])
-  assert.match(provider, /usePushReminder\(\)/)
+  assert.match(provider, /<PushReminderDialog \/>/)
   assert.match(provider, /AppState\.addEventListener/)
   assert.match(notifications, /getNotificationChannelAsync/)
   assert.match(notifications, /AndroidImportance\.NONE/)
+  assert.match(reminder, /<XGUIDialog/)
+  assert.doesNotMatch(reminder, /Alert\.alert/)
+  assert.match(settings, /<XGUIDialog/)
   assert.match(settings, /setPushReminderExplicitlyDisabled\(current, true\)/)
 })
 
