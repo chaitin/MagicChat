@@ -495,9 +495,6 @@ export function MeScreen() {
               />
               {Platform.OS === "ios" || Platform.OS === "android" ? (
                 <XGUIListItem
-                  description={
-                    pushState === "registered" ? undefined : pushStatus.label
-                  }
                   icon={({ size, strokeWidth }) => <IconBell color={colors.brand} size={size} strokeWidth={strokeWidth} />}
                   separator
                   title="手机通知"

@@ -107,6 +107,7 @@ test("mobile lifecycle installs the reminder and checks Android message channels
   assert.doesNotMatch(reminder, /Alert\.alert/)
   assert.match(settings, /<XGUIDialog/)
   assert.match(settings, /<XGUISwitch/)
+  assert.doesNotMatch(settings, /description=\{\s*pushState/)
   assert.match(settings, /message: "正在开启手机通知…"/)
   assert.match(settings, /type: "loading"/)
   assert.match(settings, /case "show_server_disabled":[\s\S]{0,180}toast\.show/)
