@@ -7,6 +7,7 @@ group = 'cloud.baizhi'
 version = '1.0.0'
 
 final def jpushVersion = '6.2.0'
+final def defaultJPushAppKey = 'd7fa4b31dd21064e095d29d5'
 final def environmentValue = { String name -> System.getenv(name)?.trim() ?: '' }
 final def requireCompleteChannel = { String channel, Map<String, String> values ->
   def configured = values.findAll { _, value -> !value.isEmpty() }
@@ -17,7 +18,7 @@ final def requireCompleteChannel = { String channel, Map<String, String> values 
   !configured.isEmpty()
 }
 
-final def jpushAppKey = environmentValue('JPUSH_APP_KEY')
+final def jpushAppKey = environmentValue('JPUSH_APP_KEY') ?: defaultJPushAppKey
 final def jpushChannel = environmentValue('JPUSH_CHANNEL') ?: 'official'
 final def xiaomiValues = [
   XIAOMI_APPID: environmentValue('JPUSH_XIAOMI_APP_ID'),

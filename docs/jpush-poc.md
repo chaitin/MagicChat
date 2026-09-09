@@ -2,13 +2,13 @@
 
 ## 配置边界
 
-Android Development Build 至少需要公开的 JPush AppKey：
+Android Development Build 默认使用仓库内固定的官方 JPush AppKey：
 
 ```bash
-JPUSH_APP_KEY=your-app-key JPUSH_CHANNEL=development pnpm android
+JPUSH_CHANNEL=development pnpm android
 ```
 
-厂商插件按环境变量条件打包；变量定义见 `client-mobile/.env.example`。小米、vivo、OPPO 必须一次提供该通道的全部变量，华为通过 `JPUSH_HUAWEI_AGCONNECT_SERVICES` 指向从 AppGallery Connect 下载的 JSON 文件。未配置的厂商插件不会进入 APK。
+仅在连接独立开发/测试 JPush 应用时，才通过 `JPUSH_APP_KEY` 环境变量覆盖默认值。厂商插件按环境变量条件打包；变量定义见 `client-mobile/.env.example`。小米、vivo、OPPO 必须一次提供该通道的全部变量，华为通过 `JPUSH_HUAWEI_AGCONNECT_SERVICES` 指向从 AppGallery Connect 下载的 JSON 文件。未配置的厂商插件不会进入 APK。
 
 公共 Push Gateway 才能持有 Master Secret：
 
@@ -44,7 +44,7 @@ Master Secret、RegistrationID、厂商 token、management token、send token �
 - 切换账号：旧账号 route 不得在新账号打开。
 - 重装 App：旧 RegistrationID 最终被 Gateway 标记失效，新安装可重新授权。
 - 关闭系统通知权限：设置页显示“通知权限未开启”。
-- Gateway 未启用 JPush：设置页显示“安装包未配置”或 Provider 不可用，不无限重试。
+- Gateway 未启用 JPush：设置页显示 Provider 不可用，不无限重试；Expo Go 等不含原生模块的包仍显示“安装包未配置”。
 
 ## 厂商覆盖
 

@@ -36,13 +36,13 @@ pnpm lint
 
 iOS 使用原生 APNs Token，固定连接 `https://push.jiying.chat`，并从签名 Entitlement 读取 sandbox/production 环境。Xcode Debug 使用 `development`，Release/TestFlight 使用 `production`；`with-apns-environments` config plugin 会在 prebuild 后保持这组配置。安装凭据、grant 和通知路由映射保存在 SecureStore；需要 Development Build 或 TestFlight 真机验证，Expo Go 不作为远程推送验证环境。
 
-Android 使用本地 Expo Module 封装 JPush Android SDK 6.2.0，不依赖 Legacy React Native bridge，也不会注册 Expo/FCM Token。构建 Development Build 前设置公开的 JPush AppKey（Master Secret 只能配置在 Gateway）：
+Android 使用本地 Expo Module 封装 JPush Android SDK 6.2.0，不依赖 Legacy React Native bridge，也不会注册 Expo/FCM Token。官方 JPush AppKey 已作为仓库内构建默认值固定；普通构建只需按需设置渠道名：
 
 ```bash
-JPUSH_APP_KEY=your-app-key JPUSH_CHANNEL=development pnpm android
+JPUSH_CHANNEL=development pnpm android
 ```
 
-未设置 `JPUSH_APP_KEY` 时，Android 安装包显示“安装包未配置”且不会初始化极光 SDK。配置后，用户仍须在“设置 → 手机通知”明确同意启用，应用才会首次调用极光 API、关闭非必要的地理围栏、自启动、链路合并和活跃时长统计，并初始化 JPush、申请 Android 通知权限；关闭手机通知时会停止 JPush。RegistrationID、grant 和通知路由继续使用同一套 SecureStore 生命周期。Expo Go 不支持该原生模块。
+如需连接独立的开发或测试 JPush 应用，可用 `JPUSH_APP_KEY` 环境变量覆盖默认值。Master Secret 只能配置在 Gateway。用户仍须在“设置 → 手机通知”明确同意启用，应用才会首次调用极光 API、关闭非必要的地理围栏、自启动、链路合并和活跃时长统计，并初始化 JPush、申请 Android 通知权限；关闭手机通知时会停止 JPush。RegistrationID、grant 和通知路由继续使用同一套 SecureStore 生命周期。Expo Go 不支持该原生模块，且不会被视为已配置。
 
 华为、小米、OPPO、vivo 使用与 JPush SDK 相同的 `6.2.0` 官方厂商插件，仍由 JPush 统一发送。插件按构建环境条件打包，变量名见 `.env.example`：小米和 vivo 各需要 App ID/App Key，OPPO 需要 App ID/App Key/App Secret，华为需要下载的 `agconnect-services.json` 路径。任一通道只配置部分参数时构建会直接失败；没有配置的通道不会进入 APK。厂商服务端凭据仍只配置在极光控制台，不进入移动端或仓库。
 

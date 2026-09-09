@@ -10,7 +10,7 @@ const MODULE_ROOT = new URL(
   import.meta.url
 )
 
-test("Android JPush module is credential-gated and privacy-gated", async () => {
+test("Android JPush module has an official AppKey default and remains privacy-gated", async () => {
   const [gradle, moduleSource, receiverSource, manifest] = await Promise.all([
     readFile(new URL("android/build.gradle", MODULE_ROOT), "utf8"),
     readFile(
@@ -31,7 +31,11 @@ test("Android JPush module is credential-gated and privacy-gated", async () => {
   ])
 
   assert.match(gradle, /jpushVersion = '6\.2\.0'/)
-  assert.match(gradle, /environmentValue\('JPUSH_APP_KEY'\)/)
+  assert.match(gradle, /defaultJPushAppKey = '[a-f0-9]{24}'/)
+  assert.match(
+    gradle,
+    /environmentValue\('JPUSH_APP_KEY'\) \?: defaultJPushAppKey/
+  )
   for (const vendor of ["huawei", "xiaomi", "oppo", "vivo"]) {
     assert.match(
       gradle,
