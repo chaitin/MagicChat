@@ -76,12 +76,7 @@ const THEME_LABELS: Record<ThemePreference, string> = {
   system: "跟随系统",
 }
 
-type PushDialogKind =
-  | "consent"
-  | "permission"
-  | "device_limit"
-  | "server_disabled"
-  | "unauthorized"
+type PushDialogKind = "consent" | "permission"
 
 export function MeScreen() {
   const { colors } = useXGUITheme()
@@ -244,13 +239,25 @@ export function MeScreen() {
         startPushSynchronization()
         return
       case "show_device_limit":
-        setPushDialog("device_limit")
+        toast.show({
+          message: "通知设备数量已达上限，请先在其他设备退出登录。",
+          modal: false,
+          type: "error",
+        })
         return
       case "show_server_disabled":
-        setPushDialog("server_disabled")
+        toast.show({
+          message: "当前服务器未启用手机通知。",
+          modal: false,
+          type: "text",
+        })
         return
       case "show_unauthorized":
-        setPushDialog("unauthorized")
+        toast.show({
+          message: "登录状态已失效，请重新登录。",
+          modal: false,
+          type: "error",
+        })
         return
       case "none":
         return
@@ -390,16 +397,14 @@ export function MeScreen() {
             variant: "primary",
           },
         ]
-      : pushDialog === "permission"
-        ? [
-            { label: "暂不提醒", onPress: dismissPushDialog },
-            {
-              label: "去设置",
-              onPress: openPushSettings,
-              variant: "primary",
-            },
-          ]
-        : [{ label: "知道了", onPress: dismissPushDialog, variant: "primary" }]
+      : [
+          { label: "暂不提醒", onPress: dismissPushDialog },
+          {
+            label: "去设置",
+            onPress: openPushSettings,
+            variant: "primary",
+          },
+        ]
 
   function openHelpCenter() {
     void Linking.openURL(appConfig.helpCenterUrl).catch(() => {
@@ -659,22 +664,6 @@ function getPushDialogContent(kind: PushDialogKind | null) {
         description:
           "系统通知权限或“消息通知”渠道尚未开启，开启后才能在后台收到新消息提醒。",
         title: "开启系统通知",
-      }
-    case "device_limit":
-      return {
-        description:
-          "当前账号最多启用 10 台通知设备。请先在其他设备退出登录，或联系服务器管理员处理。",
-        title: "通知设备数量已达上限",
-      }
-    case "server_disabled":
-      return {
-        description: "当前私有服务器没有开启公共推送功能。",
-        title: "服务器未启用通知",
-      }
-    case "unauthorized":
-      return {
-        description: "当前登录状态已失效，请切换账号后重新登录。",
-        title: "需要重新登录",
       }
     default:
       return { description: "", title: "手机通知" }
