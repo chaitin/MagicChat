@@ -1,7 +1,18 @@
 import assert from "node:assert/strict"
+import { readFile } from "node:fs/promises"
 import test from "node:test"
 
 import { normalizeJPushNotificationResponse } from "@/notifications/jpush-notification-response"
+
+test("waits briefly for JPush to issue an asynchronous RegistrationID", async () => {
+  const source = await readFile(
+    new URL("../src/notifications/jpush-registration.ts", import.meta.url),
+    "utf8"
+  )
+  assert.match(source, /REGISTRATION_ID_POLL_ATTEMPTS = 20/)
+  assert.match(source, /REGISTRATION_ID_POLL_INTERVAL_MS = 500/)
+  assert.match(source, /if \(registrationId\) return registrationId/)
+})
 
 test("normalizes only fixed-template JPush notification responses", () => {
   assert.deepEqual(

@@ -27,6 +27,9 @@ const nativeModule = requireOptionalNativeModule<JPushRegistrationNativeModule>(
   "MagicChatJPushRegistration"
 )
 
+const REGISTRATION_ID_POLL_ATTEMPTS = 20
+const REGISTRATION_ID_POLL_INTERVAL_MS = 500
+
 export async function isJPushConfigured() {
   return (
     Platform.OS === "android" &&
@@ -38,7 +41,14 @@ export async function isJPushConfigured() {
 export async function readJPushRegistrationID(privacyAccepted: boolean) {
   if (Platform.OS !== "android" || !nativeModule || !privacyAccepted) return ""
   if (!(await nativeModule.initializeAsync(true))) return ""
-  return (await nativeModule.getRegistrationIdAsync()).trim()
+  for (let attempt = 0; attempt < REGISTRATION_ID_POLL_ATTEMPTS; attempt += 1) {
+    const registrationId = (await nativeModule.getRegistrationIdAsync()).trim()
+    if (registrationId) return registrationId
+    if (attempt + 1 < REGISTRATION_ID_POLL_ATTEMPTS) {
+      await delay(REGISTRATION_ID_POLL_INTERVAL_MS)
+    }
+  }
+  return ""
 }
 
 export async function stopJPush() {
@@ -66,4 +76,8 @@ export async function getLastJPushNotificationResponse() {
 export async function clearLastJPushNotificationResponse() {
   if (Platform.OS !== "android" || !nativeModule) return
   await nativeModule.clearLastNotificationResponseAsync()
+}
+
+function delay(milliseconds: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, milliseconds))
 }

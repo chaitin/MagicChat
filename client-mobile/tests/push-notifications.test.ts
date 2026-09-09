@@ -119,6 +119,10 @@ test("calculates grant renewal, registration refresh, and route expiration", () 
     false
   )
   assert.equal(
+    pushSynchronizationShouldRetry({ code: "push_user_disabled" }),
+    false
+  )
+  assert.equal(
     pushSynchronizationShouldRetry({ code: "grant_limit_reached", status: 429 }),
     false
   )

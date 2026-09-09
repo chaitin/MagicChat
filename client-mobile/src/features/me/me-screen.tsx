@@ -41,6 +41,7 @@ import { useCachedAppInfo } from "@/data/auth/auth-hooks"
 import { AppUpdateDialog } from "@/features/updates/app-update-dialog"
 import { useAppUpdate } from "@/features/updates/use-app-update"
 import { stopJPush } from "@/notifications/jpush-registration"
+import type { PushSynchronizationState } from "@/notifications/push-coordinator"
 import {
   clearPushReminder,
   recordPushReminder,
@@ -61,7 +62,7 @@ import {
   usePushCoordinator,
   usePushSynchronizationState,
 } from "@/providers/push-coordinator-provider"
-import { XGUIActionSheet, XGUIDialog, XGUIList, XGUIListItem, XGUIPicker, useXGUITheme, useXGUIToast, type XGUIDialogAction, type XGUIPickerItem } from "@/xgui"
+import { XGUIActionSheet, XGUIDialog, XGUIList, XGUIListItem, XGUIPicker, XGUISwitch, useXGUITheme, useXGUIToast, type XGUIDialogAction, type XGUIPickerItem } from "@/xgui"
 
 const THEME_OPTIONS = [
   { icon: ({ color, size, strokeWidth }) => <IconDeviceDesktop color={color} size={size} strokeWidth={strokeWidth} />, label: "跟随系统", value: "system" },
@@ -78,7 +79,6 @@ const THEME_LABELS: Record<ThemePreference, string> = {
 type PushDialogKind =
   | "consent"
   | "permission"
-  | "disable"
   | "device_limit"
   | "server_disabled"
   | "unauthorized"
@@ -98,12 +98,16 @@ export function MeScreen() {
   const pushStatus = presentPushSynchronizationState(pushState)
   const appUpdate = useAppUpdate()
   const updateConfirmedRef = useRef(false)
+  const pushActivationRef = useRef(false)
   const themeSwitchFrameRef = useRef<number | null>(null)
   const {
     preference: themePreference,
     setPreference: setThemePreference,
   } = useAppTheme()
   const [themePickerOpen, setThemePickerOpen] = useState(false)
+  const [pushSwitchEnabled, setPushSwitchEnabled] = useState(
+    pushState === "registered"
+  )
   const [pushDialog, setPushDialog] = useState<PushDialogKind | null>(null)
   const [pushDialogError, setPushDialogError] = useState("")
   const [pushDialogPending, setPushDialogPending] = useState(false)
@@ -145,6 +149,33 @@ export function MeScreen() {
     }, 0)
     return () => clearTimeout(timer)
   }, [pushDialog, pushState])
+
+  useEffect(() => {
+    if (pushState === "synchronizing" || pushState === "idle") return
+    const timer = setTimeout(
+      () => setPushSwitchEnabled(pushState === "registered"),
+      0
+    )
+    return () => clearTimeout(timer)
+  }, [pushState])
+
+  useEffect(() => {
+    if (!pushActivationRef.current || pushState === "synchronizing") return
+    pushActivationRef.current = false
+    toast.hide()
+    if (pushState === "registered") {
+      toast.show({ message: "手机通知已开启", modal: false, type: "success" })
+      return
+    }
+    if (pushState === "consent_required" || pushState === "permission_denied") {
+      return
+    }
+    toast.show({
+      message: getPushSynchronizationErrorMessage(pushState),
+      modal: false,
+      type: "error",
+    })
+  }, [pushState, toast])
 
   useEffect(
     () => () => {
@@ -199,12 +230,18 @@ export function MeScreen() {
       case "enable_jpush":
         setPushDialog("consent")
         return
+      case "enable_notifications":
+        if (Platform.OS === "android") {
+          setPushDialog("consent")
+        } else {
+          enablePushWithoutJPushConsent()
+        }
+        return
       case "open_settings":
         setPushDialog("permission")
         return
       case "retry":
-        pushCoordinator.triggerSynchronization()
-        toast.show({ message: "正在重新同步通知", modal: false, type: "text" })
+        startPushSynchronization()
         return
       case "show_device_limit":
         setPushDialog("device_limit")
@@ -216,11 +253,44 @@ export function MeScreen() {
         setPushDialog("unauthorized")
         return
       case "none":
-        if (Platform.OS === "android" && pushState === "registered") {
-          setPushDialog("disable")
-        }
         return
     }
+  }
+
+  function handlePushSwitchChange(enabled: boolean) {
+    if (enabled) {
+      handlePushStatusPress()
+      return
+    }
+    disablePushImmediately()
+  }
+
+  function enablePushWithoutJPushConsent() {
+    setPushSwitchEnabled(true)
+    void updatePushReminderState((current) =>
+      setPushReminderExplicitlyDisabled(current, false)
+    )
+      .then(startPushSynchronization)
+      .catch(() => {
+        setPushSwitchEnabled(false)
+        toast.show({
+          message: "无法保存通知设置，请稍后重试。",
+          modal: false,
+          type: "error",
+        })
+      })
+  }
+
+  function startPushSynchronization() {
+    pushActivationRef.current = true
+    setPushSwitchEnabled(true)
+    toast.show({
+      duration: 0,
+      message: "正在开启手机通知…",
+      modal: false,
+      type: "loading",
+    })
+    pushCoordinator.triggerSynchronization()
   }
 
   function dismissPushDialog() {
@@ -252,7 +322,7 @@ export function MeScreen() {
     ])
       .then(() => {
         setPushDialog(null)
-        pushCoordinator.triggerSynchronization()
+        startPushSynchronization()
       })
       .catch(() => {
         setPushDialogError("无法保存通知授权，请稍后重试。")
@@ -276,18 +346,15 @@ export function MeScreen() {
     })
   }
 
-  function disablePushFromDialog() {
-    setPushDialogPending(true)
-    setPushDialogError("")
+  function disablePushImmediately() {
+    setPushSwitchEnabled(false)
     void (async () => {
       if (active) {
-        await pushCoordinator
-          .deactivate({
-            accountId: active.accountId,
-            generation: active.generation,
-            target: active.target,
-          })
-          .catch(() => undefined)
+        await pushCoordinator.queueRevocation({
+          accountId: active.accountId,
+          generation: active.generation,
+          target: active.target,
+        })
       }
       await Promise.all([
         saveJPushConsent(false),
@@ -296,13 +363,15 @@ export function MeScreen() {
         ),
       ])
       await stopJPush().catch(() => undefined)
-      setPushDialog(null)
       pushCoordinator.triggerSynchronization()
-    })()
-      .catch(() => {
-        setPushDialogError("暂时无法关闭手机通知，请稍后重试。")
+    })().catch(() => {
+      setPushSwitchEnabled(true)
+      toast.show({
+        message: "暂时无法关闭手机通知，请稍后重试。",
+        modal: false,
+        type: "error",
       })
-      .finally(() => setPushDialogPending(false))
+    })
   }
 
   const pushDialogContent = getPushDialogContent(pushDialog)
@@ -330,21 +399,7 @@ export function MeScreen() {
               variant: "primary",
             },
           ]
-        : pushDialog === "disable"
-          ? [
-              {
-                disabled: pushDialogPending,
-                label: "取消",
-                onPress: dismissPushDialog,
-              },
-              {
-                disabled: pushDialogPending,
-                label: pushDialogPending ? "正在关闭…" : "关闭",
-                onPress: disablePushFromDialog,
-                variant: "destructive",
-              },
-            ]
-          : [{ label: "知道了", onPress: dismissPushDialog, variant: "primary" }]
+        : [{ label: "知道了", onPress: dismissPushDialog, variant: "primary" }]
 
   function openHelpCenter() {
     void Linking.openURL(appConfig.helpCenterUrl).catch(() => {
@@ -435,16 +490,25 @@ export function MeScreen() {
               />
               {Platform.OS === "ios" || Platform.OS === "android" ? (
                 <XGUIListItem
-                  icon={({ size, strokeWidth }) => <IconBell color={colors.brand} size={size} strokeWidth={strokeWidth} />}
-                  onPress={
-                    pushStatus.action === "none" &&
-                    !(Platform.OS === "android" && pushState === "registered")
-                      ? undefined
-                      : handlePushStatusPress
+                  description={
+                    pushState === "registered" ? undefined : pushStatus.label
                   }
+                  icon={({ size, strokeWidth }) => <IconBell color={colors.brand} size={size} strokeWidth={strokeWidth} />}
                   separator
                   title="手机通知"
-                  value={pushStatus.label}
+                  trailing={
+                    <XGUISwitch
+                      accessibilityLabel="手机通知"
+                      disabled={
+                        pushDialogPending ||
+                        pushState === "synchronizing" ||
+                        pushState === "provider_unavailable"
+                      }
+                      dimWhenDisabled={false}
+                      onValueChange={handlePushSwitchChange}
+                      value={pushSwitchEnabled}
+                    />
+                  }
                 />
               ) : null}
             </XGUIList>
@@ -567,6 +631,21 @@ export function MeScreen() {
   )
 }
 
+function getPushSynchronizationErrorMessage(state: PushSynchronizationState) {
+  switch (state) {
+    case "server_disabled":
+      return "当前服务器未启用手机通知。"
+    case "device_limit_reached":
+      return "通知设备数量已达上限。"
+    case "unauthorized":
+      return "登录状态已失效，请重新登录。"
+    case "provider_unavailable":
+      return "当前安装包不支持手机通知。"
+    default:
+      return "手机通知暂时不可用，请稍后重试。"
+  }
+}
+
 function getPushDialogContent(kind: PushDialogKind | null) {
   switch (kind) {
     case "consent":
@@ -580,12 +659,6 @@ function getPushDialogContent(kind: PushDialogKind | null) {
         description:
           "系统通知权限或“消息通知”渠道尚未开启，开启后才能在后台收到新消息提醒。",
         title: "开启系统通知",
-      }
-    case "disable":
-      return {
-        description:
-          "关闭后将撤销当前账号的远程通知授权，并停止极光推送服务。",
-        title: "关闭手机通知",
       }
     case "device_limit":
       return {

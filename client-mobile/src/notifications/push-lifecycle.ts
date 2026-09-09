@@ -26,6 +26,7 @@ import {
   loadJPushConsent,
   loadPushDelegation,
   loadPushInstallation,
+  loadPushReminderState,
   savePushDelegation,
   savePushInstallation,
 } from "@/notifications/push-registration-store"
@@ -99,6 +100,14 @@ async function synchronizeRemotePush(
   if (Platform.OS !== "ios" && Platform.OS !== "android") {
     setActiveRemotePushTarget(null)
     return false
+  }
+
+  if ((await loadPushReminderState()).explicitlyDisabled) {
+    setActiveRemotePushTarget(null)
+    throw new PushLifecycleError(
+      "push_user_disabled",
+      "用户已关闭手机通知"
+    )
   }
 
   let delegation = await loadPushDelegation()

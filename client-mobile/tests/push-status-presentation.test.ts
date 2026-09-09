@@ -8,6 +8,10 @@ test("push synchronization terminal states expose actionable user labels", () =>
     action: "enable_jpush",
     label: "未启用",
   })
+  assert.deepEqual(presentPushSynchronizationState("user_disabled"), {
+    action: "enable_notifications",
+    label: "已关闭",
+  })
   assert.deepEqual(presentPushSynchronizationState("provider_unavailable"), {
     action: "none",
     label: "安装包未配置",

@@ -42,7 +42,7 @@ Android 使用本地 Expo Module 封装 JPush Android SDK 6.2.0，不依赖 Lega
 JPUSH_CHANNEL=development pnpm android
 ```
 
-如需连接独立的开发或测试 JPush 应用，可用 `JPUSH_APP_KEY` 环境变量覆盖默认值。Master Secret 只能配置在 Gateway。应用会在登录后的冷启动和每次回到前台时检查推送状态：首次未同意 JPush 时主动提示，暂缓后同版本冷却 7 天，新版本可再次提示；系统通知权限或“消息通知”渠道关闭时引导进入系统设置。用户在“设置 → 手机通知”明确关闭后不再自动强弹。只有同意后，应用才会首次调用极光 API、关闭非必要的地理围栏、自启动、链路合并和活跃时长统计，并初始化 JPush、申请 Android 通知权限；关闭手机通知时会停止 JPush。RegistrationID、grant 和通知路由继续使用同一套 SecureStore 生命周期。Expo Go 不支持该原生模块，且不会被视为已配置。
+如需连接独立的开发或测试 JPush 应用，可用 `JPUSH_APP_KEY` 环境变量覆盖默认值。Master Secret 只能配置在 Gateway。应用会在登录后的冷启动和每次回到前台时检查推送状态：首次未同意 JPush 时主动提示，暂缓后同版本冷却 7 天，新版本可再次提示；系统通知权限或“消息通知”渠道关闭时引导进入系统设置。“设置 → 手机通知”使用 `XGUISwitch`，开启确认后以 loading toast 展示 RegistrationID/Gateway 同步过程，关闭则立即更新界面并将授权撤销持久化到后台队列。用户明确关闭后不再自动强弹。只有同意后，应用才会首次调用极光 API、关闭非必要的地理围栏、自启动、链路合并和活跃时长统计，并初始化 JPush、申请 Android 通知权限；关闭手机通知时会停止 JPush。RegistrationID、grant 和通知路由继续使用同一套 SecureStore 生命周期。Expo Go 不支持该原生模块，且不会被视为已配置。
 
 华为、小米、OPPO、vivo 使用与 JPush SDK 相同的 `6.2.0` 官方厂商插件，仍由 JPush 统一发送。插件按构建环境条件打包，变量名见 `.env.example`：小米和 vivo 各需要 App ID/App Key，OPPO 需要 App ID/App Key/App Secret，华为需要下载的 `agconnect-services.json` 路径。任一通道只配置部分参数时构建会直接失败；没有配置的通道不会进入 APK。厂商服务端凭据仍只配置在极光控制台，不进入移动端或仓库。
 

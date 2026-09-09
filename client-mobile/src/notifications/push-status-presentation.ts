@@ -3,6 +3,7 @@ import type { PushSynchronizationState } from "@/notifications/push-coordinator"
 export type PushStatusAction =
   | "none"
   | "enable_jpush"
+  | "enable_notifications"
   | "open_settings"
   | "retry"
   | "show_device_limit"
@@ -21,6 +22,10 @@ const PRESENTATIONS: Record<
   consent_required: {
     action: "enable_jpush",
     label: "未启用",
+  },
+  user_disabled: {
+    action: "enable_notifications",
+    label: "已关闭",
   },
   device_limit_reached: {
     action: "show_device_limit",

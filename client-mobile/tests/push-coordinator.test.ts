@@ -103,6 +103,7 @@ test("push coordinator retries temporary failures and refreshes registration", a
 test("push coordinator exposes terminal synchronization states without retrying", async () => {
   for (const [code, expected] of [
     ["jpush_consent_required", "consent_required"],
+    ["push_user_disabled", "user_disabled"],
     ["android_provider_unavailable", "provider_unavailable"],
     ["unsupported_provider", "provider_unavailable"],
     ["push_disabled", "server_disabled"],

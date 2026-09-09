@@ -24,10 +24,10 @@ Master Secret、RegistrationID、厂商 token、management token、send token �
 
 1. 安装 Development Build 并登录测试账号；首次检测到未同意时应自动出现极光数据处理说明。
 2. 选择“暂不启用”后，同版本 7 天内不再自动强弹；新版本可再次提示。
-3. 在自动提示或“设置 → 手机通知”中选择“同意并启用”。
+3. 在自动提示或“设置 → 手机通知”的 `XGUISwitch` 中选择“同意并启用”；确认后显示 loading toast，JPush 初始化阶段允许等待最多约 9.5 秒取得异步 RegistrationID。
 4. 同意 Android 13+ 通知权限；系统权限或“消息通知”渠道关闭时，启动/回前台检查应引导进入系统设置。
-5. 设置页状态最终应从“正在同步”变为“已启用”。
-6. 在 App 内明确关闭后不再自动强弹，并应撤销 Gateway/private Server grant、调用 JPush `stopPush`；再次手动启用必须调用 `resumePush` 并重新取得 RegistrationID。
+5. 设置页 Switch 最终应保持开启，loading toast 变为“手机通知已开启”。
+6. 关闭 Switch 后应立即显示关闭、持久化授权撤销、调用 JPush `stopPush`，且不再自动强弹；再次手动启用必须调用 `resumePush` 并重新取得 RegistrationID。
 
 在用户明确同意前，应用不得调用任何 JPush SDK API。
 

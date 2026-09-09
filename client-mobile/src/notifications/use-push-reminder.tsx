@@ -19,12 +19,14 @@ import {
   usePushCoordinator,
   usePushSynchronizationState,
 } from "@/providers/push-coordinator-provider"
-import { XGUIDialog } from "@/xgui"
+import { XGUIDialog, useXGUIToast } from "@/xgui"
 
 export function PushReminderDialog() {
   const { isAuthenticated, isHydrated, isSigningOut } = useAuth()
   const coordinator = usePushCoordinator()
   const state = usePushSynchronizationState()
+  const toast = useXGUIToast()
+  const activationRef = useRef(false)
   const previousStateRef = useRef(state)
   const [error, setError] = useState("")
   const [pending, setPending] = useState(false)
@@ -44,6 +46,22 @@ export function PushReminderDialog() {
       )
     ).catch(() => undefined)
   }, [state])
+
+  useEffect(() => {
+    if (!activationRef.current || state === "synchronizing") return
+    activationRef.current = false
+    toast.hide()
+    if (state === "registered") {
+      toast.show({ message: "手机通知已开启", modal: false, type: "success" })
+      return
+    }
+    if (state === "permission_denied") return
+    toast.show({
+      message: pushSynchronizationErrorMessage(state),
+      modal: false,
+      type: "error",
+    })
+  }, [state, toast])
 
   useEffect(() => {
     if (
@@ -102,6 +120,13 @@ export function PushReminderDialog() {
     ])
       .then(() => {
         setReminder(null)
+        activationRef.current = true
+        toast.show({
+          duration: 0,
+          message: "正在开启手机通知…",
+          modal: false,
+          type: "loading",
+        })
         coordinator.triggerSynchronization()
       })
       .catch(() => {
@@ -158,6 +183,23 @@ export function PushReminderDialog() {
       title={consent ? "启用手机通知" : "开启系统通知"}
     />
   )
+}
+
+function pushSynchronizationErrorMessage(
+  state: ReturnType<typeof usePushSynchronizationState>
+) {
+  switch (state) {
+    case "server_disabled":
+      return "当前服务器未启用手机通知。"
+    case "device_limit_reached":
+      return "通知设备数量已达上限。"
+    case "unauthorized":
+      return "登录状态已失效，请重新登录。"
+    case "provider_unavailable":
+      return "当前安装包不支持手机通知。"
+    default:
+      return "手机通知暂时不可用，请稍后重试。"
+  }
 }
 
 function reminderKindForState(

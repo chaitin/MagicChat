@@ -28,6 +28,16 @@
       android:value="${XIAOMI_APPKEY}"
       tools:replace="android:value" />
 
+    <service
+      android:name="cloud.baizhi.jpush.MagicChatJCommonService"
+      android:enabled="true"
+      android:exported="false"
+      android:process=":pushcore">
+      <intent-filter>
+        <action android:name="cn.jiguang.user.service.action" />
+      </intent-filter>
+    </service>
+
     <receiver
       android:name="cloud.baizhi.jpush.JPushNotificationReceiver"
       android:enabled="true"

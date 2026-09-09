@@ -116,6 +116,7 @@ export function pushSynchronizationShouldRetry(error: unknown) {
     code === "unauthorized" ||
     code === "invalid_request" ||
     code === "jpush_consent_required" ||
+    code === "push_user_disabled" ||
     code === "android_provider_unavailable" ||
     code === "unsupported_provider"
   ) {

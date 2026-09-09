@@ -11,24 +11,35 @@ const MODULE_ROOT = new URL(
 )
 
 test("Android JPush module has an official AppKey default and remains privacy-gated", async () => {
-  const [gradle, moduleSource, receiverSource, manifest] = await Promise.all([
-    readFile(new URL("android/build.gradle", MODULE_ROOT), "utf8"),
-    readFile(
-      new URL(
-        "android/src/main/java/cloud/baizhi/jpush/JPushRegistrationModule.kt",
-        MODULE_ROOT
+  const [gradle, moduleSource, receiverSource, serviceSource, manifest] =
+    await Promise.all([
+      readFile(new URL("android/build.gradle", MODULE_ROOT), "utf8"),
+      readFile(
+        new URL(
+          "android/src/main/java/cloud/baizhi/jpush/JPushRegistrationModule.kt",
+          MODULE_ROOT
+        ),
+        "utf8"
       ),
-      "utf8"
-    ),
-    readFile(
-      new URL(
-        "android/src/main/java/cloud/baizhi/jpush/JPushNotificationReceiver.kt",
-        MODULE_ROOT
+      readFile(
+        new URL(
+          "android/src/main/java/cloud/baizhi/jpush/JPushNotificationReceiver.kt",
+          MODULE_ROOT
+        ),
+        "utf8"
       ),
-      "utf8"
-    ),
-    readFile(new URL("android/src/main/AndroidManifest.xml", MODULE_ROOT), "utf8"),
-  ])
+      readFile(
+        new URL(
+          "android/src/main/java/cloud/baizhi/jpush/MagicChatJCommonService.kt",
+          MODULE_ROOT
+        ),
+        "utf8"
+      ),
+      readFile(
+        new URL("android/src/main/AndroidManifest.xml", MODULE_ROOT),
+        "utf8"
+      ),
+    ])
 
   assert.match(gradle, /jpushVersion = '6\.2\.0'/)
   assert.match(gradle, /defaultJPushAppKey = '[a-f0-9]{24}'/)
@@ -55,6 +66,9 @@ test("Android JPush module has an official AppKey default and remains privacy-ga
   assert.match(moduleSource, /JPushInterface\.resumePush\(context\)/)
   assert.match(receiverSource, /collapse_key/)
   assert.match(receiverSource, /clearNotificationById/)
+  assert.match(serviceSource, /class MagicChatJCommonService : JCommonService\(\)/)
+  assert.match(manifest, /MagicChatJCommonService/)
+  assert.match(manifest, /cn\.jiguang\.user\.service\.action/)
   assert.match(manifest, /JPushNotificationReceiver/)
   for (const permission of [
     "ACCESS_BACKGROUND_LOCATION",
