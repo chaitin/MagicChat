@@ -1,5 +1,7 @@
 import {
+  BanIcon,
   CheckIcon,
+  CircleCheckIcon,
   CopyIcon,
   EyeIcon,
   EyeOffIcon,
@@ -39,6 +41,7 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -49,7 +52,6 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
-import { Switch } from "@/components/ui/switch"
 import {
   Table,
   TableBody,
@@ -264,16 +266,9 @@ function ServerTableRow({
         </div>
       </TableCell>
       <TableCell>
-        <div className="flex items-center gap-3">
-          <Switch
-            aria-label={`${active ? "停用" : "启用"}${server.name}`}
-            checked={active}
-            onCheckedChange={onStatusChange}
-          />
-          <Badge variant={active ? "default" : "secondary"}>
-            {active ? "已启用" : "已停用"}
-          </Badge>
-        </div>
+        <Badge variant={active ? "default" : "secondary"}>
+          {active ? "已启用" : "已停用"}
+        </Badge>
       </TableCell>
       <TableCell>
         <div className="space-y-2">
@@ -320,6 +315,14 @@ function ServerTableRow({
               <DropdownMenuItem onClick={onRotate}>
                 <RotateCwIcon />
                 轮换 Key
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => onStatusChange(!active)}
+                variant={active ? "destructive" : "default"}
+              >
+                {active ? <BanIcon /> : <CircleCheckIcon />}
+                {active ? "禁用服务器" : "启用服务器"}
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>
