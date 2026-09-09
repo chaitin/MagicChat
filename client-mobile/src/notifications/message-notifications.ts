@@ -61,7 +61,16 @@ async function prepareMessageNotificationsOnce() {
     permission = await Notifications.requestPermissionsAsync()
   }
 
-  notificationsAllowed = permission.granted
+  let messageChannelEnabled = true
+  if (Platform.OS === "android" && permission.granted) {
+    const channel = await Notifications.getNotificationChannelAsync(
+      MESSAGE_CHANNEL_ID
+    )
+    messageChannelEnabled =
+      channel?.importance !== Notifications.AndroidImportance.NONE
+  }
+
+  notificationsAllowed = permission.granted && messageChannelEnabled
   return notificationsAllowed
 }
 

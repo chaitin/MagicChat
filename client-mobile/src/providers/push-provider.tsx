@@ -22,6 +22,7 @@ import {
   getPushRetryDelay,
   type PendingPushRoute,
 } from "@/notifications/push-types"
+import { usePushReminder } from "@/notifications/use-push-reminder"
 import { useAuth } from "@/providers/auth-provider"
 import { isCurrentPushIdentity, setCurrentPushIdentity } from "@/notifications/push-runtime-state"
 import { usePushCoordinator } from "@/providers/push-coordinator-provider"
@@ -29,6 +30,7 @@ import { useClientDataStatus } from "@/providers/client-data-provider"
 import { useRealtime } from "@/realtime/realtime-context"
 
 export function PushProvider({ children }: React.PropsWithChildren) {
+  usePushReminder()
   const router = useRouter()
   const { active, isAuthenticated, isHydrated, isSigningOut } = useAuth()
   const pushCoordinator = usePushCoordinator()

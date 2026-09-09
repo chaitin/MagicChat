@@ -2,6 +2,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage"
 import * as SecureStore from "expo-secure-store"
 
 import {
+  EMPTY_PUSH_REMINDER_STATE,
+  parsePushReminderState,
+  type PushReminderState,
+} from "@/notifications/push-reminder"
+import {
   parsePendingPushRouteQueue,
   parsePushDelegation,
   parsePushInstallation,
@@ -19,6 +24,7 @@ const INSTALLATION_KEY = "magicchat.push.installation.v1"
 const DELEGATION_KEY = "magicchat.push.delegation.v1"
 const PENDING_ROUTE_KEY = "magicchat.push.pending-route.v1"
 const JPUSH_CONSENT_KEY = "magicchat.push.jpush-consent.v1"
+const PUSH_REMINDER_KEY = "magicchat.push.reminder.v1"
 const secureStoreOptions: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
 }
@@ -29,6 +35,31 @@ export async function loadJPushConsent() {
 
 export async function saveJPushConsent(value: boolean) {
   await saveSecureValue(JPUSH_CONSENT_KEY, value)
+}
+
+export async function loadPushReminderState() {
+  return (
+    (await loadSecureValue(PUSH_REMINDER_KEY, parsePushReminderState)) ??
+    EMPTY_PUSH_REMINDER_STATE
+  )
+}
+
+export async function savePushReminderState(value: PushReminderState) {
+  await saveSecureValue(PUSH_REMINDER_KEY, value)
+}
+
+let pushReminderUpdateQueue = Promise.resolve()
+export function updatePushReminderState(
+  update: (state: PushReminderState) => PushReminderState
+) {
+  const operation = pushReminderUpdateQueue.then(async () => {
+    const current = await loadPushReminderState()
+    const next = update(current)
+    if (next !== current) await savePushReminderState(next)
+    return next
+  })
+  pushReminderUpdateQueue = operation.then(() => undefined, () => undefined)
+  return operation
 }
 
 export async function loadPushInstallation() {

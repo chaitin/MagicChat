@@ -1,3 +1,4 @@
+import * as Application from "expo-application"
 import { useEffect, useRef, useState } from "react"
 // eslint-disable-next-line import/no-unresolved
 import IconBell from "@tabler/icons-react-native/IconBell"
@@ -40,7 +41,15 @@ import { useCachedAppInfo } from "@/data/auth/auth-hooks"
 import { AppUpdateDialog } from "@/features/updates/app-update-dialog"
 import { useAppUpdate } from "@/features/updates/use-app-update"
 import { stopJPush } from "@/notifications/jpush-registration"
-import { saveJPushConsent } from "@/notifications/push-registration-store"
+import {
+  clearPushReminder,
+  recordPushReminder,
+  setPushReminderExplicitlyDisabled,
+} from "@/notifications/push-reminder"
+import {
+  saveJPushConsent,
+  updatePushReminderState,
+} from "@/notifications/push-registration-store"
 import { presentPushSynchronizationState } from "@/notifications/push-status-presentation"
 import {
   useAuth,
@@ -75,6 +84,8 @@ export function MeScreen() {
   const { currentUser } = useClientSession()
   const { active, isSigningOut, phase, signOut } = useAuth()
   const pushCoordinator = usePushCoordinator()
+  const pushReminderAppVersion =
+    Application.nativeApplicationVersion?.trim() || "unknown"
   const pushState = usePushSynchronizationState()
   const pushStatus = presentPushSynchronizationState(pushState)
   const appUpdate = useAppUpdate()
@@ -169,10 +180,30 @@ export function MeScreen() {
           "启用手机通知",
           "Android 通知由极光推送提供。启用后，极光 SDK 会处理完成通知投递所需的设备、系统、网络和应用标识信息；不会收到聊天账号、服务器地址或消息内容。",
           [
-            { style: "cancel", text: "暂不启用" },
             {
               onPress: () => {
-                void saveJPushConsent(true)
+                void updatePushReminderState((current) =>
+                  recordPushReminder(
+                    current,
+                    "consent",
+                    pushReminderAppVersion
+                  )
+                ).catch(() => undefined)
+              },
+              style: "cancel",
+              text: "暂不启用",
+            },
+            {
+              onPress: () => {
+                void Promise.all([
+                  saveJPushConsent(true),
+                  updatePushReminderState((current) =>
+                    clearPushReminder(
+                      setPushReminderExplicitlyDisabled(current, false),
+                      "consent"
+                    )
+                  ),
+                ])
                   .then(() => {
                     pushCoordinator.triggerSynchronization()
                   })
@@ -225,7 +256,12 @@ export function MeScreen() {
                       })
                       .catch(() => undefined)
                   }
-                  await saveJPushConsent(false)
+                  await Promise.all([
+                    saveJPushConsent(false),
+                    updatePushReminderState((current) =>
+                      setPushReminderExplicitlyDisabled(current, true)
+                    ),
+                  ])
                   await stopJPush().catch(() => undefined)
                   pushCoordinator.triggerSynchronization()
                 })()
