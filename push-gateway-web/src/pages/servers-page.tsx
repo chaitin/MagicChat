@@ -4,7 +4,6 @@ import {
   CircleCheckIcon,
   CopyIcon,
   EyeIcon,
-  EyeOffIcon,
   MoreHorizontalIcon,
   PencilIcon,
   PlusIcon,
@@ -43,12 +42,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import {
@@ -62,10 +56,8 @@ import {
 import {
   createMockServer,
   formatCount,
-  formatLastUsed,
   MOCK_SERVER_KEYS,
   MOCK_SERVERS,
-  maskServerKey,
   quotaUsagePercent,
   rotateMockServerKey,
   type IssuedServerKey,
@@ -137,12 +129,7 @@ export default function ServersPage() {
         <Card className="min-w-0">
           <CardHeader>
             <div className="flex items-start justify-between gap-4">
-              <div className="space-y-1">
-                <CardTitle>服务器</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  管理允许使用推送服务的私有服务器及其每日额度。
-                </p>
-              </div>
+              <CardTitle>服务器</CardTitle>
               <Button onClick={() => setEditor({ mode: "create" })}>
                 <PlusIcon />
                 添加服务器
@@ -152,14 +139,13 @@ export default function ServersPage() {
           <CardContent>
             <div className="overflow-hidden rounded-lg border">
               <div className="overflow-x-auto">
-                <Table className="min-w-[880px]">
+                <Table className="min-w-[720px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="min-w-56">服务器</TableHead>
                       <TableHead className="w-32">状态</TableHead>
                       <TableHead className="w-40">今日用量</TableHead>
                       <TableHead className="w-40">每日额度</TableHead>
-                      <TableHead className="w-44">最近使用</TableHead>
                       <TableHead className="w-24 text-right">操作</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -266,9 +252,6 @@ function ServerTableRow({
       </TableCell>
       <TableCell className="font-mono text-sm tabular-nums">
         {formatCount(server.dailyLimit)} 次/日
-      </TableCell>
-      <TableCell className="text-sm text-muted-foreground">
-        {formatLastUsed(server.lastUsedAt)}
       </TableCell>
       <TableCell className="text-right">
         <DropdownMenu>
@@ -381,9 +364,6 @@ function ServerEditorDialog({
                 placeholder="例如：生产环境一号"
                 value={name}
               />
-              <FieldDescription>
-                仅用于管理识别，不填写服务器地址。
-              </FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor={limitId}>每日推送额度</FieldLabel>
@@ -396,9 +376,6 @@ function ServerEditorDialog({
                 type="number"
                 value={dailyLimit}
               />
-              <FieldDescription>
-                按北京时间自然日统计，幂等重试不重复计费。
-              </FieldDescription>
             </Field>
           </FieldGroup>
           <DialogFooter>
@@ -425,7 +402,6 @@ function ServerKeyDialog({
   onClose: () => void
 }) {
   const [copied, setCopied] = useState(false)
-  const [revealed, setRevealed] = useState(dialog?.mode === "issued")
 
   async function copyKey() {
     if (!dialog) return
@@ -451,33 +427,16 @@ function ServerKeyDialog({
           <DialogTitle>
             {viewing ? "查看服务器 Key" : "保存服务器 Key"}
           </DialogTitle>
-          <DialogDescription>
-            {viewing
-              ? `这是“${dialog?.server.name}”当前使用的访问 Key。`
-              : `已为“${dialog?.server.name}”生成新的访问 Key。`}
-          </DialogDescription>
         </DialogHeader>
         <div className="my-5 rounded-lg border bg-muted/40 p-4">
           <div className="mb-2 text-xs font-medium text-muted-foreground">
             服务器 Key
           </div>
           <code className="block font-mono text-sm leading-6 break-all">
-            {dialog ? (revealed ? dialog.key : maskServerKey(dialog.key)) : ""}
+            {dialog?.key}
           </code>
         </div>
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
-          服务器 Key
-          可以调用推送服务，请勿通过聊天、邮件或工单明文传递。查看和复制操作将在接入
-          API 后记录审计日志。
-        </div>
         <DialogFooter className="mt-5">
-          <Button
-            onClick={() => setRevealed((value) => !value)}
-            variant="outline"
-          >
-            {revealed ? <EyeOffIcon /> : <EyeIcon />}
-            {revealed ? "隐藏 Key" : "显示 Key"}
-          </Button>
           <Button onClick={() => void copyKey()} variant="outline">
             {copied ? <CheckIcon /> : <CopyIcon />}
             {copied ? "已复制" : "复制 Key"}

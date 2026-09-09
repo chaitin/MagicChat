@@ -96,11 +96,6 @@ export function formatCount(value: number) {
   return new Intl.NumberFormat("zh-CN").format(value)
 }
 
-export function maskServerKey(key: string) {
-  if (key.length <= 16) return "••••••••"
-  return `${key.slice(0, 12)}${"•".repeat(16)}${key.slice(-4)}`
-}
-
 export function formatLastUsed(value: string | null) {
   if (!value) return "尚未使用"
   return new Intl.DateTimeFormat("zh-CN", {
