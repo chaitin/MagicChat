@@ -1,6 +1,8 @@
 import {
   CheckIcon,
   CopyIcon,
+  EyeIcon,
+  EyeOffIcon,
   KeyRoundIcon,
   MoreHorizontalIcon,
   PencilIcon,
@@ -60,7 +62,9 @@ import {
   createMockServer,
   formatCount,
   formatLastUsed,
+  MOCK_SERVER_KEYS,
   MOCK_SERVERS,
+  maskServerKey,
   quotaUsagePercent,
   rotateMockServerKey,
   type IssuedServerKey,
@@ -70,11 +74,13 @@ import {
 const MAX_DAILY_LIMIT = 100_000_000
 
 type ServerEditor = { mode: "create" } | { mode: "edit"; server: PushServer }
+type KeyDialogState = IssuedServerKey & { mode: "issued" | "view" }
 
 export default function ServersPage() {
   const [servers, setServers] = useState(() => [...MOCK_SERVERS])
+  const [serverKeys, setServerKeys] = useState(() => ({ ...MOCK_SERVER_KEYS }))
   const [editor, setEditor] = useState<ServerEditor | null>(null)
-  const [issuedKey, setIssuedKey] = useState<IssuedServerKey | null>(null)
+  const [keyDialog, setKeyDialog] = useState<KeyDialogState | null>(null)
   const [rotateTarget, setRotateTarget] = useState<PushServer | null>(null)
 
   function updateServer(server: PushServer) {
@@ -91,7 +97,8 @@ export default function ServersPage() {
     }
     setEditor(null)
     if (key) {
-      setIssuedKey({ key, server })
+      setServerKeys((current) => ({ ...current, [server.id]: key }))
+      setKeyDialog({ key, mode: "issued", server })
     } else {
       toast.success("服务器配置已更新")
     }
@@ -106,8 +113,21 @@ export default function ServersPage() {
     if (!rotateTarget) return
     const result = rotateMockServerKey(rotateTarget)
     updateServer(result.server)
+    setServerKeys((current) => ({
+      ...current,
+      [result.server.id]: result.key,
+    }))
     setRotateTarget(null)
-    setIssuedKey(result)
+    setKeyDialog({ ...result, mode: "issued" })
+  }
+
+  function viewServerKey(server: PushServer) {
+    const key = serverKeys[server.id]
+    if (!key) {
+      toast.error("暂时无法读取服务器 Key")
+      return
+    }
+    setKeyDialog({ key, mode: "view", server })
   }
 
   return (
@@ -151,6 +171,7 @@ export default function ServersPage() {
                         onStatusChange={(enabled) =>
                           toggleServer(server, enabled)
                         }
+                        onViewKey={() => viewServerKey(server)}
                         server={server}
                       />
                     ))}
@@ -177,10 +198,10 @@ export default function ServersPage() {
         onSaved={handleSaved}
       />
 
-      <IssuedKeyDialog
-        issued={issuedKey}
-        key={issuedKey?.key ?? "empty"}
-        onClose={() => setIssuedKey(null)}
+      <ServerKeyDialog
+        dialog={keyDialog}
+        key={keyDialog ? `${keyDialog.mode}:${keyDialog.key}` : "empty"}
+        onClose={() => setKeyDialog(null)}
       />
 
       <AlertDialog
@@ -193,8 +214,7 @@ export default function ServersPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>轮换服务器 Key？</AlertDialogTitle>
             <AlertDialogDescription>
-              旧 Key 将立即失效。新 Key
-              只会展示一次，请在关闭窗口前完成复制并更新私有服务器配置。
+              旧 Key 将立即失效。请复制新 Key 并及时更新私有服务器配置。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -213,11 +233,13 @@ function ServerTableRow({
   onEdit,
   onRotate,
   onStatusChange,
+  onViewKey,
   server,
 }: {
   onEdit: () => void
   onRotate: () => void
   onStatusChange: (enabled: boolean) => void
+  onViewKey: () => void
   server: PushServer
 }) {
   const percent = quotaUsagePercent(server)
@@ -287,6 +309,10 @@ function ServerTableRow({
           />
           <DropdownMenuContent align="end" className="w-40">
             <DropdownMenuGroup>
+              <DropdownMenuItem onClick={onViewKey}>
+                <EyeIcon />
+                查看 Key
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={onEdit}>
                 <PencilIcon />
                 编辑配置
@@ -407,19 +433,20 @@ function ServerEditorDialog({
   )
 }
 
-function IssuedKeyDialog({
-  issued,
+function ServerKeyDialog({
+  dialog,
   onClose,
 }: {
-  issued: IssuedServerKey | null
+  dialog: KeyDialogState | null
   onClose: () => void
 }) {
   const [copied, setCopied] = useState(false)
+  const [revealed, setRevealed] = useState(dialog?.mode === "issued")
 
   async function copyKey() {
-    if (!issued) return
+    if (!dialog) return
     try {
-      await navigator.clipboard.writeText(issued.key)
+      await navigator.clipboard.writeText(dialog.key)
       setCopied(true)
       toast.success("服务器 Key 已复制")
     } catch {
@@ -427,18 +454,23 @@ function IssuedKeyDialog({
     }
   }
 
+  const viewing = dialog?.mode === "view"
   return (
     <Dialog
       onOpenChange={(open) => {
         if (!open) onClose()
       }}
-      open={issued !== null}
+      open={dialog !== null}
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>保存服务器 Key</DialogTitle>
+          <DialogTitle>
+            {viewing ? "查看服务器 Key" : "保存服务器 Key"}
+          </DialogTitle>
           <DialogDescription>
-            这是“{issued?.server.name}”的访问 Key。关闭后将无法再次查看明文。
+            {viewing
+              ? `这是“${dialog?.server.name}”当前使用的访问 Key。`
+              : `已为“${dialog?.server.name}”生成新的访问 Key。`}
           </DialogDescription>
         </DialogHeader>
         <div className="my-5 rounded-lg border bg-muted/40 p-4">
@@ -446,18 +478,27 @@ function IssuedKeyDialog({
             服务器 Key
           </div>
           <code className="block font-mono text-sm leading-6 break-all">
-            {issued?.key}
+            {dialog ? (revealed ? dialog.key : maskServerKey(dialog.key)) : ""}
           </code>
         </div>
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
-          请立即复制并保存到私有服务器 Secret 中。系统只保存 Key 哈希。
+          服务器 Key
+          可以调用推送服务，请勿通过聊天、邮件或工单明文传递。查看和复制操作将在接入
+          API 后记录审计日志。
         </div>
         <DialogFooter className="mt-5">
+          <Button
+            onClick={() => setRevealed((value) => !value)}
+            variant="outline"
+          >
+            {revealed ? <EyeOffIcon /> : <EyeIcon />}
+            {revealed ? "隐藏 Key" : "显示 Key"}
+          </Button>
           <Button onClick={() => void copyKey()} variant="outline">
             {copied ? <CheckIcon /> : <CopyIcon />}
             {copied ? "已复制" : "复制 Key"}
           </Button>
-          <Button onClick={onClose}>我已保存</Button>
+          <Button onClick={onClose}>完成</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

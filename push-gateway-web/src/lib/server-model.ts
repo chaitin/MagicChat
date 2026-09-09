@@ -21,6 +21,12 @@ export type IssuedServerKey = {
   server: PushServer
 }
 
+export const MOCK_SERVER_KEYS: Record<string, string> = {
+  srv_prod_cn_01: "mcps_srv_prod_cn_01_demo8n4k2q5x7c9v3m6a1s4d",
+  srv_staging_01: "mcps_srv_staging_01_demoq2mx7v4c8n1k5a9s3d6f",
+  srv_dev_02: "mcps_srv_dev_02_demo7jpc4m8x2v6n1k9a5s3d",
+}
+
 export const MOCK_SERVERS: PushServer[] = [
   {
     createdAt: "2026-08-21T09:20:00+08:00",
@@ -88,6 +94,11 @@ export function quotaUsagePercent(server: PushServer) {
 
 export function formatCount(value: number) {
   return new Intl.NumberFormat("zh-CN").format(value)
+}
+
+export function maskServerKey(key: string) {
+  if (key.length <= 16) return "••••••••"
+  return `${key.slice(0, 12)}${"•".repeat(16)}${key.slice(-4)}`
 }
 
 export function formatLastUsed(value: string | null) {
