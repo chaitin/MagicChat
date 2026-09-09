@@ -152,12 +152,12 @@ export default function ServersPage() {
           <CardContent>
             <div className="overflow-hidden rounded-lg border">
               <div className="overflow-x-auto">
-                <Table className="min-w-[980px]">
+                <Table className="min-w-[880px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="min-w-56">服务器</TableHead>
                       <TableHead className="w-32">状态</TableHead>
-                      <TableHead className="min-w-64">今日用量</TableHead>
+                      <TableHead className="w-40">今日用量</TableHead>
                       <TableHead className="w-40">每日额度</TableHead>
                       <TableHead className="w-44">最近使用</TableHead>
                       <TableHead className="w-24 text-right">操作</TableHead>
