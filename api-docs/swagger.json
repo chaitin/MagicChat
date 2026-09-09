@@ -9326,7 +9326,7 @@
                         "CookieAuth": []
                     }
                 ],
-                "description": "普通用户上传临时文件，最大 200MiB。大于 10MiB 的文件保留 30 天，其余文件保留 180 天，统一写入 temporary bucket。",
+                "description": "普通用户上传临时文件，最大 200MiB。大于 20MiB 的文件保留 180 天，其余文件默认保留 180 天，统一写入 temporary bucket。",
                 "consumes": [
                     "multipart/form-data"
                 ],
