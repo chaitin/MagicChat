@@ -5,7 +5,6 @@ import {
   CopyIcon,
   EyeIcon,
   EyeOffIcon,
-  KeyRoundIcon,
   MoreHorizontalIcon,
   PencilIcon,
   PlusIcon,
@@ -254,15 +253,7 @@ function ServerTableRow({
           <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
             <ServerIcon className="size-4" />
           </div>
-          <div className="min-w-0">
-            <div className="truncate font-medium">{server.name}</div>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <span className="font-mono">{server.id}</span>
-              <span>·</span>
-              <KeyRoundIcon className="size-3" />
-              <span className="font-mono">{server.keyFingerprint}</span>
-            </div>
-          </div>
+          <div className="min-w-0 truncate font-medium">{server.name}</div>
         </div>
       </TableCell>
       <TableCell>
