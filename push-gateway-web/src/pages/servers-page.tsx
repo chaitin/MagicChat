@@ -73,7 +73,7 @@ import {
 const MAX_DAILY_LIMIT = 100_000_000
 
 type ServerEditor = { mode: "create" } | { mode: "edit"; server: PushServer }
-type KeyDialogState = IssuedServerKey & { mode: "issued" | "view" }
+type KeyDialogState = IssuedServerKey
 
 export default function ServersPage() {
   const [servers, setServers] = useState<PushServer[]>([])
@@ -111,7 +111,7 @@ export default function ServersPage() {
       const result = await createServer(draft)
       setServers((current) => [result.server, ...current])
       setEditor(null)
-      setKeyDialog({ ...result, mode: "issued" })
+      setKeyDialog(result)
       return
     }
     const server = await updateServerAPI(editor.server.id, draft)
@@ -139,7 +139,7 @@ export default function ServersPage() {
       const result = await rotateServerKey(rotateTarget.id)
       updateServer(result.server)
       setRotateTarget(null)
-      setKeyDialog({ ...result, mode: "issued" })
+      setKeyDialog(result)
     } catch (error) {
       toast.error(errorMessage(error))
     }
@@ -148,7 +148,7 @@ export default function ServersPage() {
   async function viewServerKey(server: PushServer) {
     try {
       const result = await revealServerKey(server.id)
-      setKeyDialog({ key: result.key, mode: "view", server })
+      setKeyDialog({ key: result.key, server })
     } catch (error) {
       toast.error(errorMessage(error))
     }
@@ -232,7 +232,7 @@ export default function ServersPage() {
 
       <ServerKeyDialog
         dialog={keyDialog}
-        key={keyDialog ? `${keyDialog.mode}:${keyDialog.key}` : "empty"}
+        key={keyDialog?.key ?? "empty"}
         onClose={() => setKeyDialog(null)}
       />
 
@@ -469,7 +469,6 @@ function ServerKeyDialog({
     }
   }
 
-  const viewing = dialog?.mode === "view"
   return (
     <Dialog
       onOpenChange={(open) => {
@@ -479,7 +478,7 @@ function ServerKeyDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{viewing ? "查看密钥" : "保存密钥"}</DialogTitle>
+          <DialogTitle>查看密钥</DialogTitle>
         </DialogHeader>
         <div className="grid gap-2">
           <Label htmlFor={keyInputId}>服务器密钥</Label>
