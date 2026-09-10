@@ -11,7 +11,8 @@ import type { SessionController } from "@main/session-controller"
 
 const MAX_CHUNK_BYTES = 256 * 1024
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024
-const MAX_FILE_MESSAGE_MULTIPART_BYTES = 200 * 1024 * 1024 + 1024 * 1024
+const MAX_FILE_MESSAGE_BYTES = 500 * 1024 * 1024
+const MAX_FILE_MESSAGE_MULTIPART_BYTES = MAX_FILE_MESSAGE_BYTES + 1024 * 1024
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 const MAX_MULTIPART_HEADER_BYTES = 64 * 1024
 
@@ -73,7 +74,7 @@ export class StreamingUploadController {
       serverId: profile.id,
       stream,
       fileSizeGuard: isFileMessage
-        ? new MultipartFileSizeGuard(boundary, 200 * 1024 * 1024)
+        ? new MultipartFileSizeGuard(boundary, MAX_FILE_MESSAGE_BYTES)
         : undefined,
       maxBytes: isFileMessage ? MAX_FILE_MESSAGE_MULTIPART_BYTES : MAX_UPLOAD_BYTES,
     })
@@ -90,7 +91,7 @@ export class StreamingUploadController {
       this.abort(ownerId, streamId)
       throw new Error(
         upload.maxBytes === MAX_FILE_MESSAGE_MULTIPART_BYTES
-          ? "上传文件超过 200 MiB 限制"
+          ? "上传文件超过 500 MiB 限制"
           : "上传文件超过 5 GiB 限制",
       )
     }
@@ -312,7 +313,7 @@ export class MultipartFileSizeGuard {
     if (!this.currentPartIsFile) return
     this.fileBytes += count
     if (this.fileBytes > this.maxFileBytes) {
-      throw new Error("上传文件超过 200 MiB 限制")
+      throw new Error("上传文件超过 500 MiB 限制")
     }
   }
 

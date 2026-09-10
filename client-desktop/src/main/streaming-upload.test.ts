@@ -24,7 +24,7 @@ describe("MultipartFileSizeGuard", () => {
     ])
     const guard = new MultipartFileSizeGuard(boundary, 5)
 
-    expect(() => guard.push(payload)).toThrow("上传文件超过 200 MiB 限制")
+    expect(() => guard.push(payload)).toThrow("上传文件超过 500 MiB 限制")
   })
 
   it("rejects empty, duplicate, and malformed file parts", () => {
