@@ -42,12 +42,11 @@ func TestLoadReadsPlaintextAdminConfiguration(t *testing.T) {
 	t.Setenv("PUSH_PROVIDERS", "fake")
 	t.Setenv("PUSH_ADMIN_USERNAME", "operator")
 	t.Setenv("PUSH_ADMIN_PASSWORD", "local admin password")
-	t.Setenv("PUSH_ADMIN_COOKIE_SECURE", "false")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.Admin.Username != "operator" || cfg.Admin.Password != "local admin password" || cfg.Admin.PasswordHash != "" || cfg.Admin.CookieSecure {
+	if cfg.Admin.Username != "operator" || cfg.Admin.Password != "local admin password" || cfg.Admin.PasswordHash != "" {
 		t.Fatalf("admin configuration did not load plaintext credential")
 	}
 }
@@ -59,13 +58,11 @@ func TestLoadReadsOptionalAdminConfiguration(t *testing.T) {
 	t.Setenv("PUSH_PROVIDERS", "fake")
 	t.Setenv("PUSH_ADMIN_USERNAME", "operator")
 	t.Setenv("PUSH_ADMIN_PASSWORD_HASH", "$argon2id$v=19$m=65536,t=3,p=2$c2FsdHNhbHRzYWx0c2FsdA$aGFzaGhhc2hoYXNoaGFzaGhhc2g")
-	t.Setenv("PUSH_ADMIN_COOKIE_SECURE", "false")
-	t.Setenv("PUSH_ADMIN_SESSION_TTL", "6h")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.Admin.Username != "operator" || cfg.Admin.PasswordHash == "" || cfg.Admin.CookieSecure || cfg.Admin.SessionTTL != 6*time.Hour {
+	if cfg.Admin.Username != "operator" || cfg.Admin.PasswordHash == "" {
 		t.Fatalf("admin configuration = %#v", cfg.Admin)
 	}
 }

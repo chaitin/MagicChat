@@ -168,14 +168,24 @@ func (s *Server) requireAdminSession(next echo.HandlerFunc) echo.HandlerFunc {
 
 func (s *Server) setAdminCookies(c echo.Context, credential gatewayadmin.SessionCredential) {
 	maxAge := int(time.Until(credential.ExpiresAt).Seconds())
-	c.SetCookie(&http.Cookie{Name: adminSessionCookie, Value: credential.SessionToken, Path: "/", HttpOnly: true, Secure: s.adminCookieSecure, SameSite: http.SameSiteStrictMode, MaxAge: maxAge, Expires: credential.ExpiresAt})
-	c.SetCookie(&http.Cookie{Name: adminCSRFCookie, Value: credential.CSRFToken, Path: "/", HttpOnly: false, Secure: s.adminCookieSecure, SameSite: http.SameSiteStrictMode, MaxAge: maxAge, Expires: credential.ExpiresAt})
+	secureCookie := requestUsesHTTPS(c.Request())
+	c.SetCookie(&http.Cookie{Name: adminSessionCookie, Value: credential.SessionToken, Path: "/", HttpOnly: true, Secure: secureCookie, SameSite: http.SameSiteStrictMode, MaxAge: maxAge, Expires: credential.ExpiresAt})
+	c.SetCookie(&http.Cookie{Name: adminCSRFCookie, Value: credential.CSRFToken, Path: "/", HttpOnly: false, Secure: secureCookie, SameSite: http.SameSiteStrictMode, MaxAge: maxAge, Expires: credential.ExpiresAt})
 }
 
 func (s *Server) clearAdminCookies(c echo.Context) {
 	expires := time.Unix(0, 0)
-	c.SetCookie(&http.Cookie{Name: adminSessionCookie, Path: "/", HttpOnly: true, Secure: s.adminCookieSecure, SameSite: http.SameSiteStrictMode, MaxAge: -1, Expires: expires})
-	c.SetCookie(&http.Cookie{Name: adminCSRFCookie, Path: "/", HttpOnly: false, Secure: s.adminCookieSecure, SameSite: http.SameSiteStrictMode, MaxAge: -1, Expires: expires})
+	secureCookie := requestUsesHTTPS(c.Request())
+	c.SetCookie(&http.Cookie{Name: adminSessionCookie, Path: "/", HttpOnly: true, Secure: secureCookie, SameSite: http.SameSiteStrictMode, MaxAge: -1, Expires: expires})
+	c.SetCookie(&http.Cookie{Name: adminCSRFCookie, Path: "/", HttpOnly: false, Secure: secureCookie, SameSite: http.SameSiteStrictMode, MaxAge: -1, Expires: expires})
+}
+
+func requestUsesHTTPS(request *http.Request) bool {
+	if request.TLS != nil {
+		return true
+	}
+	forwardedProto := strings.TrimSpace(strings.Split(request.Header.Get("X-Forwarded-Proto"), ",")[0])
+	return strings.EqualFold(forwardedProto, "https")
 }
 
 func adminSessionToken(c echo.Context) string {

@@ -16,7 +16,10 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-const MaxDailyQuota int64 = 100_000_000
+const (
+	MaxDailyQuota   int64 = 100_000_000
+	adminSessionTTL       = 12 * time.Hour
+)
 
 var beijing = time.FixedZone("Asia/Shanghai", 8*60*60)
 
@@ -27,7 +30,6 @@ type Options struct {
 	Password     string
 	PasswordHash string
 	Now          func() time.Time
-	SessionTTL   time.Duration
 }
 
 type Service struct {
@@ -79,13 +81,9 @@ func New(options Options) (*Service, error) {
 	if now == nil {
 		now = time.Now
 	}
-	ttl := options.SessionTTL
-	if ttl <= 0 {
-		ttl = 12 * time.Hour
-	}
 	return &Service{
 		db: options.DB, cipher: options.Cipher, username: username,
-		passwordHash: passwordHash, now: now, sessionTTL: ttl,
+		passwordHash: passwordHash, now: now, sessionTTL: adminSessionTTL,
 		enabled: username != "",
 	}, nil
 }

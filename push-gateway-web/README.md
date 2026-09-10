@@ -13,7 +13,7 @@ pnpm install
 pnpm dev
 ```
 
-默认地址为 <http://localhost:20061>。如 Gateway 使用其他地址，可设置 `PUSH_GATEWAY_API_URL`。本地 Gateway 需要设置 `PUSH_ADMIN_COOKIE_SECURE=false`，生产必须保持为 `true`。
+默认地址为 <http://localhost:20061>。如 Gateway 使用其他地址，可设置 `PUSH_GATEWAY_API_URL`。
 
 生产镜像使用 `/admin/` 作为前端基础路径。反向代理需要将 `/api/*` 转发至 Push Gateway，并将 `/admin/*` 去掉前缀后转发至本镜像的 `8080` 端口。
 

@@ -71,7 +71,6 @@ func main() {
 	adminService, err := gatewayadmin.New(gatewayadmin.Options{
 		DB: db, Cipher: cipher, Username: cfg.Admin.Username,
 		Password: cfg.Admin.Password, PasswordHash: cfg.Admin.PasswordHash,
-		SessionTTL: cfg.Admin.SessionTTL,
 	})
 	if err != nil {
 		logger.Error("create admin service", "error", err)
@@ -85,7 +84,7 @@ func main() {
 	})
 	router := httpserver.New(db, service, httpserver.Options{
 		TrustedProxyCIDRs: cfg.TrustedProxyCIDRs,
-		Admin:             adminService, AdminCookieSecure: cfg.Admin.CookieSecure,
+		Admin:             adminService,
 	})
 	go func() {
 		<-ctx.Done()

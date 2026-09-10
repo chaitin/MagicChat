@@ -171,6 +171,18 @@ func TestRecentGatewayFailureMetricsAreGroupedByAnonymousCode(t *testing.T) {
 	}
 }
 
+func TestAdminCookieSecurityFollowsRequestScheme(t *testing.T) {
+	httpRequest := httptest.NewRequest(http.MethodPost, "/", nil)
+	if requestUsesHTTPS(httpRequest) {
+		t.Fatal("plain HTTP request was treated as HTTPS")
+	}
+	httpsRequest := httptest.NewRequest(http.MethodPost, "/", nil)
+	httpsRequest.Header.Set("X-Forwarded-Proto", "https")
+	if !requestUsesHTTPS(httpsRequest) {
+		t.Fatal("forwarded HTTPS request was treated as plain HTTP")
+	}
+}
+
 func TestClientAddressOnlyTrustsConfiguredProxy(t *testing.T) {
 	_, trustedNetwork, err := net.ParseCIDR("10.0.0.0/8")
 	if err != nil {
@@ -252,7 +264,7 @@ func newTestRouter(t *testing.T) *echo.Echo {
 	if err != nil {
 		t.Fatalf("create admin: %v", err)
 	}
-	return New(db, service, Options{Admin: adminService, AdminCookieSecure: false})
+	return New(db, service, Options{Admin: adminService})
 }
 
 func requestJSON(t *testing.T, router http.Handler, method, path string, body any, headers map[string]string) *httptest.ResponseRecorder {

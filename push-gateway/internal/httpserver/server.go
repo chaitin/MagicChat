@@ -27,22 +27,19 @@ var assets embed.FS
 type Options struct {
 	TrustedProxyCIDRs []string
 	Admin             *gatewayadmin.Service
-	AdminCookieSecure bool
 }
 
 type Server struct {
-	db                *gorm.DB
-	gateway           *gateway.Service
-	admin             *gatewayadmin.Service
-	adminCookieSecure bool
-	trustedProxies    []*net.IPNet
+	db             *gorm.DB
+	gateway        *gateway.Service
+	admin          *gatewayadmin.Service
+	trustedProxies []*net.IPNet
 }
 
 func New(db *gorm.DB, service *gateway.Service, options ...Options) *echo.Echo {
 	server := &Server{db: db, gateway: service}
 	if len(options) > 0 {
 		server.admin = options[0].Admin
-		server.adminCookieSecure = options[0].AdminCookieSecure
 		for _, cidr := range options[0].TrustedProxyCIDRs {
 			_, network, err := net.ParseCIDR(cidr)
 			if err == nil {
