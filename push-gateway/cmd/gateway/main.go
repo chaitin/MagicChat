@@ -70,7 +70,8 @@ func main() {
 	}
 	adminService, err := gatewayadmin.New(gatewayadmin.Options{
 		DB: db, Cipher: cipher, Username: cfg.Admin.Username,
-		PasswordHash: cfg.Admin.PasswordHash, SessionTTL: cfg.Admin.SessionTTL,
+		Password: cfg.Admin.Password, PasswordHash: cfg.Admin.PasswordHash,
+		SessionTTL: cfg.Admin.SessionTTL,
 	})
 	if err != nil {
 		logger.Error("create admin service", "error", err)

@@ -35,6 +35,23 @@ func TestLoadReadsConfiguration(t *testing.T) {
 	}
 }
 
+func TestLoadReadsPlaintextAdminConfiguration(t *testing.T) {
+	key := make([]byte, 32)
+	t.Setenv("DATABASE_URL", "postgres://db/push")
+	t.Setenv("DATA_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(key))
+	t.Setenv("PUSH_PROVIDERS", "fake")
+	t.Setenv("PUSH_ADMIN_USERNAME", "operator")
+	t.Setenv("PUSH_ADMIN_PASSWORD", "local admin password")
+	t.Setenv("PUSH_ADMIN_COOKIE_SECURE", "false")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Admin.Username != "operator" || cfg.Admin.Password != "local admin password" || cfg.Admin.PasswordHash != "" || cfg.Admin.CookieSecure {
+		t.Fatalf("admin configuration did not load plaintext credential")
+	}
+}
+
 func TestLoadReadsOptionalAdminConfiguration(t *testing.T) {
 	key := make([]byte, 32)
 	t.Setenv("DATABASE_URL", "postgres://db/push")
@@ -53,13 +70,26 @@ func TestLoadReadsOptionalAdminConfiguration(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsBothAdminPasswordForms(t *testing.T) {
+	key := make([]byte, 32)
+	t.Setenv("DATABASE_URL", "postgres://db/push")
+	t.Setenv("DATA_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(key))
+	t.Setenv("PUSH_PROVIDERS", "fake")
+	t.Setenv("PUSH_ADMIN_USERNAME", "operator")
+	t.Setenv("PUSH_ADMIN_PASSWORD", "local admin password")
+	t.Setenv("PUSH_ADMIN_PASSWORD_HASH", "hash")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "cannot both") {
+		t.Fatalf("both admin credentials error = %v", err)
+	}
+}
+
 func TestLoadRejectsPartialAdminConfiguration(t *testing.T) {
 	key := make([]byte, 32)
 	t.Setenv("DATABASE_URL", "postgres://db/push")
 	t.Setenv("DATA_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(key))
 	t.Setenv("PUSH_PROVIDERS", "fake")
 	t.Setenv("PUSH_ADMIN_USERNAME", "operator")
-	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "PUSH_ADMIN_PASSWORD_HASH") {
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "admin password credential") {
 		t.Fatalf("partial admin configuration error = %v", err)
 	}
 }

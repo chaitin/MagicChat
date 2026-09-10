@@ -24,6 +24,7 @@ type Options struct {
 	DB           *gorm.DB
 	Cipher       *secure.TokenCipher
 	Username     string
+	Password     string
 	PasswordHash string
 	Now          func() time.Time
 	SessionTTL   time.Duration
@@ -56,9 +57,23 @@ func New(options Options) (*Service, error) {
 		return nil, fmt.Errorf("database and cipher are required")
 	}
 	username := strings.TrimSpace(options.Username)
+	password := options.Password
 	passwordHash := strings.TrimSpace(options.PasswordHash)
+	if password != "" && passwordHash != "" {
+		return nil, fmt.Errorf("admin plaintext password and password hash cannot both be configured")
+	}
+	if password != "" {
+		if len(password) < 12 {
+			return nil, fmt.Errorf("admin plaintext password must contain at least 12 characters")
+		}
+		var err error
+		passwordHash, err = secure.HashArgon2id(password)
+		if err != nil {
+			return nil, fmt.Errorf("hash admin password: %w", err)
+		}
+	}
 	if (username == "") != (passwordHash == "") {
-		return nil, fmt.Errorf("admin username and password hash must be configured together")
+		return nil, fmt.Errorf("admin username and password credential must be configured together")
 	}
 	if passwordHash != "" && !secure.IsArgon2idHash(passwordHash) {
 		return nil, fmt.Errorf("admin password hash must be a valid Argon2id PHC string")

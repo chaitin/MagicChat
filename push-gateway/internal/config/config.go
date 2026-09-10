@@ -48,6 +48,7 @@ type JPushConfig struct {
 
 type AdminConfig struct {
 	Username     string
+	Password     string
 	PasswordHash string
 	CookieSecure bool
 	SessionTTL   time.Duration
@@ -96,9 +97,15 @@ func Load() (Config, error) {
 	}
 
 	cfg.Admin.Username = strings.TrimSpace(os.Getenv("PUSH_ADMIN_USERNAME"))
+	cfg.Admin.Password = os.Getenv("PUSH_ADMIN_PASSWORD")
 	cfg.Admin.PasswordHash = strings.TrimSpace(os.Getenv("PUSH_ADMIN_PASSWORD_HASH"))
-	if (cfg.Admin.Username == "") != (cfg.Admin.PasswordHash == "") {
-		return Config{}, fmt.Errorf("PUSH_ADMIN_USERNAME and PUSH_ADMIN_PASSWORD_HASH must be configured together")
+	if cfg.Admin.Password != "" && cfg.Admin.PasswordHash != "" {
+		return Config{}, fmt.Errorf("PUSH_ADMIN_PASSWORD and PUSH_ADMIN_PASSWORD_HASH cannot both be configured")
+	}
+	hasUsername := cfg.Admin.Username != ""
+	hasCredential := cfg.Admin.Password != "" || cfg.Admin.PasswordHash != ""
+	if hasUsername != hasCredential {
+		return Config{}, fmt.Errorf("PUSH_ADMIN_USERNAME and one admin password credential must be configured together")
 	}
 	if cfg.Admin.CookieSecure, err = boolEnv("PUSH_ADMIN_COOKIE_SECURE", cfg.Admin.CookieSecure); err != nil {
 		return Config{}, err

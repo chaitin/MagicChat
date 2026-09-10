@@ -15,6 +15,22 @@ import (
 	"gorm.io/gorm"
 )
 
+func TestPlaintextAdminPasswordIsHashedAtStartup(t *testing.T) {
+	db, cipher := newAdminDependencies(t)
+	service, err := New(Options{
+		DB: db, Cipher: cipher, Username: "operator", Password: "correct password",
+	})
+	if err != nil {
+		t.Fatalf("create service: %v", err)
+	}
+	if service.passwordHash == "" || service.passwordHash == "correct password" {
+		t.Fatal("plaintext password was retained instead of hashing")
+	}
+	if _, err := service.Login(t.Context(), "operator", "correct password", "203.0.113.1"); err != nil {
+		t.Fatalf("login with plaintext configuration: %v", err)
+	}
+}
+
 func TestAdminSessionAndServerLifecycle(t *testing.T) {
 	service, db := newTestAdmin(t)
 	credential, err := service.Login(t.Context(), "operator", "correct password", "203.0.113.1")
@@ -78,6 +94,19 @@ func TestAdminSessionAndServerLifecycle(t *testing.T) {
 
 func newTestAdmin(t *testing.T) (*Service, *gorm.DB) {
 	t.Helper()
+	db, cipher := newAdminDependencies(t)
+	service, err := New(Options{
+		DB: db, Cipher: cipher, Username: "operator", PasswordHash: testPasswordHash("correct password"),
+		Now: func() time.Time { return time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatalf("create service: %v", err)
+	}
+	return service, db
+}
+
+func newAdminDependencies(t *testing.T) (*gorm.DB, *secure.TokenCipher) {
+	t.Helper()
 	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{TranslateError: true})
 	if err != nil {
 		t.Fatalf("open database: %v", err)
@@ -93,14 +122,7 @@ func newTestAdmin(t *testing.T) (*Service, *gorm.DB) {
 	if err != nil {
 		t.Fatalf("create cipher: %v", err)
 	}
-	service, err := New(Options{
-		DB: db, Cipher: cipher, Username: "operator", PasswordHash: testPasswordHash("correct password"),
-		Now: func() time.Time { return time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC) },
-	})
-	if err != nil {
-		t.Fatalf("create service: %v", err)
-	}
-	return service, db
+	return db, cipher
 }
 
 func testPasswordHash(password string) string {
