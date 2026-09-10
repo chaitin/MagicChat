@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	postgresMaxConnections = 100
-	postgresMaxIdleTime    = 5 * time.Minute
+	postgresMaxConnections     = 40
+	postgresMaxIdleConnections = 20
+	postgresMaxIdleTime        = 5 * time.Minute
 )
 
 func OpenPostgres(dsn string) (*gorm.DB, error) {
@@ -36,9 +37,9 @@ func OpenPostgres(dsn string) (*gorm.DB, error) {
 
 func configurePostgresPool(db *sql.DB) {
 	db.SetMaxOpenConns(postgresMaxConnections)
-	// Keep burst capacity available: database/sql otherwise retains only two
-	// idle connections, repeatedly closing and authenticating the rest.
-	db.SetMaxIdleConns(postgresMaxConnections)
+	// Retain enough idle connections for ordinary bursts while leaving capacity
+	// for the document server, assistant, migrations, and operator sessions.
+	db.SetMaxIdleConns(postgresMaxIdleConnections)
 	db.SetConnMaxIdleTime(postgresMaxIdleTime)
 }
 
