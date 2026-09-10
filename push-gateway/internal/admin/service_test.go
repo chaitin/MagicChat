@@ -31,6 +31,17 @@ func TestPlaintextAdminPasswordIsHashedAtStartup(t *testing.T) {
 	}
 }
 
+func TestListServersReturnsEmptySlice(t *testing.T) {
+	service, _ := newTestAdmin(t)
+	servers, err := service.ListServers(t.Context())
+	if err != nil {
+		t.Fatalf("list servers: %v", err)
+	}
+	if servers == nil || len(servers) != 0 {
+		t.Fatalf("servers = %#v, want non-nil empty slice", servers)
+	}
+}
+
 func TestAdminSessionAndServerLifecycle(t *testing.T) {
 	service, db := newTestAdmin(t)
 	credential, err := service.Login(t.Context(), "operator", "correct password", "203.0.113.1")

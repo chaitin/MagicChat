@@ -22,10 +22,10 @@ type IssuedServerResponse = {
 }
 
 export async function listServers() {
-  const response = await requestJSON<{ servers: ServerResponse[] }>(
+  const response = await requestJSON<{ servers: ServerResponse[] | null }>(
     "/api/admin/v1/servers"
   )
-  return response.servers.map(normalizeServer)
+  return (response.servers ?? []).map(normalizeServer)
 }
 
 export async function createServer(draft: PushServerDraft) {

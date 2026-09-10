@@ -199,7 +199,7 @@ type IssuedServer struct {
 
 func (s *Service) ListServers(ctx context.Context) ([]ServerView, error) {
 	date := beijingDate(s.now())
-	var result []ServerView
+	result := make([]ServerView, 0)
 	err := s.db.WithContext(ctx).Table("push_servers AS servers").
 		Select("servers.id, servers.name, servers.status, servers.daily_quota, servers.revision, servers.created_at, COALESCE(usage.accepted_count, 0) AS today_usage").
 		Joins("LEFT JOIN push_server_daily_usage AS usage ON usage.server_id = servers.id AND usage.usage_date = ?", date).
