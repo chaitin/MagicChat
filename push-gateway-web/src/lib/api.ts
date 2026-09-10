@@ -23,25 +23,43 @@ export async function requestJSON<T>(path: string, init: RequestInit = {}) {
     credentials: "same-origin",
     headers,
   })
+  if (response.status === 204) return undefined as T
+
+  const payload = await readJSON(response)
   if (!response.ok) {
     if (response.status === 401) {
       window.dispatchEvent(new Event("push-gateway-admin-unauthorized"))
     }
-    let code = `http_${response.status}`
-    let message = "请求失败，请稍后重试"
-    try {
-      const body = (await response.json()) as {
-        error?: { code?: string; message?: string }
-      }
-      code = body.error?.code ?? code
-      message = body.error?.message ?? message
-    } catch {
-      // Keep the generic response for non-JSON failures.
-    }
-    throw new APIError(code, message, response.status)
+    const error =
+      isRecord(payload) && isRecord(payload.error) ? payload.error : undefined
+    throw new APIError(
+      typeof error?.code === "string" ? error.code : `http_${response.status}`,
+      typeof error?.message === "string"
+        ? error.message
+        : "请求失败，请稍后重试",
+      response.status
+    )
   }
-  if (response.status === 204) return undefined as T
-  return (await response.json()) as T
+  if (!isRecord(payload) || payload.success !== true || !("data" in payload)) {
+    throw new APIError(
+      "invalid_response",
+      "服务端响应格式错误",
+      response.status
+    )
+  }
+  return payload.data as T
+}
+
+async function readJSON(response: Response): Promise<unknown> {
+  try {
+    return (await response.json()) as unknown
+  } catch {
+    throw new APIError(
+      "invalid_response",
+      "服务端响应格式错误",
+      response.status
+    )
+  }
 }
 
 function readCookie(name: string) {
@@ -53,4 +71,8 @@ function readCookie(name: string) {
     }
   }
   return ""
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null
 }

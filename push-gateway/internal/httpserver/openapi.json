@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "MagicChat Push Gateway API",
-    "version": "0.2.0",
-    "description": "Anonymous capability-based push gateway with authenticated private-server admission and management APIs."
+    "version": "0.3.0",
+    "description": "Anonymous capability-based push gateway. JSON APIs return {success:true,data:...} on success and {success:false,error:{code,message}} on failure; 204 responses have no body."
   },
   "components": {
     "securitySchemes": {
@@ -11,6 +11,31 @@
       "serverKey": {"type": "apiKey", "in": "header", "name": "X-MagicChat-Server-Key"},
       "adminSession": {"type": "apiKey", "in": "cookie", "name": "push_gateway_admin_session"},
       "adminCSRF": {"type": "apiKey", "in": "header", "name": "X-CSRF-Token"}
+    },
+    "schemas": {
+      "SuccessEnvelope": {
+        "type": "object",
+        "required": ["success", "data"],
+        "properties": {
+          "success": {"type": "boolean", "enum": [true]},
+          "data": {"type": "object"}
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["success", "error"],
+        "properties": {
+          "success": {"type": "boolean", "enum": [false]},
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": {"type": "string"},
+              "message": {"type": "string"}
+            }
+          }
+        }
+      }
     }
   },
   "paths": {

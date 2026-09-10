@@ -46,7 +46,7 @@ func TestAPIRoutesInstallationGrantAndNotification(t *testing.T) {
 	unauthorized := requestJSON(t, router, http.MethodPost,
 		"/api/v1/installations/"+installation.InstallationID+"/active-grant", nil,
 		map[string]string{"Authorization": "Installation wrong-token"})
-	if unauthorized.Code != http.StatusUnauthorized {
+	if unauthorized.Code != http.StatusUnauthorized || !strings.Contains(unauthorized.Body.String(), `"success":false`) {
 		t.Fatalf("unauthorized status = %d, body = %s", unauthorized.Code, unauthorized.Body.String())
 	}
 	grantResponse := requestJSON(t, router, http.MethodPost,
@@ -219,6 +219,9 @@ func TestOperationalRoutesUseAPIPrefix(t *testing.T) {
 		if response.Code != http.StatusOK {
 			t.Fatalf("GET %s status = %d, body = %s", path, response.Code, response.Body.String())
 		}
+		if strings.HasPrefix(path, "/api/health/") && !strings.Contains(response.Body.String(), `"success":true`) {
+			t.Fatalf("GET %s is not enveloped: %s", path, response.Body.String())
+		}
 	}
 	if response := requestJSON(t, router, http.MethodGet, "/health/live", nil, nil); response.Code != http.StatusNotFound {
 		t.Fatalf("unprefixed health status = %d", response.Code)
@@ -297,7 +300,14 @@ func httpTestPasswordHash(password string) string {
 
 func decodeResponse(t *testing.T, response *httptest.ResponseRecorder, target any) {
 	t.Helper()
-	if err := json.Unmarshal(response.Body.Bytes(), target); err != nil {
-		t.Fatalf("decode response %q: %v", response.Body.String(), err)
+	var envelope struct {
+		Success bool            `json:"success"`
+		Data    json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil || !envelope.Success || len(envelope.Data) == 0 {
+		t.Fatalf("decode response envelope %q: %v", response.Body.String(), err)
+	}
+	if err := json.Unmarshal(envelope.Data, target); err != nil {
+		t.Fatalf("decode response data %q: %v", response.Body.String(), err)
 	}
 }

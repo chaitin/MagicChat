@@ -60,12 +60,12 @@ func (s *Server) adminLogin(c echo.Context) error {
 		return err
 	}
 	s.setAdminCookies(c, credential)
-	return c.JSON(http.StatusOK, map[string]any{"authenticated": true, "expires_at": credential.ExpiresAt})
+	return writeSuccess(c, http.StatusOK, map[string]any{"authenticated": true, "expires_at": credential.ExpiresAt})
 }
 
 func (s *Server) adminSession(c echo.Context) error {
 	session := c.Get(adminSessionKey).(model.AdminSession)
-	return c.JSON(http.StatusOK, map[string]any{"authenticated": true, "expires_at": session.ExpiresAt})
+	return writeSuccess(c, http.StatusOK, map[string]any{"authenticated": true, "expires_at": session.ExpiresAt})
 }
 
 func (s *Server) adminLogout(c echo.Context) error {
@@ -81,7 +81,7 @@ func (s *Server) adminListServers(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"servers": servers})
+	return writeSuccess(c, http.StatusOK, map[string]any{"servers": servers})
 }
 
 func (s *Server) adminCreateServer(c echo.Context) error {
@@ -93,7 +93,7 @@ func (s *Server) adminCreateServer(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusCreated, issued)
+	return writeSuccess(c, http.StatusCreated, issued)
 }
 
 func (s *Server) adminUpdateServer(c echo.Context) error {
@@ -105,7 +105,7 @@ func (s *Server) adminUpdateServer(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, server)
+	return writeSuccess(c, http.StatusOK, server)
 }
 
 func (s *Server) adminEnableServer(c echo.Context) error {
@@ -121,7 +121,7 @@ func (s *Server) adminSetServerStatus(c echo.Context, status string) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, server)
+	return writeSuccess(c, http.StatusOK, server)
 }
 
 func (s *Server) adminRevealServerKey(c echo.Context) error {
@@ -129,7 +129,7 @@ func (s *Server) adminRevealServerKey(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, map[string]string{"key": key})
+	return writeSuccess(c, http.StatusOK, map[string]string{"key": key})
 }
 
 func (s *Server) adminRotateServerKey(c echo.Context) error {
@@ -137,7 +137,7 @@ func (s *Server) adminRotateServerKey(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, issued)
+	return writeSuccess(c, http.StatusOK, issued)
 }
 
 func (s *Server) requireAdminSession(next echo.HandlerFunc) echo.HandlerFunc {

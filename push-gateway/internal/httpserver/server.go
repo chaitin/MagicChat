@@ -91,7 +91,7 @@ func (s *Server) registerInstallation(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusCreated, credential)
+	return writeSuccess(c, http.StatusCreated, credential)
 }
 
 type updateProviderTokenRequest struct {
@@ -120,7 +120,7 @@ func (s *Server) createActiveGrant(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusCreated, credential)
+	return writeSuccess(c, http.StatusCreated, credential)
 }
 
 func (s *Server) renewGrant(c echo.Context) error {
@@ -128,7 +128,7 @@ func (s *Server) renewGrant(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"grant_id": c.Param("grant_id"), "expires_at": expiresAt})
+	return writeSuccess(c, http.StatusOK, map[string]any{"grant_id": c.Param("grant_id"), "expires_at": expiresAt})
 }
 
 func (s *Server) revokeGrant(c echo.Context) error {
@@ -158,19 +158,19 @@ func (s *Server) enqueueNotification(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusAccepted, result)
+	return writeSuccess(c, http.StatusAccepted, result)
 }
 
 func (*Server) live(c echo.Context) error {
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+	return writeSuccess(c, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (s *Server) ready(c echo.Context) error {
 	sqlDB, err := s.db.DB()
 	if err != nil || sqlDB.PingContext(c.Request().Context()) != nil {
-		return c.JSON(http.StatusServiceUnavailable, map[string]string{"status": "unavailable"})
+		return writeFailure(c, http.StatusServiceUnavailable, "database_unavailable", "数据库暂不可用")
 	}
-	return c.JSON(http.StatusOK, map[string]string{"status": "ready"})
+	return writeSuccess(c, http.StatusOK, map[string]string{"status": "ready"})
 }
 
 func (s *Server) metrics(c echo.Context) error {
@@ -463,5 +463,5 @@ func (s *Server) handleHTTPError(err error, c echo.Context) {
 		}
 		c.Logger().Error(err)
 	}
-	_ = c.JSON(status, map[string]any{"error": map[string]string{"code": code, "message": message}})
+	_ = writeFailure(c, status, code, message)
 }

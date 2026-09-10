@@ -55,6 +55,12 @@ Notification admission requires `X-MagicChat-Server-Key` in addition to the gran
 
 ## API
 
+All JSON business and health responses use the same envelope as MagicChat Server:
+
+- success: `{"success":true,"data":{...}}`
+- failure: `{"success":false,"error":{"code":"...","message":"..."}}`
+- `204 No Content`, Prometheus metrics, and OpenAPI documents are not enveloped.
+
 - `POST /api/v1/installations`
 - `PUT /api/v1/installations/{installation_id}/provider-token`
 - `POST /api/v1/installations/{installation_id}/active-grant`

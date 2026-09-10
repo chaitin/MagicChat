@@ -10,6 +10,7 @@ const PUSH_REQUEST_TIMEOUT_MS = 5_000
 
 type GatewayErrorEnvelope = {
   error?: { code?: string; message?: string }
+  success?: boolean
 }
 
 export class PushGatewayRequestError extends Error {
@@ -192,7 +193,17 @@ async function gatewayRequest<T = unknown>(
         }
       )
     }
-    return payload as T | undefined
+    if (response.status === 204) return undefined
+    if (
+      !isRecord(payload) ||
+      payload.success !== true ||
+      !("data" in payload)
+    ) {
+      throw new PushGatewayRequestError("推送网关响应格式不正确", {
+        status: response.status,
+      })
+    }
+    return payload.data as T
   })()
   try {
     return await Promise.race([requestResult, timeoutFailure])

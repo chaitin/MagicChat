@@ -143,17 +143,26 @@ test("uses the fixed public gateway and installation authorization", async () =>
   const requests: Array<{ init?: RequestInit; url: string }> = []
   const responses = [
     {
-      installation_id: "installation-1",
-      management_token: "management-token",
+      data: {
+        installation_id: "installation-1",
+        management_token: "management-token",
+      },
+      success: true,
     },
     {
-      expires_at: "2026-09-27T00:00:00Z",
-      grant_id: "grant-1",
-      send_token: "send-token",
+      data: {
+        expires_at: "2026-09-27T00:00:00Z",
+        grant_id: "grant-1",
+        send_token: "send-token",
+      },
+      success: true,
     },
     {
-      expires_at: "2026-10-27T00:00:00Z",
-      grant_id: "grant-1",
+      data: {
+        expires_at: "2026-10-27T00:00:00Z",
+        grant_id: "grant-1",
+      },
+      success: true,
     },
   ]
   const fetcher: ApiFetch = async (url, init) => {
