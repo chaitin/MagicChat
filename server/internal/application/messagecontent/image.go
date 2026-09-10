@@ -9,6 +9,7 @@ import (
 )
 
 const imageMessageSummaryPrefix = "[图片]"
+const videoMessageSummaryPrefix = "[视频]"
 
 type ImageCaption struct {
 	Content     string
@@ -16,12 +17,20 @@ type ImageCaption struct {
 }
 
 func NormalizeImageCaption(content string, contentType string) (ImageCaption, error) {
+	return normalizeMediaCaption(content, contentType, "图片")
+}
+
+func NormalizeVideoCaption(content string, contentType string) (ImageCaption, error) {
+	return normalizeMediaCaption(content, contentType, "视频")
+}
+
+func normalizeMediaCaption(content string, contentType string, mediaName string) (ImageCaption, error) {
 	content = strings.TrimSpace(content)
 	if content == "" {
 		return ImageCaption{}, nil
 	}
 	if utf8.RuneCountInString(content) > maxTextLength {
-		return ImageCaption{}, errors.New("图片说明不能超过 5000 个字符")
+		return ImageCaption{}, errors.New(mediaName + "说明不能超过 5000 个字符")
 	}
 
 	contentType = strings.ToLower(strings.TrimSpace(contentType))
@@ -29,15 +38,23 @@ func NormalizeImageCaption(content string, contentType string) (ImageCaption, er
 		contentType = TypeText
 	}
 	if contentType != TypeText && contentType != TypeMarkdown {
-		return ImageCaption{}, errors.New("图片说明类型只能是 text 或 markdown")
+		return ImageCaption{}, errors.New(mediaName + "说明类型只能是 text 或 markdown")
 	}
 
 	return ImageCaption{Content: content, ContentType: contentType}, nil
 }
 
 func ImageMessageSummary(caption ImageCaption) (string, error) {
+	return mediaMessageSummary(imageMessageSummaryPrefix, caption)
+}
+
+func VideoMessageSummary(caption ImageCaption) (string, error) {
+	return mediaMessageSummary(videoMessageSummaryPrefix, caption)
+}
+
+func mediaMessageSummary(prefix string, caption ImageCaption) (string, error) {
 	if caption.Content == "" {
-		return imageMessageSummaryPrefix, nil
+		return prefix, nil
 	}
 
 	summary := caption.Content
@@ -50,7 +67,7 @@ func ImageMessageSummary(caption ImageCaption) (string, error) {
 	}
 	summary = strings.TrimSpace(summary)
 	if summary == "" {
-		return imageMessageSummaryPrefix, nil
+		return prefix, nil
 	}
-	return imageMessageSummaryPrefix + " " + summary, nil
+	return prefix + " " + summary, nil
 }

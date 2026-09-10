@@ -1619,6 +1619,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     sendConversationMarkdown,
     sendConversationCard,
     sendConversationText,
+    sendConversationVideo,
     sendConversationVoice,
   } = useConversationSenders({
     currentUserId: me?.id ?? "",
@@ -1821,10 +1822,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
       setLatestCachedMessages((currentMessages) =>
         accountChanged
           ? preloadedLatestMessages
-          : mergeLatestCachedMessages(
-              currentMessages,
-              preloadedLatestMessages
-            )
+          : mergeLatestCachedMessages(currentMessages, preloadedLatestMessages)
       )
       setPersonalProject(nextProjects.personalProject)
       setProjects(nextProjects.projects)
@@ -1940,6 +1938,22 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     shouldLoadConversations,
   ])
 
+  useEffect(() => {
+    if (
+      bootstrapState !== "ready" ||
+      !shouldLoadConversations ||
+      !includedConversationId
+    ) {
+      return
+    }
+    void refreshConversations().catch(() => undefined)
+  }, [
+    bootstrapState,
+    includedConversationId,
+    refreshConversations,
+    shouldLoadConversations,
+  ])
+
   const getVisibleConversation = useCallback(
     (conversationId: string) =>
       visibleConversations.find(
@@ -2050,6 +2064,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     sendConversationMarkdown,
     sendConversationCard,
     sendConversationText,
+    sendConversationVideo,
     sendConversationVoice,
     setForegroundConversationId,
     setGroupConversationPrivate,

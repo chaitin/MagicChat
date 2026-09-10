@@ -54,6 +54,11 @@ export type SendConversationImageOptions = SendConversationMessageOptions & {
   captionType?: ImageCaptionType
 }
 
+export type SendConversationVideoOptions = SendConversationMessageOptions & {
+  caption?: string
+  captionType?: ImageCaptionType
+}
+
 export type ClientDataContextValue = {
   contactApps: ContactApp[]
   contactGroups: ContactGroup[]
@@ -240,6 +245,11 @@ export type ClientDataContextValue = {
     conversationId: string,
     image: File,
     options?: SendConversationImageOptions
+  ) => Promise<ClientMessage | null>
+  sendConversationVideo: (
+    conversationId: string,
+    video: File,
+    options?: SendConversationVideoOptions
   ) => Promise<ClientMessage | null>
   sendConversationVoice: (
     conversationId: string,

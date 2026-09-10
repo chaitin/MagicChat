@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	clientConversationListLimit          = 30
+	clientConversationListLimit         = 30
 	topicConversationListActivityWindow = 30 * time.Minute
 )
 
@@ -107,6 +107,26 @@ func (s *Service) List(ctx context.Context, cmd ListCommand) (ListResult, error)
 	parentByID := make(map[string]store.Conversation, len(parentConversations)+len(topicGroups))
 	for _, conversation := range parentConversations {
 		parentByID[conversation.ID] = conversation
+	}
+	if includeConversationID != "" {
+		if _, exists := parentByID[includeConversationID]; !exists {
+			var includedParent store.Conversation
+			result := db.Model(&store.Conversation{}).
+				Joins("JOIN conversation_members cm ON cm.conversation_id = conversations.id").
+				Joins("LEFT JOIN conversation_user_preferences cup ON cup.conversation_id = conversations.id AND cup.user_id = ?", accountID).
+				Where("cm.member_type = ? AND cm.member_id = ? AND cm.left_at IS NULL", store.ConversationMemberTypeUser, accountID).
+				Where("conversations.id = ?", includeConversationID).
+				Where("conversations.kind <> ?", store.ConversationKindTopic).
+				Where("conversations.status = ?", store.ConversationStatusActive).
+				Where("cup.hidden_through_seq IS NULL OR conversations.last_message_seq > cup.hidden_through_seq").
+				Take(&includedParent)
+			if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+				return ListResult{}, internalError(result.Error)
+			}
+			if result.Error == nil {
+				parentByID[includedParent.ID] = includedParent
+			}
+		}
 	}
 	missingParentIDs := make([]string, 0, len(topicGroups))
 	for _, group := range topicGroups {
@@ -209,7 +229,23 @@ func (s *Service) List(ctx context.Context, cmd ListCommand) (ListResult, error)
 		return leftConversation.ID < rightConversation.ID
 	})
 	if len(parentConversations) > groupLimit {
-		parentConversations = parentConversations[:groupLimit]
+		includedParentID := includeConversationID
+		if parentID, ok := parentIDByTopicID[includeConversationID]; ok {
+			includedParentID = parentID
+		}
+		includedParentIndex := -1
+		for index, conversation := range parentConversations {
+			if conversation.ID == includedParentID {
+				includedParentIndex = index
+				break
+			}
+		}
+		if includedParentIndex >= groupLimit {
+			includedParent := parentConversations[includedParentIndex]
+			parentConversations = append(parentConversations[:groupLimit-1], includedParent)
+		} else {
+			parentConversations = parentConversations[:groupLimit]
+		}
 	}
 	conversations := make([]store.Conversation, 0, len(parentConversations)+len(topicConversations))
 	if hasAssistant {

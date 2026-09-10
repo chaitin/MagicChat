@@ -144,9 +144,11 @@ describe("useConversationStatus", () => {
     expect(result.current.status).toBeUndefined()
   })
 
-  it("sends immediately on focus and every three seconds", () => {
+  it("sends while focused with a non-empty draft and every three seconds", () => {
     const { result, sendRealtimeRequest } = setup()
     act(() => result.current.onFocus())
+    expect(sendRealtimeRequest).not.toHaveBeenCalled()
+    act(() => result.current.onDraftChange("hello"))
     expect(sendRealtimeRequest).toHaveBeenCalledTimes(1)
     expect(sendRealtimeRequest).toHaveBeenLastCalledWith(
       "conversation.status",
@@ -161,7 +163,10 @@ describe("useConversationStatus", () => {
 
   it("stops heartbeating until the new conversation input is focused", () => {
     const { result, rerender, sendRealtimeRequest } = setup()
-    act(() => result.current.onFocus())
+    act(() => {
+      result.current.onFocus()
+      result.current.onDraftChange("hello")
+    })
     expect(sendRealtimeRequest).toHaveBeenLastCalledWith(
       "conversation.status",
       expect.objectContaining({ conversation_id: "conversation-1" })
@@ -172,7 +177,10 @@ describe("useConversationStatus", () => {
     act(() => vi.advanceTimersByTime(6_000))
     expect(sendRealtimeRequest).toHaveBeenCalledTimes(callsAfterSwitch)
 
-    act(() => result.current.onFocus())
+    act(() => {
+      result.current.onFocus()
+      result.current.onDraftChange("new draft")
+    })
     expect(sendRealtimeRequest).toHaveBeenLastCalledWith(
       "conversation.status",
       expect.objectContaining({ conversation_id: "conversation-2" })
@@ -186,7 +194,10 @@ describe("useConversationStatus", () => {
 
   it("stops on blur and while hidden", () => {
     const { result, sendRealtimeRequest } = setup()
-    act(() => result.current.onFocus())
+    act(() => {
+      result.current.onFocus()
+      result.current.onDraftChange("hello")
+    })
     act(() => result.current.onBlur())
     act(() => vi.advanceTimersByTime(6_000))
     expect(sendRealtimeRequest).toHaveBeenCalledTimes(1)
@@ -200,8 +211,24 @@ describe("useConversationStatus", () => {
 
   it("does not send for unsupported conversations", () => {
     const { result, sendRealtimeRequest } = setup(false)
-    act(() => result.current.onFocus())
+    act(() => {
+      result.current.onFocus()
+      result.current.onDraftChange("hello")
+    })
     act(() => vi.advanceTimersByTime(6_000))
     expect(sendRealtimeRequest).not.toHaveBeenCalled()
+  })
+
+  it("stops heartbeating when the draft becomes blank", () => {
+    const { result, sendRealtimeRequest } = setup()
+    act(() => {
+      result.current.onFocus()
+      result.current.onDraftChange("hello")
+    })
+    expect(sendRealtimeRequest).toHaveBeenCalledTimes(1)
+
+    act(() => result.current.onDraftChange("   "))
+    act(() => vi.advanceTimersByTime(6_000))
+    expect(sendRealtimeRequest).toHaveBeenCalledTimes(1)
   })
 })

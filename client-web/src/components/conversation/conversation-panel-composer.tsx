@@ -1,5 +1,13 @@
 import * as React from "react"
-import { ImageIcon, LoaderCircle, Mic, Paperclip, Smile, X } from "lucide-react"
+import {
+  Film,
+  ImageIcon,
+  LoaderCircle,
+  Mic,
+  Paperclip,
+  Smile,
+  X,
+} from "lucide-react"
 import { toast } from "sonner"
 import {
   type ClientConversation,
@@ -14,6 +22,7 @@ import {
 import { getFileMessageUploadError } from "@/lib/file-message"
 import type { ConversationDraftMention } from "@/lib/conversation-drafts"
 import type { VoiceMessageRecording } from "@/lib/voice-message"
+import { getVideoMessageUploadError } from "@/lib/video-message"
 import {
   createDraftMentionTemplate,
   createMentionCandidates,
@@ -36,6 +45,7 @@ import { MarkdownIcon } from "@/components/icons/markdown-icon"
 import { Button } from "@/components/ui/button"
 import { SendFileMessageDialog } from "@/components/send-file-message-dialog"
 import { SendImageMessageDialog } from "@/components/send-image-message-dialog"
+import { SendVideoMessageDialog } from "@/components/send-video-message-dialog"
 import {
   InputGroup,
   InputGroupAddon,
@@ -68,10 +78,16 @@ export const ConversationPanelComposer = React.forwardRef<
     onCancelReply: () => void
     onDraftBlur?: () => void
     onDraftFocus?: () => void
+    onDraftPresenceChange?: (draft: string) => void
     onDraftChange: (draft: string, mentions: ConversationDraftMention[]) => void
     onSendFile: (file: File) => Promise<ClientMessage | null>
     onSendImage: (
       image: File,
+      caption: string,
+      captionType: ImageCaptionType
+    ) => Promise<ClientMessage | null>
+    onSendVideo?: (
+      video: File,
       caption: string,
       captionType: ImageCaptionType
     ) => Promise<ClientMessage | null>
@@ -90,9 +106,11 @@ export const ConversationPanelComposer = React.forwardRef<
     onCancelReply,
     onDraftBlur,
     onDraftFocus,
+    onDraftPresenceChange,
     onDraftChange,
     onSendFile,
     onSendImage,
+    onSendVideo,
     onSendVoice,
     onRichTextModeChange,
     onSendMessage,
@@ -103,6 +121,7 @@ export const ConversationPanelComposer = React.forwardRef<
 ) {
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const imageInputRef = React.useRef<HTMLInputElement | null>(null)
+  const videoInputRef = React.useRef<HTMLInputElement | null>(null)
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null)
   const previousSendingRef = React.useRef(sending)
   const shouldFocusAfterSendingRef = React.useRef(false)
@@ -122,10 +141,13 @@ export const ConversationPanelComposer = React.forwardRef<
   })
   const previousConversationIdRef = React.useRef(conversation.id)
   const sendInFlightRef = React.useRef(false)
+  const videoSendInFlightRef = React.useRef(false)
   onDraftChangeRef.current = onDraftChange
   const [expressionPickerOpen, setExpressionPickerOpen] = React.useState(false)
   const [fileDialogOpen, setFileDialogOpen] = React.useState(false)
   const [imageDialogOpen, setImageDialogOpen] = React.useState(false)
+  const [videoDialogOpen, setVideoDialogOpen] = React.useState(false)
+  const [videoSending, setVideoSending] = React.useState(false)
   const [imagePreparing, setImagePreparing] = React.useState(false)
   const [voiceInputDialogOpen, setVoiceInputDialogOpen] = React.useState(false)
   const [mentionTrigger, setMentionTrigger] =
@@ -134,6 +156,8 @@ export const ConversationPanelComposer = React.forwardRef<
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null)
   const [selectedImage, setSelectedImage] = React.useState<File | null>(null)
   const [imageCaption, setImageCaption] = React.useState("")
+  const [selectedVideo, setSelectedVideo] = React.useState<File | null>(null)
+  const [videoCaption, setVideoCaption] = React.useState("")
   const mentionCandidates = React.useMemo(
     () =>
       conversation.type === "group" ||
@@ -205,13 +229,14 @@ export const ConversationPanelComposer = React.forwardRef<
       localDraftRef.current = { mentions, text }
       setLocalDraft(text)
       setLocalDraftMentions(mentions)
+      onDraftPresenceChange?.(text)
       cancelScheduledDraftSync()
       draftSyncTimerRef.current = window.setTimeout(
         flushLocalDraft,
         draftSyncDelayMs
       )
     },
-    [cancelScheduledDraftSync, flushLocalDraft]
+    [cancelScheduledDraftSync, flushLocalDraft, onDraftPresenceChange]
   )
 
   React.useEffect(() => {
@@ -511,6 +536,24 @@ export const ConversationPanelComposer = React.forwardRef<
     imageInputRef.current?.click()
   }
 
+  function handleVideoButtonClick() {
+    videoInputRef.current?.click()
+  }
+
+  function handleVideoInputChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const video = event.target.files?.[0] ?? null
+    event.target.value = ""
+    if (!video) return
+    const validationError = getVideoMessageUploadError(video)
+    if (validationError) {
+      toast.error(validationError)
+      return
+    }
+    setSelectedVideo(video)
+    setVideoCaption("")
+    setVideoDialogOpen(true)
+  }
+
   function handleFileInputChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null
 
@@ -641,6 +684,32 @@ export const ConversationPanelComposer = React.forwardRef<
     }
   }
 
+  function handleVideoDialogOpenChange(open: boolean) {
+    if (videoSending) return
+    setVideoDialogOpen(open)
+    if (!open) {
+      setSelectedVideo(null)
+      setVideoCaption("")
+    }
+  }
+
+  async function handleVideoSendConfirm(caption: string) {
+    if (!onSendVideo || !selectedVideo || videoSendInFlightRef.current) return
+    videoSendInFlightRef.current = true
+    setVideoSending(true)
+    try {
+      const message = await onSendVideo(selectedVideo, caption, "text")
+      if (message) {
+        setVideoDialogOpen(false)
+        setSelectedVideo(null)
+        setVideoCaption("")
+      }
+    } finally {
+      videoSendInFlightRef.current = false
+      setVideoSending(false)
+    }
+  }
+
   return (
     <footer
       className="shrink-0 border-t p-4"
@@ -659,6 +728,15 @@ export const ConversationPanelComposer = React.forwardRef<
         onChange={handleImageInputChange}
         type="file"
       />
+      {onSendVideo && (
+        <input
+          ref={videoInputRef}
+          accept="video/mp4,video/webm"
+          className="hidden"
+          onChange={handleVideoInputChange}
+          type="file"
+        />
+      )}
       <div
         className="flex w-full flex-col gap-2"
         data-testid="conversation-panel-composer-content"
@@ -698,7 +776,10 @@ export const ConversationPanelComposer = React.forwardRef<
                 flushLocalDraft()
                 onDraftBlur?.()
               }}
-              onFocus={onDraftFocus}
+              onFocus={() => {
+                onDraftPresenceChange?.(localDraftRef.current.text)
+                onDraftFocus?.()
+              }}
               onChange={handleDraftChange}
               onKeyDown={handleComposerKeyDown}
               onSelect={(event) =>
@@ -754,6 +835,17 @@ export const ConversationPanelComposer = React.forwardRef<
                     <ImageIcon className="size-4" />
                   )}
                 </InputGroupButton>
+                {onSendVideo && (
+                  <InputGroupButton
+                    aria-label="插入视频"
+                    disabled={sending}
+                    onClick={handleVideoButtonClick}
+                    size="icon-sm"
+                    title="插入视频"
+                  >
+                    <Film className="size-4" />
+                  </InputGroupButton>
+                )}
                 <Toggle
                   aria-label="支持 markdown"
                   className="size-8 p-0"
@@ -818,6 +910,19 @@ export const ConversationPanelComposer = React.forwardRef<
         open={imageDialogOpen}
         sending={sending}
       />
+      {onSendVideo && (
+        <SendVideoMessageDialog
+          caption={videoCaption}
+          conversationName={conversation.name}
+          mentionCandidates={mentionCandidates}
+          onCaptionChange={setVideoCaption}
+          onConfirm={(caption) => void handleVideoSendConfirm(caption)}
+          onOpenChange={handleVideoDialogOpenChange}
+          open={videoDialogOpen}
+          sending={videoSending}
+          video={selectedVideo}
+        />
+      )}
       <VoiceInputDialog
         onSendText={onSendMessage}
         onSendVoice={onSendVoice}

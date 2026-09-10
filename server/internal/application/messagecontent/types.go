@@ -17,6 +17,7 @@ const (
 	TypeEntityCard    = "entity_card"
 	TypeFile          = "file"
 	TypeImage         = "image"
+	TypeVideo         = "video"
 	TypeVoice         = "voice"
 	TypeForwardBundle = "forward_bundle"
 )
@@ -82,6 +83,16 @@ type imageBody struct {
 	FileID      string `json:"file_id"`
 	Width       int    `json:"width,omitempty"`
 	Height      int    `json:"height,omitempty"`
+	Caption     string `json:"caption,omitempty"`
+	CaptionType string `json:"caption_type,omitempty"`
+}
+
+type videoBody struct {
+	Type        string `json:"type"`
+	FileID      string `json:"file_id"`
+	Name        string `json:"name"`
+	SizeBytes   int64  `json:"size_bytes"`
+	ContentType string `json:"content_type"`
 	Caption     string `json:"caption,omitempty"`
 	CaptionType string `json:"caption_type,omitempty"`
 }

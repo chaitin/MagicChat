@@ -4,6 +4,7 @@ import { toast } from "sonner"
 import {
   sendConversationFileMessage,
   sendConversationImageMessage,
+  sendConversationVideoMessage,
   sendConversationVoiceMessage,
   sendConversationLinkMessage,
   sendConversationMarkdownMessage,
@@ -11,12 +12,13 @@ import {
   sendConversationEntityCardMessage,
   sendConversationTextMessage,
 } from "@/lib/client-data-api"
-import type { ClientCardSendInput } from "@/lib/client-data-api"
+import type { ClientCardSendInput, ClientMessage } from "@/lib/client-data-api"
 import type {
   ClientConversationMessageState,
   ClientDataContextValue,
   SendConversationImageOptions,
   SendConversationMessageOptions,
+  SendConversationVideoOptions,
 } from "@/lib/client-data-context"
 import { getClientDataErrorMessage } from "@/lib/client-data-state"
 import { createClientMessageId } from "@/lib/message-id"
@@ -44,15 +46,18 @@ export function useConversationSenders({
 }) {
   const attemptsRef = useRef(new Set<string>())
   const sendOptimistic = useCallback(
-    async function runOptimistic(
+    function runOptimistic(
       conversationId: string,
       clientMessageId: string,
-      body: import("@/lib/client-data-api").ClientMessage["body"],
+      body: ClientMessage["body"],
       replyToMessageId: string | undefined,
-      request: () => Promise<import("@/lib/client-data-api").ClientMessage>,
-      failureText: string
-    ) {
-      if (attemptsRef.current.has(clientMessageId)) return null
+      request: () => Promise<ClientMessage>,
+      failureText: string,
+      onConfirmed?: () => void
+    ): Promise<ClientMessage | null> {
+      if (attemptsRef.current.has(clientMessageId)) {
+        return Promise.resolve(null)
+      }
       const retry = () =>
         void runOptimistic(
           conversationId,
@@ -60,23 +65,24 @@ export function useConversationSenders({
           body,
           replyToMessageId,
           request,
-          failureText
+          failureText,
+          onConfirmed
         )
       attemptsRef.current.add(clientMessageId)
       const accountGeneration = getConversationAccountGeneration()
       const state = conversationMessageStatesRef.current[conversationId]
-      const temporary = {
+      const temporary: ClientMessage = {
         body,
         clientMessageId,
         conversationId,
         createdAt: new Date().toISOString(),
-        deliveryStatus: "sending" as const,
+        deliveryStatus: "sending",
         id: `optimistic:${clientMessageId}`,
         reactionVersion: 0,
         reactions: [],
         replyToMessageId,
         retry,
-        sender: { id: currentUserId, type: "user" as const },
+        sender: { id: currentUserId, type: "user" },
         seq:
           Math.max(
             state?.latestKnownSeq ?? 0,
@@ -84,22 +90,25 @@ export function useConversationSenders({
           ) + 1,
       }
       mergeIncomingConversationMessage(temporary, { markLoaded: true })
-      try {
-        const message = await request()
-        if (accountGeneration !== getConversationAccountGeneration()) return null
-        mergeIncomingConversationMessage(message, { markLoaded: true })
-        return message
-      } catch (error) {
-        if (accountGeneration !== getConversationAccountGeneration()) return null
-        mergeIncomingConversationMessage(
-          { ...temporary, deliveryStatus: "failed" },
-          { markLoaded: true }
-        )
-        toast.error(getClientDataErrorMessage(error, failureText))
-        return null
-      } finally {
-        attemptsRef.current.delete(clientMessageId)
-      }
+      void Promise.resolve()
+        .then(request)
+        .then((message) => {
+          if (accountGeneration !== getConversationAccountGeneration()) return
+          mergeIncomingConversationMessage(message, { markLoaded: true })
+          onConfirmed?.()
+        })
+        .catch((error: unknown) => {
+          if (accountGeneration !== getConversationAccountGeneration()) return
+          mergeIncomingConversationMessage(
+            { ...temporary, deliveryStatus: "failed" },
+            { markLoaded: true, updateList: false }
+          )
+          toast.error(getClientDataErrorMessage(error, failureText))
+        })
+        .finally(() => {
+          attemptsRef.current.delete(clientMessageId)
+        })
+      return Promise.resolve(temporary)
     },
     [
       conversationMessageStatesRef,
@@ -118,11 +127,16 @@ export function useConversationSenders({
       if (!conversationId || !trimmedContent) return null
       const clientMessageId = createClientMessageId()
       return sendOptimistic(
-        conversationId, clientMessageId, { type: "text", content: trimmedContent },
+        conversationId,
+        clientMessageId,
+        { type: "text", content: trimmedContent },
         options.replyToMessageId,
-        () => sendConversationTextMessage(conversationId, {
-          clientMessageId, content: trimmedContent, replyToMessageId: options.replyToMessageId,
-        }),
+        () =>
+          sendConversationTextMessage(conversationId, {
+            clientMessageId,
+            content: trimmedContent,
+            replyToMessageId: options.replyToMessageId,
+          }),
         "发送消息失败"
       )
     },
@@ -139,11 +153,16 @@ export function useConversationSenders({
       if (!conversationId || !trimmedContent) return null
       const clientMessageId = createClientMessageId()
       return sendOptimistic(
-        conversationId, clientMessageId, { type: "markdown", content: trimmedContent },
+        conversationId,
+        clientMessageId,
+        { type: "markdown", content: trimmedContent },
         options.replyToMessageId,
-        () => sendConversationMarkdownMessage(conversationId, {
-          clientMessageId, content: trimmedContent, replyToMessageId: options.replyToMessageId,
-        }),
+        () =>
+          sendConversationMarkdownMessage(conversationId, {
+            clientMessageId,
+            content: trimmedContent,
+            replyToMessageId: options.replyToMessageId,
+          }),
         "发送富文本消息失败"
       )
     },
@@ -160,11 +179,16 @@ export function useConversationSenders({
       if (!conversationId || !trimmedURL) return null
       const clientMessageId = createClientMessageId()
       return sendOptimistic(
-        conversationId, clientMessageId, { type: "link", title: trimmedURL, url: trimmedURL },
+        conversationId,
+        clientMessageId,
+        { type: "link", title: trimmedURL, url: trimmedURL },
         options.replyToMessageId,
-        () => sendConversationLinkMessage(conversationId, {
-          clientMessageId, url: trimmedURL, replyToMessageId: options.replyToMessageId,
-        }),
+        () =>
+          sendConversationLinkMessage(conversationId, {
+            clientMessageId,
+            url: trimmedURL,
+            replyToMessageId: options.replyToMessageId,
+          }),
         "发送链接失败"
       )
     },
@@ -205,7 +229,8 @@ export function useConversationSenders({
                 title: card.title.trim(),
                 url: card.url.trim(),
               })
-        if (accountGeneration !== getConversationAccountGeneration()) return null
+        if (accountGeneration !== getConversationAccountGeneration())
+          return null
         mergeIncomingConversationMessage(message, { markLoaded: true })
         return message
       } catch (error: unknown) {
@@ -254,7 +279,8 @@ export function useConversationSenders({
           file,
           replyToMessageId: options.replyToMessageId,
         })
-        if (accountGeneration !== getConversationAccountGeneration()) return null
+        if (accountGeneration !== getConversationAccountGeneration())
+          return null
         mergeIncomingConversationMessage(message, { markLoaded: true })
         return message
       } catch (error: unknown) {
@@ -305,7 +331,8 @@ export function useConversationSenders({
           image,
           replyToMessageId: options.replyToMessageId,
         })
-        if (accountGeneration !== getConversationAccountGeneration()) return null
+        if (accountGeneration !== getConversationAccountGeneration())
+          return null
         mergeIncomingConversationMessage(message, { markLoaded: true })
         return message
       } catch (error: unknown) {
@@ -328,6 +355,46 @@ export function useConversationSenders({
       mergeIncomingConversationMessage,
       updateConversationMessageState,
     ]
+  )
+
+  const sendConversationVideo = useCallback(
+    async (
+      conversationId: string,
+      video: File,
+      options: SendConversationVideoOptions = {}
+    ) => {
+      if (!conversationId || video.size <= 0) return null
+      const clientMessageId = createClientMessageId()
+      const localURL = URL.createObjectURL(video)
+      return sendOptimistic(
+        conversationId,
+        clientMessageId,
+        {
+          caption: options.caption?.trim() || undefined,
+          captionType: options.caption?.trim()
+            ? (options.captionType ?? "text")
+            : undefined,
+          contentType: video.type === "video/webm" ? "video/webm" : "video/mp4",
+          fileId: clientMessageId,
+          localURL,
+          name: video.name,
+          sizeBytes: video.size,
+          type: "video",
+        },
+        options.replyToMessageId,
+        () =>
+          sendConversationVideoMessage(conversationId, {
+            caption: options.caption,
+            captionType: options.captionType,
+            clientMessageId,
+            replyToMessageId: options.replyToMessageId,
+            video,
+          }),
+        "发送视频失败",
+        () => window.setTimeout(() => URL.revokeObjectURL(localURL), 0)
+      )
+    },
+    [sendOptimistic]
   )
 
   const sendConversationVoice = useCallback(
@@ -356,7 +423,8 @@ export function useConversationSenders({
           transcript: voice.transcript,
           voice: voice.blob,
         })
-        if (accountGeneration !== getConversationAccountGeneration()) return null
+        if (accountGeneration !== getConversationAccountGeneration())
+          return null
         mergeIncomingConversationMessage(message, { markLoaded: true })
         return message
       } catch (error: unknown) {
@@ -388,6 +456,7 @@ export function useConversationSenders({
     sendConversationMarkdown,
     sendConversationCard,
     sendConversationText,
+    sendConversationVideo,
     sendConversationVoice,
   }
 }

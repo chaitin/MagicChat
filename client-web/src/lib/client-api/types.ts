@@ -364,6 +364,16 @@ export type ImageMessageBodyResponse = {
   width?: number
 }
 
+export type VideoMessageBodyResponse = {
+  caption?: string
+  caption_type?: "text" | "markdown"
+  content_type?: string
+  file_id?: string
+  name?: string
+  size_bytes?: number
+  type?: "video"
+}
+
 export type VoiceMessageBodyResponse = {
   content_type?: string
   duration_ms?: number
@@ -381,6 +391,7 @@ export type ForwardBundleItemBodyResponse =
   | ChartMessageBodyResponse
   | FileMessageBodyResponse
   | ImageMessageBodyResponse
+  | VideoMessageBodyResponse
   | VoiceMessageBodyResponse
   | ForwardBundleMessageBodyResponse
 
@@ -482,6 +493,7 @@ export type MessageBodyResponse =
   | ChartMessageBodyResponse
   | FileMessageBodyResponse
   | ImageMessageBodyResponse
+  | VideoMessageBodyResponse
   | VoiceMessageBodyResponse
   | ForwardBundleMessageBodyResponse
   | GroupMembersInvitedSystemEventBodyResponse
@@ -1070,6 +1082,17 @@ export type ClientImageMessageBody = {
   width?: number
 }
 
+export type ClientVideoMessageBody = {
+  caption?: string
+  captionType?: ImageCaptionType
+  contentType: "video/mp4" | "video/webm"
+  fileId: string
+  localURL?: string
+  name: string
+  sizeBytes: number
+  type: "video"
+}
+
 export type ClientVoiceMessageBody = {
   contentType: string
   durationMS: number
@@ -1087,6 +1110,7 @@ export type ClientForwardableMessageBody =
   | ClientChartMessageBody
   | ClientFileMessageBody
   | ClientImageMessageBody
+  | ClientVideoMessageBody
   | ClientVoiceMessageBody
   | ClientForwardBundleMessageBody
 
@@ -1197,6 +1221,7 @@ export type ClientMessageBody =
   | ClientChartMessageBody
   | ClientFileMessageBody
   | ClientImageMessageBody
+  | ClientVideoMessageBody
   | ClientVoiceMessageBody
   | ClientForwardBundleMessageBody
   | ClientRevokedMessageBody
@@ -1392,6 +1417,14 @@ export type SendConversationImageMessageInput = {
   clientMessageId: string
   image: File
   replyToMessageId?: string
+}
+
+export type SendConversationVideoMessageInput = {
+  caption?: string
+  captionType?: ImageCaptionType
+  clientMessageId: string
+  replyToMessageId?: string
+  video: File
 }
 
 export type SendConversationVoiceMessageInput = {

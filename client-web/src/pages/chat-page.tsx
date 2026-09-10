@@ -178,6 +178,7 @@ export function ChatPage() {
     sendConversationLink,
     sendConversationMarkdown,
     sendConversationText,
+    sendConversationVideo,
     sendConversationVoice,
     setConversationPinned,
     setConversationMuted,
@@ -804,6 +805,9 @@ export function ChatPage() {
         : sendConversationText
     const sendContent = linkURL ?? content
 
+    if (activeMessageState?.viewMode === "history") {
+      returnToLatestConversationMessages(sendingConversationId)
+    }
     const message = await sendConversation(sendingConversationId, sendContent, {
       replyToMessageId: sendingReplyToMessageId,
     })
@@ -849,6 +853,31 @@ export function ChatPage() {
       clearSentReplyTarget(sendingConversationId, sendingReplyToMessageId)
     }
 
+    return message
+  }
+
+  async function sendVideoMessage(
+    video: File,
+    caption: string,
+    captionType: ImageCaptionType
+  ) {
+    if (!activeConversationId) {
+      return null
+    }
+
+    const sendingConversationId = activeConversationId
+    const sendingReplyToMessageId = replyTarget?.id
+    if (activeMessageState?.viewMode === "history") {
+      returnToLatestConversationMessages(sendingConversationId)
+    }
+    const message = await sendConversationVideo(sendingConversationId, video, {
+      caption,
+      captionType,
+      replyToMessageId: sendingReplyToMessageId,
+    })
+    if (message) {
+      clearSentReplyTarget(sendingConversationId, sendingReplyToMessageId)
+    }
     return message
   }
 
@@ -1055,6 +1084,7 @@ export function ChatPage() {
           flushDrafts()
         }}
         onDraftFocus={conversationStatus.onFocus}
+        onDraftPresenceChange={conversationStatus.onDraftChange}
         onDraftChange={setDraft}
         onCreateTopic={
           activeConversation?.type === "topic" ||
@@ -1071,6 +1101,7 @@ export function ChatPage() {
         onRichTextModeChange={setRichTextMode}
         onSendFile={sendFileMessage}
         onSendImage={sendImageMessage}
+        onSendVideo={sendVideoMessage}
         onSendVoice={sendVoiceMessage}
         onLoadBeforeMessages={loadBeforeMessages}
         onOpenTopic={openTopicDrawer}

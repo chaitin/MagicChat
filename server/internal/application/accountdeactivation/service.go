@@ -74,22 +74,24 @@ type Mailer interface {
 }
 type Presence interface{ CloseUser(string) int }
 type Dependencies struct {
-	DB           *gorm.DB
-	Settings     Settings
-	Mailer       Mailer
-	Secret       string
-	Presence     Presence
-	Now          func() time.Time
-	GenerateCode func() (string, error)
+	DB                *gorm.DB
+	Settings          Settings
+	Mailer            Mailer
+	Secret            string
+	Presence          Presence
+	Now               func() time.Time
+	GenerateCode      func() (string, error)
+	InvalidateProfile func(string)
 }
 type Service struct {
-	db           *gorm.DB
-	settings     Settings
-	mailer       Mailer
-	key          []byte
-	presence     Presence
-	now          func() time.Time
-	generateCode func() (string, error)
+	db                *gorm.DB
+	settings          Settings
+	mailer            Mailer
+	key               []byte
+	presence          Presence
+	now               func() time.Time
+	generateCode      func() (string, error)
+	invalidateProfile func(string)
 }
 
 func NewService(d Dependencies) *Service {
@@ -103,7 +105,10 @@ func NewService(d Dependencies) *Service {
 	}
 	m := hmac.New(sha256.New, []byte(d.Secret))
 	m.Write([]byte("dianbao/account-deactivation/v1"))
-	return &Service{d.DB, d.Settings, d.Mailer, m.Sum(nil), d.Presence, n, g}
+	return &Service{
+		db: d.DB, settings: d.Settings, mailer: d.Mailer, key: m.Sum(nil),
+		presence: d.Presence, now: n, generateCode: g, invalidateProfile: d.InvalidateProfile,
+	}
 }
 func generateCode() (string, error) {
 	var b [8]byte
@@ -273,6 +278,9 @@ func (s *Service) Deactivate(ctx context.Context, userID, code string) error {
 	}
 	if invalidCode {
 		return &Error{Code: CodeInvalidCode, Message: "验证码无效"}
+	}
+	if s.invalidateProfile != nil {
+		s.invalidateProfile(userID)
 	}
 	if s.presence != nil {
 		s.presence.CloseUser(userID)

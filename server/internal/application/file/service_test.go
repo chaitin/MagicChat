@@ -76,32 +76,58 @@ func TestServiceUploadsTemporaryFileAndResolvesURL(t *testing.T) {
 func TestServiceClassifiesTemporaryFilesBySizeAndRejectsOversize(t *testing.T) {
 	now := time.Date(2026, 7, 15, 6, 30, 0, 0, time.UTC)
 	tests := []struct {
-		name       string
-		sizeBytes  int64
-		wantPrefix string
-		wantDays   int
+		name         string
+		sizeBytes    int64
+		wantPrefix   string
+		wantDays     int
+		standardDays int32
+		largeDays    int32
 	}{
 		{
-			name:       "exactly ten MiB is standard",
-			sizeBytes:  LargeTemporaryFileThreshold,
+			name:       "exactly twenty MiB is standard",
+			sizeBytes:  20 * 1024 * 1024,
 			wantPrefix: TemporaryStandardObjectPrefix,
 			wantDays:   DefaultTemporaryExpireDays,
 		},
 		{
-			name:       "over ten MiB is large",
-			sizeBytes:  LargeTemporaryFileThreshold + 1,
+			name:       "over twenty MiB is large",
+			sizeBytes:  20*1024*1024 + 1,
 			wantPrefix: TemporaryLargeObjectPrefix,
-			wantDays:   LargeTemporaryExpireDays,
+			wantDays:   180,
+		},
+		{
+			name:       "exactly five hundred MiB is accepted",
+			sizeBytes:  500 * 1024 * 1024,
+			wantPrefix: TemporaryLargeObjectPrefix,
+			wantDays:   180,
+		},
+		{
+			name:         "custom large retention",
+			sizeBytes:    20*1024*1024 + 1,
+			wantPrefix:   TemporaryLargeObjectPrefix,
+			wantDays:     365,
+			standardDays: 90,
+			largeDays:    365,
+		},
+		{
+			name:         "custom standard retention stays independent",
+			sizeBytes:    20 * 1024 * 1024,
+			wantPrefix:   TemporaryStandardObjectPrefix,
+			wantDays:     90,
+			standardDays: 90,
+			largeDays:    365,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			storage := &recordingBlobStorage{}
 			service := NewService(Dependencies{
-				DB:      openFileTestDB(t),
-				Storage: storage,
-				Now:     func() time.Time { return now },
-				NewID:   uuid.NewString,
+				DB:                       openFileTestDB(t),
+				Storage:                  storage,
+				TemporaryExpireDays:      test.standardDays,
+				LargeTemporaryExpireDays: test.largeDays,
+				Now:                      func() time.Time { return now },
+				NewID:                    uuid.NewString,
 			})
 			value, err := service.UploadTemporary(context.Background(), UploadTemporaryCommand{
 				Content:     strings.NewReader("content does not need to match the declared size in this storage fake"),
@@ -117,6 +143,16 @@ func TestServiceClassifiesTemporaryFilesBySizeAndRejectsOversize(t *testing.T) {
 			if want := now.AddDate(0, 0, test.wantDays); !value.ExpiresAt.Equal(want) {
 				t.Fatalf("expires at = %v, want %v", value.ExpiresAt, want)
 			}
+			resolved, err := service.ResolveTemporaryURL(context.Background(), value.ID)
+			if err != nil || resolved.FileID != value.ID {
+				t.Fatalf("resolve uploaded file = %#v, err = %v", resolved, err)
+			}
+			now = value.ExpiresAt
+			_, err = service.ResolveTemporaryURL(context.Background(), value.ID)
+			if ErrorCodeOf(err) != CodeNotFound {
+				t.Fatalf("resolve expired file error = %v", err)
+			}
+			now = value.CreatedAt
 			if storage.temporarySize != test.sizeBytes {
 				t.Fatalf("storage size = %d, want %d", storage.temporarySize, test.sizeBytes)
 			}
@@ -127,7 +163,7 @@ func TestServiceClassifiesTemporaryFilesBySizeAndRejectsOversize(t *testing.T) {
 	service := NewService(Dependencies{DB: openFileTestDB(t), Storage: storage})
 	_, err := service.UploadTemporary(context.Background(), UploadTemporaryCommand{
 		Content:   strings.NewReader("oversize"),
-		SizeBytes: MaxTemporaryUploadBytes + 1,
+		SizeBytes: 500*1024*1024 + 1,
 	})
 	if ErrorCodeOf(err) != CodeRequestTooLarge {
 		t.Fatalf("oversize error = %v, code = %q", err, ErrorCodeOf(err))

@@ -38,6 +38,7 @@ type Dependencies struct {
 	RandomAvatar         func() string
 	StateTTL             time.Duration
 	SessionTTL           time.Duration
+	InvalidateProfile    func(string)
 }
 
 type Service struct {
@@ -51,6 +52,7 @@ type Service struct {
 	randomAvatar         func() string
 	stateTTL             time.Duration
 	sessionTTL           time.Duration
+	invalidateProfile    func(string)
 }
 
 func NewService(deps Dependencies) *Service {
@@ -86,6 +88,7 @@ func NewService(deps Dependencies) *Service {
 		db: deps.DB, providers: deps.Providers, oauth: deps.OAuth, now: now, newID: newID,
 		generateRandomValue: generateRandomValue, generateSessionToken: generateSessionToken,
 		randomAvatar: randomAvatar, stateTTL: stateTTL, sessionTTL: sessionTTL,
+		invalidateProfile: deps.InvalidateProfile,
 	}
 }
 
@@ -241,6 +244,9 @@ func (s *Service) ResolveUser(ctx context.Context, provider identityprovider.Pro
 			return store.User{}, err
 		}
 		return store.User{}, internalError(err)
+	}
+	if s.invalidateProfile != nil {
+		s.invalidateProfile(resultUser.ID)
 	}
 	return resultUser, nil
 }

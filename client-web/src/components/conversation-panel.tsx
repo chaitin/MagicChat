@@ -62,6 +62,7 @@ type ConversationPanelProps = {
   onCancelMessageSelection?: () => void
   onDraftBlur?: () => void
   onDraftFocus?: () => void
+  onDraftPresenceChange?: (draft: string) => void
   onDraftChange: (draft: string, mentions: ConversationDraftMention[]) => void
   onCreateTopic?: (message: ConversationPanelMessage) => void
   onForwardMessage?: (message: ConversationPanelMessage) => void
@@ -83,6 +84,11 @@ type ConversationPanelProps = {
   onSendFile: (file: File) => Promise<ClientMessage | null>
   onSendImage: (
     image: File,
+    caption: string,
+    captionType: ImageCaptionType
+  ) => Promise<ClientMessage | null>
+  onSendVideo?: (
+    video: File,
     caption: string,
     captionType: ImageCaptionType
   ) => Promise<ClientMessage | null>
@@ -120,6 +126,7 @@ export function ConversationPanel({
   onCancelMessageSelection,
   onDraftBlur,
   onDraftFocus,
+  onDraftPresenceChange,
   onDraftChange,
   onCreateTopic,
   onForwardMessage,
@@ -133,6 +140,7 @@ export function ConversationPanel({
   onRespondToChoice,
   onSendFile,
   onSendImage,
+  onSendVideo,
   onSendVoice,
   onLoadBeforeMessages,
   onOpenTopic,
@@ -392,9 +400,11 @@ export function ConversationPanel({
               onCancelReply={onCancelReply}
               onDraftBlur={onDraftBlur}
               onDraftFocus={onDraftFocus}
+              onDraftPresenceChange={onDraftPresenceChange}
               onDraftChange={onDraftChange}
               onSendFile={onSendFile}
               onSendImage={onSendImage}
+              onSendVideo={onSendVideo}
               onSendVoice={onSendVoice}
               onSendMessage={onSendMessage}
               onRichTextModeChange={onRichTextModeChange}

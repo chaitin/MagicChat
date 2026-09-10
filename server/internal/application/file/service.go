@@ -14,19 +14,21 @@ import (
 )
 
 type Dependencies struct {
-	DB                  *gorm.DB
-	Storage             BlobStorage
-	Now                 func() time.Time
-	NewID               func() string
-	TemporaryExpireDays int32
+	DB                       *gorm.DB
+	Storage                  BlobStorage
+	Now                      func() time.Time
+	NewID                    func() string
+	TemporaryExpireDays      int32
+	LargeTemporaryExpireDays int32
 }
 
 type Service struct {
-	db                  *gorm.DB
-	storage             BlobStorage
-	now                 func() time.Time
-	newID               func() string
-	temporaryExpireDays int32
+	db                       *gorm.DB
+	storage                  BlobStorage
+	now                      func() time.Time
+	newID                    func() string
+	temporaryExpireDays      int32
+	largeTemporaryExpireDays int32
 }
 
 func NewService(deps Dependencies) *Service {
@@ -42,12 +44,17 @@ func NewService(deps Dependencies) *Service {
 	if expireDays <= 0 {
 		expireDays = DefaultTemporaryExpireDays
 	}
+	largeExpireDays := deps.LargeTemporaryExpireDays
+	if largeExpireDays <= 0 {
+		largeExpireDays = DefaultLargeTemporaryExpireDays
+	}
 	return &Service{
-		db:                  deps.DB,
-		storage:             deps.Storage,
-		now:                 now,
-		newID:               newID,
-		temporaryExpireDays: expireDays,
+		db:                       deps.DB,
+		storage:                  deps.Storage,
+		now:                      now,
+		newID:                    newID,
+		temporaryExpireDays:      expireDays,
+		largeTemporaryExpireDays: largeExpireDays,
 	}
 }
 
@@ -80,7 +87,7 @@ func (s *Service) UploadTemporary(ctx context.Context, cmd UploadTemporaryComman
 		return TemporaryFile{}, newError(CodeInvalidRequest, "临时文件参数错误", nil)
 	}
 	if cmd.SizeBytes > MaxTemporaryUploadBytes {
-		return TemporaryFile{}, newError(CodeRequestTooLarge, "临时文件不能超过 200MiB", nil)
+		return TemporaryFile{}, newError(CodeRequestTooLarge, "临时文件不能超过 500MiB", nil)
 	}
 	if s.storage == nil {
 		return TemporaryFile{}, newError(CodeStorageUnavailable, "临时文件存储未配置", nil)
@@ -204,7 +211,7 @@ func (s *Service) temporaryFileExpiresAt(value store.TemporaryFile) time.Time {
 
 func (s *Service) temporaryRetentionDays(sizeBytes int64) int {
 	if isLargeTemporaryFile(sizeBytes) {
-		return LargeTemporaryExpireDays
+		return int(s.largeTemporaryExpireDays)
 	}
 	return int(s.temporaryExpireDays)
 }

@@ -323,7 +323,10 @@ describe("ChatPage last conversation", () => {
       <MemoryRouter initialEntries={[`/chat/${conversation.id}`]}>
         <RealtimeContext.Provider value={createRealtimeValue()}>
           <Routes>
-            <Route path="/chat/:conversationId?" element={<MessageStateHarness />} />
+            <Route
+              path="/chat/:conversationId?"
+              element={<MessageStateHarness />}
+            />
           </Routes>
         </RealtimeContext.Provider>
       </MemoryRouter>
@@ -332,7 +335,9 @@ describe("ChatPage last conversation", () => {
     expect(await screen.findByText("讨论发布计划")).toBeVisible()
     expect(ensureConversationMessages).not.toHaveBeenCalled()
 
-    await user.click(screen.getByRole("button", { name: "clear message state" }))
+    await user.click(
+      screen.getByRole("button", { name: "clear message state" })
+    )
 
     await waitFor(() =>
       expect(ensureConversationMessages).toHaveBeenCalledWith(conversation.id)
@@ -543,6 +548,7 @@ function createClientDataValue(
     setMessageReaction: vi.fn(),
     sendConversationFile: vi.fn(),
     sendConversationImage: vi.fn(),
+    sendConversationVideo: vi.fn(),
     sendConversationVoice: vi.fn(),
     sendConversationLink: vi.fn(),
     sendConversationMarkdown: vi.fn(),

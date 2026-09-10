@@ -215,6 +215,7 @@ func (a *MessageAPI) RegisterRoutes(group *echo.Group) {
 	group.POST("/conversations/:conversation_id/messages", a.create)
 	group.POST("/conversations/:conversation_id/messages/files", a.createFile)
 	group.POST("/conversations/:conversation_id/messages/images", a.createImage)
+	group.POST("/conversations/:conversation_id/messages/videos", a.createVideo)
 	group.POST("/conversations/:conversation_id/messages/voices", a.createVoice)
 	group.POST("/conversations/:conversation_id/messages/forward", a.forward)
 	group.POST("/conversations/:conversation_id/messages/reactions/query", a.listReactionSnapshots)

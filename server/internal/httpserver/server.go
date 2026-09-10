@@ -110,14 +110,30 @@ func NewRouter(db *gorm.DB, cfg config.Config) *echo.Echo {
 }
 
 func NewRouterWithRealtimeOptions(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options) *echo.Echo {
-	return newRouter(db, cfg, realtimeOptions, nil)
+	router, _ := newRouter(db, cfg, realtimeOptions, nil)
+	return router
 }
 
-func NewRouterWithTaskReminderWorker(ctx context.Context, db *gorm.DB, cfg config.Config) *echo.Echo {
-	return newRouter(db, cfg, realtime.Options{}, ctx)
+// The returned function must be called after HTTP shutdown and cancellation of
+// ctx, so buffered activity is persisted before the process exits.
+func NewRouterWithTaskReminderWorker(ctx context.Context, db *gorm.DB, cfg config.Config) (*echo.Echo, func(context.Context) error) {
+	router, accounts := newRouter(db, cfg, realtime.Options{}, ctx)
+	activityDone := make(chan struct{})
+	go func() {
+		defer close(activityDone)
+		accounts.RunActivityWorker(ctx)
+	}()
+	return router, func(shutdownCtx context.Context) error {
+		select {
+		case <-activityDone:
+			return accounts.CloseActivity(shutdownCtx)
+		case <-shutdownCtx.Done():
+			return shutdownCtx.Err()
+		}
+	}
 }
 
-func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options, workerContext context.Context) *echo.Echo {
+func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options, workerContext context.Context) (*echo.Echo, *account.Service) {
 	if err := store.InstallUserNicknamePolicy(db); err != nil {
 		panic(err)
 	}
@@ -129,9 +145,10 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 	realtimeOptions.RecordUserPong = server.recordUserPong
 	server.realtime = realtime.NewConnectionPool(realtimeOptions)
 	server.files = fileapp.NewService(fileapp.Dependencies{
-		DB:                  db,
-		Storage:             filestorage.New(cfg.Storage),
-		TemporaryExpireDays: cfg.Storage.Lifecycle.TemporaryExpireDays,
+		DB:                       db,
+		Storage:                  filestorage.New(cfg.Storage),
+		TemporaryExpireDays:      cfg.Storage.Lifecycle.TemporaryExpireDays,
+		LargeTemporaryExpireDays: cfg.Storage.Lifecycle.LargeTemporaryExpireDays,
 	})
 	server.clientFiles = clientapi.NewFileAPI(server.files)
 	server.adminAuth = adminauth.NewService(adminauth.Dependencies{DB: db, Password: cfg.Admin.Password})
@@ -164,6 +181,7 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 	deactivation := accountdeactivation.NewService(accountdeactivation.Dependencies{
 		DB: db, Settings: server.settings, Mailer: mailinfra.NewSMTPMailer(),
 		Secret: cfg.Apps.AIAssistantSecret, Presence: server.realtime,
+		InvalidateProfile: server.accounts.InvalidateProfile,
 	})
 	clientDeactivation := clientapi.NewAccountDeactivationAPI(deactivation)
 	emailAuth := emailauth.NewService(emailauth.Dependencies{
@@ -219,6 +237,7 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 	server.adminProviders = adminapi.NewIdentityProviderAPI(server.identityProviders, cfg.Server.ClientOrigin())
 	server.externalAuth = externalauthapp.NewService(externalauthapp.Dependencies{
 		DB: db, Providers: server.identityProviders, OAuth: externalauthinfra.NewOAuth(),
+		InvalidateProfile: server.accounts.InvalidateProfile,
 	})
 	server.clientExternalAuth = clientapi.NewExternalAuthAPI(server.externalAuth, cfg.Server.ClientOrigin())
 	server.contacts = contactapp.NewService(contactapp.Dependencies{
@@ -328,7 +347,7 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 		go server.tasks.RunReminderWorker(workerContext)
 		go server.mobilePush.RunWorker(workerContext)
 	}
-	return router
+	return router, server.accounts
 }
 
 func legacyUserFromAccount(value account.Account) store.User {

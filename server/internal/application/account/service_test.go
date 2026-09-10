@@ -366,7 +366,7 @@ func openAccountTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
-	if err := db.AutoMigrate(&store.User{}, &store.UserSession{}, &store.UserPushGrant{}, &store.Project{}); err != nil {
+	if err := db.AutoMigrate(&store.User{}, &store.UserSession{}, &store.UserPushGrant{}, &store.Project{}, &store.AppSettings{}); err != nil {
 		t.Fatalf("migrate database: %v", err)
 	}
 	return db

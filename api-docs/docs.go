@@ -4789,7 +4789,7 @@ const docTemplate = `{
         },
         "/api/client/conversations/{conversation_id}/messages/files": {
             "post": {
-                "description": "普通用户上传最大 200MiB 的文件并发送为会话文件消息。文件写入 temporary bucket，消息 body 保存 file_id、文件名和文件大小。",
+                "description": "普通用户上传最大 500MiB 的文件并发送为会话文件消息。文件写入 temporary bucket，消息 body 保存 file_id、文件名和文件大小。",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -5162,6 +5162,136 @@ const docTemplate = `{
                                     "properties": {
                                         "data": {
                                             "$ref": "#/definitions/client.listMessageReactionSnapshotsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/client/conversations/{conversation_id}/messages/videos": {
+            "post": {
+                "description": "普通用户上传最大 100MiB 的 MP4 或 WebM 视频并发送为会话视频消息，可附带 text 或 markdown 视频说明。",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端消息"
+                ],
+                "summary": "发送视频消息",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "会话 ID",
+                        "name": "conversation_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "客户端消息 ID",
+                        "name": "client_message_id",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "引用消息 ID",
+                        "name": "reply_to_message_id",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "视频说明，最多 5000 个字符，支持与文本消息相同的 @ token",
+                        "name": "caption",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "视频说明类型：text 或 markdown，默认 text",
+                        "name": "caption_type",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "file",
+                        "description": "MP4 或 WebM 视频",
+                        "name": "video",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/client.successEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/client.createMessageResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/client.successEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/client.createMessageResponse"
                                         }
                                     }
                                 }
@@ -9333,7 +9463,7 @@ const docTemplate = `{
                         "CookieAuth": []
                     }
                 ],
-                "description": "普通用户上传临时文件，最大 200MiB。大于 10MiB 的文件保留 30 天，其余文件保留 180 天，统一写入 temporary bucket。",
+                "description": "普通用户上传临时文件，最大 500MiB。大于 20MiB 的文件保留期由 LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS 控制，其余文件由 TEMPORARY_ASSETS_EXPIRE_DAYS 控制，默认均为 180 天，统一写入 temporary bucket。",
                 "consumes": [
                     "multipart/form-data"
                 ],

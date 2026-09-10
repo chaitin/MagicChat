@@ -63,6 +63,7 @@ export function useConversationStatus({
   )
   const expiryTimersRef = React.useRef(new Map<string, number>())
   const focusedRef = React.useRef(false)
+  const hasDraftRef = React.useRef(false)
   const heartbeatRef = React.useRef<number | null>(null)
 
   const clearStatus = React.useCallback(
@@ -156,6 +157,7 @@ export function useConversationStatus({
     stopHeartbeat()
     if (
       !focusedRef.current ||
+      !hasDraftRef.current ||
       !supported ||
       document.visibilityState !== "visible"
     )
@@ -169,6 +171,7 @@ export function useConversationStatus({
 
   React.useEffect(() => {
     focusedRef.current = false
+    hasDraftRef.current = false
     stopHeartbeat()
   }, [conversationId, stopHeartbeat, supported])
 
@@ -210,5 +213,15 @@ export function useConversationStatus({
       focusedRef.current = false
       stopHeartbeat()
     }, [stopHeartbeat]),
+    onDraftChange: React.useCallback(
+      (draft: string) => {
+        const hasDraft = draft.trim().length > 0
+        if (hasDraftRef.current === hasDraft) return
+        hasDraftRef.current = hasDraft
+        if (hasDraft) startHeartbeat()
+        else stopHeartbeat()
+      },
+      [startHeartbeat, stopHeartbeat]
+    ),
   }
 }

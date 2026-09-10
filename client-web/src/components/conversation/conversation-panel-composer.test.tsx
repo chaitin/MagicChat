@@ -37,6 +37,53 @@ it("allows Enter text sending while an attachment send is in progress", () => {
   expect(screen.getByRole("button", { name: "发送消息" })).toBeEnabled()
 })
 
+it("selects a video and sends it with a caption", async () => {
+  Object.defineProperty(URL, "createObjectURL", {
+    configurable: true,
+    value: vi.fn(() => "blob:video-preview"),
+  })
+  Object.defineProperty(URL, "revokeObjectURL", {
+    configurable: true,
+    value: vi.fn(),
+  })
+  const onSendVideo = vi.fn(async () => null)
+  const { container } = render(
+    <MemoryRouter>
+      <ConversationPanelComposer
+        conversation={conversation}
+        draft=""
+        draftMentions={[]}
+        onCancelReply={vi.fn()}
+        onDraftChange={vi.fn()}
+        onRichTextModeChange={vi.fn()}
+        onSendFile={async () => null}
+        onSendImage={async () => null}
+        onSendMessage={async () => true}
+        onSendVideo={onSendVideo}
+        onSendVoice={async () => null}
+        replyTarget={null}
+        richTextMode={false}
+        sending={false}
+      />
+    </MemoryRouter>
+  )
+
+  expect(screen.getByRole("button", { name: "插入视频" })).toBeEnabled()
+  const input = container.querySelector<HTMLInputElement>(
+    'input[accept="video/mp4,video/webm"]'
+  )!
+  const video = new File(["video"], "demo.mp4", { type: "video/mp4" })
+  fireEvent.change(input, { target: { files: [video] } })
+  fireEvent.change(await screen.findByLabelText("视频说明"), {
+    target: { value: "演示视频" },
+  })
+  fireEvent.click(screen.getByRole("button", { name: "发送" }))
+
+  await waitFor(() =>
+    expect(onSendVideo).toHaveBeenCalledWith(video, "演示视频", "text")
+  )
+})
+
 it("keeps typing local and synchronizes on debounce, blur, send, and switch", async () => {
   vi.useFakeTimers()
   const onDraftChange = vi.fn()

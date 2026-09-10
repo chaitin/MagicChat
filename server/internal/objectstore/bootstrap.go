@@ -20,8 +20,9 @@ import (
 const bootstrapRetryInterval = 2 * time.Second
 
 const (
-	temporaryLifecycleRuleID      = "expire-temporary-assets"
-	largeTemporaryLifecycleRuleID = "expire-large-temporary-assets"
+	temporaryLifecycleRuleID         = "expire-temporary-assets"
+	largeTemporaryLifecycleRuleID    = "expire-large-temporary-assets"
+	standardTemporaryLifecycleRuleID = "expire-standard-temporary-assets"
 )
 
 type publicReadPolicy struct {
@@ -138,6 +139,7 @@ func (c *Client) ensureTemporaryLifecycle(ctx context.Context, bucket string) er
 		if temporaryLifecycleConfigured(
 			output.Rules,
 			c.cfg.Lifecycle.TemporaryExpireDays,
+			c.cfg.Lifecycle.LargeTemporaryExpireDays,
 			c.cfg.Lifecycle.AbortMultipartDays,
 		) {
 			return nil
@@ -153,6 +155,7 @@ func (c *Client) ensureTemporaryLifecycle(ctx context.Context, bucket string) er
 	rules := mergeTemporaryLifecycleRules(
 		existing,
 		c.cfg.Lifecycle.TemporaryExpireDays,
+		c.cfg.Lifecycle.LargeTemporaryExpireDays,
 		c.cfg.Lifecycle.AbortMultipartDays,
 	)
 
@@ -166,60 +169,75 @@ func (c *Client) ensureTemporaryLifecycle(ctx context.Context, bucket string) er
 	return err
 }
 
-func mergeTemporaryLifecycleRules(existing []types.LifecycleRule, standardExpireDays, abortMultipartDays int32) []types.LifecycleRule {
-	rules := make([]types.LifecycleRule, 0, len(existing)+2)
+func mergeTemporaryLifecycleRules(existing []types.LifecycleRule, standardExpireDays, largeExpireDays, abortMultipartDays int32) []types.LifecycleRule {
+	rules := make([]types.LifecycleRule, 0, len(existing)+3)
 	for _, rule := range existing {
 		id := strings.TrimSpace(aws.ToString(rule.ID))
-		if id == temporaryLifecycleRuleID || id == largeTemporaryLifecycleRuleID {
+		if id == temporaryLifecycleRuleID || id == largeTemporaryLifecycleRuleID || id == standardTemporaryLifecycleRuleID {
 			continue
 		}
 		rules = append(rules, rule)
 	}
-	return append(rules, temporaryLifecycleRules(standardExpireDays, abortMultipartDays)...)
+	return append(rules, temporaryLifecycleRules(standardExpireDays, largeExpireDays, abortMultipartDays)...)
 }
 
-func temporaryLifecycleRules(standardExpireDays, abortMultipartDays int32) []types.LifecycleRule {
+func temporaryLifecycleRules(standardExpireDays, largeExpireDays, abortMultipartDays int32) []types.LifecycleRule {
 	return []types.LifecycleRule{
 		{
 			AbortIncompleteMultipartUpload: &types.AbortIncompleteMultipartUpload{
 				DaysAfterInitiation: aws.Int32(abortMultipartDays),
 			},
-			Expiration: &types.LifecycleExpiration{Days: aws.Int32(standardExpireDays)},
+			// Keep legacy keys covered without shortening either class's lifetime:
+			// S3 applies the earliest expiration when prefix rules overlap.
+			Expiration: &types.LifecycleExpiration{Days: aws.Int32(max(standardExpireDays, largeExpireDays))},
 			Filter:     &types.LifecycleRuleFilter{Prefix: aws.String(fileapp.TemporaryObjectPrefix)},
 			ID:         aws.String(temporaryLifecycleRuleID),
 			Status:     types.ExpirationStatusEnabled,
 		},
 		{
-			Expiration: &types.LifecycleExpiration{Days: aws.Int32(fileapp.LargeTemporaryExpireDays)},
+			Expiration: &types.LifecycleExpiration{Days: aws.Int32(largeExpireDays)},
 			Filter:     &types.LifecycleRuleFilter{Prefix: aws.String(fileapp.TemporaryLargeObjectPrefix)},
 			ID:         aws.String(largeTemporaryLifecycleRuleID),
+			Status:     types.ExpirationStatusEnabled,
+		},
+		{
+			Expiration: &types.LifecycleExpiration{Days: aws.Int32(standardExpireDays)},
+			Filter:     &types.LifecycleRuleFilter{Prefix: aws.String(fileapp.TemporaryStandardObjectPrefix)},
+			ID:         aws.String(standardTemporaryLifecycleRuleID),
 			Status:     types.ExpirationStatusEnabled,
 		},
 	}
 }
 
-func temporaryLifecycleConfigured(rules []types.LifecycleRule, standardExpireDays, abortMultipartDays int32) bool {
+func temporaryLifecycleConfigured(rules []types.LifecycleRule, standardExpireDays, largeExpireDays, abortMultipartDays int32) bool {
 	matched := map[string]bool{}
 	for _, rule := range rules {
 		id := strings.TrimSpace(aws.ToString(rule.ID))
 		switch id {
 		case temporaryLifecycleRuleID:
 			if matched[id] || !temporaryLifecycleRuleMatches(
-				rule, fileapp.TemporaryObjectPrefix, standardExpireDays, abortMultipartDays,
+				rule, fileapp.TemporaryObjectPrefix, max(standardExpireDays, largeExpireDays), abortMultipartDays,
+			) {
+				return false
+			}
+			matched[id] = true
+		case standardTemporaryLifecycleRuleID:
+			if matched[id] || !temporaryLifecycleRuleMatches(
+				rule, fileapp.TemporaryStandardObjectPrefix, standardExpireDays, 0,
 			) {
 				return false
 			}
 			matched[id] = true
 		case largeTemporaryLifecycleRuleID:
 			if matched[id] || !temporaryLifecycleRuleMatches(
-				rule, fileapp.TemporaryLargeObjectPrefix, fileapp.LargeTemporaryExpireDays, 0,
+				rule, fileapp.TemporaryLargeObjectPrefix, largeExpireDays, 0,
 			) {
 				return false
 			}
 			matched[id] = true
 		}
 	}
-	return matched[temporaryLifecycleRuleID] && matched[largeTemporaryLifecycleRuleID]
+	return matched[temporaryLifecycleRuleID] && matched[largeTemporaryLifecycleRuleID] && matched[standardTemporaryLifecycleRuleID]
 }
 
 func temporaryLifecycleRuleMatches(rule types.LifecycleRule, prefix string, expireDays, abortDays int32) bool {

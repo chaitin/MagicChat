@@ -1,6 +1,7 @@
 package objectstore
 
 import (
+	"strings"
 	"testing"
 
 	fileapp "app/internal/application/file"
@@ -9,29 +10,43 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
-func TestTemporaryLifecycleRulesUseStandardAndLargeRetention(t *testing.T) {
-	rules := temporaryLifecycleRules(fileapp.DefaultTemporaryExpireDays, 7)
-	if len(rules) != 2 {
-		t.Fatalf("lifecycle rule count = %d, want 2", len(rules))
-	}
-	if !temporaryLifecycleRuleMatches(
-		rules[0],
-		fileapp.TemporaryObjectPrefix,
-		fileapp.DefaultTemporaryExpireDays,
-		7,
-	) {
-		t.Fatalf("standard lifecycle rule = %#v", rules[0])
-	}
-	if !temporaryLifecycleRuleMatches(
-		rules[1],
-		fileapp.TemporaryLargeObjectPrefix,
-		fileapp.LargeTemporaryExpireDays,
-		0,
-	) {
-		t.Fatalf("large lifecycle rule = %#v", rules[1])
-	}
-	if !temporaryLifecycleConfigured(rules, fileapp.DefaultTemporaryExpireDays, 7) {
-		t.Fatal("generated lifecycle rules are not recognized as configured")
+func TestTemporaryLifecycleRulesUseIndependentRetention(t *testing.T) {
+	for _, test := range []struct {
+		name                    string
+		standardDays, largeDays int32
+	}{
+		{"defaults", 180, 180},
+		{"large files retained longer", 90, 365},
+		{"standard files retained longer", 365, 90},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			rules := temporaryLifecycleRules(test.standardDays, test.largeDays, 7)
+			if len(rules) != 3 || !temporaryLifecycleConfigured(rules, test.standardDays, test.largeDays, 7) {
+				t.Fatalf("unexpected lifecycle rules: %#v", rules)
+			}
+			// S3 chooses the earliest expiration among all matching prefix rules.
+			for _, object := range []struct {
+				key      string
+				wantDays int32
+			}{
+				{fileapp.TemporaryStandardObjectPrefix + "file", test.standardDays},
+				{fileapp.TemporaryLargeObjectPrefix + "file", test.largeDays},
+				{fileapp.TemporaryObjectPrefix + "2025/01/01/legacy", max(test.standardDays, test.largeDays)},
+			} {
+				var earliest int32
+				for _, rule := range rules {
+					if rule.Status == types.ExpirationStatusEnabled && rule.Expiration != nil && strings.HasPrefix(object.key, aws.ToString(rule.Filter.Prefix)) {
+						days := aws.ToInt32(rule.Expiration.Days)
+						if earliest == 0 || days < earliest {
+							earliest = days
+						}
+					}
+				}
+				if earliest != object.wantDays {
+					t.Fatalf("expiration for %q = %d, want %d", object.key, earliest, object.wantDays)
+				}
+			}
+		})
 	}
 }
 
@@ -42,72 +57,83 @@ func TestMergeTemporaryLifecycleRulesPreservesUnmanagedRulesAndReplacesManagedRu
 		ID:         aws.String("retain-unmanaged-rule"),
 		Status:     types.ExpirationStatusEnabled,
 	}
+	// Existing installations have two overlapping rules, including a 30-day large rule.
 	existing := []types.LifecycleRule{
 		unmanaged,
 		{
-			Expiration: &types.LifecycleExpiration{Days: aws.Int32(1)},
-			Filter:     &types.LifecycleRuleFilter{},
+			Expiration: &types.LifecycleExpiration{Days: aws.Int32(180)},
+			Filter:     &types.LifecycleRuleFilter{Prefix: aws.String(fileapp.TemporaryObjectPrefix)},
 			ID:         aws.String(temporaryLifecycleRuleID),
 			Status:     types.ExpirationStatusEnabled,
 		},
 		{
-			Expiration: &types.LifecycleExpiration{Days: aws.Int32(90)},
-			Filter:     &types.LifecycleRuleFilter{Prefix: aws.String("old-large/")},
+			Expiration: &types.LifecycleExpiration{Days: aws.Int32(30)},
+			Filter:     &types.LifecycleRuleFilter{Prefix: aws.String(fileapp.TemporaryLargeObjectPrefix)},
 			ID:         aws.String(largeTemporaryLifecycleRuleID),
 			Status:     types.ExpirationStatusEnabled,
 		},
 	}
-
-	merged := mergeTemporaryLifecycleRules(existing, fileapp.DefaultTemporaryExpireDays, 7)
-	if len(merged) != 3 {
-		t.Fatalf("merged lifecycle rule count = %d, want 3", len(merged))
-	}
-	if aws.ToString(merged[0].ID) != aws.ToString(unmanaged.ID) {
-		t.Fatalf("first merged lifecycle rule = %q, want unmanaged rule", aws.ToString(merged[0].ID))
-	}
-	if !temporaryLifecycleConfigured(merged, fileapp.DefaultTemporaryExpireDays, 7) {
-		t.Fatalf("merged lifecycle rules are not configured: %#v", merged)
+	for range 2 {
+		merged := mergeTemporaryLifecycleRules(existing, 90, 365, 7)
+		if len(merged) != 4 {
+			t.Fatalf("merged lifecycle rule count = %d, want 4", len(merged))
+		}
+		if aws.ToString(merged[0].ID) != aws.ToString(unmanaged.ID) || !temporaryLifecycleRuleMatches(merged[0], "unmanaged/", 365, 0) {
+			t.Fatalf("unmanaged lifecycle rule changed: %#v", merged[0])
+		}
+		if !temporaryLifecycleConfigured(merged, 90, 365, 7) {
+			t.Fatalf("merged lifecycle rules are not configured: %#v", merged)
+		}
+		existing = merged
 	}
 }
 
 func TestTemporaryLifecycleConfiguredRejectsIncompleteOrIncorrectRules(t *testing.T) {
-	valid := temporaryLifecycleRules(fileapp.DefaultTemporaryExpireDays, 7)
+	valid := temporaryLifecycleRules(90, 365, 7)
 	tests := []struct {
 		name  string
 		rules func() []types.LifecycleRule
 	}{
 		{
-			name: "missing large rule",
+			name:  "missing standard rule",
+			rules: func() []types.LifecycleRule { return append([]types.LifecycleRule(nil), valid[:2]...) },
+		},
+		{
+			name:  "missing large rule",
+			rules: func() []types.LifecycleRule { return []types.LifecycleRule{valid[0], valid[2]} },
+		},
+		{
+			name: "overlapping root expiration too short",
 			rules: func() []types.LifecycleRule {
-				return append([]types.LifecycleRule(nil), valid[0])
+				result := append([]types.LifecycleRule(nil), valid...)
+				result[0].Expiration = &types.LifecycleExpiration{Days: aws.Int32(90)}
+				return result
 			},
 		},
 		{
 			name: "wrong standard prefix",
 			rules: func() []types.LifecycleRule {
 				result := append([]types.LifecycleRule(nil), valid...)
-				result[0].Filter = &types.LifecycleRuleFilter{Prefix: aws.String(fileapp.TemporaryStandardObjectPrefix)}
+				result[2].Filter = &types.LifecycleRuleFilter{Prefix: aws.String(fileapp.TemporaryObjectPrefix)}
 				return result
 			},
 		},
 		{
-			name: "wrong large expiration",
+			name: "old thirty day large expiration",
 			rules: func() []types.LifecycleRule {
 				result := append([]types.LifecycleRule(nil), valid...)
-				result[1].Expiration = &types.LifecycleExpiration{Days: aws.Int32(31)}
+				result[1].Expiration = &types.LifecycleExpiration{Days: aws.Int32(30)}
 				return result
 			},
 		},
 		{
-			name: "duplicate managed rule",
-			rules: func() []types.LifecycleRule {
-				return append(append([]types.LifecycleRule(nil), valid...), valid[0])
-			},
+			name:  "duplicate managed rule",
+			rules: func() []types.LifecycleRule { return append(append([]types.LifecycleRule(nil), valid...), valid[2]) },
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if temporaryLifecycleConfigured(test.rules(), fileapp.DefaultTemporaryExpireDays, 7) {
+			if temporaryLifecycleConfigured(test.rules(), 90, 365, 7) {
 				t.Fatal("incorrect lifecycle rules were recognized as configured")
 			}
 		})

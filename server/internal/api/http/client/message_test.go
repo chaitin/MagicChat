@@ -432,6 +432,92 @@ func TestMessageAPICreatesFileMessageAfterPreparingUpload(t *testing.T) {
 	}
 }
 
+func TestMessageAPICreatesVideoMessageWithCaption(t *testing.T) {
+	conversationID := uuid.NewString()
+	fileID := uuid.NewString()
+	stub := &messageServiceStub{createResult: messageapp.CreateResult{Created: true, Message: messageapp.Message{ID: uuid.NewString()}}}
+	videoContent := append([]byte{0, 0, 0, 16}, []byte("ftypisomvideo")...)
+	files := &fakeFileService{uploaded: fileapp.TemporaryFile{ID: fileID, SizeBytes: int64(len(videoContent))}}
+	api := NewMessageAPI(stub, files)
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for name, value := range map[string]string{
+		"client_message_id": "client-video", "caption": "**演示**", "caption_type": "markdown",
+	} {
+		if err := writer.WriteField(name, value); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	part, err := writer.CreateFormFile("video", "demo.mp4")
+	if err != nil {
+		t.Fatalf("create video part: %v", err)
+	}
+	if _, err := part.Write(videoContent); err != nil {
+		t.Fatalf("write video: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close multipart body: %v", err)
+	}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/conversations/"+conversationID+"/messages/videos", &body)
+	req.Header.Set(echo.HeaderContentType, writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/conversations/:conversation_id/messages/videos")
+	c.SetParamNames("conversation_id")
+	c.SetParamValues(conversationID)
+	c.Set(currentAccountKey, account.Account{ID: "account-id"})
+
+	if err := api.createVideo(c); err != nil {
+		t.Fatalf("create video message: %v", err)
+	}
+	if rec.Code != http.StatusCreated || stub.prepareUploadCommand.ClientMessageID != "client-video" {
+		t.Fatalf("status = %d, prepare command = %#v", rec.Code, stub.prepareUploadCommand)
+	}
+	if !bytes.Equal(files.uploadContent, videoContent) || files.uploadCommand.ContentType != "video/mp4" {
+		t.Fatalf("upload command = %#v, content = %q", files.uploadCommand, files.uploadContent)
+	}
+	if stub.createPreparedCommand.Summary != "[视频] 演示" {
+		t.Fatalf("create prepared command = %#v", stub.createPreparedCommand)
+	}
+	var messageBody videoMessageBody
+	if err := json.Unmarshal(stub.createPreparedCommand.Body, &messageBody); err != nil {
+		t.Fatalf("decode message body: %v", err)
+	}
+	if messageBody.FileID != fileID || messageBody.Name != "demo.mp4" || messageBody.Caption != "**演示**" || messageBody.CaptionType != "markdown" {
+		t.Fatalf("message body = %#v", messageBody)
+	}
+}
+
+func TestMessageAPIRejectsInvalidVideoContent(t *testing.T) {
+	conversationID := uuid.NewString()
+	stub := &messageServiceStub{}
+	api := NewMessageAPI(stub, &fakeFileService{})
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	_ = writer.WriteField("client_message_id", "client-video")
+	part, _ := writer.CreateFormFile("video", "fake.mp4")
+	_, _ = part.Write([]byte("not a video"))
+	_ = writer.Close()
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/conversations/"+conversationID+"/messages/videos", &body)
+	req.Header.Set(echo.HeaderContentType, writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("conversation_id")
+	c.SetParamValues(conversationID)
+	c.Set(currentAccountKey, account.Account{ID: "account-id"})
+
+	if err := api.createVideo(c); err != nil {
+		t.Fatalf("create invalid video: %v", err)
+	}
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "MP4 或 WebM") {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestMessageAPIAttachmentRetryDoesNotUploadAgain(t *testing.T) {
 	conversationID := uuid.NewString()
 	existing := messageapp.Message{ID: uuid.NewString(), ConversationID: conversationID}

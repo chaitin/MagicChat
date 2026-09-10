@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -11,6 +12,11 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
+const (
+	postgresMaxConnections = 100
+	postgresMaxIdleTime    = 5 * time.Minute
+)
+
 func OpenPostgres(dsn string) (*gorm.DB, error) {
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: newDatabaseLogger(log.New(os.Stdout, "\r\n", log.LstdFlags)),
@@ -19,7 +25,21 @@ func OpenPostgres(dsn string) (*gorm.DB, error) {
 		return nil, fmt.Errorf("open postgres: %w", err)
 	}
 
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("get sql database: %w", err)
+	}
+	configurePostgresPool(sqlDB)
+
 	return db, nil
+}
+
+func configurePostgresPool(db *sql.DB) {
+	db.SetMaxOpenConns(postgresMaxConnections)
+	// Keep burst capacity available: database/sql otherwise retains only two
+	// idle connections, repeatedly closing and authenticating the rest.
+	db.SetMaxIdleConns(postgresMaxConnections)
+	db.SetConnMaxIdleTime(postgresMaxIdleTime)
 }
 
 func newDatabaseLogger(writer gormlogger.Writer) gormlogger.Interface {

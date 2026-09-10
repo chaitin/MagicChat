@@ -7218,14 +7218,25 @@ func TestCreateConversationTextMessageRejectsMutedConversation(t *testing.T) {
 	requireError(t, body, "forbidden")
 }
 
-func TestRecordUserPongUpdatesLastOnlineAt(t *testing.T) {
-	_, db := newTestRouter(t)
+func TestRecordUserPongBuffersLastOnlineAtUntilFlush(t *testing.T) {
+	router, db := newTestRouter(t)
+	defer router.Close()
 	user := insertTestUser(t, db, "alice@example.com", "Alice", store.UserStatusActive, time.Now().UTC())
-	server := &Server{db: db}
+	server := &Server{db: db, accounts: account.NewService(account.Dependencies{DB: db})}
 	pongAt := time.Date(2026, 7, 3, 2, 0, 0, 0, time.UTC)
 
 	server.recordUserPong(user.ID, pongAt)
 
+	var before store.User
+	if err := db.First(&before, "id = ?", user.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if before.LastOnlineAt != nil {
+		t.Fatal("pong wrote to database before flush")
+	}
+	if err := server.accounts.FlushActivity(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 	var stored store.User
 	if err := db.First(&stored, "id = ?", user.ID).Error; err != nil {
 		t.Fatalf("load user: %v", err)

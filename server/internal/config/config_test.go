@@ -21,6 +21,7 @@ func TestLoadReadsEnvironmentConfiguration(t *testing.T) {
 	t.Setenv("S3_BOOTSTRAP_ENABLED", "true")
 	t.Setenv("S3_FORCE_PATH_STYLE", "true")
 	t.Setenv("TEMPORARY_ASSETS_EXPIRE_DAYS", "90")
+	t.Setenv("LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS", "365")
 	t.Setenv("S3_ABORT_MULTIPART_DAYS", "5")
 
 	cfg, err := Load()
@@ -72,7 +73,7 @@ func TestLoadReadsEnvironmentConfiguration(t *testing.T) {
 	if cfg.Storage.AssetHostnames.Public != "public-assets.example.com" || cfg.Storage.AssetHostnames.Private != "private-assets.example.com" || cfg.Storage.AssetHostnames.Temporary != "temporary-assets.example.com" {
 		t.Fatalf("Storage.AssetHostnames = %#v", cfg.Storage.AssetHostnames)
 	}
-	if cfg.Storage.Lifecycle.TemporaryExpireDays != 90 || cfg.Storage.Lifecycle.AbortMultipartDays != 5 {
+	if cfg.Storage.Lifecycle.TemporaryExpireDays != 90 || cfg.Storage.Lifecycle.LargeTemporaryExpireDays != 365 || cfg.Storage.Lifecycle.AbortMultipartDays != 5 {
 		t.Fatalf("Storage.Lifecycle = %#v", cfg.Storage.Lifecycle)
 	}
 }
@@ -85,6 +86,7 @@ func TestLoadUsesEnvironmentDefaults(t *testing.T) {
 	t.Setenv("S3_BOOTSTRAP_ENABLED", "")
 	t.Setenv("S3_FORCE_PATH_STYLE", "")
 	t.Setenv("TEMPORARY_ASSETS_EXPIRE_DAYS", "")
+	t.Setenv("LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS", "")
 	t.Setenv("S3_ABORT_MULTIPART_DAYS", "")
 
 	cfg, err := Load()
@@ -107,7 +109,7 @@ func TestLoadUsesEnvironmentDefaults(t *testing.T) {
 	if cfg.Storage.BootstrapEnabled {
 		t.Fatal("Storage.BootstrapEnabled = true, want false")
 	}
-	if cfg.Storage.Lifecycle.TemporaryExpireDays != 180 || cfg.Storage.Lifecycle.AbortMultipartDays != 7 {
+	if cfg.Storage.Lifecycle.TemporaryExpireDays != 180 || cfg.Storage.Lifecycle.LargeTemporaryExpireDays != 180 || cfg.Storage.Lifecycle.AbortMultipartDays != 7 {
 		t.Fatalf("Storage.Lifecycle = %#v", cfg.Storage.Lifecycle)
 	}
 	if cfg.Push.Enabled {
@@ -213,6 +215,10 @@ func TestLoadRejectsInvalidEnvironment(t *testing.T) {
 		{name: "bootstrap enabled", envName: "S3_BOOTSTRAP_ENABLED", envValue: "sometimes", errorText: "S3_BOOTSTRAP_ENABLED"},
 		{name: "path style", envName: "S3_FORCE_PATH_STYLE", envValue: "sometimes", errorText: "S3_FORCE_PATH_STYLE"},
 		{name: "temporary expiration", envName: "TEMPORARY_ASSETS_EXPIRE_DAYS", envValue: "0", errorText: "TEMPORARY_ASSETS_EXPIRE_DAYS"},
+		{name: "large expiration zero", envName: "LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS", envValue: "0", errorText: "LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS"},
+		{name: "large expiration negative", envName: "LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS", envValue: "-1", errorText: "LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS"},
+		{name: "large expiration non-integer", envName: "LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS", envValue: "abc", errorText: "LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS"},
+		{name: "large expiration overflow", envName: "LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS", envValue: "2147483648", errorText: "LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS"},
 		{name: "multipart expiration", envName: "S3_ABORT_MULTIPART_DAYS", envValue: "abc", errorText: "S3_ABORT_MULTIPART_DAYS"},
 		{name: "push enabled", envName: "PUSH_GATEWAY_ENABLED", envValue: "sometimes", errorText: "PUSH_GATEWAY_ENABLED"},
 	}
@@ -245,27 +251,28 @@ func setRequiredEnvironment(t *testing.T) {
 	t.Helper()
 
 	values := map[string]string{
-		"PUBLIC_HOSTNAME":              "chat.example.com",
-		"PUBLIC_ASSETS_HOSTNAME":       "public-assets.example.com",
-		"PRIVATE_ASSETS_HOSTNAME":      "private-assets.example.com",
-		"TEMPORARY_ASSETS_HOSTNAME":    "temporary-assets.example.com",
-		"POSTGRES_DB":                  "magic-chat",
-		"POSTGRES_USER":                "magic-chat",
-		"POSTGRES_PASSWORD":            "test-postgres-password",
-		"ADMIN_PASSWORD":               "test-admin-password",
-		"AI_ASSISTANT_SECRET":          "test-ai-assistant-secret",
-		"ASRMODEL_API_KEY":             "test-asrmodel-api-key",
-		"AWS_ENDPOINT_URL_S3":          "https://s3.example.com",
-		"AWS_REGION":                   "us-east-1",
-		"AWS_ACCESS_KEY_ID":            "test-access-key",
-		"AWS_SECRET_ACCESS_KEY":        "test-secret-key",
-		"PUBLIC_ASSETS_BUCKET":         "magicchat-public",
-		"PRIVATE_ASSETS_BUCKET":        "magicchat-private",
-		"TEMPORARY_ASSETS_BUCKET":      "magicchat-temporary",
-		"S3_BOOTSTRAP_ENABLED":         "false",
-		"S3_FORCE_PATH_STYLE":          "false",
-		"TEMPORARY_ASSETS_EXPIRE_DAYS": "180",
-		"S3_ABORT_MULTIPART_DAYS":      "7",
+		"PUBLIC_HOSTNAME":                    "chat.example.com",
+		"PUBLIC_ASSETS_HOSTNAME":             "public-assets.example.com",
+		"PRIVATE_ASSETS_HOSTNAME":            "private-assets.example.com",
+		"TEMPORARY_ASSETS_HOSTNAME":          "temporary-assets.example.com",
+		"POSTGRES_DB":                        "magic-chat",
+		"POSTGRES_USER":                      "magic-chat",
+		"POSTGRES_PASSWORD":                  "test-postgres-password",
+		"ADMIN_PASSWORD":                     "test-admin-password",
+		"AI_ASSISTANT_SECRET":                "test-ai-assistant-secret",
+		"ASRMODEL_API_KEY":                   "test-asrmodel-api-key",
+		"AWS_ENDPOINT_URL_S3":                "https://s3.example.com",
+		"AWS_REGION":                         "us-east-1",
+		"AWS_ACCESS_KEY_ID":                  "test-access-key",
+		"AWS_SECRET_ACCESS_KEY":              "test-secret-key",
+		"PUBLIC_ASSETS_BUCKET":               "magicchat-public",
+		"PRIVATE_ASSETS_BUCKET":              "magicchat-private",
+		"TEMPORARY_ASSETS_BUCKET":            "magicchat-temporary",
+		"S3_BOOTSTRAP_ENABLED":               "false",
+		"S3_FORCE_PATH_STYLE":                "false",
+		"TEMPORARY_ASSETS_EXPIRE_DAYS":       "180",
+		"LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS": "180",
+		"S3_ABORT_MULTIPART_DAYS":            "7",
 	}
 	for name, value := range values {
 		t.Setenv(name, value)

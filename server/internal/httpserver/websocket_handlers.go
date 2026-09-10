@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"app/internal/application/account"
 	"app/internal/realtime"
 
 	"github.com/gorilla/websocket"
@@ -55,11 +54,9 @@ func (s *Server) handleRealtimeRequest(userID string, request realtime.Envelope)
 }
 
 func (s *Server) recordUserPong(userID string, at time.Time) {
-	accounts := s.accounts
-	if accounts == nil {
-		accounts = account.NewService(account.Dependencies{DB: s.db})
+	if s.accounts != nil {
+		_ = s.accounts.RecordOnlineActivity(context.Background(), userID, at)
 	}
-	_ = accounts.RecordOnlineActivity(context.Background(), userID, at)
 }
 
 func formatOptionalTime(value *time.Time) *string {

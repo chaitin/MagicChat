@@ -103,6 +103,7 @@ function TopicDrawerContent({
     sendConversationLink,
     sendConversationMarkdown,
     sendConversationText,
+    sendConversationVideo,
     sendConversationVoice,
     setMessageReaction,
     updateMessageTopic,
@@ -403,6 +404,21 @@ function TopicDrawerContent({
     return message
   }
 
+  async function sendVideo(
+    video: File,
+    caption: string,
+    captionType: ImageCaptionType
+  ) {
+    if (!conversation) return null
+    const message = await sendConversationVideo(conversation.id, video, {
+      caption,
+      captionType,
+      replyToMessageId: replyTarget?.id,
+    })
+    if (message) setReplyTarget(null)
+    return message
+  }
+
   async function sendVoice(voice: VoiceMessageRecording) {
     if (!conversation) return null
     const message = await sendConversationVoice(conversation.id, voice, {
@@ -617,6 +633,7 @@ function TopicDrawerContent({
             onSendFile={sendFile}
             onSendImage={sendImage}
             onSendMessage={sendMessage}
+            onSendVideo={sendVideo}
             onSendVoice={sendVoice}
             readOnlyFooter={
               detail?.canParticipate &&

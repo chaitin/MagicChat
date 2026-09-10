@@ -84,8 +84,9 @@ type StorageBucketsConfig struct {
 }
 
 type StorageLifecycleConfig struct {
-	TemporaryExpireDays int32
-	AbortMultipartDays  int32
+	TemporaryExpireDays      int32
+	LargeTemporaryExpireDays int32
+	AbortMultipartDays       int32
 }
 
 func Load() (Config, error) {
@@ -260,6 +261,9 @@ func loadStorageConfig() (StorageConfig, error) {
 		return StorageConfig{}, err
 	}
 	if cfg.Lifecycle.TemporaryExpireDays, err = positiveInt32FromEnv("TEMPORARY_ASSETS_EXPIRE_DAYS", 180); err != nil {
+		return StorageConfig{}, err
+	}
+	if cfg.Lifecycle.LargeTemporaryExpireDays, err = positiveInt32FromEnv("LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS", 180); err != nil {
 		return StorageConfig{}, err
 	}
 	if cfg.Lifecycle.AbortMultipartDays, err = positiveInt32FromEnv("S3_ABORT_MULTIPART_DAYS", 7); err != nil {

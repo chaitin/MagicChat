@@ -44,6 +44,7 @@ services:
     container_name: magic-chat-server
     image: ${IMAGE_REGISTRY:-ghcr.1ms.run/chaitin/magicchat}/server:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    stop_grace_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
@@ -75,6 +76,7 @@ services:
       PRIVATE_ASSETS_BUCKET: ${PRIVATE_ASSETS_BUCKET:-magicchat-private}
       TEMPORARY_ASSETS_BUCKET: ${TEMPORARY_ASSETS_BUCKET:-magicchat-temporary}
       TEMPORARY_ASSETS_EXPIRE_DAYS: ${TEMPORARY_ASSETS_EXPIRE_DAYS:-180}
+      LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS: ${LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS:-180}
       S3_ABORT_MULTIPART_DAYS: ${S3_ABORT_MULTIPART_DAYS:-7}
     volumes:
       - ./data/server/log:/app/log

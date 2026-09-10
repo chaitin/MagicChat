@@ -23,6 +23,7 @@ import { MessageLink } from "@/components/message-link"
 import { MessageMarkdown } from "@/components/message-markdown"
 import { MessageCard } from "@/components/message-card"
 import { MessageRenderErrorBoundary } from "@/components/message-render-error-boundary"
+import { MessageVideo } from "@/components/message-video"
 import { MessageVoice } from "@/components/message-voice"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -207,11 +208,17 @@ export const MessageBubble = React.memo(function MessageBubble({
   }
 
   const flushImageBubble =
-    message.body.type === "image" && !message.replyTo && !message.topic
+    (message.body.type === "image" || message.body.type === "video") &&
+    !message.replyTo &&
+    !message.topic
+  const roundVideoBottom = !(
+    message.body.type === "video" &&
+    (message.body.caption || message.reactions.length > 0 || message.topic)
+  )
   const messageActionOptions: MessageActionOptions = {
     canRevoke: Boolean(onRevoke) && message.canRevoke,
     copyDisabled: !copyText,
-    hideCopy: message.body.type === "image",
+    hideCopy: message.body.type === "image" || message.body.type === "video",
     onCopy: handleCopyMessage,
     onCreateTopic:
       onCreateTopic && !message.topic
@@ -277,6 +284,7 @@ export const MessageBubble = React.memo(function MessageBubble({
               ? () => onReeditRevoked(message)
               : undefined
           }
+          roundVideoBottom={roundVideoBottom}
         />
       )}
       {!selectionMode && message.reactions.length > 0 && (
@@ -377,7 +385,10 @@ export const MessageBubble = React.memo(function MessageBubble({
           >
             {renderedMessageBody}
             {message.deliveryStatus === "sending" && (
-              <LoaderCircle aria-label="消息发送中" className="size-4 animate-spin text-muted-foreground" />
+              <LoaderCircle
+                aria-label="消息发送中"
+                className="size-4 animate-spin text-muted-foreground"
+              />
             )}
             {message.deliveryStatus === "failed" && (
               <Button
@@ -679,6 +690,7 @@ function getMessageCopyText(
     case "file":
       return message.body.name
     case "image":
+    case "video":
       return ""
     case "voice":
       return ""
@@ -1052,6 +1064,7 @@ type MessageBodyRendererProps = {
   flushImage?: boolean
   mentionLabelResolver: MentionLabelResolver
   onReeditRevoked?: () => void
+  roundVideoBottom?: boolean
 }
 
 export const MessageBodyRenderer = React.memo(function MessageBodyRenderer({
@@ -1061,6 +1074,7 @@ export const MessageBodyRenderer = React.memo(function MessageBodyRenderer({
   flushImage = false,
   mentionLabelResolver,
   onReeditRevoked,
+  roundVideoBottom = true,
 }: MessageBodyRendererProps) {
   switch (body.type) {
     case "file":
@@ -1072,6 +1086,16 @@ export const MessageBodyRenderer = React.memo(function MessageBodyRenderer({
           currentUserId={currentUserId}
           flush={flushImage}
           mentionLabelResolver={mentionLabelResolver}
+        />
+      )
+    case "video":
+      return (
+        <VideoMessageBody
+          body={body}
+          currentUserId={currentUserId}
+          flush={flushImage}
+          mentionLabelResolver={mentionLabelResolver}
+          roundedBottom={roundVideoBottom}
         />
       )
     case "voice":
@@ -1186,9 +1210,13 @@ function messageBodyUsesMentionLabels(
     body.type === "text" ||
     body.type === "markdown" ||
     body.type === "choice" ||
-    body.type === "image"
+    body.type === "image" ||
+    body.type === "video"
   ) {
-    const content = body.type === "image" ? body.caption : body.content
+    const content =
+      body.type === "image" || body.type === "video"
+        ? body.caption
+        : body.content
     return Boolean(content?.includes("{(@"))
   }
 
@@ -1219,6 +1247,43 @@ function ImageMessageBody({
       style={{ width: thumbnailFrame.width }}
     >
       <MessageImage image={body} />
+      {body.caption && (
+        <div className={cn("min-w-0 pt-2", flush && "px-3 pb-3")}>
+          {body.captionType === "markdown" ? (
+            <MessageMarkdown
+              content={body.caption}
+              currentUserId={currentUserId}
+              mentionLabelResolver={mentionLabelResolver}
+            />
+          ) : (
+            <TextMessageBody
+              content={body.caption}
+              currentUserId={currentUserId}
+              mentionLabelResolver={mentionLabelResolver}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function VideoMessageBody({
+  body,
+  currentUserId,
+  flush,
+  mentionLabelResolver,
+  roundedBottom,
+}: {
+  body: Extract<ConversationPanelMessage["body"], { type: "video" }>
+  currentUserId: string
+  flush: boolean
+  mentionLabelResolver: MentionLabelResolver
+  roundedBottom: boolean
+}) {
+  return (
+    <div className="max-w-[65vw] min-w-0" data-slot="video-message-body">
+      <MessageVideo roundedBottom={roundedBottom} video={body} />
       {body.caption && (
         <div className={cn("min-w-0 pt-2", flush && "px-3 pb-3")}>
           {body.captionType === "markdown" ? (

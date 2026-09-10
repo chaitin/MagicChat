@@ -24,6 +24,9 @@ type userPresenceUpdatedEventResponse struct {
 }
 
 func (s *Server) PublishUserProfileUpdated(_ context.Context, userID string, updatedAt time.Time) {
+	if s.accounts != nil {
+		s.accounts.InvalidateProfile(userID)
+	}
 	s.realtime.Broadcast(realtime.NewEvent(userProfileUpdatedEvent, userProfileUpdatedEventResponse{
 		UserID: userID, UpdatedAt: updatedAt,
 	}))

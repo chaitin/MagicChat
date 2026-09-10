@@ -502,6 +502,10 @@ func TestParseMessageMentionTargetsSupportsStructuredMessageContent(t *testing.T
 			name: "image caption defaults to text",
 			body: json.RawMessage(`{"type":"image","file_id":"image-1","caption":"请看 {(@user/` + userID + `)}"}`),
 		},
+		{
+			name: "video text caption",
+			body: json.RawMessage(`{"type":"video","file_id":"video-1","caption":"请看 {(@user/` + userID + `)}","caption_type":"text"}`),
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			targets := parseMessageMentionTargets(testCase.body)

@@ -58,6 +58,40 @@ func TestListRejectsInvalidIncludedConversationID(t *testing.T) {
 	}
 }
 
+func TestListIncludesParentConversationOutsideRecentLimit(t *testing.T) {
+	db := openConversationTestDB(t)
+	now := time.Date(2026, 7, 28, 8, 0, 0, 0, time.UTC)
+	owner := insertConversationTestUser(t, db, "list-included-owner@example.com", "Owner", now)
+	member := insertConversationTestUser(t, db, "list-included-member@example.com", "Member", now)
+	service := NewService(Dependencies{
+		Apps: config.AppsConfig{AIAssistantSecret: "assistant-secret"}, DB: db,
+		Now: func() time.Time { return now },
+	})
+
+	oldest := insertPinTestConversation(t, db, owner, member, "oldest", now.Add(-time.Hour), now)
+	for index := 0; index < clientConversationListLimit; index++ {
+		insertPinTestConversation(t, db, owner, member, "recent", now.Add(time.Duration(index)*time.Minute), now)
+	}
+
+	listed, err := service.List(context.Background(), ListCommand{AccountID: owner.ID})
+	if err != nil {
+		t.Fatalf("list recent conversations: %v", err)
+	}
+	if conversationListItemIndex(listed.Conversations, oldest.ID) >= 0 {
+		t.Fatal("oldest conversation unexpectedly appears in recent list")
+	}
+
+	included, err := service.List(context.Background(), ListCommand{
+		AccountID: owner.ID, IncludeConversationID: oldest.ID,
+	})
+	if err != nil {
+		t.Fatalf("list included conversation: %v", err)
+	}
+	if conversationListItemIndex(included.Conversations, oldest.ID) < 0 {
+		t.Fatal("included conversation is missing from list")
+	}
+}
+
 func TestListGroupsActiveTopicsUnderTheirParent(t *testing.T) {
 	db := openConversationTestDB(t)
 	now := time.Date(2026, 7, 27, 8, 0, 0, 0, time.UTC)
@@ -142,6 +176,9 @@ func TestListGroupsActiveTopicsUnderTheirParent(t *testing.T) {
 	unreadTopicIndex := conversationListItemIndex(conversations, unreadTopic.Conversation.ID)
 	if unreadParentIndex < 0 || unreadTopicIndex != unreadParentIndex+1 {
 		t.Fatalf("unread topic is not grouped under its parent: parent=%d topic=%d", unreadParentIndex, unreadTopicIndex)
+	}
+	for index := 0; index < clientConversationListLimit; index++ {
+		insertPinTestConversation(t, db, owner, member, "Newer parent", now.Add(time.Duration(index)*time.Minute), now)
 	}
 
 	included, err := service.List(context.Background(), ListCommand{

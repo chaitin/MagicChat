@@ -426,6 +426,7 @@ function createClientDataContextValue(
     setMessageReaction: vi.fn(),
     sendConversationFile: vi.fn(),
     sendConversationImage: vi.fn(),
+    sendConversationVideo: vi.fn(),
     sendConversationVoice: vi.fn(),
     sendConversationLink: vi.fn(),
     sendConversationMarkdown: vi.fn(),

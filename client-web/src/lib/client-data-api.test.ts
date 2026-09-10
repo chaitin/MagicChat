@@ -21,6 +21,7 @@ import {
   restoreConversation,
   sendConversationFileMessage,
   sendConversationImageMessage,
+  sendConversationVideoMessage,
   sendConversationLinkMessage,
   sendConversationMarkdownMessage,
   sendConversationCardMessage,
@@ -215,15 +216,17 @@ describe("client data API", () => {
   })
 
   it("searches users and maps friend request APIs", async () => {
-    const searchFetcher = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({ success: true, data: { user_ids: ["user-2"] } }),
-        { headers: { "content-type": "application/json" }, status: 200 }
+    const searchFetcher = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ success: true, data: { user_ids: ["user-2"] } }),
+          { headers: { "content-type": "application/json" }, status: 200 }
+        )
       )
-    )
-    await expect(searchContactUsers("bob@example.com", searchFetcher)).resolves.toEqual([
-      "user-2",
-    ])
+    await expect(
+      searchContactUsers("bob@example.com", searchFetcher)
+    ).resolves.toEqual(["user-2"])
 
     const requestPayload = {
       addressee_user_id: "user-2",
@@ -240,7 +243,9 @@ describe("client data API", () => {
         status: 201,
       })
     )
-    await expect(createFriendRequest("user-2", createFetcher)).resolves.toMatchObject({
+    await expect(
+      createFriendRequest("user-2", createFetcher)
+    ).resolves.toMatchObject({
       id: "request-1",
       status: "pending",
     })
@@ -251,13 +256,20 @@ describe("client data API", () => {
       method: "POST",
     })
 
-    const listFetcher = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({ success: true, data: { requests: [requestPayload] } }),
-        { headers: { "content-type": "application/json" }, status: 200 }
+    const listFetcher = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            success: true,
+            data: { requests: [requestPayload] },
+          }),
+          { headers: { "content-type": "application/json" }, status: 200 }
+        )
       )
-    )
-    await expect(listFriendRequests("incoming", listFetcher)).resolves.toHaveLength(1)
+    await expect(
+      listFriendRequests("incoming", listFetcher)
+    ).resolves.toHaveLength(1)
   })
 
   it("loads client conversations with credentials", async () => {
@@ -934,6 +946,64 @@ describe("client data API", () => {
     )
     expect((imageBody as FormData).get("caption")).toBe("**图片说明**")
     expect((imageBody as FormData).get("caption_type")).toBe("markdown")
+  })
+
+  it("sends and normalizes video messages with captions", async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            message: {
+              body: {
+                caption: "**视频说明**",
+                caption_type: "markdown",
+                content_type: "video/mp4",
+                file_id: "video-1",
+                name: "demo.mp4",
+                size_bytes: 1024,
+                type: "video",
+              },
+              client_message_id: "client-video",
+              conversation_id: "conversation-1",
+              created_at: "2026-09-10T08:00:00Z",
+              id: "message-video",
+              sender: { id: "user-1", type: "user" },
+              seq: 11,
+            },
+          },
+          success: true,
+        }),
+        { headers: { "content-type": "application/json" }, status: 201 }
+      )
+    )
+
+    const message = await sendConversationVideoMessage(
+      "conversation-1",
+      {
+        caption: " **视频说明** ",
+        captionType: "markdown",
+        clientMessageId: "client-video",
+        replyToMessageId: "message-quoted",
+        video: new File(["video"], "demo.mp4", { type: "video/mp4" }),
+      },
+      fetcher
+    )
+
+    const requestBody = fetcher.mock.calls[0][1]?.body as FormData
+    expect(requestBody.get("caption")).toBe("**视频说明**")
+    expect(requestBody.get("caption_type")).toBe("markdown")
+    expect(requestBody.get("reply_to_message_id")).toBe("message-quoted")
+    expect(requestBody.get("video")).toBeInstanceOf(File)
+    expect(message.body).toEqual({
+      caption: "**视频说明**",
+      captionType: "markdown",
+      contentType: "video/mp4",
+      fileId: "video-1",
+      name: "demo.mp4",
+      sizeBytes: 1024,
+      type: "video",
+    })
+    expect(formatClientMessageBodySummary(message.body)).toBe("[视频] 视频说明")
   })
 
   it("normalizes image captions and formats markdown summaries", () => {

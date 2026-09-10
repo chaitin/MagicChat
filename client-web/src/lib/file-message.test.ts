@@ -11,12 +11,13 @@ describe("getFileMessageUploadError", () => {
   })
 
   it("accepts files at the upload limit", () => {
-    expect(getFileMessageUploadError({ size: fileMessageMaxBytes })).toBeNull()
+    expect(fileMessageMaxBytes).toBe(500 * 1024 * 1024)
+    expect(getFileMessageUploadError({ size: 500 * 1024 * 1024 })).toBeNull()
   })
 
   it("rejects files above the upload limit", () => {
     expect(getFileMessageUploadError({ size: fileMessageMaxBytes + 1 })).toBe(
-      "文件不能超过 200MiB"
+      "文件不能超过 500MiB"
     )
   })
 })

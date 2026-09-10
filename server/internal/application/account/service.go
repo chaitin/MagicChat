@@ -51,6 +51,9 @@ type Service struct {
 	generateSessionToken func() (string, error)
 	randomAvatar         func() string
 	sessionTTL           time.Duration
+
+	profiles profileCache
+	activity activityBuffer
 }
 
 func NewService(deps Dependencies) *Service {
@@ -289,40 +292,52 @@ func (s *Service) AuthenticateSession(ctx context.Context, token string) (Authen
 		return AuthenticatedSession{}, unauthorized()
 	}
 
-	var session store.UserSession
-	err := s.db.WithContext(ctx).Preload("User").Where(
-		"token_hash = ? AND expires_at > ?",
-		auth.HashSessionToken(token),
-		s.now().UTC(),
-	).First(&session).Error
+	var session struct {
+		ID               string
+		UserID           string
+		ProfileUpdatedAt time.Time
+		AllowNickname    bool
+	}
+	// Always check revocation, expiry and account status in the database.
+	// Only the full profile is cached, with its database version checked here.
+	err := s.db.WithContext(ctx).Table("user_sessions AS sessions").
+		Select("sessions.id, sessions.user_id, users.updated_at AS profile_updated_at, COALESCE(nickname_policy.allow_user_nickname_editing, TRUE) AS allow_nickname").
+		Joins("JOIN users ON users.id = sessions.user_id").
+		Joins("LEFT JOIN app_settings nickname_policy ON nickname_policy.id = ?", store.AppSettingsID).
+		Where("sessions.token_hash = ? AND sessions.expires_at > ? AND users.status = ?",
+			auth.HashSessionToken(token), s.now().UTC(), store.UserStatusActive).
+		Take(&session).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return AuthenticatedSession{}, unauthorized()
 	}
 	if err != nil {
 		return AuthenticatedSession{}, internalError(err)
 	}
-	if session.User.Status != store.UserStatusActive {
+	profile, err := s.getProfile(ctx, session.UserID, &session.ProfileUpdatedAt)
+	if ErrorCodeOf(err) == CodeNotFound {
+		return AuthenticatedSession{}, unauthorized()
+	}
+	if err != nil {
+		return AuthenticatedSession{}, err
+	}
+	if profile.Status != store.UserStatusActive {
 		return AuthenticatedSession{}, unauthorized()
 	}
 
-	_ = s.db.WithContext(ctx).Model(&session).Update("last_seen_at", s.now().UTC()).Error
-
-	return AuthenticatedSession{
-		ID:      session.ID,
-		Account: newAccount(session.User),
-	}, nil
+	s.recordSessionActivity(session.ID, s.now().UTC())
+	return AuthenticatedSession{ID: session.ID, Account: applyProfileNicknamePolicy(profile, session.AllowNickname)}, nil
 }
 
 func (s *Service) GetProfile(ctx context.Context, accountID string) (Account, error) {
-	var user store.User
-	err := s.db.WithContext(ctx).First(&user, "id = ?", strings.TrimSpace(accountID)).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return Account{}, newError(CodeNotFound, "用户不存在", err)
-	}
+	profile, err := s.getProfile(ctx, strings.TrimSpace(accountID), nil)
 	if err != nil {
-		return Account{}, internalError(err)
+		return Account{}, err
 	}
-	return newAccount(user), nil
+	allowNickname, err := s.profileNicknameAllowed(ctx)
+	if err != nil {
+		return Account{}, err
+	}
+	return applyProfileNicknamePolicy(profile, allowNickname), nil
 }
 
 func (s *Service) UpdateProfile(ctx context.Context, cmd UpdateProfileCommand) (Account, error) {
@@ -364,6 +379,7 @@ func (s *Service) UpdateProfile(ctx context.Context, cmd UpdateProfileCommand) (
 		}
 		return Account{}, internalError(err)
 	}
+	s.InvalidateProfile(cmd.AccountID)
 	profile, err := s.GetProfile(ctx, cmd.AccountID)
 	if err == nil && s.profileNotifications != nil {
 		s.profileNotifications.PublishUserProfileUpdated(ctx, profile.ID, profile.UpdatedAt)
@@ -420,20 +436,12 @@ func (s *Service) UploadAvatar(ctx context.Context, cmd UploadAvatarCommand) (Ac
 		Update("avatar", avatarURL).Error; err != nil {
 		return Account{}, wrapInternal("保存头像失败", err)
 	}
+	s.InvalidateProfile(accountID)
 	profile, err := s.GetProfile(ctx, accountID)
 	if err == nil && s.profileNotifications != nil {
 		s.profileNotifications.PublishUserProfileUpdated(ctx, profile.ID, profile.UpdatedAt)
 	}
 	return profile, err
-}
-
-func (s *Service) RecordOnlineActivity(ctx context.Context, accountID string, at time.Time) error {
-	if err := s.db.WithContext(ctx).Model(&store.User{}).
-		Where("id = ?", strings.TrimSpace(accountID)).
-		Update("last_online_at", at.UTC()).Error; err != nil {
-		return internalError(err)
-	}
-	return nil
 }
 
 func newAccount(user store.User) Account {

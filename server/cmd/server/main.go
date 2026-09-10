@@ -57,17 +57,27 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	router := httpserver.NewRouterWithTaskReminderWorker(ctx, db, cfg)
+	router, flushActivity := httpserver.NewRouterWithTaskReminderWorker(ctx, db, cfg)
+	shutdownDone := make(chan struct{})
 	go func() {
+		defer close(shutdownDone)
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := router.Shutdown(shutdownCtx); err != nil {
 			logger.Error("shutdown server", "error", err)
 		}
+		flushCtx, flushCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer flushCancel()
+		if err := flushActivity(flushCtx); err != nil {
+			logger.Error("flush account activity on shutdown", "error", err)
+		}
 	}()
 	logger.Info("server starting", "addr", serverAddr)
-	if err := router.Start(serverAddr); err != nil && err != http.ErrServerClosed {
+	err = router.Start(serverAddr)
+	stop()
+	<-shutdownDone
+	if err != nil && err != http.ErrServerClosed {
 		logger.Error("server stopped", "error", err)
 		os.Exit(1)
 	}

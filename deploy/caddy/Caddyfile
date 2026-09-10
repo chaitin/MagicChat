@@ -54,7 +54,7 @@ https://{$PUBLIC_HOSTNAME:localhost} {
 		@client_api path /api/client/* /api/app/*
 		handle @client_api {
 			request_body {
-				max_size 201MiB
+				max_size 501MiB
 			}
 			reverse_proxy server:20080
 		}
@@ -100,7 +100,7 @@ https://{$PUBLIC_HOSTNAME:localhost}:1443 {
 
 		handle /api/* {
 			request_body {
-				max_size 201MiB
+				max_size 501MiB
 			}
 			reverse_proxy server:20080
 		}

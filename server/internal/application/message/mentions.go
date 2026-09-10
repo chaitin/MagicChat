@@ -153,7 +153,7 @@ func messageMentionContent(body json.RawMessage) (string, bool) {
 		}
 		return envelope.Content, true
 	}
-	if messageType == "image" {
+	if messageType == "image" || messageType == "video" {
 		contentType := strings.TrimSpace(envelope.CaptionType)
 		if contentType == "" {
 			contentType = "text"

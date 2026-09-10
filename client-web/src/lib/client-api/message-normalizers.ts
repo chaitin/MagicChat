@@ -25,6 +25,7 @@ import type {
   ClientMessageDelegatedBy,
   ClientMessageReplyTo,
   ClientImageMessageBody,
+  ClientVideoMessageBody,
   ClientVoiceMessageBody,
   ClientForwardBundleMessageBody,
   ClientForwardableMessageBody,
@@ -406,6 +407,30 @@ function normalizeMessageBody(
   }
 
   if (
+    body?.type === "video" &&
+    typeof body.file_id === "string" &&
+    typeof body.name === "string" &&
+    typeof body.size_bytes === "number" &&
+    body.size_bytes > 0 &&
+    (body.content_type === "video/mp4" || body.content_type === "video/webm")
+  ) {
+    const caption = typeof body.caption === "string" ? body.caption.trim() : ""
+    const normalizedVideo: ClientVideoMessageBody = {
+      contentType: body.content_type,
+      fileId: body.file_id,
+      name: body.name,
+      sizeBytes: body.size_bytes,
+      type: "video",
+    }
+    if (caption) {
+      normalizedVideo.caption = caption
+      normalizedVideo.captionType =
+        body.caption_type === "markdown" ? "markdown" : "text"
+    }
+    return normalizedVideo
+  }
+
+  if (
     body?.type === "voice" &&
     typeof body.file_id === "string" &&
     typeof body.duration_ms === "number" &&
@@ -531,6 +556,7 @@ function isForwardableMessageBody(
     body.type === "chart" ||
     body.type === "file" ||
     body.type === "image" ||
+    body.type === "video" ||
     body.type === "voice" ||
     body.type === "forward_bundle"
   )

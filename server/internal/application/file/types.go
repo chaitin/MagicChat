@@ -7,15 +7,15 @@ import (
 )
 
 const (
-	DefaultTemporaryExpireDays     = 180
-	LargeTemporaryExpireDays       = 30
-	LargeTemporaryFileThreshold    = 10 * 1024 * 1024
-	MaxResolveBatchSize            = 100
-	MaxTemporaryUploadBytes        = 200 * 1024 * 1024
-	MaxTemporaryUploadRequestBytes = MaxTemporaryUploadBytes + 1024*1024
-	TemporaryObjectPrefix          = "temporary-files/"
-	TemporaryStandardObjectPrefix  = TemporaryObjectPrefix + "standard/"
-	TemporaryLargeObjectPrefix     = TemporaryObjectPrefix + "large/"
+	DefaultTemporaryExpireDays      = 180
+	DefaultLargeTemporaryExpireDays = 180
+	LargeTemporaryFileThreshold     = 20 * 1024 * 1024
+	MaxResolveBatchSize             = 100
+	MaxTemporaryUploadBytes         = 500 * 1024 * 1024
+	MaxTemporaryUploadRequestBytes  = MaxTemporaryUploadBytes + 1024*1024
+	TemporaryObjectPrefix           = "temporary-files/"
+	TemporaryStandardObjectPrefix   = TemporaryObjectPrefix + "standard/"
+	TemporaryLargeObjectPrefix      = TemporaryObjectPrefix + "large/"
 )
 
 type TemporaryFile struct {

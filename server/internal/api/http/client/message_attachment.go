@@ -30,6 +30,12 @@ const (
 	maxImageMessageRequestBytes = maxImageMessageUploadBytes + 1*1024*1024
 	maxImageMessageDimension    = 1920
 
+	maxVideoMessageUploadBytes  = 100 * 1024 * 1024
+	maxVideoMessageRequestBytes = maxVideoMessageUploadBytes + 1*1024*1024
+	videoMessageMultipartMemory = 8 * 1024 * 1024
+	videoMessageMP4ContentType  = "video/mp4"
+	videoMessageWebMContentType = "video/webm"
+
 	maxVoiceMessageDurationMS       = 60_000
 	maxVoiceMessageUploadBytes      = 1 * 1024 * 1024
 	maxVoiceMessageRequestBytes     = maxVoiceMessageUploadBytes + 512*1024
@@ -60,6 +66,16 @@ type imageMessageBody struct {
 	CaptionType string `json:"caption_type,omitempty"`
 }
 
+type videoMessageBody struct {
+	Type        string `json:"type"`
+	FileID      string `json:"file_id"`
+	Name        string `json:"name"`
+	SizeBytes   int64  `json:"size_bytes"`
+	ContentType string `json:"content_type"`
+	Caption     string `json:"caption,omitempty"`
+	CaptionType string `json:"caption_type,omitempty"`
+}
+
 type voiceMessageBody struct {
 	Type        string `json:"type"`
 	FileID      string `json:"file_id"`
@@ -72,7 +88,7 @@ type voiceMessageBody struct {
 // createFile godoc
 //
 // @Summary 发送文件消息
-// @Description 普通用户上传最大 200MiB 的文件并发送为会话文件消息。文件写入 temporary bucket，消息 body 保存 file_id、文件名和文件大小。
+// @Description 普通用户上传最大 500MiB 的文件并发送为会话文件消息。文件写入 temporary bucket，消息 body 保存 file_id、文件名和文件大小。
 // @Tags 客户端消息
 // @Accept multipart/form-data
 // @Produce json
@@ -106,12 +122,12 @@ func (a *MessageAPI) createFile(c echo.Context) error {
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
 		if isRequestBodyTooLarge(err) {
-			return writeFailure(c, http.StatusRequestEntityTooLarge, string(messageapp.CodeRequestTooLarge), "文件不能超过 200MiB")
+			return writeFailure(c, http.StatusRequestEntityTooLarge, string(messageapp.CodeRequestTooLarge), "文件不能超过 500MiB")
 		}
 		return writeFailure(c, http.StatusBadRequest, string(messageapp.CodeInvalidRequest), "请选择要发送的文件")
 	}
 	if fileHeader.Size > fileapp.MaxTemporaryUploadBytes {
-		return writeFailure(c, http.StatusRequestEntityTooLarge, string(messageapp.CodeRequestTooLarge), "文件不能超过 200MiB")
+		return writeFailure(c, http.StatusRequestEntityTooLarge, string(messageapp.CodeRequestTooLarge), "文件不能超过 500MiB")
 	}
 	if fileHeader.Size <= 0 {
 		return writeFailure(c, http.StatusBadRequest, string(messageapp.CodeInvalidRequest), "文件不能为空")
@@ -254,6 +270,115 @@ func (a *MessageAPI) createImage(c echo.Context) error {
 		AccountID: current.ID, Body: body, ClientMessageID: clientMessageID,
 		ConversationID: conversationID, ReplyToMessageID: replyToMessageID, Summary: summary,
 	})
+}
+
+// createVideo godoc
+//
+// @Summary 发送视频消息
+// @Description 普通用户上传最大 100MiB 的 MP4 或 WebM 视频并发送为会话视频消息，可附带 text 或 markdown 视频说明。
+// @Tags 客户端消息
+// @Accept multipart/form-data
+// @Produce json
+// @Param conversation_id path string true "会话 ID"
+// @Param client_message_id formData string true "客户端消息 ID"
+// @Param reply_to_message_id formData string false "引用消息 ID"
+// @Param caption formData string false "视频说明，最多 5000 个字符，支持与文本消息相同的 @ token"
+// @Param caption_type formData string false "视频说明类型：text 或 markdown，默认 text"
+// @Param video formData file true "MP4 或 WebM 视频"
+// @Success 200 {object} successEnvelope{data=createMessageResponse}
+// @Success 201 {object} successEnvelope{data=createMessageResponse}
+// @Failure 400 {object} errorEnvelope
+// @Failure 401 {object} errorEnvelope
+// @Failure 403 {object} errorEnvelope
+// @Failure 404 {object} errorEnvelope
+// @Failure 413 {object} errorEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/client/conversations/{conversation_id}/messages/videos [post]
+func (a *MessageAPI) createVideo(c echo.Context) error {
+	current, ok := CurrentAccount(c)
+	if !ok {
+		return writeFailure(c, http.StatusInternalServerError, string(messageapp.CodeInternal), "服务端错误")
+	}
+	conversationID, err := normalizeMessageConversationID(c.Param("conversation_id"))
+	if err != nil {
+		return writeFailure(c, http.StatusBadRequest, string(messageapp.CodeInvalidRequest), err.Error())
+	}
+	c.Request().Body = http.MaxBytesReader(c.Response().Writer, c.Request().Body, maxVideoMessageRequestBytes)
+	if err := c.Request().ParseMultipartForm(videoMessageMultipartMemory); err != nil {
+		if isRequestBodyTooLarge(err) {
+			return writeFailure(c, http.StatusRequestEntityTooLarge, string(messageapp.CodeRequestTooLarge), "视频不能超过 100MiB")
+		}
+		return writeFailure(c, http.StatusBadRequest, string(messageapp.CodeInvalidRequest), "请求格式错误")
+	}
+	clientMessageID := c.FormValue("client_message_id")
+	replyToMessageID := c.FormValue("reply_to_message_id")
+	caption, err := messagecontentapp.NormalizeVideoCaption(c.FormValue("caption"), c.FormValue("caption_type"))
+	if err != nil {
+		return writeFailure(c, http.StatusBadRequest, string(messageapp.CodeInvalidRequest), err.Error())
+	}
+	summary, err := messagecontentapp.VideoMessageSummary(caption)
+	if err != nil {
+		return writeFailure(c, http.StatusBadRequest, string(messageapp.CodeInvalidRequest), "视频说明格式错误")
+	}
+	if handled, err := a.prepareAttachmentUpload(c, current.ID, conversationID, clientMessageID, replyToMessageID); handled || err != nil {
+		return err
+	}
+	fileHeader, err := c.FormFile("video")
+	if err != nil {
+		return writeFailure(c, http.StatusBadRequest, string(messageapp.CodeInvalidRequest), "请选择要发送的视频")
+	}
+	if fileHeader.Size <= 0 {
+		return writeFailure(c, http.StatusBadRequest, string(messageapp.CodeInvalidRequest), "视频不能为空")
+	}
+	if fileHeader.Size > maxVideoMessageUploadBytes {
+		return writeFailure(c, http.StatusRequestEntityTooLarge, string(messageapp.CodeRequestTooLarge), "视频不能超过 100MiB")
+	}
+	fileName, err := normalizeFileMessageName(fileHeader.Filename)
+	if err != nil {
+		return writeFailure(c, http.StatusBadRequest, string(messageapp.CodeInvalidRequest), err.Error())
+	}
+	file, err := fileHeader.Open()
+	if err != nil {
+		return writeFailure(c, http.StatusBadRequest, string(messageapp.CodeInvalidRequest), "读取视频失败")
+	}
+	defer file.Close()
+	header := make([]byte, 16)
+	n, readErr := io.ReadFull(file, header)
+	if readErr != nil && !errors.Is(readErr, io.ErrUnexpectedEOF) {
+		return writeFailure(c, http.StatusBadRequest, string(messageapp.CodeInvalidRequest), "读取视频失败")
+	}
+	header = header[:n]
+	contentType, validVideo := detectVideoMessageContentType(header)
+	if !validVideo {
+		return writeFailure(c, http.StatusBadRequest, string(messageapp.CodeInvalidRequest), "视频必须是 MP4 或 WebM 格式")
+	}
+	temporary, err := a.files.UploadTemporary(c.Request().Context(), fileapp.UploadTemporaryCommand{
+		Content: io.MultiReader(bytes.NewReader(header), file), ContentType: contentType, SizeBytes: fileHeader.Size,
+	})
+	if err != nil {
+		return writeMessageFileError(c, err)
+	}
+	body, err := json.Marshal(videoMessageBody{
+		Type: "video", FileID: temporary.ID, Name: fileName, SizeBytes: temporary.SizeBytes,
+		ContentType: contentType, Caption: caption.Content, CaptionType: caption.ContentType,
+	})
+	if err != nil {
+		return writeFailure(c, http.StatusInternalServerError, string(messageapp.CodeInternal), "服务端错误")
+	}
+	return a.createPreparedAttachment(c, messageapp.CreatePreparedCommand{
+		AccountID: current.ID, Body: body, ClientMessageID: clientMessageID,
+		ConversationID: conversationID, ReplyToMessageID: replyToMessageID, Summary: summary,
+	})
+}
+
+func detectVideoMessageContentType(header []byte) (string, bool) {
+	if len(header) >= 12 && string(header[4:8]) == "ftyp" {
+		return videoMessageMP4ContentType, true
+	}
+	if len(header) >= len(webMHeader) && bytes.Equal(header[:len(webMHeader)], webMHeader) {
+		return videoMessageWebMContentType, true
+	}
+	return "", false
 }
 
 // createVoice godoc

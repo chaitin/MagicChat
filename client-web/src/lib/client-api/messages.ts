@@ -35,6 +35,7 @@ import type {
   SendConversationEntityCardMessageInput,
   SendConversationFileMessageInput,
   SendConversationImageMessageInput,
+  SendConversationVideoMessageInput,
   SendConversationVoiceMessageInput,
   TemporaryFileReadURL,
   MarkConversationReadOptions,
@@ -810,6 +811,43 @@ export async function sendConversationImageMessage(
   return normalizeMessage(message)
 }
 
+export async function sendConversationVideoMessage(
+  conversationId: string,
+  input: SendConversationVideoMessageInput,
+  fetcher: ClientDataFetch = fetch
+) {
+  const formData = new FormData()
+  formData.set("client_message_id", input.clientMessageId)
+  if (input.replyToMessageId) {
+    formData.set("reply_to_message_id", input.replyToMessageId)
+  }
+  const caption = input.caption?.trim() ?? ""
+  if (caption) {
+    formData.set("caption", caption)
+    formData.set("caption_type", input.captionType ?? "text")
+  }
+  formData.set("video", input.video)
+
+  const response = await fetcher(
+    `/api/client/conversations/${encodeURIComponent(conversationId)}/messages/videos`,
+    {
+      body: formData,
+      credentials: "include",
+      method: "POST",
+    }
+  )
+  const payload = await readJson<
+    ClientDataErrorEnvelope | ClientDataSuccessEnvelope<CreateMessageResponse>
+  >(response)
+  if (!response.ok || payload?.success === false) {
+    throw createRequestError(payload, response, "发送视频失败")
+  }
+  const message = (
+    payload as ClientDataSuccessEnvelope<CreateMessageResponse> | undefined
+  )?.data?.message
+  return normalizeMessage(message)
+}
+
 export async function sendConversationVoiceMessage(
   conversationId: string,
   input: SendConversationVoiceMessageInput,
@@ -1236,6 +1274,17 @@ export function formatClientMessageBodySummary(body: ClientMessageBody) {
         ? formatMarkdownMessageSummary(body.caption)
         : body.caption
     return caption ? `[图片] ${caption}` : "[图片]"
+  }
+
+  if (body.type === "video") {
+    if (!body.caption) {
+      return "[视频]"
+    }
+    const caption =
+      body.captionType === "markdown"
+        ? formatMarkdownMessageSummary(body.caption)
+        : body.caption
+    return caption ? `[视频] ${caption}` : "[视频]"
   }
 
   if (body.type === "voice") {

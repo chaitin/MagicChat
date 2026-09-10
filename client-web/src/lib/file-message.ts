@@ -1,4 +1,4 @@
-export const fileMessageMaxBytes = 200 * 1024 * 1024
+export const fileMessageMaxBytes = 500 * 1024 * 1024
 
 export function getFileMessageUploadError(
   file: Pick<File, "size">
@@ -8,7 +8,7 @@ export function getFileMessageUploadError(
   }
 
   if (file.size > fileMessageMaxBytes) {
-    return "文件不能超过 200MiB"
+    return "文件不能超过 500MiB"
   }
 
   return null

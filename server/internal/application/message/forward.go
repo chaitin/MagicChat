@@ -411,7 +411,7 @@ func collectForwardTemporaryFileIDs(raw json.RawMessage, fileIDs map[string]stru
 		return
 	}
 	switch envelope.Type {
-	case "file", "image", "voice":
+	case "file", "image", "video", "voice":
 		var body forwardTemporaryFileBody
 		if json.Unmarshal(raw, &body) == nil && body.FileID != "" {
 			fileIDs[body.FileID] = struct{}{}

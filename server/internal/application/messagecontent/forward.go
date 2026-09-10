@@ -120,6 +120,24 @@ func (s *Service) sanitizeForwardBody(
 		}
 		summary, err := ImageMessageSummary(caption)
 		return encoded, summary, leaf, err
+	case TypeVideo:
+		var body videoBody
+		if json.Unmarshal(raw, &body) != nil || strings.TrimSpace(body.FileID) == "" || strings.TrimSpace(body.Name) == "" || body.SizeBytes <= 0 || (body.ContentType != "video/mp4" && body.ContentType != "video/webm") {
+			return nil, "", messageapp.ForwardBodyMetrics{}, messageapp.ErrForwardUnsupportedMessage
+		}
+		caption, err := NormalizeVideoCaption(body.Caption, body.CaptionType)
+		if err != nil {
+			return nil, "", messageapp.ForwardBodyMetrics{}, messageapp.ErrForwardUnsupportedMessage
+		}
+		caption.Content = replaceMentions(caption.Content, mentionLabels, caption.ContentType == TypeMarkdown)
+		body.Caption = caption.Content
+		body.CaptionType = caption.ContentType
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			return nil, "", messageapp.ForwardBodyMetrics{}, err
+		}
+		summary, err := VideoMessageSummary(caption)
+		return encoded, summary, leaf, err
 	case TypeVoice:
 		var body voiceBody
 		if json.Unmarshal(raw, &body) != nil || strings.TrimSpace(body.FileID) == "" || body.DurationMS <= 0 {

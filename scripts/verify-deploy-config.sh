@@ -91,6 +91,7 @@ assert_contains "compose.yml" 'PUBLIC_ASSETS_BUCKET: ${PUBLIC_ASSETS_BUCKET:-mag
 assert_contains "compose.yml" 'PRIVATE_ASSETS_BUCKET: ${PRIVATE_ASSETS_BUCKET:-magicchat-private}'
 assert_contains "compose.yml" 'TEMPORARY_ASSETS_BUCKET: ${TEMPORARY_ASSETS_BUCKET:-magicchat-temporary}'
 assert_contains "compose.yml" 'TEMPORARY_ASSETS_EXPIRE_DAYS: ${TEMPORARY_ASSETS_EXPIRE_DAYS:-180}'
+assert_contains "compose.yml" 'LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS: ${LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS:-180}'
 assert_contains "compose.yml" 'S3_ABORT_MULTIPART_DAYS: ${S3_ABORT_MULTIPART_DAYS:-7}'
 assert_not_contains "compose.yml" "MYGOD_AI_ASSISTANT_SECRET"
 assert_not_contains "compose.yml" "MYGOD_APP_SECRET"
@@ -148,6 +149,7 @@ assert_contains ".env.example" "PUBLIC_ASSETS_BUCKET=magicchat-public"
 assert_contains ".env.example" "PRIVATE_ASSETS_BUCKET=magicchat-private"
 assert_contains ".env.example" "TEMPORARY_ASSETS_BUCKET=magicchat-temporary"
 assert_contains ".env.example" "TEMPORARY_ASSETS_EXPIRE_DAYS=180"
+assert_contains ".env.example" "LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS=180"
 assert_contains ".env.example" "S3_ABORT_MULTIPART_DAYS=7"
 assert_contains ".env.example" "PUBLIC_ASSETS_HOSTNAME=public-assets.localhost"
 assert_contains ".env.example" "PRIVATE_ASSETS_HOSTNAME=private-assets.localhost"
@@ -183,7 +185,7 @@ assert_contains "deploy/caddy/Caddyfile" "reverse_proxy document-server:20100"
 assert_contains "deploy/caddy/Caddyfile" "@client_api path /api/client/* /api/app/*"
 assert_contains "deploy/caddy/Caddyfile" "handle /api/*"
 assert_contains "deploy/caddy/Caddyfile" "reverse_proxy server:20080"
-assert_contains "deploy/caddy/Caddyfile" "max_size 201MiB"
+assert_contains "deploy/caddy/Caddyfile" "max_size 501MiB"
 assert_contains "deploy/caddy/Caddyfile" "root * /srv/client"
 assert_contains "deploy/caddy/Caddyfile" "root * /srv/admin"
 assert_contains "deploy/caddy/Caddyfile" "try_files {path} /index.html"
