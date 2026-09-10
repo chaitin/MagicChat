@@ -35,6 +35,35 @@ func TestLoadReadsConfiguration(t *testing.T) {
 	}
 }
 
+func TestLoadReadsOptionalAdminConfiguration(t *testing.T) {
+	key := make([]byte, 32)
+	t.Setenv("DATABASE_URL", "postgres://db/push")
+	t.Setenv("DATA_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(key))
+	t.Setenv("PUSH_PROVIDERS", "fake")
+	t.Setenv("PUSH_ADMIN_USERNAME", "operator")
+	t.Setenv("PUSH_ADMIN_PASSWORD_HASH", "$argon2id$v=19$m=65536,t=3,p=2$c2FsdHNhbHRzYWx0c2FsdA$aGFzaGhhc2hoYXNoaGFzaGhhc2g")
+	t.Setenv("PUSH_ADMIN_COOKIE_SECURE", "false")
+	t.Setenv("PUSH_ADMIN_SESSION_TTL", "6h")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Admin.Username != "operator" || cfg.Admin.PasswordHash == "" || cfg.Admin.CookieSecure || cfg.Admin.SessionTTL != 6*time.Hour {
+		t.Fatalf("admin configuration = %#v", cfg.Admin)
+	}
+}
+
+func TestLoadRejectsPartialAdminConfiguration(t *testing.T) {
+	key := make([]byte, 32)
+	t.Setenv("DATABASE_URL", "postgres://db/push")
+	t.Setenv("DATA_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(key))
+	t.Setenv("PUSH_PROVIDERS", "fake")
+	t.Setenv("PUSH_ADMIN_USERNAME", "operator")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "PUSH_ADMIN_PASSWORD_HASH") {
+		t.Fatalf("partial admin configuration error = %v", err)
+	}
+}
+
 func TestLoadRequiresJPushCredentialsWhenEnabled(t *testing.T) {
 	key := make([]byte, 32)
 	t.Setenv("DATABASE_URL", "postgres://db/push")

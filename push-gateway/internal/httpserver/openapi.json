@@ -2,8 +2,16 @@
   "openapi": "3.0.3",
   "info": {
     "title": "MagicChat Push Gateway API",
-    "version": "0.1.0",
-    "description": "Anonymous capability-based push notification gateway."
+    "version": "0.2.0",
+    "description": "Anonymous capability-based push gateway with authenticated private-server admission and management APIs."
+  },
+  "components": {
+    "securitySchemes": {
+      "grantToken": {"type": "http", "scheme": "bearer"},
+      "serverKey": {"type": "apiKey", "in": "header", "name": "X-MagicChat-Server-Key"},
+      "adminSession": {"type": "apiKey", "in": "cookie", "name": "push_gateway_admin_session"},
+      "adminCSRF": {"type": "apiKey", "in": "header", "name": "X-CSRF-Token"}
+    }
   },
   "paths": {
     "/api/v1/installations": {"post": {"summary": "Register an app installation", "responses": {"201": {"description": "Registered"}}}},
@@ -11,9 +19,23 @@
     "/api/v1/installations/{installation_id}/active-grant": {"post": {"summary": "Replace the active grant", "responses": {"201": {"description": "Created"}}}},
     "/api/v1/grants/{grant_id}/renew": {"post": {"summary": "Renew an active grant", "responses": {"200": {"description": "Renewed"}}}},
     "/api/v1/grants/{grant_id}": {"delete": {"summary": "Revoke a grant", "responses": {"204": {"description": "Revoked"}}}},
-    "/api/v1/grants/{grant_id}/notifications": {"post": {"summary": "Enqueue a notification", "responses": {"202": {"description": "Accepted"}}}},
+    "/api/v1/grants/{grant_id}/notifications": {"post": {"summary": "Enqueue a quota-charged notification", "security": [{"grantToken": [], "serverKey": []}], "responses": {"202": {"description": "Accepted"}, "401": {"description": "Grant or server authentication failed"}, "403": {"description": "Server disabled"}, "429": {"description": "Rate or daily quota exceeded"}}}},
+    "/api/admin/v1/session": {
+      "post": {"summary": "Create an admin session", "responses": {"200": {"description": "Authenticated"}}},
+      "get": {"summary": "Read the admin session", "security": [{"adminSession": []}], "responses": {"200": {"description": "Authenticated"}}},
+      "delete": {"summary": "Delete the admin session", "security": [{"adminSession": [], "adminCSRF": []}], "responses": {"204": {"description": "Logged out"}}}
+    },
+    "/api/admin/v1/servers": {
+      "get": {"summary": "List authorized private servers", "security": [{"adminSession": []}], "responses": {"200": {"description": "Server list"}}},
+      "post": {"summary": "Create a private server and issue its key", "security": [{"adminSession": [], "adminCSRF": []}], "responses": {"201": {"description": "Server and key created"}}}
+    },
+    "/api/admin/v1/servers/{server_id}": {"patch": {"summary": "Update a private server", "security": [{"adminSession": [], "adminCSRF": []}], "responses": {"200": {"description": "Updated"}}}},
+    "/api/admin/v1/servers/{server_id}/enable": {"post": {"summary": "Enable a private server", "security": [{"adminSession": [], "adminCSRF": []}], "responses": {"200": {"description": "Enabled"}}}},
+    "/api/admin/v1/servers/{server_id}/disable": {"post": {"summary": "Disable a private server", "security": [{"adminSession": [], "adminCSRF": []}], "responses": {"200": {"description": "Disabled"}}}},
+    "/api/admin/v1/servers/{server_id}/key/reveal": {"post": {"summary": "Reveal the active private-server key", "security": [{"adminSession": [], "adminCSRF": []}], "responses": {"200": {"description": "Key revealed"}}}},
+    "/api/admin/v1/servers/{server_id}/key/rotate": {"post": {"summary": "Rotate the active private-server key", "security": [{"adminSession": [], "adminCSRF": []}], "responses": {"200": {"description": "Key rotated"}}}},
     "/api/health/live": {"get": {"summary": "Liveness probe", "responses": {"200": {"description": "Alive"}}}},
     "/api/health/ready": {"get": {"summary": "Readiness probe", "responses": {"200": {"description": "Ready"}}}},
-    "/api/metrics": {"get": {"summary": "Prometheus metrics", "responses": {"200": {"description": "Metrics"}}}}
+    "/api/metrics": {"get": {"summary": "Anonymous Prometheus metrics", "responses": {"200": {"description": "Metrics"}}}}
   }
 }

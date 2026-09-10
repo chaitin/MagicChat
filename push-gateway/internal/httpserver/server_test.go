@@ -2,7 +2,9 @@ package httpserver
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	gatewayadmin "push-gateway/internal/admin"
 	"push-gateway/internal/gateway"
 	"push-gateway/internal/model"
 	"push-gateway/internal/provider"
@@ -19,8 +22,11 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"golang.org/x/crypto/argon2"
 	"gorm.io/gorm"
 )
+
+const testHTTPServerKey = "mcps_srv_BBBBBBBBBBBB_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
 
 func TestAPIRoutesInstallationGrantAndNotification(t *testing.T) {
 	router := newTestRouter(t)
@@ -53,8 +59,9 @@ func TestAPIRoutesInstallationGrantAndNotification(t *testing.T) {
 	decodeResponse(t, grantResponse, &grant)
 
 	headers := map[string]string{
-		"Authorization":   "Bearer " + grant.SendToken,
-		"Idempotency-Key": "message-http-1:grant-http-1",
+		"Authorization":          "Bearer " + grant.SendToken,
+		"Idempotency-Key":        "message-http-1:grant-http-1",
+		"X-MagicChat-Server-Key": testHTTPServerKey,
 	}
 	notification := requestJSON(t, router, http.MethodPost,
 		"/api/v1/grants/"+grant.GrantID+"/notifications", map[string]any{
@@ -80,6 +87,9 @@ func TestAPIRoutesInstallationGrantAndNotification(t *testing.T) {
 		`push_gateway_jobs{status="queued"} 1`,
 		`push_gateway_grants{status="active"} 1`,
 		`push_gateway_installations{provider="fake",platform="android",status="active"} 1`,
+		`push_gateway_private_servers{status="active"} 1`,
+		"push_gateway_server_notifications_accepted_today 1",
+		"push_gateway_server_quota_rejections_total 0",
 		"push_gateway_recent_failed_jobs 0",
 		"# TYPE push_gateway_recent_failed_jobs_by_code gauge",
 		"push_gateway_oldest_pending_job_age_seconds",
@@ -87,6 +97,44 @@ func TestAPIRoutesInstallationGrantAndNotification(t *testing.T) {
 		if !strings.Contains(metrics.Body.String(), expected) {
 			t.Fatalf("metrics do not contain %q: %s", expected, metrics.Body.String())
 		}
+	}
+}
+
+func TestAdminServerRoutesUseSessionAndCSRF(t *testing.T) {
+	router := newTestRouter(t)
+	unauthorized := requestJSON(t, router, http.MethodGet, "/api/admin/v1/servers", nil, nil)
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized status = %d", unauthorized.Code)
+	}
+	login := requestJSON(t, router, http.MethodPost, "/api/admin/v1/session", map[string]any{
+		"username": "operator", "password": "correct password",
+	}, nil)
+	if login.Code != http.StatusOK {
+		t.Fatalf("login status/body = %d/%s", login.Code, login.Body.String())
+	}
+	var sessionCookie, csrfCookie *http.Cookie
+	for _, cookie := range login.Result().Cookies() {
+		switch cookie.Name {
+		case adminSessionCookie:
+			sessionCookie = cookie
+		case adminCSRFCookie:
+			csrfCookie = cookie
+		}
+	}
+	if sessionCookie == nil || csrfCookie == nil || !sessionCookie.HttpOnly || csrfCookie.HttpOnly {
+		t.Fatalf("admin cookies = %#v", login.Result().Cookies())
+	}
+	cookieHeader := sessionCookie.Name + "=" + sessionCookie.Value + "; " + csrfCookie.Name + "=" + csrfCookie.Value
+	headers := map[string]string{"Cookie": cookieHeader, "X-CSRF-Token": csrfCookie.Value}
+	created := requestJSON(t, router, http.MethodPost, "/api/admin/v1/servers", map[string]any{
+		"name": "生产环境一号", "daily_quota": 100000,
+	}, headers)
+	if created.Code != http.StatusCreated || !strings.Contains(created.Body.String(), "mcps_srv_") {
+		t.Fatalf("create status/body = %d/%s", created.Code, created.Body.String())
+	}
+	listed := requestJSON(t, router, http.MethodGet, "/api/admin/v1/servers", nil, map[string]string{"Cookie": cookieHeader})
+	if listed.Code != http.StatusOK || !strings.Contains(listed.Body.String(), "生产环境一号") {
+		t.Fatalf("list status/body = %d/%s", listed.Code, listed.Body.String())
 	}
 }
 
@@ -165,21 +213,40 @@ func newTestRouter(t *testing.T) *echo.Echo {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&model.RateLimit{}, &model.Installation{}, &model.Grant{}, &model.Job{}); err != nil {
+	if err := db.AutoMigrate(
+		&model.RateLimit{}, &model.Installation{}, &model.Grant{}, &model.Server{},
+		&model.ServerKey{}, &model.ServerDailyUsage{}, &model.AdminSession{},
+		&model.AdminAuditEvent{}, &model.Job{},
+	); err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
+	}
+	serverID := uuid.NewString()
+	if err := db.Create(&model.Server{ID: serverID, Name: "http", Status: model.ServerStatusActive, DailyQuota: 1000, Revision: 1, CreatedAt: time.Now(), UpdatedAt: time.Now()}).Error; err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	if err := db.Create(&model.ServerKey{ID: uuid.NewString(), ServerID: serverID, PublicID: "BBBBBBBBBBBB", KeyHash: secure.HashToken(testHTTPServerKey), KeyCiphertext: []byte{1}, Status: model.ServerKeyStatusActive, CreatedAt: time.Now()}).Error; err != nil {
+		t.Fatalf("create server key: %v", err)
 	}
 	cipher, err := secure.NewTokenCipher(make([]byte, 32))
 	if err != nil {
 		t.Fatalf("create cipher: %v", err)
 	}
+	now := time.Now().UTC()
 	service, err := gateway.New(gateway.Options{
 		DB: db, Cipher: cipher, Providers: []provider.Provider{fake.New()},
-		Now: func() time.Time { return time.Date(2026, 8, 21, 9, 0, 0, 0, time.UTC) },
+		Now: func() time.Time { return now },
 	})
 	if err != nil {
 		t.Fatalf("create gateway: %v", err)
 	}
-	return New(db, service)
+	adminService, err := gatewayadmin.New(gatewayadmin.Options{
+		DB: db, Cipher: cipher, Username: "operator", PasswordHash: httpTestPasswordHash("correct password"),
+		Now: func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+	return New(db, service, Options{Admin: adminService, AdminCookieSecure: false})
 }
 
 func requestJSON(t *testing.T, router http.Handler, method, path string, body any, headers map[string]string) *httptest.ResponseRecorder {
@@ -202,6 +269,12 @@ func requestJSON(t *testing.T, router http.Handler, method, path string, body an
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	return response
+}
+
+func httpTestPasswordHash(password string) string {
+	salt := []byte("0123456789abcdef")
+	encoded := argon2.IDKey([]byte(password), salt, 1, 8*1024, 1, 32)
+	return fmt.Sprintf("$argon2id$v=19$m=8192,t=1,p=1$%s$%s", base64.RawStdEncoding.EncodeToString(salt), base64.RawStdEncoding.EncodeToString(encoded))
 }
 
 func decodeResponse(t *testing.T, response *httptest.ResponseRecorder, target any) {

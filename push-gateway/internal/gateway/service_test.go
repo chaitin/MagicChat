@@ -16,6 +16,8 @@ import (
 	"gorm.io/gorm"
 )
 
+const testServerKey = "mcps_srv_AAAAAAAAAAAA_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+
 type recordingProvider struct {
 	mu                     sync.Mutex
 	notifications          []provider.Notification
@@ -62,11 +64,11 @@ func TestInstallationGrantAndNotificationLifecycle(t *testing.T) {
 		Event: EventMessageCreated, RouteToken: "route-token-123",
 		CollapseKey: "conversation-hash", IdempotencyKey: "message-1:grant-1",
 	}
-	first, err := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, input)
+	first, err := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, testServerKey, input)
 	if err != nil || !first.Accepted || first.Duplicate {
 		t.Fatalf("first enqueue = %#v, err = %v", first, err)
 	}
-	second, err := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, input)
+	second, err := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, testServerKey, input)
 	if err != nil || !second.Duplicate || second.JobID != first.JobID {
 		t.Fatalf("duplicate enqueue = %#v, err = %v", second, err)
 	}
@@ -94,12 +96,12 @@ func TestInstallationGrantAndNotificationLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("replace active grant: %v", err)
 	}
-	if _, err := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, NotificationInput{
+	if _, err := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, testServerKey, NotificationInput{
 		Event: EventMessageCreated, RouteToken: "another-route", IdempotencyKey: "message-2:old-grant",
 	}); failureCode(err) != "grant_revoked" {
 		t.Fatalf("old grant enqueue error = %v", err)
 	}
-	if _, err := service.EnqueueNotification(t.Context(), replacement.GrantID, replacement.SendToken, NotificationInput{
+	if _, err := service.EnqueueNotification(t.Context(), replacement.GrantID, replacement.SendToken, testServerKey, NotificationInput{
 		Event: EventMessageCreated, RouteToken: "another-route", IdempotencyKey: "message-2:new-grant",
 	}); err != nil {
 		t.Fatalf("replacement grant enqueue: %v", err)
@@ -122,15 +124,74 @@ func TestRegistrationAndGlobalNotificationRateLimits(t *testing.T) {
 	}
 	grant, _ := service.CreateActiveGrant(t.Context(), first.InstallationID, first.ManagementToken)
 	service.maxNotificationsGlobalMinute = 1
-	if _, err := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, NotificationInput{
+	if _, err := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, testServerKey, NotificationInput{
 		Event: EventMessageCreated, RouteToken: "rate-route-token-1", IdempotencyKey: "rate-message-id-1",
 	}); err != nil {
 		t.Fatalf("first notification: %v", err)
 	}
-	if _, err := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, NotificationInput{
+	if _, err := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, testServerKey, NotificationInput{
 		Event: EventMessageCreated, RouteToken: "rate-route-token-2", IdempotencyKey: "rate-message-id-2",
 	}); failureCode(err) != "rate_limited" {
 		t.Fatalf("second notification error = %v", err)
+	}
+}
+
+func TestServerQuotaChargesAcceptedIdempotentJobsOnce(t *testing.T) {
+	service, db, _, now := newTestService(t)
+	if err := db.Model(&model.Server{}).Where("status = ?", model.ServerStatusActive).Update("daily_quota", 1).Error; err != nil {
+		t.Fatalf("set quota: %v", err)
+	}
+	credential, err := service.RegisterInstallation(t.Context(), RegisterInstallationInput{
+		Provider: "fake", ProviderToken: "quota-provider-token", Platform: "android",
+	})
+	if err != nil {
+		t.Fatalf("register installation: %v", err)
+	}
+	grant, err := service.CreateActiveGrant(t.Context(), credential.InstallationID, credential.ManagementToken)
+	if err != nil {
+		t.Fatalf("create grant: %v", err)
+	}
+	input := NotificationInput{Event: EventMessageCreated, RouteToken: "quota-route-token", IdempotencyKey: "quota-job-one"}
+	first, err := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, testServerKey, input)
+	if err != nil {
+		t.Fatalf("first enqueue: %v", err)
+	}
+	duplicate, err := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, testServerKey, input)
+	if err != nil || !duplicate.Duplicate || duplicate.JobID != first.JobID {
+		t.Fatalf("duplicate = %#v, err = %v", duplicate, err)
+	}
+	if _, err := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, testServerKey, NotificationInput{
+		Event: EventMessageCreated, RouteToken: "quota-route-token-two", IdempotencyKey: "quota-job-two",
+	}); failureCode(err) != "daily_quota_exceeded" {
+		t.Fatalf("quota error = %v", err)
+	}
+	var usage model.ServerDailyUsage
+	if err := db.First(&usage).Error; err != nil || usage.AcceptedCount != 1 {
+		t.Fatalf("usage = %#v, err = %v", usage, err)
+	}
+	*now = time.Date(2026, 8, 21, 16, 0, 0, 0, time.UTC)
+	if _, err := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, testServerKey, NotificationInput{
+		Event: EventMessageCreated, RouteToken: "quota-route-next-day", IdempotencyKey: "quota-job-next-day",
+	}); err != nil {
+		t.Fatalf("next Beijing day enqueue: %v", err)
+	}
+}
+
+func TestNotificationRequiresActiveServerKey(t *testing.T) {
+	service, db, _, _ := newTestService(t)
+	credential, _ := service.RegisterInstallation(t.Context(), RegisterInstallationInput{
+		Provider: "fake", ProviderToken: "server-auth-provider-token", Platform: "android",
+	})
+	grant, _ := service.CreateActiveGrant(t.Context(), credential.InstallationID, credential.ManagementToken)
+	input := NotificationInput{Event: EventMessageCreated, RouteToken: "server-auth-route", IdempotencyKey: "server-auth-job"}
+	if _, err := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, "wrong", input); failureCode(err) != "server_unauthorized" {
+		t.Fatalf("invalid key error = %v", err)
+	}
+	if err := db.Model(&model.Server{}).Where("status = ?", model.ServerStatusActive).Update("status", model.ServerStatusDisabled).Error; err != nil {
+		t.Fatalf("disable server: %v", err)
+	}
+	if _, err := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, testServerKey, input); failureCode(err) != "server_disabled" {
+		t.Fatalf("disabled server error = %v", err)
 	}
 }
 
@@ -158,7 +219,7 @@ func TestRegisteringExistingProviderTokenRevokesOldGrant(t *testing.T) {
 	if _, err := service.CreateActiveGrant(t.Context(), first.InstallationID, first.ManagementToken); failureCode(err) != "unauthorized" {
 		t.Fatalf("old management token error = %v", err)
 	}
-	if _, err := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, NotificationInput{
+	if _, err := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, testServerKey, NotificationInput{
 		Event: EventMessageCreated, RouteToken: "stale-route", IdempotencyKey: "stale-message-id",
 	}); failureCode(err) != "grant_revoked" {
 		t.Fatalf("old send token error = %v", err)
@@ -171,7 +232,7 @@ func TestDispatchLazilyRotatesProviderTokenEncryption(t *testing.T) {
 		Provider: "fake", ProviderToken: "rotation-device-token", Platform: "android",
 	})
 	grant, _ := oldService.CreateActiveGrant(t.Context(), credential.InstallationID, credential.ManagementToken)
-	_, _ = oldService.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, NotificationInput{
+	_, _ = oldService.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, testServerKey, NotificationInput{
 		Event: EventMessageCreated, RouteToken: "rotation-route", IdempotencyKey: "rotation-message",
 	})
 	newKey := make([]byte, 32)
@@ -211,7 +272,7 @@ func TestInvalidDeviceDisablesInstallation(t *testing.T) {
 		Provider: "fake", ProviderToken: "invalid-device-token", Platform: "android",
 	})
 	grant, _ := service.CreateActiveGrant(t.Context(), credential.InstallationID, credential.ManagementToken)
-	job, err := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, NotificationInput{
+	job, err := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, testServerKey, NotificationInput{
 		Event: EventMessageCreated, RouteToken: "invalid-device-route", IdempotencyKey: "invalid-device-message",
 	})
 	if err != nil {
@@ -240,7 +301,7 @@ func TestStaleInvalidDeviceResponseDoesNotDisableRotatedToken(t *testing.T) {
 		Provider: "fake", ProviderToken: "old-rotation-device-token", Platform: "android",
 	})
 	grant, _ := service.CreateActiveGrant(t.Context(), credential.InstallationID, credential.ManagementToken)
-	_, _ = service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, NotificationInput{
+	_, _ = service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, testServerKey, NotificationInput{
 		Event: EventMessageCreated, RouteToken: "rotation-race-route", IdempotencyKey: "rotation-race-message",
 	})
 	claimed, err := service.claimJobs(t.Context(), 1)
@@ -327,7 +388,7 @@ func TestReclaimedJobRejectsStaleWorkerBeforeProviderSend(t *testing.T) {
 		Provider: "fake", ProviderToken: "lease-device-token", Platform: "android",
 	})
 	grant, _ := service.CreateActiveGrant(t.Context(), credential.InstallationID, credential.ManagementToken)
-	_, _ = service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, NotificationInput{
+	_, _ = service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, testServerKey, NotificationInput{
 		Event: EventMessageCreated, RouteToken: "lease-route-token", IdempotencyKey: "lease-message-id",
 	})
 	firstClaim, err := service.claimJobs(t.Context(), 1)
@@ -363,7 +424,7 @@ func TestTransientProviderFailureRetries(t *testing.T) {
 		Provider: "fake", ProviderToken: "retry-device-token", Platform: "android",
 	})
 	grant, _ := service.CreateActiveGrant(t.Context(), credential.InstallationID, credential.ManagementToken)
-	job, _ := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, NotificationInput{
+	job, _ := service.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, testServerKey, NotificationInput{
 		Event: EventMessageCreated, RouteToken: "retry-route-token", IdempotencyKey: "retry-message-id",
 	})
 	if _, err := service.DispatchBatch(t.Context(), 10); err != nil {
@@ -397,8 +458,26 @@ func newTestService(t *testing.T) (*Service, *gorm.DB, *recordingProvider, *time
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&model.RateLimit{}, &model.Installation{}, &model.Grant{}, &model.Job{}); err != nil {
+	if err := db.AutoMigrate(
+		&model.RateLimit{}, &model.Installation{}, &model.Grant{}, &model.Server{},
+		&model.ServerKey{}, &model.ServerDailyUsage{}, &model.AdminSession{},
+		&model.AdminAuditEvent{}, &model.Job{},
+	); err != nil {
 		t.Fatalf("migrate test database: %v", err)
+	}
+	serverID := uuid.NewString()
+	if err := db.Create(&model.Server{
+		ID: serverID, Name: "test", Status: model.ServerStatusActive,
+		DailyQuota: 1000, Revision: 1, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}).Error; err != nil {
+		t.Fatalf("create test server: %v", err)
+	}
+	if err := db.Create(&model.ServerKey{
+		ID: uuid.NewString(), ServerID: serverID, PublicID: "AAAAAAAAAAAA",
+		KeyHash: secure.HashToken(testServerKey), Status: model.ServerKeyStatusActive,
+		CreatedAt: time.Now(), KeyCiphertext: []byte{1},
+	}).Error; err != nil {
+		t.Fatalf("create test server key: %v", err)
 	}
 	cipher, err := secure.NewTokenCipher(make([]byte, 32))
 	if err != nil {

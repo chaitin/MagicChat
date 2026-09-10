@@ -122,13 +122,10 @@ export default function LoginPage({
                 </Field>
               </FieldGroup>
             </CardContent>
-            <CardFooter className="flex-col gap-3">
+            <CardFooter>
               <Button className="w-full" disabled={pending} type="submit">
                 {pending ? "登录中..." : "登录"}
               </Button>
-              <p className="text-center text-xs text-muted-foreground">
-                前端预览阶段，输入任意非空账号和密码即可登录
-              </p>
             </CardFooter>
           </Card>
         </form>

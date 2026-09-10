@@ -10,7 +10,7 @@ import {
   RotateCwIcon,
   ServerIcon,
 } from "lucide-react"
-import { useId, useState, type FormEvent } from "react"
+import { useEffect, useId, useState, type FormEvent } from "react"
 import { toast } from "sonner"
 
 import {
@@ -54,14 +54,19 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
-  createMockServer,
+  createServer,
+  listServers,
+  revealServerKey,
+  rotateServerKey,
+  setServerStatus,
+  updateServer as updateServerAPI,
+} from "@/lib/server-api"
+import {
   formatCount,
-  MOCK_SERVER_KEYS,
-  MOCK_SERVERS,
   quotaUsagePercent,
-  rotateMockServerKey,
   type IssuedServerKey,
   type PushServer,
+  type PushServerDraft,
 } from "@/lib/server-model"
 
 const MAX_DAILY_LIMIT = 100_000_000
@@ -70,11 +75,28 @@ type ServerEditor = { mode: "create" } | { mode: "edit"; server: PushServer }
 type KeyDialogState = IssuedServerKey & { mode: "issued" | "view" }
 
 export default function ServersPage() {
-  const [servers, setServers] = useState(() => [...MOCK_SERVERS])
-  const [serverKeys, setServerKeys] = useState(() => ({ ...MOCK_SERVER_KEYS }))
+  const [servers, setServers] = useState<PushServer[]>([])
+  const [loading, setLoading] = useState(true)
   const [editor, setEditor] = useState<ServerEditor | null>(null)
   const [keyDialog, setKeyDialog] = useState<KeyDialogState | null>(null)
   const [rotateTarget, setRotateTarget] = useState<PushServer | null>(null)
+
+  useEffect(() => {
+    let active = true
+    void listServers()
+      .then((result) => {
+        if (active) setServers(result)
+      })
+      .catch((error) => {
+        if (active) toast.error(errorMessage(error))
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   function updateServer(server: PushServer) {
     setServers((current) =>
@@ -82,45 +104,53 @@ export default function ServersPage() {
     )
   }
 
-  function handleSaved(server: PushServer, key?: string) {
-    if (editor?.mode === "create") {
-      setServers((current) => [server, ...current])
-    } else {
-      updateServer(server)
-    }
-    setEditor(null)
-    if (key) {
-      setServerKeys((current) => ({ ...current, [server.id]: key }))
-      setKeyDialog({ key, mode: "issued", server })
-    } else {
-      toast.success("服务器配置已更新")
-    }
-  }
-
-  function toggleServer(server: PushServer, enabled: boolean) {
-    updateServer({ ...server, status: enabled ? "active" : "disabled" })
-    toast.success(enabled ? "服务器已启用" : "服务器已停用")
-  }
-
-  function rotateServerKey() {
-    if (!rotateTarget) return
-    const result = rotateMockServerKey(rotateTarget)
-    updateServer(result.server)
-    setServerKeys((current) => ({
-      ...current,
-      [result.server.id]: result.key,
-    }))
-    setRotateTarget(null)
-    setKeyDialog({ ...result, mode: "issued" })
-  }
-
-  function viewServerKey(server: PushServer) {
-    const key = serverKeys[server.id]
-    if (!key) {
-      toast.error("暂时无法读取服务器 Key")
+  async function handleSaved(draft: PushServerDraft) {
+    if (!editor) return
+    if (editor.mode === "create") {
+      const result = await createServer(draft)
+      setServers((current) => [result.server, ...current])
+      setEditor(null)
+      setKeyDialog({ ...result, mode: "issued" })
       return
     }
-    setKeyDialog({ key, mode: "view", server })
+    const server = await updateServerAPI(editor.server.id, draft)
+    updateServer(server)
+    setEditor(null)
+    toast.success("服务器配置已更新")
+  }
+
+  async function toggleServer(server: PushServer, enabled: boolean) {
+    try {
+      const updated = await setServerStatus(
+        server.id,
+        enabled ? "active" : "disabled"
+      )
+      updateServer(updated)
+      toast.success(enabled ? "服务器已启用" : "服务器已停用")
+    } catch (error) {
+      toast.error(errorMessage(error))
+    }
+  }
+
+  async function rotateCurrentServerKey() {
+    if (!rotateTarget) return
+    try {
+      const result = await rotateServerKey(rotateTarget.id)
+      updateServer(result.server)
+      setRotateTarget(null)
+      setKeyDialog({ ...result, mode: "issued" })
+    } catch (error) {
+      toast.error(errorMessage(error))
+    }
+  }
+
+  async function viewServerKey(server: PushServer) {
+    try {
+      const result = await revealServerKey(server.id)
+      setKeyDialog({ key: result.key, mode: "view", server })
+    } catch (error) {
+      toast.error(errorMessage(error))
+    }
   }
 
   return (
@@ -150,18 +180,32 @@ export default function ServersPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {servers.map((server) => (
-                      <ServerTableRow
-                        key={server.id}
-                        onEdit={() => setEditor({ mode: "edit", server })}
-                        onRotate={() => setRotateTarget(server)}
-                        onStatusChange={(enabled) =>
-                          toggleServer(server, enabled)
-                        }
-                        onViewKey={() => viewServerKey(server)}
-                        server={server}
-                      />
-                    ))}
+                    {loading ? (
+                      <TableRow>
+                        <TableCell className="h-24 text-center" colSpan={5}>
+                          正在加载...
+                        </TableCell>
+                      </TableRow>
+                    ) : servers.length === 0 ? (
+                      <TableRow>
+                        <TableCell className="h-24 text-center" colSpan={5}>
+                          暂无服务器
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      servers.map((server) => (
+                        <ServerTableRow
+                          key={server.id}
+                          onEdit={() => setEditor({ mode: "edit", server })}
+                          onRotate={() => setRotateTarget(server)}
+                          onStatusChange={(enabled) =>
+                            toggleServer(server, enabled)
+                          }
+                          onViewKey={() => void viewServerKey(server)}
+                          server={server}
+                        />
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
@@ -206,7 +250,7 @@ export default function ServersPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction onClick={rotateServerKey}>
+            <AlertDialogAction onClick={() => void rotateCurrentServerKey()}>
               确认轮换
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -303,7 +347,7 @@ function ServerEditorDialog({
 }: {
   editor: ServerEditor | null
   onOpenChange: (open: boolean) => void
-  onSaved: (server: PushServer, key?: string) => void
+  onSaved: (draft: PushServerDraft) => Promise<void>
 }) {
   const nameId = useId()
   const limitId = useId()
@@ -312,8 +356,9 @@ function ServerEditorDialog({
   const [dailyLimit, setDailyLimit] = useState(
     String(editing?.dailyLimit ?? 10_000)
   )
+  const [pending, setPending] = useState(false)
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const normalizedName = name.trim()
     const normalizedLimit = Number(dailyLimit)
@@ -330,15 +375,14 @@ function ServerEditorDialog({
       return
     }
 
-    if (editing) {
-      onSaved({ ...editing, dailyLimit: normalizedLimit, name: normalizedName })
-      return
+    setPending(true)
+    try {
+      await onSaved({ dailyLimit: normalizedLimit, name: normalizedName })
+    } catch (error) {
+      toast.error(errorMessage(error))
+    } finally {
+      setPending(false)
     }
-    const result = createMockServer({
-      dailyLimit: normalizedLimit,
-      name: normalizedName,
-    })
-    onSaved(result.server, result.key)
   }
 
   return (
@@ -358,6 +402,7 @@ function ServerEditorDialog({
               <FieldLabel htmlFor={nameId}>服务器名称</FieldLabel>
               <Input
                 autoFocus
+                disabled={pending}
                 id={nameId}
                 maxLength={64}
                 onChange={(event) => setName(event.target.value)}
@@ -368,6 +413,7 @@ function ServerEditorDialog({
             <Field>
               <FieldLabel htmlFor={limitId}>每日推送额度</FieldLabel>
               <Input
+                disabled={pending}
                 id={limitId}
                 inputMode="numeric"
                 max={MAX_DAILY_LIMIT}
@@ -380,18 +426,25 @@ function ServerEditorDialog({
           </FieldGroup>
           <DialogFooter>
             <Button
+              disabled={pending}
               onClick={() => onOpenChange(false)}
               type="button"
               variant="outline"
             >
               取消
             </Button>
-            <Button type="submit">{editing ? "保存" : "创建并生成 Key"}</Button>
+            <Button disabled={pending} type="submit">
+              {pending ? "保存中..." : editing ? "保存" : "创建并生成 Key"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   )
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "请求失败，请稍后重试"
 }
 
 function ServerKeyDialog({

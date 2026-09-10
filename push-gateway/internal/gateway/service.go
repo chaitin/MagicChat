@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"push-gateway/internal/model"
@@ -59,6 +60,7 @@ type Service struct {
 	maxRegistrationsGlobalMinute      int64
 	maxGrantRotationsPerInstallMinute int64
 	maxNotificationsGlobalMinute      int64
+	quotaRejected                     atomic.Uint64
 }
 
 func New(options Options) (*Service, error) {
@@ -373,7 +375,7 @@ type JobResult struct {
 	Duplicate bool   `json:"duplicate,omitempty"`
 }
 
-func (s *Service) EnqueueNotification(ctx context.Context, grantID, sendToken string, input NotificationInput) (JobResult, error) {
+func (s *Service) EnqueueNotification(ctx context.Context, grantID, sendToken, serverKey string, input NotificationInput) (JobResult, error) {
 	grantID, err := normalizeID(grantID)
 	if err != nil {
 		return JobResult{}, err
@@ -404,6 +406,10 @@ func (s *Service) EnqueueNotification(ctx context.Context, grantID, sendToken st
 
 	var result JobResult
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		server, err := authenticateServer(tx, serverKey)
+		if err != nil {
+			return err
+		}
 		var grant model.Grant
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Preload("Installation").First(&grant, "id = ?", strings.TrimSpace(grantID)).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -424,11 +430,17 @@ func (s *Service) EnqueueNotification(ctx context.Context, grantID, sendToken st
 		var existing model.Job
 		existingErr := tx.Where("grant_id = ? AND idempotency_key = ?", grant.ID, input.IdempotencyKey).First(&existing).Error
 		if existingErr == nil {
+			if existing.ServerID == nil || *existing.ServerID != server.ID {
+				return newFailure("idempotency_conflict", "幂等键已被其他服务器使用")
+			}
 			result = JobResult{JobID: existing.ID, Accepted: true, Duplicate: true}
 			return nil
 		}
 		if !errors.Is(existingErr, gorm.ErrRecordNotFound) {
 			return existingErr
+		}
+		if server.Status != model.ServerStatusActive {
+			return newFailure("server_disabled", "服务器已禁用")
 		}
 		if err := s.enforceRateLimit(tx, "notification_global", "global", s.maxNotificationsGlobalMinute, now); err != nil {
 			return err
@@ -441,11 +453,15 @@ func (s *Service) EnqueueNotification(ctx context.Context, grantID, sendToken st
 			return newFailure("rate_limited", "推送请求过于频繁")
 		}
 
+		quotaDate, err := chargeServerQuota(tx, server, now)
+		if err != nil {
+			return err
+		}
 		job := model.Job{
 			ID: uuid.NewString(), GrantID: grant.ID, IdempotencyKey: input.IdempotencyKey,
 			EventType: input.Event, RouteToken: input.RouteToken, CollapseKey: input.CollapseKey,
 			Status: model.JobStatusQueued, NextAttemptAt: now, ExpiresAt: now.Add(ttl),
-			CreatedAt: now, UpdatedAt: now,
+			CreatedAt: now, UpdatedAt: now, ServerID: &server.ID, QuotaDate: &quotaDate,
 		}
 		// The grant row is locked above, so requests for the same grant are
 		// serialized before this insert and the idempotency lookup is race-free.
@@ -461,9 +477,16 @@ func (s *Service) EnqueueNotification(ctx context.Context, grantID, sendToken st
 		return nil
 	})
 	if err != nil {
+		if failure, ok := FailureOf(err); ok && failure.Code == "daily_quota_exceeded" {
+			s.quotaRejected.Add(1)
+		}
 		return JobResult{}, err
 	}
 	return result, nil
+}
+
+func (s *Service) QuotaRejectedTotal() uint64 {
+	return s.quotaRejected.Load()
 }
 
 func (s *Service) validateInstallationInput(input RegisterInstallationInput) (RegisterInstallationInput, error) {

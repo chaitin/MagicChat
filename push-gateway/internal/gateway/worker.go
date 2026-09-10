@@ -87,6 +87,16 @@ func (s *Service) claimJobs(ctx context.Context, limit int) ([]model.Job, error)
 		if err := tx.Where("updated_at < ?", now.Add(-24*time.Hour)).Delete(&model.RateLimit{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("expires_at <= ?", now).Delete(&model.AdminSession{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("created_at < ?", now.Add(-180*24*time.Hour)).Delete(&model.AdminAuditEvent{}).Error; err != nil {
+			return err
+		}
+		usageCutoff := now.In(beijing).AddDate(0, 0, -90).Format("2006-01-02")
+		if err := tx.Where("usage_date < ?", usageCutoff).Delete(&model.ServerDailyUsage{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("status IN ? AND updated_at < ?", []string{model.JobStatusAccepted, model.JobStatusFailed, model.JobStatusExpired}, now.Add(-s.jobRetention)).
 			Delete(&model.Job{}).Error; err != nil {
 			return err
@@ -160,6 +170,13 @@ func (s *Service) dispatchJob(ctx context.Context, job model.Job) error {
 	}
 	if job.Grant.Status != model.GrantStatusActive || !job.Grant.ExpiresAt.After(now) || job.Grant.Installation.Status != model.InstallationStatusActive {
 		return s.finishJob(ctx, job, model.JobStatusFailed, "grant_inactive", "")
+	}
+	if job.ServerID == nil {
+		return s.finishJob(ctx, job, model.JobStatusFailed, "server_inactive", "")
+	}
+	var server model.Server
+	if err := s.db.WithContext(ctx).Select("id", "status").First(&server, "id = ?", *job.ServerID).Error; err != nil || server.Status != model.ServerStatusActive {
+		return s.finishJob(ctx, job, model.JobStatusFailed, "server_inactive", "")
 	}
 	pushProvider, ok := s.providers[job.Grant.Installation.Provider]
 	if !ok {

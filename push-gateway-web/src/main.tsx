@@ -7,9 +7,11 @@ import App from "./App"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 
+const basename = import.meta.env.BASE_URL.replace(/\/$/, "") || undefined
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <ThemeProvider storageKey="magicchat-push-gateway-theme">
         <App />
         <Toaster position="top-center" />

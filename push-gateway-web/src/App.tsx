@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   Navigate,
   Route,
@@ -8,13 +8,36 @@ import {
 } from "react-router-dom"
 
 import Console from "@/console"
-import { isAuthenticated, logout } from "@/lib/auth"
+import { checkSession, logout } from "@/lib/auth"
 import { defaultConsolePage } from "@/lib/console-pages"
 import LoginPage from "@/pages/login-page"
 import ServersPage from "@/pages/servers-page"
 
 export function App() {
-  const [authenticated, setAuthenticated] = useState(isAuthenticated)
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let active = true
+    const handleUnauthorized = () => setAuthenticated(false)
+    window.addEventListener(
+      "push-gateway-admin-unauthorized",
+      handleUnauthorized
+    )
+    void checkSession().then((value) => {
+      if (active) setAuthenticated(value)
+    })
+    return () => {
+      active = false
+      window.removeEventListener(
+        "push-gateway-admin-unauthorized",
+        handleUnauthorized
+      )
+    }
+  }, [])
+
+  if (authenticated === null) {
+    return <main className="min-h-svh bg-background" />
+  }
 
   return (
     <Routes>
@@ -77,7 +100,7 @@ function ProtectedConsole({
   return (
     <Console
       onLogout={() => {
-        logout()
+        void logout()
         onLogout()
         navigate("/login", { replace: true })
       }}

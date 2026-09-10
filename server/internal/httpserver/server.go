@@ -261,7 +261,7 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 		if err != nil {
 			panic(err)
 		}
-		pushGateway = mobilepushapp.NewGatewayClient()
+		pushGateway = mobilepushapp.NewGatewayClient(cfg.Push.ServerKey)
 	}
 	var mobilePushErr error
 	server.mobilePush, mobilePushErr = mobilepushapp.NewService(mobilepushapp.Dependencies{

@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	gatewayadmin "push-gateway/internal/admin"
 	"push-gateway/internal/config"
 	"push-gateway/internal/gateway"
 	"push-gateway/internal/httpserver"
@@ -67,13 +68,24 @@ func main() {
 		logger.Error("create gateway service", "error", err)
 		os.Exit(1)
 	}
+	adminService, err := gatewayadmin.New(gatewayadmin.Options{
+		DB: db, Cipher: cipher, Username: cfg.Admin.Username,
+		PasswordHash: cfg.Admin.PasswordHash, SessionTTL: cfg.Admin.SessionTTL,
+	})
+	if err != nil {
+		logger.Error("create admin service", "error", err)
+		os.Exit(1)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go service.RunWorker(ctx, gateway.WorkerOptions{
 		BatchSize: cfg.WorkerBatchSize, PollInterval: cfg.WorkerPollInterval, Logger: logger,
 	})
-	router := httpserver.New(db, service, httpserver.Options{TrustedProxyCIDRs: cfg.TrustedProxyCIDRs})
+	router := httpserver.New(db, service, httpserver.Options{
+		TrustedProxyCIDRs: cfg.TrustedProxyCIDRs,
+		Admin:             adminService, AdminCookieSecure: cfg.Admin.CookieSecure,
+	})
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

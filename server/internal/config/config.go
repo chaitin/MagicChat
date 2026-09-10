@@ -54,6 +54,7 @@ type PushConfig struct {
 	Enabled                 bool
 	CredentialEncryptionKey []byte
 	PreviousEncryptionKeys  [][]byte
+	ServerKey               string
 }
 
 type StorageConfig struct {
@@ -200,6 +201,12 @@ func loadPushConfig() (PushConfig, error) {
 	if err != nil || len(cfg.CredentialEncryptionKey) != 32 {
 		return PushConfig{}, fmt.Errorf("PUSH_CREDENTIAL_ENCRYPTION_KEY must be a base64-encoded 32-byte key")
 	}
+	if cfg.ServerKey, err = requiredEnv("PUSH_GATEWAY_SERVER_KEY"); err != nil {
+		return PushConfig{}, err
+	}
+	if !validPushGatewayServerKey(cfg.ServerKey) {
+		return PushConfig{}, fmt.Errorf("PUSH_GATEWAY_SERVER_KEY has an invalid format")
+	}
 	if previous := strings.TrimSpace(os.Getenv("PUSH_CREDENTIAL_PREVIOUS_KEYS")); previous != "" {
 		for index, encoded := range strings.Split(previous, ",") {
 			key, decodeErr := base64.StdEncoding.DecodeString(strings.TrimSpace(encoded))
@@ -210,6 +217,21 @@ func loadPushConfig() (PushConfig, error) {
 		}
 	}
 	return cfg, nil
+}
+
+func validPushGatewayServerKey(value string) bool {
+	const prefix = "mcps_srv_"
+	value = strings.TrimSpace(value)
+	if !strings.HasPrefix(value, prefix) {
+		return false
+	}
+	content := strings.TrimPrefix(value, prefix)
+	if len(content) != 56 || content[12] != '_' {
+		return false
+	}
+	publicID, publicErr := base64.RawURLEncoding.DecodeString(content[:12])
+	secret, secretErr := base64.RawURLEncoding.DecodeString(content[13:])
+	return publicErr == nil && len(publicID) == 9 && secretErr == nil && len(secret) == 32
 }
 
 func loadStorageConfig() (StorageConfig, error) {

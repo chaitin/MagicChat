@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	gatewayadmin "push-gateway/internal/admin"
 	"push-gateway/internal/gateway"
 	"push-gateway/internal/model"
 
@@ -25,17 +26,23 @@ var assets embed.FS
 
 type Options struct {
 	TrustedProxyCIDRs []string
+	Admin             *gatewayadmin.Service
+	AdminCookieSecure bool
 }
 
 type Server struct {
-	db             *gorm.DB
-	gateway        *gateway.Service
-	trustedProxies []*net.IPNet
+	db                *gorm.DB
+	gateway           *gateway.Service
+	admin             *gatewayadmin.Service
+	adminCookieSecure bool
+	trustedProxies    []*net.IPNet
 }
 
 func New(db *gorm.DB, service *gateway.Service, options ...Options) *echo.Echo {
 	server := &Server{db: db, gateway: service}
 	if len(options) > 0 {
+		server.admin = options[0].Admin
+		server.adminCookieSecure = options[0].AdminCookieSecure
 		for _, cidr := range options[0].TrustedProxyCIDRs {
 			_, network, err := net.ParseCIDR(cidr)
 			if err == nil {
@@ -47,6 +54,7 @@ func New(db *gorm.DB, service *gateway.Service, options ...Options) *echo.Echo {
 	router.HideBanner = true
 	router.HTTPErrorHandler = server.handleHTTPError
 	router.Use(middleware.Recover())
+	router.Use(middleware.RequestID())
 	router.Use(middleware.BodyLimit("16K"))
 
 	router.GET("/api/health/live", server.live)
@@ -62,6 +70,7 @@ func New(db *gorm.DB, service *gateway.Service, options ...Options) *echo.Echo {
 	v1.POST("/grants/:grant_id/renew", server.renewGrant)
 	v1.DELETE("/grants/:grant_id", server.revokeGrant)
 	v1.POST("/grants/:grant_id/notifications", server.enqueueNotification)
+	server.registerAdminRoutes(router)
 	return router
 }
 
@@ -144,7 +153,7 @@ func (s *Server) enqueueNotification(c echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return err
 	}
-	result, err := s.gateway.EnqueueNotification(c.Request().Context(), c.Param("grant_id"), bearerToken(c), gateway.NotificationInput{
+	result, err := s.gateway.EnqueueNotification(c.Request().Context(), c.Param("grant_id"), bearerToken(c), c.Request().Header.Get("X-MagicChat-Server-Key"), gateway.NotificationInput{
 		Event: request.Event, RouteToken: request.RouteToken,
 		CollapseKey: request.CollapseKey, TTLSeconds: request.TTLSeconds,
 		IdempotencyKey: c.Request().Header.Get("Idempotency-Key"),
@@ -177,6 +186,15 @@ func (s *Server) metrics(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	serverCounts, err := metricStatusCounts(s.db.WithContext(ctx).Model(&model.Server{}))
+	if err != nil {
+		return err
+	}
+	beijingDate := time.Now().In(time.FixedZone("Asia/Shanghai", 8*60*60)).Format("2006-01-02")
+	var acceptedToday int64
+	if err := s.db.WithContext(ctx).Model(&model.ServerDailyUsage{}).Where("usage_date = ?", beijingDate).Select("COALESCE(SUM(accepted_count), 0)").Scan(&acceptedToday).Error; err != nil {
+		return err
+	}
 	installationCounts, err := metricInstallationCounts(s.db.WithContext(ctx))
 	if err != nil {
 		return err
@@ -204,6 +222,13 @@ func (s *Server) metrics(c echo.Context) error {
 	var output strings.Builder
 	writeMetricStatusCounts(&output, "push_gateway_jobs", "Current push jobs by status.", jobCounts)
 	writeMetricStatusCounts(&output, "push_gateway_grants", "Current anonymous push grants by status.", grantCounts)
+	writeMetricStatusCounts(&output, "push_gateway_private_servers", "Authorized private servers by status.", serverCounts)
+	output.WriteString("# HELP push_gateway_server_notifications_accepted_today Notifications accepted during the current Beijing calendar day.\n")
+	output.WriteString("# TYPE push_gateway_server_notifications_accepted_today gauge\n")
+	fmt.Fprintf(&output, "push_gateway_server_notifications_accepted_today %d\n", acceptedToday)
+	output.WriteString("# HELP push_gateway_server_quota_rejections_total Notification requests rejected by a private server daily quota.\n")
+	output.WriteString("# TYPE push_gateway_server_quota_rejections_total counter\n")
+	fmt.Fprintf(&output, "push_gateway_server_quota_rejections_total %d\n", s.gateway.QuotaRejectedTotal())
 	output.WriteString("# HELP push_gateway_installations Current anonymous push installations by provider, platform, and status.\n")
 	output.WriteString("# TYPE push_gateway_installations gauge\n")
 	for _, count := range installationCounts {
@@ -403,16 +428,34 @@ func (s *Server) handleHTTPError(err error, c echo.Context) {
 	if failure, ok := gateway.FailureOf(err); ok {
 		code, message = failure.Code, failure.Message
 		switch code {
-		case "unauthorized":
+		case "unauthorized", "server_unauthorized":
 			status = http.StatusUnauthorized
 		case "installation_not_found", "grant_not_found":
 			status = http.StatusNotFound
 		case "grant_revoked", "grant_expired", "installation_disabled":
 			status = http.StatusGone
-		case "rate_limited":
+		case "server_disabled":
+			status = http.StatusForbidden
+		case "rate_limited", "daily_quota_exceeded":
 			status = http.StatusTooManyRequests
 		default:
 			status = http.StatusBadRequest
+		}
+	} else if failure, ok := gatewayadmin.FailureOf(err); ok {
+		code = failure.Code
+		switch code {
+		case "admin_unauthorized", "invalid_credentials":
+			status, message = http.StatusUnauthorized, "管理员认证失败"
+		case "csrf_invalid":
+			status, message = http.StatusForbidden, "请求校验失败"
+		case "server_not_found":
+			status, message = http.StatusNotFound, "服务器不存在"
+		case "login_rate_limited":
+			status, message = http.StatusTooManyRequests, "登录尝试过于频繁"
+		case "admin_unavailable":
+			status, message = http.StatusServiceUnavailable, "管理服务未配置"
+		default:
+			status, message = http.StatusBadRequest, "请求格式错误"
 		}
 	} else {
 		var echoErr *echo.HTTPError

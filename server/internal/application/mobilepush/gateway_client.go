@@ -16,18 +16,23 @@ const maxGatewayResponseBytes = 16 << 10
 
 type HTTPGatewayClient struct {
 	endpoint   string
+	serverKey  string
 	httpClient *http.Client
 }
 
-func NewGatewayClient() *HTTPGatewayClient {
-	return NewGatewayClientWithEndpoint(GatewayURL, &http.Client{Timeout: 5 * time.Second})
+func NewGatewayClient(serverKey string) *HTTPGatewayClient {
+	return NewGatewayClientWithEndpointAndServerKey(GatewayURL, serverKey, &http.Client{Timeout: 5 * time.Second})
 }
 
 func NewGatewayClientWithEndpoint(endpoint string, client *http.Client) *HTTPGatewayClient {
+	return NewGatewayClientWithEndpointAndServerKey(endpoint, "", client)
+}
+
+func NewGatewayClientWithEndpointAndServerKey(endpoint, serverKey string, client *http.Client) *HTTPGatewayClient {
 	if client == nil {
 		client = &http.Client{Timeout: 5 * time.Second}
 	}
-	return &HTTPGatewayClient{endpoint: strings.TrimRight(endpoint, "/"), httpClient: client}
+	return &HTTPGatewayClient{endpoint: strings.TrimRight(endpoint, "/"), serverKey: strings.TrimSpace(serverKey), httpClient: client}
 }
 
 func (c *HTTPGatewayClient) Send(
@@ -49,6 +54,7 @@ func (c *HTTPGatewayClient) Send(
 	request.Header.Set("Authorization", "Bearer "+sendToken)
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", idempotencyKey)
+	request.Header.Set("X-MagicChat-Server-Key", c.serverKey)
 	response, err := c.httpClient.Do(request)
 	if err != nil {
 		return &GatewayError{Kind: GatewayErrorRetry, Code: "gateway_unavailable", Err: err}
@@ -73,9 +79,10 @@ func (c *HTTPGatewayClient) Send(
 	}
 	kind := GatewayErrorInvalid
 	switch {
-	case response.StatusCode == http.StatusUnauthorized,
-		response.StatusCode == http.StatusNotFound,
-		response.StatusCode == http.StatusGone:
+	case code == "server_unauthorized" || code == "server_disabled" || code == "daily_quota_exceeded":
+		kind = GatewayErrorInvalid
+	case code == "unauthorized" || code == "grant_not_found" || code == "grant_revoked" || code == "grant_expired" ||
+		response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusNotFound || response.StatusCode == http.StatusGone:
 		kind = GatewayErrorRevoked
 	case response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= 500:
 		kind = GatewayErrorRetry

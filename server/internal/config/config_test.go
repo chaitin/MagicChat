@@ -123,13 +123,14 @@ func TestLoadReadsOptionalPushConfiguration(t *testing.T) {
 	t.Setenv("PUSH_GATEWAY_ENABLED", "true")
 	t.Setenv("PUSH_CREDENTIAL_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(currentKey))
 	t.Setenv("PUSH_CREDENTIAL_PREVIOUS_KEYS", base64.StdEncoding.EncodeToString(previousKey))
+	t.Setenv("PUSH_GATEWAY_SERVER_KEY", "mcps_srv_AAAAAAAAAAAA_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if !cfg.Push.Enabled || len(cfg.Push.CredentialEncryptionKey) != 32 || len(cfg.Push.PreviousEncryptionKeys) != 1 {
-		t.Fatalf("Push configuration = %#v", cfg.Push)
+	if !cfg.Push.Enabled || len(cfg.Push.CredentialEncryptionKey) != 32 || len(cfg.Push.PreviousEncryptionKeys) != 1 || cfg.Push.ServerKey != "mcps_srv_AAAAAAAAAAAA_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" {
+		t.Fatalf("Push configuration is invalid: enabled=%v key_bytes=%d previous_keys=%d has_server_key=%v", cfg.Push.Enabled, len(cfg.Push.CredentialEncryptionKey), len(cfg.Push.PreviousEncryptionKeys), cfg.Push.ServerKey != "")
 	}
 }
 
@@ -138,6 +139,26 @@ func TestLoadRequiresPushEncryptionKeyWhenEnabled(t *testing.T) {
 	t.Setenv("PUSH_GATEWAY_ENABLED", "true")
 	t.Setenv("PUSH_CREDENTIAL_ENCRYPTION_KEY", "")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "PUSH_CREDENTIAL_ENCRYPTION_KEY") {
+		t.Fatalf("Load() error = %v", err)
+	}
+}
+
+func TestLoadRequiresPushServerKeyWhenEnabled(t *testing.T) {
+	setRequiredEnvironment(t)
+	t.Setenv("PUSH_GATEWAY_ENABLED", "true")
+	t.Setenv("PUSH_CREDENTIAL_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(make([]byte, 32)))
+	t.Setenv("PUSH_GATEWAY_SERVER_KEY", "")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "PUSH_GATEWAY_SERVER_KEY") {
+		t.Fatalf("Load() error = %v", err)
+	}
+}
+
+func TestLoadRejectsInvalidPushServerKey(t *testing.T) {
+	setRequiredEnvironment(t)
+	t.Setenv("PUSH_GATEWAY_ENABLED", "true")
+	t.Setenv("PUSH_CREDENTIAL_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(make([]byte, 32)))
+	t.Setenv("PUSH_GATEWAY_SERVER_KEY", "invalid")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "PUSH_GATEWAY_SERVER_KEY") {
 		t.Fatalf("Load() error = %v", err)
 	}
 }

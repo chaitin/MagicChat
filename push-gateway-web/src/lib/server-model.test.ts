@@ -1,35 +1,23 @@
 import { describe, expect, it } from "vitest"
 
-import {
-  createMockServer,
-  MOCK_SERVERS,
-  quotaUsagePercent,
-  rotateMockServerKey,
-} from "@/lib/server-model"
+import { quotaUsagePercent, type PushServer } from "@/lib/server-model"
+
+const server: PushServer = {
+  createdAt: "2026-09-09T00:00:00Z",
+  dailyLimit: 100_000,
+  id: "server-id",
+  name: "生产环境一号",
+  revision: 1,
+  status: "active",
+  todayUsage: 38_642,
+}
 
 describe("push server model", () => {
-  it("creates a unique-looking server key without placing it in the record", () => {
-    const result = createMockServer({
-      dailyLimit: 10_000,
-      name: " 测试服务器 ",
-    })
-    expect(result.server.name).toBe("测试服务器")
-    expect(result.server.dailyLimit).toBe(10_000)
-    expect(result.server).not.toHaveProperty("key")
-    expect(result.key).toMatch(/^mcps_srv_[a-z0-9]+_[a-z0-9]+$/)
-  })
-
-  it("rotates only the key fingerprint", () => {
-    const original = MOCK_SERVERS[0]
-    const result = rotateMockServerKey(original)
-    expect(result.server.id).toBe(original.id)
-    expect(result.server.keyFingerprint).not.toBe(original.keyFingerprint)
-    expect(result.key).toContain(original.id)
+  it("calculates quota progress", () => {
+    expect(quotaUsagePercent(server)).toBe(39)
   })
 
   it("caps quota progress at one hundred percent", () => {
-    expect(quotaUsagePercent({ ...MOCK_SERVERS[0], todayUsage: 200_000 })).toBe(
-      100
-    )
+    expect(quotaUsagePercent({ ...server, todayUsage: 200_000 })).toBe(100)
   })
 })

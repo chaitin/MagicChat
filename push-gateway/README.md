@@ -14,7 +14,10 @@ Implemented:
 - one active grant per installation
 - grant renewal, revocation, and expiration
 - idempotent fixed-template notification jobs
-- database-backed per-IP, global, grant-rotation, and per-grant rate limiting
+- independently authenticated private servers with enable/disable and key rotation
+- Beijing-calendar-day quotas charged once per accepted unique job
+- authenticated management sessions and server-management APIs
+- database-backed per-IP, global, grant-rotation, admin-login, and per-grant rate limiting
 - PostgreSQL-backed retry worker
 - bounded retention for jobs, grants, and abandoned installations
 - invalid-device revocation behavior
@@ -29,7 +32,6 @@ Not implemented yet:
 
 - JPush OEM-channel real-device validation and Getui fallback evaluation
 - provider delivery-receipt polling
-- mobile installation and grant lifecycle integration
 
 ## Run locally
 
@@ -47,6 +49,10 @@ To rotate `DATA_ENCRYPTION_KEY`, move the old value into `DATA_ENCRYPTION_PREVIO
 
 `INSTALLATION_RETENTION` controls how long expired/revoked grants and abandoned installations remain after they are no longer active. It must not be shorter than `JOB_RETENTION`.
 
+The management API is enabled only when both `PUSH_ADMIN_USERNAME` and `PUSH_ADMIN_PASSWORD_HASH` are configured. The password value is an Argon2id PHC hash, not a plaintext password. Generate it interactively with `go run ./cmd/hash-password`. Production must keep `PUSH_ADMIN_COOKIE_SECURE=true`.
+
+Notification admission requires `X-MagicChat-Server-Key` in addition to the grant Bearer token. Server keys are created in the management console. The active key is encrypted at rest so an administrator can reveal it; authentication uses a separate SHA-256 hash. Rotating a key erases the old ciphertext and revokes the old key immediately.
+
 ## API
 
 - `POST /api/v1/installations`
@@ -55,6 +61,14 @@ To rotate `DATA_ENCRYPTION_KEY`, move the old value into `DATA_ENCRYPTION_PREVIO
 - `POST /api/v1/grants/{grant_id}/renew`
 - `DELETE /api/v1/grants/{grant_id}`
 - `POST /api/v1/grants/{grant_id}/notifications`
+- `POST /api/admin/v1/session`
+- `GET|DELETE /api/admin/v1/session`
+- `GET|POST /api/admin/v1/servers`
+- `PATCH /api/admin/v1/servers/{server_id}`
+- `POST /api/admin/v1/servers/{server_id}/enable`
+- `POST /api/admin/v1/servers/{server_id}/disable`
+- `POST /api/admin/v1/servers/{server_id}/key/reveal`
+- `POST /api/admin/v1/servers/{server_id}/key/rotate`
 - `GET /api/health/live`
 - `GET /api/health/ready`
 - `GET /api/metrics`

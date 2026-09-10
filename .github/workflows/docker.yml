@@ -57,6 +57,7 @@ jobs:
           cache-dependency-path: |
             client-web/pnpm-lock.yaml
             admin-web/pnpm-lock.yaml
+            push-gateway-web/pnpm-lock.yaml
             document-server/pnpm-lock.yaml
 
       - name: Verify client web
@@ -70,6 +71,15 @@ jobs:
 
       - name: Verify admin web
         working-directory: admin-web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm test
+          pnpm typecheck
+          pnpm lint
+          pnpm build
+
+      - name: Verify Push Gateway web
+        working-directory: push-gateway-web
         run: |
           pnpm install --frozen-lockfile
           pnpm test
@@ -132,6 +142,10 @@ jobs:
             context: push-gateway
             dockerfile: push-gateway/Dockerfile
             build_args: ""
+          - image: push-gateway-web
+            context: push-gateway-web
+            dockerfile: push-gateway-web/Dockerfile
+            build_args: VITE_BASE_PATH=/admin/
     steps:
       - name: Checkout
         uses: actions/checkout@v7

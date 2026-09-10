@@ -19,6 +19,7 @@ type Config struct {
 	TrustedProxyCIDRs                 []string
 	APNS                              APNSConfig
 	JPush                             JPushConfig
+	Admin                             AdminConfig
 	GrantTTL                          time.Duration
 	NotificationTTL                   time.Duration
 	MaxNotificationTTL                time.Duration
@@ -45,6 +46,13 @@ type JPushConfig struct {
 	MasterSecret string
 }
 
+type AdminConfig struct {
+	Username     string
+	PasswordHash string
+	CookieSecure bool
+	SessionTTL   time.Duration
+}
+
 func Load() (Config, error) {
 	cfg := Config{
 		HTTPAddr:                          envOrDefault("HTTP_ADDR", ":8080"),
@@ -61,6 +69,7 @@ func Load() (Config, error) {
 		MaxRegistrationsGlobalMinute:      1000,
 		MaxGrantRotationsPerInstallMinute: 10,
 		MaxNotificationsGlobalMinute:      10000,
+		Admin:                             AdminConfig{CookieSecure: true, SessionTTL: 12 * time.Hour},
 	}
 	cfg.DatabaseURL = strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if cfg.DatabaseURL == "" {
@@ -84,6 +93,18 @@ func Load() (Config, error) {
 			}
 			cfg.PreviousDataEncryptionKeys = append(cfg.PreviousDataEncryptionKeys, previousKey)
 		}
+	}
+
+	cfg.Admin.Username = strings.TrimSpace(os.Getenv("PUSH_ADMIN_USERNAME"))
+	cfg.Admin.PasswordHash = strings.TrimSpace(os.Getenv("PUSH_ADMIN_PASSWORD_HASH"))
+	if (cfg.Admin.Username == "") != (cfg.Admin.PasswordHash == "") {
+		return Config{}, fmt.Errorf("PUSH_ADMIN_USERNAME and PUSH_ADMIN_PASSWORD_HASH must be configured together")
+	}
+	if cfg.Admin.CookieSecure, err = boolEnv("PUSH_ADMIN_COOKIE_SECURE", cfg.Admin.CookieSecure); err != nil {
+		return Config{}, err
+	}
+	if cfg.Admin.SessionTTL, err = durationEnv("PUSH_ADMIN_SESSION_TTL", cfg.Admin.SessionTTL); err != nil {
+		return Config{}, err
 	}
 
 	if trustedProxies := strings.TrimSpace(os.Getenv("TRUSTED_PROXY_CIDRS")); trustedProxies != "" {
@@ -214,6 +235,18 @@ func durationEnv(name string, fallback time.Duration) (time.Duration, error) {
 	parsed, err := time.ParseDuration(value)
 	if err != nil || parsed <= 0 {
 		return 0, fmt.Errorf("%s must be a positive duration", name)
+	}
+	return parsed, nil
+}
+
+func boolEnv(name string, fallback bool) (bool, error) {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return false, fmt.Errorf("%s must be a boolean", name)
 	}
 	return parsed, nil
 }
