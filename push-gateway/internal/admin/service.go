@@ -63,9 +63,6 @@ func New(options Options) (*Service, error) {
 		return nil, fmt.Errorf("admin plaintext password and password hash cannot both be configured")
 	}
 	if password != "" {
-		if len(password) < 12 {
-			return nil, fmt.Errorf("admin plaintext password must contain at least 12 characters")
-		}
 		var err error
 		passwordHash, err = secure.HashArgon2id(password)
 		if err != nil {

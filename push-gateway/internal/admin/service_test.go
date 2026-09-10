@@ -18,15 +18,15 @@ import (
 func TestPlaintextAdminPasswordIsHashedAtStartup(t *testing.T) {
 	db, cipher := newAdminDependencies(t)
 	service, err := New(Options{
-		DB: db, Cipher: cipher, Username: "operator", Password: "correct password",
+		DB: db, Cipher: cipher, Username: "admin", Password: "admin",
 	})
 	if err != nil {
 		t.Fatalf("create service: %v", err)
 	}
-	if service.passwordHash == "" || service.passwordHash == "correct password" {
+	if service.passwordHash == "" || service.passwordHash == "admin" {
 		t.Fatal("plaintext password was retained instead of hashing")
 	}
-	if _, err := service.Login(t.Context(), "operator", "correct password", "203.0.113.1"); err != nil {
+	if _, err := service.Login(t.Context(), "admin", "admin", "203.0.113.1"); err != nil {
 		t.Fatalf("login with plaintext configuration: %v", err)
 	}
 }
