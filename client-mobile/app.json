@@ -2,26 +2,26 @@
   "expo": {
     "name": "即应",
     "slug": "magicchat-mobile",
-    "version": "1.4.2",
+    "version": "1.5.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "magicchat",
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "cloud.baizhi.chat",
-      "buildNumber": "12",
+      "buildNumber": "13",
       "icon": "./assets/images/icon.png",
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         },
         "NSPhotoLibraryAddUsageDescription": "即应需要将您主动保存的聊天图片写入相册，例如将联系人发送的图片保存到系统“照片”。",
-        "NSPhotoLibraryUsageDescription": "即应需要访问您选择的照片，用于在聊天中发送图片，例如从相册选择产品截图并发送给联系人或群聊。"
+        "NSPhotoLibraryUsageDescription": "即应需要访问您选择的照片和视频，用于在聊天中发送图片或视频。"
       }
     },
     "android": {
       "package": "cloud.baizhi.chat",
-      "versionCode": 12,
+      "versionCode": 13,
       "permissions": [
         "android.permission.REQUEST_INSTALL_PACKAGES"
       ],
@@ -53,8 +53,11 @@
       [
         "expo-media-library",
         {
-          "granularPermissions": ["photo"],
-          "photosPermission": "即应需要访问您选择的照片，用于在聊天中发送图片，例如从相册选择产品截图并发送给联系人或群聊。",
+          "granularPermissions": [
+            "photo",
+            "video"
+          ],
+          "photosPermission": "即应需要访问您选择的照片和视频，用于在聊天中发送图片或视频。",
           "savePhotosPermission": "即应需要将您主动保存的聊天图片写入相册，例如将联系人发送的图片保存到系统“照片”。"
         }
       ],
@@ -63,7 +66,7 @@
         {
           "cameraPermission": "允许即应使用相机拍摄并发送图片",
           "microphonePermission": "允许即应使用麦克风录制并发送语音消息",
-          "photosPermission": "即应需要访问您选择的照片，用于在聊天中发送图片，例如从相册选择产品截图并发送给联系人或群聊。"
+          "photosPermission": "即应需要访问您选择的照片和视频，用于在聊天中发送图片或视频。"
         }
       ],
       [
@@ -93,7 +96,9 @@
           "microphonePermission": "允许即应使用麦克风录制并发送语音消息"
         }
       ],
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-video",
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -35,6 +35,7 @@ import { MarkdownMessage } from "@/features/conversation/messages/markdown-messa
 import { MessageChart } from "@/features/conversation/messages/message-chart"
 import { CollapsibleMessageContent } from "@/features/conversation/messages/collapsible-message-content"
 import { MessageMentionText } from "@/features/conversation/messages/message-mention-text"
+import { MessageVideo } from "@/features/conversation/messages/message-video"
 import { VoiceMessagePlayer } from "@/features/conversation/voice/voice-message-player"
 import { XGUILoadingIcon, useXGUITheme } from "@/xgui"
 
@@ -50,6 +51,7 @@ export const MessageBody = memo(function MessageBody({
   onResourcePress,
   onVoiceResourcePress,
   resolveMentionLabel,
+  roundVideoBottom,
   resourceStates,
   serverUrl,
 }: {
@@ -64,6 +66,7 @@ export const MessageBody = memo(function MessageBody({
   onResourcePress: (fileId: string) => void
   onVoiceResourcePress: (fileId: string) => void
   resolveMentionLabel: MessageMentionLabelResolver
+  roundVideoBottom: boolean
   resourceStates: ReadonlyMap<string, ResourceLoadState>
   serverUrl: string
 }) {
@@ -220,6 +223,48 @@ export const MessageBody = memo(function MessageBody({
     return (
       <YStack maxW="100%" width={size.width}>
         {image}
+        <YStack
+          pb={flushImage ? "$3" : undefined}
+          pt="$2"
+          px={flushImage ? "$3" : undefined}
+        >
+          {body.captionType === "markdown" ? (
+            <MarkdownMessage
+              content={body.caption}
+              currentUserId={currentUserId}
+              onMentionPress={onMentionPress}
+              resolveMentionLabel={resolveMentionLabel}
+              selectable={false}
+              serverUrl={serverUrl}
+            />
+          ) : (
+            <Paragraph color={colors.textPrimary} size="$4">
+              <MessageMentionText
+                content={body.caption}
+                currentUserId={currentUserId}
+                onMentionPress={onMentionPress}
+                resolveMentionLabel={resolveMentionLabel}
+              />
+            </Paragraph>
+          )}
+        </YStack>
+      </YStack>
+    )
+  }
+
+  if (body.type === "video") {
+    const video = (
+      <MessageVideo
+        onLongPress={onMessageLongPress}
+        onReload={() => onResourceError(body.fileId)}
+        roundedBottom={roundVideoBottom}
+        state={resourceStates.get(body.fileId)}
+      />
+    )
+    if (!body.caption) return video
+    return (
+      <YStack maxW="100%" width="100%">
+        {video}
         <YStack
           pb={flushImage ? "$3" : undefined}
           pt="$2"

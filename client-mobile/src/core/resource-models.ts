@@ -1,4 +1,4 @@
-export type AttachmentResourceKind = "file" | "image" | "voice"
+export type AttachmentResourceKind = "file" | "image" | "video" | "voice"
 
 export type AttachmentResourceReference = {
   expectedSizeBytes?: number

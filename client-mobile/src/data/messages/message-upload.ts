@@ -8,7 +8,7 @@ export type ClientMessageUpload = {
 export type PreparedClientMessageUpload = {
   cleanup?: () => void
   height?: number
-  kind: "file" | "image"
+  kind: "file" | "image" | "video"
   upload: ClientMessageUpload
   width?: number
 }

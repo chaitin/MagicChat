@@ -233,6 +233,21 @@ export function useSendConversationImageMessage(
   )
 }
 
+export function useSendConversationVideoMessage(
+  server: AuthenticatedTarget,
+  conversationId: string
+) {
+  return useSendConversationMessageMutation(
+    server,
+    conversationId,
+    (input: {
+      clientMessageId: string
+      replyToMessageId?: string
+      video: ClientMessageUpload
+    }) => messageManager.sendVideo(server, conversationId, input)
+  )
+}
+
 export function useSendConversationVoiceMessage(
   server: AuthenticatedTarget,
   conversationId: string

@@ -10,6 +10,7 @@ import {
 } from "@/features/permissions/media-permission"
 
 export const FILE_MESSAGE_MAX_BYTES = 500 * 1024 * 1024
+export const VIDEO_MESSAGE_MAX_BYTES = 100 * 1024 * 1024
 
 export async function pickCameraImageMessage() {
   const permission = await requestPermissionForUserAction(
@@ -29,6 +30,32 @@ export async function pickCameraImageMessage() {
   })
 
   return preparePickedImage(result, "camera.jpg", "image/jpeg")
+}
+
+export function prepareVideoMessage(input: {
+  mimeType?: string
+  name: string
+  sizeBytes: number
+  uri: string
+}): PreparedClientMessageUpload {
+  const name = input.name.trim() || "video.mp4"
+  const mimeType = normalizeVideoMimeType(input.mimeType ?? "", name)
+  if (!mimeType) {
+    throw new Error("请选择 MP4 或 WebM 视频")
+  }
+  if (input.sizeBytes <= 0) throw new Error("视频不能为空")
+  if (input.sizeBytes > VIDEO_MESSAGE_MAX_BYTES) {
+    throw new Error("视频大于 100MiB，无法上传")
+  }
+  return {
+    kind: "video",
+    upload: {
+      mimeType,
+      name,
+      sizeBytes: input.sizeBytes,
+      uri: input.uri,
+    },
+  }
 }
 
 export async function pickLibraryImageMessage() {
@@ -78,6 +105,13 @@ export async function pickFileMessage(): Promise<PreparedClientMessageUpload | n
       uri: asset.uri,
     },
   }
+}
+
+function normalizeVideoMimeType(mimeType: string, name: string) {
+  if (mimeType === "video/mp4" || mimeType === "video/webm") return mimeType
+  if (/\.mp4$/i.test(name)) return "video/mp4"
+  if (/\.webm$/i.test(name)) return "video/webm"
+  return null
 }
 
 async function preparePickedImage(

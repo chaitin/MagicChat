@@ -17,5 +17,5 @@ export default function MediaPickerRoute() {
   useEffect(() => { if (!request) router.back() }, [request, router])
 
   if (!request) return null
-  return <XGUIMediaPicker confirmLabel={request.confirmLabel} maxSelection={request.maxSelection} mode={request.mode} onCancel={close} onConfirm={async (assets) => { await request.onSelect(assets); deleteMediaPickerRequest(requestId); router.back() }} />
+  return <XGUIMediaPicker confirmLabel={request.confirmLabel} maxSelection={request.maxSelection} mediaKind={request.mediaKind} mode={request.mode} onCancel={close} onConfirm={async (assets) => { await request.onSelect(assets); deleteMediaPickerRequest(requestId); router.back() }} />
 }

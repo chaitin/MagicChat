@@ -4,7 +4,7 @@ import test from "node:test"
 
 const root = new URL("../", import.meta.url)
 const photoLibraryUsage =
-  "即应需要访问您选择的照片，用于在聊天中发送图片，例如从相册选择产品截图并发送给联系人或群聊。"
+  "即应需要访问您选择的照片和视频，用于在聊天中发送图片或视频。"
 const photoLibraryAddUsage =
   "即应需要将您主动保存的聊天图片写入相册，例如将联系人发送的图片保存到系统“照片”。"
 

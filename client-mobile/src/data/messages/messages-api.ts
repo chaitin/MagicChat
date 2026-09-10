@@ -368,6 +368,32 @@ export function sendConversationImageMessage(
   )
 }
 
+export function sendConversationVideoMessage(
+  target: AuthenticatedTarget,
+  conversationId: string,
+  input: {
+    clientMessageId: string
+    replyToMessageId?: string
+    video: ClientMessageUpload
+  },
+  options: ApiOptions = {}
+) {
+  return sendConversationUploadMessage(
+    target,
+    conversationId,
+    {
+      clientMessageId: input.clientMessageId,
+      fieldName: "video",
+      path: "videos",
+      replyToMessageId: input.replyToMessageId,
+      timeoutMs: 10 * 60_000,
+      upload: input.video,
+    },
+    "发送视频失败",
+    options
+  )
+}
+
 export function sendConversationVoiceMessage(
   target: AuthenticatedTarget,
   conversationId: string,
@@ -547,9 +573,10 @@ async function sendConversationUploadMessage(
   input: {
     clientMessageId: string
     extraFields?: Record<string, string>
-    fieldName: "file" | "image" | "voice"
-    path: "files" | "images" | "voices"
+    fieldName: "file" | "image" | "video" | "voice"
+    path: "files" | "images" | "videos" | "voices"
     replyToMessageId?: string
+    timeoutMs?: number
     upload: ClientMessageUpload
   },
   errorMessage: string,
@@ -583,7 +610,7 @@ async function sendConversationUploadMessage(
       errorMessage,
       method: "POST",
       signal: options.signal,
-      timeoutMs: 120_000,
+      timeoutMs: input.timeoutMs ?? 120_000,
     }
   )
 

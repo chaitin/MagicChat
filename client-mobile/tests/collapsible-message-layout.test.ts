@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
+import { readFile } from "node:fs/promises"
 import test from "node:test"
 
 import { getCollapsibleMessageLayout } from "@/features/conversation/messages/collapsible-message-layout"
+
+const root = new URL("../", import.meta.url)
 
 test("leaves the viewport unconstrained while natural height is being measured", () => {
   assert.deepEqual(
@@ -58,6 +61,19 @@ test("clips long content using the variant threshold until expanded", () => {
       viewportHeight: 600,
     }
   )
+})
+
+test("covers the SVG fade raster edge with an opaque strip", async () => {
+  const source = await readFile(
+    new URL(
+      "src/features/conversation/messages/collapsible-message-content.tsx",
+      root
+    ),
+    "utf8"
+  )
+
+  assert.match(source, /styles\.fadeEdge, \{ backgroundColor: fadeColor \}/)
+  assert.match(source, /fadeEdge: \{[\s\S]*?height: 1,/)
 })
 
 test("does not treat layout rounding at the threshold as overflow", () => {

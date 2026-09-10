@@ -65,6 +65,15 @@ export async function ensureAttachmentResource(
   options: { signal?: AbortSignal } = {}
 ) {
   const identity = getAttachmentIdentity(reference.fileId)
+  if (reference.kind === "video") {
+    const readUrl = await requestResourceReadUrl(session, reference.fileId)
+    return createRemoteResource(
+      identity,
+      readUrl.url,
+      readUrl.sizeBytes ?? reference.expectedSizeBytes ?? 0,
+      reference.mimeType
+    )
+  }
   const cached = await getCachedAttachmentResource(session, reference)
   if (cached) return cached
 

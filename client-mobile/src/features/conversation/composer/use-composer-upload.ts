@@ -79,7 +79,7 @@ export function useComposerUpload({
   )
 
   const confirm = useCallback(async () => {
-    if (!selected || disabled) return false
+    if (!selected || disabled || uploadInFlightRef.current) return false
 
     const selection = selected
     uploadInFlightRef.current = true

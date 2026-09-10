@@ -19,6 +19,7 @@ import {
   useWindowDimensions,
 } from "react-native"
 import * as MediaLibrary from "expo-media-library/legacy"
+import { File } from "expo-file-system"
 import { useRouter, type Href } from "expo-router"
 import {
   type TamaguiElement,
@@ -52,6 +53,7 @@ import { MentionPickerSheet } from "@/features/conversation/composer/mention-pic
 import {
   pickCameraImageMessage,
   pickFileMessage,
+  prepareVideoMessage,
 } from "@/features/conversation/composer/message-upload-picker"
 import { MessageUploadDialog } from "@/features/conversation/composer/message-upload-dialog"
 import { useComposerUpload } from "@/features/conversation/composer/use-composer-upload"
@@ -129,6 +131,7 @@ export const MessageComposer = forwardRef<
   const restoreKeyboardAfterMediaPickerRef = useRef(false)
   const pendingImageUploadsRef = useRef<PreparedClientMessageUpload[]>([])
   const imageConfirmationPendingRef = useRef(false)
+  const videoConfirmationPendingRef = useRef(false)
   const [content, setContent] = useState("")
   const [inputHeight, setInputHeight] = useState(COMPOSER_CONTROL_HEIGHT)
   const [accessoryMode, setAccessoryMode] =
@@ -439,13 +442,17 @@ export const MessageComposer = forwardRef<
       setPendingImageUploads([])
     } else {
       upload.cancel()
+      videoConfirmationPendingRef.current = false
     }
     restoreKeyboardAfterMediaPicker()
   }
 
   async function handleUploadConfirm() {
     if (pendingImageUploadsRef.current.length === 0) {
-      if (await upload.confirm()) restoreKeyboardAfterMediaPicker()
+      if (await upload.confirm()) {
+        videoConfirmationPendingRef.current = false
+        restoreKeyboardAfterMediaPicker()
+      }
       return
     }
     if (imageBatchSending) return
@@ -476,44 +483,52 @@ export const MessageComposer = forwardRef<
     setAccessoryMode(null)
     const requestId = createMediaPickerRequest({
       confirmLabel: "发送",
-      maxSelection: 4,
-      mode: "multiple",
+      maxSelection: 1,
+      mediaKind: "mixed",
+      mode: "single",
       onClose: () => {
-        if (!imageConfirmationPendingRef.current) {
+        if (
+          !imageConfirmationPendingRef.current &&
+          !videoConfirmationPendingRef.current
+        ) {
           restoreKeyboardAfterMediaPicker()
         }
       },
-      onSelect: async (assets) => {
-        const preparedUploads: PreparedClientMessageUpload[] = []
-        try {
-          for (const asset of assets) {
-            const uri =
-              Platform.OS === "android"
-                ? await MediaLibrary.getAssetContentUriAsync(asset)
-                : await MediaLibrary.getAssetInfoAsync(asset).then(
-                    (info) => info.localUri ?? info.uri
-                  )
-            preparedUploads.push(
-              await prepareImageMessage({
-                height: asset.height,
-                mimeType: imageMimeType(asset.filename),
-                name: asset.filename,
-                uri,
-                width: asset.width,
-              })
-            )
-          }
-        } catch (error: unknown) {
-          preparedUploads.forEach((selection) => selection.cleanup?.())
-          throw error
+      onSelect: async ([asset]) => {
+        if (!asset) return
+        const uri =
+          Platform.OS === "android"
+            ? await MediaLibrary.getAssetContentUriAsync(asset)
+            : await MediaLibrary.getAssetInfoAsync(asset).then(
+                (info) => info.localUri ?? info.uri
+              )
+
+        if (asset.mediaType === MediaLibrary.MediaType.video) {
+          const file = new File(uri)
+          const selection = prepareVideoMessage({
+            mimeType: file.type,
+            name: asset.filename,
+            sizeBytes: file.size,
+            uri,
+          })
+          const selected = await upload.pick(async () => selection)
+          videoConfirmationPendingRef.current = selected?.kind === "video"
+          return
         }
 
-        pendingImageUploadsRef.current.forEach((selection) =>
-          selection.cleanup?.()
+        const selection = await prepareImageMessage({
+          height: asset.height,
+          mimeType: imageMimeType(asset.filename),
+          name: asset.filename,
+          uri,
+          width: asset.width,
+        })
+        pendingImageUploadsRef.current.forEach((pending) =>
+          pending.cleanup?.()
         )
-        pendingImageUploadsRef.current = preparedUploads
+        pendingImageUploadsRef.current = [selection]
         imageConfirmationPendingRef.current = true
-        setPendingImageUploads(preparedUploads)
+        setPendingImageUploads([selection])
       },
     })
     router.push({ pathname: "/media-picker", params: { requestId } } as unknown as Href)

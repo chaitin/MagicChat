@@ -3,6 +3,7 @@ import type * as MediaLibrary from "expo-media-library/legacy"
 export type MediaPickerRequest = {
   confirmLabel: string
   maxSelection?: number
+  mediaKind?: "mixed" | "photo" | "video"
   mode: "single" | "multiple"
   onClose?: () => void
   onSelect: (assets: MediaLibrary.Asset[]) => void | Promise<void>

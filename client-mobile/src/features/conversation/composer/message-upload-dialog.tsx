@@ -1,6 +1,7 @@
 import { FileText } from "lucide-react-native"
 import { useRef, useState } from "react"
 import { Image, StyleSheet, Text, View } from "react-native"
+import { useVideoPlayer, VideoView } from "expo-video"
 
 import type { PreparedClientMessageUpload } from "@/data/messages/message-upload"
 import { formatFileSize } from "@/domain/messages/message-presenter"
@@ -47,11 +48,15 @@ export function MessageUploadDialog({
   )
   const firstSelection = displaySelections[0]
   if (!firstSelection) return null
+  const isVideo =
+    displaySelections.length === 1 && firstSelection.kind === "video"
   const title = isImage
     ? displaySelections.length > 1
       ? `发送 ${displaySelections.length} 张图片`
       : "发送图片"
-    : "发送文件"
+    : isVideo
+      ? "发送视频"
+      : "发送文件"
 
   return (
     <XGUIActionSheet
@@ -104,6 +109,13 @@ export function MessageUploadDialog({
               />
             ))}
           </View>
+        ) : isVideo ? (
+          <View style={styles.videoContainer}>
+            <VideoUploadPreview uri={firstSelection.upload.uri} />
+            <Text style={[styles.fileSize, { color: colors.textPlaceholder }]}>
+              {firstSelection.upload.name} · {formatFileSize(firstSelection.upload.sizeBytes)}
+            </Text>
+          </View>
         ) : (
           <View
             style={[
@@ -130,6 +142,19 @@ export function MessageUploadDialog({
         )}
       </View>
     </XGUIActionSheet>
+  )
+}
+
+function VideoUploadPreview({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri)
+  return (
+    <VideoView
+      contentFit="contain"
+      fullscreenOptions={{ enable: true }}
+      nativeControls
+      player={player}
+      style={styles.video}
+    />
   )
 }
 
@@ -172,5 +197,15 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     flex: 1,
     height: 80,
+  },
+  video: {
+    aspectRatio: 16 / 9,
+    backgroundColor: "#000",
+    borderRadius: 8,
+    overflow: "hidden",
+    width: "100%",
+  },
+  videoContainer: {
+    gap: 10,
   },
 })

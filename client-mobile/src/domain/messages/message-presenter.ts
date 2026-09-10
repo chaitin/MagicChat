@@ -384,6 +384,15 @@ export function formatClientMessageBodySummary(
     const summary = formatMentionTemplateText(caption, resolveMentionLabel)
     return summary ? `[图片] ${summary}` : "[图片]"
   }
+  if (body.type === "video") {
+    if (!body.caption) return "[视频]"
+    const caption =
+      body.captionType === "markdown"
+        ? formatMarkdownAsPlainText(body.caption)
+        : body.caption
+    const summary = formatMentionTemplateText(caption, resolveMentionLabel)
+    return summary ? `[视频] ${summary}` : "[视频]"
+  }
   if (body.type === "voice") {
     const summary = `[语音] ${formatVoiceDuration(body.durationMS)}`
     return body.transcript ? `${summary} - ${body.transcript}` : summary
@@ -492,6 +501,15 @@ function collectBodyResources(
       fileName: "image.webp",
       kind: "image",
       mimeType: "image/webp",
+      type: "attachment",
+    })
+  } else if (body.type === "video") {
+    resources.set(body.fileId, {
+      expectedSizeBytes: body.sizeBytes,
+      fileId: body.fileId,
+      fileName: body.name,
+      kind: "video",
+      mimeType: body.contentType,
       type: "attachment",
     })
   } else if (body.type === "voice") {

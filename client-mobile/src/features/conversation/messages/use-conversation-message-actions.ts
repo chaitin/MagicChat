@@ -8,6 +8,7 @@ import {
   useSendConversationFileMessage,
   useSendConversationImageMessage,
   useSendConversationTextMessage,
+  useSendConversationVideoMessage,
   useSendConversationVoiceMessage,
   useSetConversationMessageReaction,
   useSubmitConversationMessageChoiceResponse,
@@ -84,6 +85,10 @@ export function useConversationMessageActions({
     server,
     conversationId
   )
+  const sendVideoMutation = useSendConversationVideoMessage(
+    server,
+    conversationId
+  )
   const sendVoiceMutation = useSendConversationVoiceMessage(
     server,
     conversationId
@@ -121,6 +126,7 @@ export function useConversationMessageActions({
       if (descriptor.kind === "text") await sendTextMutation.mutateAsync(descriptor)
       else if (descriptor.kind === "image") await sendImageMutation.mutateAsync({ clientMessageId: descriptor.clientMessageId, image: descriptor.upload, replyToMessageId: descriptor.replyToMessageId })
       else if (descriptor.kind === "file") await sendFileMutation.mutateAsync({ clientMessageId: descriptor.clientMessageId, file: descriptor.upload, replyToMessageId: descriptor.replyToMessageId })
+      else if (descriptor.kind === "video") await sendVideoMutation.mutateAsync({ clientMessageId: descriptor.clientMessageId, replyToMessageId: descriptor.replyToMessageId, video: descriptor.upload })
       else await sendVoiceMutation.mutateAsync({ clientMessageId: descriptor.clientMessageId, durationMS: descriptor.durationMS, replyToMessageId: descriptor.replyToMessageId, transcript: descriptor.transcript, voice: descriptor.upload })
     } catch (error: unknown) {
       setOptimisticMessages((current) => markOptimisticMessageFailed(current, descriptor.clientMessageId, confirmedMessagesRef.current))
@@ -150,7 +156,24 @@ export function useConversationMessageActions({
   }
 
   function sendUpload(selection: PreparedClientMessageUpload) {
-    return enqueue({ cleanup: selection.cleanup, clientMessageId: createClientMessageId(), height: selection.height, kind: selection.kind, replyToMessageId, upload: selection.upload, width: selection.width })
+    const common = {
+      cleanup: selection.cleanup,
+      clientMessageId: createClientMessageId(),
+      replyToMessageId,
+      upload: selection.upload,
+    }
+    if (selection.kind === "image") {
+      return enqueue({
+        ...common,
+        height: selection.height,
+        kind: "image",
+        width: selection.width,
+      })
+    }
+    if (selection.kind === "video") {
+      return enqueue({ ...common, kind: "video" })
+    }
+    return enqueue({ ...common, kind: "file" })
   }
 
   function sendVoice(recording: PreparedClientVoiceMessage) {

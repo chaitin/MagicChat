@@ -108,10 +108,19 @@ export const MessageBubble = memo(function MessageBubble({
       : undefined
   const sender = message.sender
   const flushImageBubble =
-    message.body.type === "image" && !message.replyTo && !message.topic
+    (message.body.type === "image" || message.body.type === "video") &&
+    !message.replyTo &&
+    !message.topic
+  const videoHasFollowingContent =
+    message.body.type === "video" &&
+    (Boolean(message.body.caption) ||
+      message.reactions.length > 0 ||
+      Boolean(message.topic))
+  const roundVideoBottom = !videoHasFollowingContent
   const usesStructuredBubbleWidth =
     Boolean(message.topic) ||
     message.body.type === "voice" ||
+    message.body.type === "video" ||
     message.body.type === "file" ||
     message.body.type === "chart" ||
     message.body.type === "forward_bundle" ||
@@ -308,6 +317,7 @@ export const MessageBubble = memo(function MessageBubble({
                 onVoiceResourcePress={onVoiceResourcePress}
                 resolveMentionLabel={resolveMentionLabel}
                 resourceStates={resourceStates}
+                roundVideoBottom={roundVideoBottom}
                 serverUrl={server.url}
               />
             )}

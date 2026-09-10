@@ -5,6 +5,7 @@ export type OptimisticSendDescriptor =
   | { clientMessageId: string; content: string; kind: "text"; replyToMessageId?: string }
   | { cleanup?: () => void; clientMessageId: string; height?: number; kind: "image"; replyToMessageId?: string; upload: ClientMessageUpload; width?: number }
   | { cleanup?: () => void; clientMessageId: string; kind: "file"; replyToMessageId?: string; upload: ClientMessageUpload }
+  | { cleanup?: () => void; clientMessageId: string; kind: "video"; replyToMessageId?: string; upload: ClientMessageUpload }
   | { cleanup?: () => void; clientMessageId: string; durationMS: number; kind: "voice"; replyToMessageId?: string; transcript?: string; upload: ClientMessageUpload }
 
 export type OptimisticMessage = {
@@ -38,6 +39,7 @@ export function createOptimisticBody(descriptor: OptimisticSendDescriptor): Clie
     case "text": return { content: descriptor.content, type: "text" }
     case "image": return { fileId: descriptor.upload.uri, height: descriptor.height, type: "image", width: descriptor.width }
     case "file": return { fileId: descriptor.upload.uri, name: descriptor.upload.name, sizeBytes: descriptor.upload.sizeBytes, type: "file" }
+    case "video": return { contentType: descriptor.upload.mimeType === "video/webm" ? "video/webm" : "video/mp4", fileId: descriptor.upload.uri, name: descriptor.upload.name, sizeBytes: descriptor.upload.sizeBytes, type: "video" }
     case "voice": return { contentType: descriptor.upload.mimeType, durationMS: descriptor.durationMS, fileId: descriptor.upload.uri, sizeBytes: descriptor.upload.sizeBytes, transcript: descriptor.transcript?.trim() ?? "", type: "voice" }
   }
 }

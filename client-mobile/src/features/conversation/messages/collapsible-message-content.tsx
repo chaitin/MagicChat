@@ -89,6 +89,12 @@ export function CollapsibleMessageContent({
             />
           </Svg>
         ) : null}
+        {collapsed ? (
+          <View
+            pointerEvents="none"
+            style={[styles.fadeEdge, { backgroundColor: fadeColor }]}
+          />
+        ) : null}
       </View>
 
       {collapsed ? (
@@ -147,6 +153,13 @@ const styles = StyleSheet.create({
   },
   fade: {
     bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+  },
+  fadeEdge: {
+    bottom: 0,
+    height: 1,
     left: 0,
     position: "absolute",
     right: 0,

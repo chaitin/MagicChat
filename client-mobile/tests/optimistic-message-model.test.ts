@@ -67,9 +67,10 @@ test("批量 cleanup 在单项抛错时仍释放其余 descriptor", () => {
   assert.equal(descriptors.size, 0)
 })
 
-test("图片、文件和语音临时正文保留本地 URI 与 metadata", () => {
+test("图片、视频、文件和语音临时正文保留本地 URI 与 metadata", () => {
   const upload = { mimeType: "image/jpeg", name: "photo.jpg", sizeBytes: 123, uri: "file:///photo.jpg" }
   assert.deepEqual(createOptimisticBody({ clientMessageId: "i", height: 20, kind: "image", upload, width: 10 }), { fileId: upload.uri, height: 20, type: "image", width: 10 })
   assert.deepEqual(createOptimisticBody({ clientMessageId: "f", kind: "file", upload }), { fileId: upload.uri, name: upload.name, sizeBytes: 123, type: "file" })
+  assert.deepEqual(createOptimisticBody({ clientMessageId: "video", kind: "video", upload: { ...upload, mimeType: "video/mp4", name: "demo.mp4", uri: "file:///demo.mp4" } }), { contentType: "video/mp4", fileId: "file:///demo.mp4", name: "demo.mp4", sizeBytes: 123, type: "video" })
   assert.deepEqual(createOptimisticBody({ clientMessageId: "v", durationMS: 900, kind: "voice", transcript: "  hello  ", upload }), { contentType: upload.mimeType, durationMS: 900, fileId: upload.uri, sizeBytes: 123, transcript: "hello", type: "voice" })
 })

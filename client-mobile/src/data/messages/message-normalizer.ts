@@ -373,6 +373,37 @@ function normalizeMessageBody(
     return image
   }
 
+  if (type === "video") {
+    const contentType = asString(body.content_type)
+    const fileId = asString(body.file_id)
+    const name = asString(body.name)
+    const sizeBytes = asNumber(body.size_bytes)
+    if (
+      (contentType !== "video/mp4" && contentType !== "video/webm") ||
+      !fileId ||
+      !name ||
+      !sizeBytes ||
+      sizeBytes < 0
+    ) {
+      throw new Error("invalid message body")
+    }
+    const caption = asString(body.caption)?.trim() ?? ""
+    return {
+      ...(caption
+        ? {
+            caption,
+            captionType:
+              body.caption_type === "markdown" ? ("markdown" as const) : ("text" as const),
+          }
+        : {}),
+      contentType,
+      fileId,
+      name,
+      sizeBytes,
+      type,
+    }
+  }
+
   if (type === "voice") {
     const contentType = asString(body.content_type)
     const durationMS = asNumber(body.duration_ms)
@@ -576,6 +607,7 @@ function isForwardableBody(
     body.type === "chart" ||
     body.type === "file" ||
     body.type === "image" ||
+    body.type === "video" ||
     body.type === "voice" ||
     body.type === "forward_bundle"
   )

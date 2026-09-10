@@ -20,6 +20,7 @@ type revokeConversationMessage = typeof Api.revokeConversationMessage
 type sendConversationFileMessage = typeof Api.sendConversationFileMessage
 type sendConversationImageMessage = typeof Api.sendConversationImageMessage
 type sendConversationTextMessage = typeof Api.sendConversationTextMessage
+type sendConversationVideoMessage = typeof Api.sendConversationVideoMessage
 type sendConversationVoiceMessage = typeof Api.sendConversationVoiceMessage
 type setConversationMessageReaction = typeof Api.setConversationMessageReaction
 type submitConversationMessageChoiceResponse = typeof Api.submitConversationMessageChoiceResponse
@@ -48,6 +49,7 @@ export type MessageManagerDependencies = {
     sendFile: sendConversationFileMessage
     sendImage: sendConversationImageMessage
     sendText: sendConversationTextMessage
+    sendVideo: sendConversationVideoMessage
     sendVoice: sendConversationVoiceMessage
     setReaction: setConversationMessageReaction
     submitChoice: submitConversationMessageChoiceResponse
@@ -122,6 +124,7 @@ const manager = {
   sendFile,
   sendImage,
   sendText,
+  sendVideo,
   sendVoice,
   setReaction,
   submitChoice,
@@ -398,6 +401,16 @@ async function sendImage(
     conversationId,
     input
   )
+  await writeMessages(target, [message])
+  return message
+}
+
+async function sendVideo(
+  target: AuthenticatedTarget,
+  conversationId: string,
+  input: SendUploadInput & { video: ClientMessageUpload }
+) {
+  const message = await api.sendVideo(target, conversationId, input)
   await writeMessages(target, [message])
   return message
 }

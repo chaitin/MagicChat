@@ -380,6 +380,16 @@ export type ClientImageMessageBody = {
   width?: number
 }
 
+export type ClientVideoMessageBody = {
+  caption?: string
+  captionType?: ImageCaptionType
+  contentType: "video/mp4" | "video/webm"
+  fileId: string
+  name: string
+  sizeBytes: number
+  type: "video"
+}
+
 export type ClientVoiceMessageBody = {
   contentType: string
   durationMS: number
@@ -397,6 +407,7 @@ export type ClientForwardableMessageBody =
   | ClientChartMessageBody
   | ClientFileMessageBody
   | ClientImageMessageBody
+  | ClientVideoMessageBody
   | ClientVoiceMessageBody
   | ClientForwardBundleMessageBody
 
