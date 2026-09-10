@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import {
   Table,
@@ -243,15 +244,15 @@ export default function ServersPage() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>轮换服务器 Key？</AlertDialogTitle>
+            <AlertDialogTitle>重置密钥？</AlertDialogTitle>
             <AlertDialogDescription>
-              旧 Key 将立即失效。请复制新 Key 并及时更新私有服务器配置。
+              旧密钥将立即失效。请复制新密钥并及时更新私有服务器配置。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction onClick={() => void rotateCurrentServerKey()}>
-              确认轮换
+              确认重置
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -314,15 +315,15 @@ function ServerTableRow({
             <DropdownMenuGroup>
               <DropdownMenuItem onClick={onViewKey}>
                 <EyeIcon />
-                查看 Key
+                查看密钥
               </DropdownMenuItem>
               <DropdownMenuItem onClick={onEdit}>
                 <PencilIcon />
-                编辑配置
+                修改信息
               </DropdownMenuItem>
               <DropdownMenuItem onClick={onRotate}>
                 <RotateCwIcon />
-                轮换 Key
+                重置密钥
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -330,7 +331,7 @@ function ServerTableRow({
                 variant={active ? "destructive" : "default"}
               >
                 {active ? <BanIcon /> : <CircleCheckIcon />}
-                {active ? "禁用服务器" : "启用服务器"}
+                {active ? "禁用" : "启用"}
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>
@@ -390,11 +391,11 @@ function ServerEditorDialog({
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>{editing ? "编辑服务器" : "添加服务器"}</DialogTitle>
+            <DialogTitle>{editing ? "修改信息" : "添加服务器"}</DialogTitle>
             <DialogDescription>
               {editing
                 ? "调整显示名称和每日允许创建的推送任务数量。"
-                : "创建后会生成该私有服务器专用的访问 Key。"}
+                : "创建后会生成该私有服务器专用的访问密钥。"}
             </DialogDescription>
           </DialogHeader>
           <FieldGroup className="py-6">
@@ -434,7 +435,7 @@ function ServerEditorDialog({
               取消
             </Button>
             <Button disabled={pending} type="submit">
-              {pending ? "保存中..." : editing ? "保存" : "创建并生成 Key"}
+              {pending ? "保存中..." : editing ? "保存" : "创建并生成密钥"}
             </Button>
           </DialogFooter>
         </form>
@@ -454,6 +455,7 @@ function ServerKeyDialog({
   dialog: KeyDialogState | null
   onClose: () => void
 }) {
+  const keyInputId = useId()
   const [copied, setCopied] = useState(false)
 
   async function copyKey() {
@@ -461,7 +463,7 @@ function ServerKeyDialog({
     try {
       await navigator.clipboard.writeText(dialog.key)
       setCopied(true)
-      toast.success("服务器 Key 已复制")
+      toast.success("服务器密钥已复制")
     } catch {
       toast.error("复制失败，请手动复制")
     }
@@ -477,22 +479,21 @@ function ServerKeyDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            {viewing ? "查看服务器 Key" : "保存服务器 Key"}
-          </DialogTitle>
+          <DialogTitle>{viewing ? "查看密钥" : "保存密钥"}</DialogTitle>
         </DialogHeader>
-        <div className="my-5 rounded-lg border bg-muted/40 p-4">
-          <div className="mb-2 text-xs font-medium text-muted-foreground">
-            服务器 Key
-          </div>
-          <code className="block font-mono text-sm leading-6 break-all">
-            {dialog?.key}
-          </code>
+        <div className="my-5 grid gap-2">
+          <Label htmlFor={keyInputId}>服务器密钥</Label>
+          <Input
+            className="font-mono"
+            id={keyInputId}
+            readOnly
+            value={dialog?.key ?? ""}
+          />
         </div>
         <DialogFooter className="mt-5">
           <Button onClick={() => void copyKey()} variant="outline">
             {copied ? <CheckIcon /> : <CopyIcon />}
-            {copied ? "已复制" : "复制 Key"}
+            {copied ? "已复制" : "复制密钥"}
           </Button>
           <Button onClick={onClose}>完成</Button>
         </DialogFooter>
