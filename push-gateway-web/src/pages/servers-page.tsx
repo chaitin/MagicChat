@@ -251,7 +251,7 @@ function ServerTableRow({
         <Progress value={percent} />
       </TableCell>
       <TableCell className="font-mono text-sm tabular-nums">
-        {formatCount(server.dailyLimit)} 次/日
+        {formatCount(server.dailyLimit)} 次
       </TableCell>
       <TableCell className="text-right">
         <DropdownMenu>
