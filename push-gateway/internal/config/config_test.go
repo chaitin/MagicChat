@@ -7,6 +7,20 @@ import (
 	"time"
 )
 
+func TestLoadUsesDefaultHTTPAddress(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://db/push")
+	t.Setenv("DATA_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(make([]byte, 32)))
+	t.Setenv("PUSH_PROVIDERS", "fake")
+	t.Setenv("HTTP_ADDR", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.HTTPAddr != ":20062" {
+		t.Fatalf("HTTPAddr = %q, want :20062", cfg.HTTPAddr)
+	}
+}
+
 func TestLoadReadsConfiguration(t *testing.T) {
 	key := make([]byte, 32)
 	for index := range key {

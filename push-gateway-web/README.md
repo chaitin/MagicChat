@@ -6,7 +6,7 @@
 
 ## 本地运行
 
-先启动 Push Gateway，并配置管理账户。开发服务默认将 `/api` 代理到 `http://127.0.0.1:8080`：
+先启动 Push Gateway，并配置管理账户。开发服务默认将 `/api` 代理到 `http://127.0.0.1:20062`：
 
 ```bash
 pnpm install

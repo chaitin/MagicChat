@@ -54,7 +54,7 @@ type AdminConfig struct {
 
 func Load() (Config, error) {
 	cfg := Config{
-		HTTPAddr:                          envOrDefault("HTTP_ADDR", ":8080"),
+		HTTPAddr:                          envOrDefault("HTTP_ADDR", ":20062"),
 		Providers:                         providerNames(os.Getenv("PUSH_PROVIDERS")),
 		GrantTTL:                          30 * 24 * time.Hour,
 		NotificationTTL:                   5 * time.Minute,

@@ -13,7 +13,7 @@ export default defineConfig({
     proxy: {
       "/api": {
         changeOrigin: true,
-        target: process.env.PUSH_GATEWAY_API_URL ?? "http://127.0.0.1:8080",
+        target: process.env.PUSH_GATEWAY_API_URL ?? "http://127.0.0.1:20062",
       },
     },
   },

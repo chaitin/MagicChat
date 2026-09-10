@@ -11,5 +11,5 @@ RUN apk add --no-cache ca-certificates \
     && adduser -S -G gateway gateway
 COPY --from=build /out/push-gateway /usr/local/bin/push-gateway
 USER gateway
-EXPOSE 8080
+EXPOSE 20062
 ENTRYPOINT ["/usr/local/bin/push-gateway"]
