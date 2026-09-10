@@ -123,13 +123,13 @@ func TestLoadReadsOptionalPushConfiguration(t *testing.T) {
 	t.Setenv("PUSH_GATEWAY_ENABLED", "true")
 	t.Setenv("PUSH_CREDENTIAL_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(currentKey))
 	t.Setenv("PUSH_CREDENTIAL_PREVIOUS_KEYS", base64.StdEncoding.EncodeToString(previousKey))
-	t.Setenv("PUSH_GATEWAY_SERVER_KEY", "mcps_srv_AAAAAAAAAAAA_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+	t.Setenv("PUSH_GATEWAY_SERVER_KEY", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if !cfg.Push.Enabled || len(cfg.Push.CredentialEncryptionKey) != 32 || len(cfg.Push.PreviousEncryptionKeys) != 1 || cfg.Push.ServerKey != "mcps_srv_AAAAAAAAAAAA_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" {
+	if !cfg.Push.Enabled || len(cfg.Push.CredentialEncryptionKey) != 32 || len(cfg.Push.PreviousEncryptionKeys) != 1 || cfg.Push.ServerKey != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
 		t.Fatalf("Push configuration is invalid: enabled=%v key_bytes=%d previous_keys=%d has_server_key=%v", cfg.Push.Enabled, len(cfg.Push.CredentialEncryptionKey), len(cfg.Push.PreviousEncryptionKeys), cfg.Push.ServerKey != "")
 	}
 }

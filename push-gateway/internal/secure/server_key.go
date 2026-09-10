@@ -2,45 +2,32 @@ package secure
 
 import (
 	"crypto/rand"
-	"encoding/base64"
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
 )
 
-const serverKeyPrefix = "mcps_srv_"
+const serverKeyBytes = 16
 
 func GenerateServerKey() (publicID string, key string, err error) {
-	identifier := make([]byte, 9)
-	if _, err = rand.Read(identifier); err != nil {
+	content := make([]byte, serverKeyBytes)
+	if _, err = rand.Read(content); err != nil {
 		return "", "", err
 	}
-	secret := make([]byte, 32)
-	if _, err = rand.Read(secret); err != nil {
-		return "", "", err
-	}
-	publicID = base64.RawURLEncoding.EncodeToString(identifier)
-	key = serverKeyPrefix + publicID + "_" + base64.RawURLEncoding.EncodeToString(secret)
+	key = hex.EncodeToString(content)
+	publicID, _ = ServerKeyPublicID(key)
 	return publicID, key, nil
 }
 
 func ServerKeyPublicID(key string) (string, bool) {
 	value := strings.TrimSpace(key)
-	if !strings.HasPrefix(value, serverKeyPrefix) {
+	if len(value) != serverKeyBytes*2 || value != strings.ToLower(value) {
 		return "", false
 	}
-	content := strings.TrimPrefix(value, serverKeyPrefix)
-	if len(content) != 12+1+43 || content[12] != '_' {
+	decoded, err := hex.DecodeString(value)
+	if err != nil || len(decoded) != serverKeyBytes {
 		return "", false
 	}
-	publicID := content[:12]
-	secret := content[13:]
-	if len(publicID) != 12 || len(secret) != 43 {
-		return "", false
-	}
-	if _, err := base64.RawURLEncoding.DecodeString(publicID); err != nil {
-		return "", false
-	}
-	if decoded, err := base64.RawURLEncoding.DecodeString(secret); err != nil || len(decoded) != 32 {
-		return "", false
-	}
-	return publicID, true
+	digest := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(digest[:12]), true
 }

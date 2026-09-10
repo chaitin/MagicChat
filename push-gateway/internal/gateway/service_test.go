@@ -16,7 +16,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const testServerKey = "mcps_srv_AAAAAAAAAAAA_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+const testServerKey = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 type recordingProvider struct {
 	mu                     sync.Mutex
@@ -472,8 +472,12 @@ func newTestService(t *testing.T) (*Service, *gorm.DB, *recordingProvider, *time
 	}).Error; err != nil {
 		t.Fatalf("create test server: %v", err)
 	}
+	publicID, valid := secure.ServerKeyPublicID(testServerKey)
+	if !valid {
+		t.Fatal("test server key is invalid")
+	}
 	if err := db.Create(&model.ServerKey{
-		ID: uuid.NewString(), ServerID: serverID, PublicID: "AAAAAAAAAAAA",
+		ID: uuid.NewString(), ServerID: serverID, PublicID: publicID,
 		KeyHash: secure.HashToken(testServerKey), Status: model.ServerKeyStatusActive,
 		CreatedAt: time.Now(), KeyCiphertext: []byte{1},
 	}).Error; err != nil {

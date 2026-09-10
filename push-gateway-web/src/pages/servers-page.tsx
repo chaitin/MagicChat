@@ -481,7 +481,7 @@ function ServerKeyDialog({
         <DialogHeader>
           <DialogTitle>{viewing ? "查看密钥" : "保存密钥"}</DialogTitle>
         </DialogHeader>
-        <div className="my-5 grid gap-2">
+        <div className="grid gap-2">
           <Label htmlFor={keyInputId}>服务器密钥</Label>
           <Input
             className="font-mono"
@@ -490,7 +490,7 @@ function ServerKeyDialog({
             value={dialog?.key ?? ""}
           />
         </div>
-        <DialogFooter className="mt-5">
+        <DialogFooter>
           <Button onClick={() => void copyKey()} variant="outline">
             {copied ? <CheckIcon /> : <CopyIcon />}
             {copied ? "已复制" : "复制密钥"}

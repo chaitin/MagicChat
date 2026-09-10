@@ -51,7 +51,7 @@ To rotate `DATA_ENCRYPTION_KEY`, move the old value into `DATA_ENCRYPTION_PREVIO
 
 The management API is enabled when `PUSH_ADMIN_USERNAME` and one password credential are configured. `PUSH_ADMIN_PASSWORD` accepts plaintext from a protected environment file and is converted to an Argon2id hash during startup; the plaintext is not retained by the service. Alternatively, set `PUSH_ADMIN_PASSWORD_HASH` to an Argon2id PHC hash generated with `go run ./cmd/hash-password`. Never configure both forms. Admin sessions always last 12 hours. Session cookies automatically use `Secure` for HTTPS requests, including TLS terminated by a reverse proxy that supplies `X-Forwarded-Proto: https`.
 
-Notification admission requires `X-MagicChat-Server-Key` in addition to the grant Bearer token. Server keys are created in the management console. The active key is encrypted at rest so an administrator can reveal it; authentication uses a separate SHA-256 hash. Rotating a key erases the old ciphertext and revokes the old key immediately.
+Notification admission requires `X-MagicChat-Server-Key` in addition to the grant Bearer token. Server keys are 32-character lowercase hexadecimal strings created in the management console. The active key is encrypted at rest so an administrator can reveal it; authentication and database lookup use a separate SHA-256 digest. Rotating a key erases the old ciphertext and revokes the old key immediately.
 
 ## API
 

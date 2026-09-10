@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"net/url"
@@ -220,18 +221,12 @@ func loadPushConfig() (PushConfig, error) {
 }
 
 func validPushGatewayServerKey(value string) bool {
-	const prefix = "mcps_srv_"
 	value = strings.TrimSpace(value)
-	if !strings.HasPrefix(value, prefix) {
+	if len(value) != 32 || value != strings.ToLower(value) {
 		return false
 	}
-	content := strings.TrimPrefix(value, prefix)
-	if len(content) != 56 || content[12] != '_' {
-		return false
-	}
-	publicID, publicErr := base64.RawURLEncoding.DecodeString(content[:12])
-	secret, secretErr := base64.RawURLEncoding.DecodeString(content[13:])
-	return publicErr == nil && len(publicID) == 9 && secretErr == nil && len(secret) == 32
+	decoded, err := hex.DecodeString(value)
+	return err == nil && len(decoded) == 16
 }
 
 func loadStorageConfig() (StorageConfig, error) {

@@ -26,7 +26,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const testHTTPServerKey = "mcps_srv_BBBBBBBBBBBB_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+const testHTTPServerKey = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
 func TestAPIRoutesInstallationGrantAndNotification(t *testing.T) {
 	router := newTestRouter(t)
@@ -135,8 +135,15 @@ func TestAdminServerRoutesUseSessionAndCSRF(t *testing.T) {
 	created := requestJSON(t, router, http.MethodPost, "/api/admin/v1/servers", map[string]any{
 		"name": "生产环境一号", "daily_quota": 100000,
 	}, headers)
-	if created.Code != http.StatusCreated || !strings.Contains(created.Body.String(), "mcps_srv_") {
+	if created.Code != http.StatusCreated {
 		t.Fatalf("create status/body = %d/%s", created.Code, created.Body.String())
+	}
+	var issued struct {
+		Key string `json:"key"`
+	}
+	decodeResponse(t, created, &issued)
+	if len(issued.Key) != 32 {
+		t.Fatalf("issued key length = %d, body = %s", len(issued.Key), created.Body.String())
 	}
 	listed := requestJSON(t, router, http.MethodGet, "/api/admin/v1/servers", nil, map[string]string{"Cookie": cookieHeader})
 	if listed.Code != http.StatusOK || !strings.Contains(listed.Body.String(), "生产环境一号") {
@@ -245,7 +252,11 @@ func newTestRouter(t *testing.T) *echo.Echo {
 	if err := db.Create(&model.Server{ID: serverID, Name: "http", Status: model.ServerStatusActive, DailyQuota: 1000, Revision: 1, CreatedAt: time.Now(), UpdatedAt: time.Now()}).Error; err != nil {
 		t.Fatalf("create server: %v", err)
 	}
-	if err := db.Create(&model.ServerKey{ID: uuid.NewString(), ServerID: serverID, PublicID: "BBBBBBBBBBBB", KeyHash: secure.HashToken(testHTTPServerKey), KeyCiphertext: []byte{1}, Status: model.ServerKeyStatusActive, CreatedAt: time.Now()}).Error; err != nil {
+	publicID, valid := secure.ServerKeyPublicID(testHTTPServerKey)
+	if !valid {
+		t.Fatal("test server key is invalid")
+	}
+	if err := db.Create(&model.ServerKey{ID: uuid.NewString(), ServerID: serverID, PublicID: publicID, KeyHash: secure.HashToken(testHTTPServerKey), KeyCiphertext: []byte{1}, Status: model.ServerKeyStatusActive, CreatedAt: time.Now()}).Error; err != nil {
 		t.Fatalf("create server key: %v", err)
 	}
 	cipher, err := secure.NewTokenCipher(make([]byte, 32))
