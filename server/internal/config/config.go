@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -54,7 +53,6 @@ type ASRModelConfig struct {
 type PushConfig struct {
 	Enabled                 bool
 	CredentialEncryptionKey []byte
-	PreviousEncryptionKeys  [][]byte
 	ServerKey               string
 }
 
@@ -187,38 +185,26 @@ func loadDatabaseConfig() (DatabaseConfig, error) {
 }
 
 func loadPushConfig() (PushConfig, error) {
-	enabled, err := boolFromEnv("PUSH_GATEWAY_ENABLED", false)
-	if err != nil {
-		return PushConfig{}, err
+	serverKey := strings.TrimSpace(os.Getenv("PUSH_GATEWAY_SERVER_KEY"))
+	if serverKey == "" {
+		return PushConfig{}, nil
 	}
-	cfg := PushConfig{Enabled: enabled}
-	if !enabled {
-		return cfg, nil
-	}
-	encodedKey, err := requiredEnv("PUSH_CREDENTIAL_ENCRYPTION_KEY")
-	if err != nil {
-		return PushConfig{}, err
-	}
-	cfg.CredentialEncryptionKey, err = base64.StdEncoding.DecodeString(encodedKey)
-	if err != nil || len(cfg.CredentialEncryptionKey) != 32 {
-		return PushConfig{}, fmt.Errorf("PUSH_CREDENTIAL_ENCRYPTION_KEY must be a base64-encoded 32-byte key")
-	}
-	if cfg.ServerKey, err = requiredEnv("PUSH_GATEWAY_SERVER_KEY"); err != nil {
-		return PushConfig{}, err
-	}
-	if !validPushGatewayServerKey(cfg.ServerKey) {
+	if !validPushGatewayServerKey(serverKey) {
 		return PushConfig{}, fmt.Errorf("PUSH_GATEWAY_SERVER_KEY has an invalid format")
 	}
-	if previous := strings.TrimSpace(os.Getenv("PUSH_CREDENTIAL_PREVIOUS_KEYS")); previous != "" {
-		for index, encoded := range strings.Split(previous, ",") {
-			key, decodeErr := base64.StdEncoding.DecodeString(strings.TrimSpace(encoded))
-			if decodeErr != nil || len(key) != 32 {
-				return PushConfig{}, fmt.Errorf("PUSH_CREDENTIAL_PREVIOUS_KEYS entry %d must be a base64-encoded 32-byte key", index)
-			}
-			cfg.PreviousEncryptionKeys = append(cfg.PreviousEncryptionKeys, key)
-		}
+	keyFile := strings.TrimSpace(os.Getenv("PUSH_CREDENTIAL_KEY_FILE"))
+	if keyFile == "" {
+		keyFile = defaultPushCredentialKeyFile
 	}
-	return cfg, nil
+	credentialKey, err := loadOrCreatePushCredentialKey(keyFile)
+	if err != nil {
+		return PushConfig{}, fmt.Errorf("load push credential key: %w", err)
+	}
+	return PushConfig{
+		Enabled:                 true,
+		CredentialEncryptionKey: credentialKey,
+		ServerKey:               serverKey,
+	}, nil
 }
 
 func validPushGatewayServerKey(value string) bool {

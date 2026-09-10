@@ -274,9 +274,8 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 	var pushCipher *mobilepushapp.TokenCipher
 	var pushGateway mobilepushapp.GatewayClient
 	if cfg.Push.Enabled {
-		pushKeys := append([][]byte{cfg.Push.CredentialEncryptionKey}, cfg.Push.PreviousEncryptionKeys...)
 		var err error
-		pushCipher, err = mobilepushapp.NewTokenCipher(pushKeys...)
+		pushCipher, err = mobilepushapp.NewTokenCipher(cfg.Push.CredentialEncryptionKey)
 		if err != nil {
 			panic(err)
 		}

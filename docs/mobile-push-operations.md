@@ -2,6 +2,18 @@
 
 私有 Server 在 `/metrics` 暴露 Prometheus 文本指标；公共 Push Gateway 在 `https://push.jiying.chat/api/metrics` 暴露匿名聚合指标。两个端点都不包含用户、私有服务器地址、会话、消息、设备 token、grant capability 或 route token。
 
+## 私有 Server 接入
+
+每台私有 Server 只需配置 Push Gateway 管理页面签发的独立密钥：
+
+```dotenv
+PUSH_GATEWAY_SERVER_KEY=<32 位小写 Hex Server Key>
+```
+
+密钥为空时推送关闭，配置有效密钥后推送启用。Server 首次启用时会自动生成内部凭据加密密钥，写入 Compose 的 `server-push-data` 持久卷；该内部密钥不发送给 Gateway，也不需要部署者配置。备份和恢复私有 Server 时必须同时保留这个卷，否则数据库中的既有 Grant 无法解密，移动客户端需要重新注册。
+
+Server Key 只用于向 Gateway 证明服务器身份。管理页面重置 Server Key 不会改变内部加密密钥，因此不会破坏历史凭据；更新 `.env` 中的 Server Key 并重建 Server 即可。
+
 ## 指标
 
 私有 Server：

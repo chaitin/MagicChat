@@ -1,8 +1,10 @@
 package config
 
 import (
-	"encoding/base64"
+	"bytes"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -117,48 +119,54 @@ func TestLoadUsesEnvironmentDefaults(t *testing.T) {
 	}
 }
 
-func TestLoadReadsOptionalPushConfiguration(t *testing.T) {
+func TestLoadEnablesPushFromServerKeyAndPersistsGeneratedCredentialKey(t *testing.T) {
 	setRequiredEnvironment(t)
-	currentKey := make([]byte, 32)
-	previousKey := make([]byte, 32)
-	previousKey[0] = 1
-	t.Setenv("PUSH_GATEWAY_ENABLED", "true")
-	t.Setenv("PUSH_CREDENTIAL_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(currentKey))
-	t.Setenv("PUSH_CREDENTIAL_PREVIOUS_KEYS", base64.StdEncoding.EncodeToString(previousKey))
+	keyFile := filepath.Join(t.TempDir(), "push", "credential.key")
+	t.Setenv("PUSH_CREDENTIAL_KEY_FILE", keyFile)
 	t.Setenv("PUSH_GATEWAY_SERVER_KEY", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+
+	first, err := Load()
+	if err != nil {
+		t.Fatalf("first Load() error = %v", err)
+	}
+	second, err := Load()
+	if err != nil {
+		t.Fatalf("second Load() error = %v", err)
+	}
+	if !first.Push.Enabled || first.Push.ServerKey != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
+		t.Fatalf("Push configuration is invalid: enabled=%v has_server_key=%v", first.Push.Enabled, first.Push.ServerKey != "")
+	}
+	if len(first.Push.CredentialEncryptionKey) != 32 || !bytes.Equal(first.Push.CredentialEncryptionKey, second.Push.CredentialEncryptionKey) {
+		t.Fatal("generated push credential key was not persisted")
+	}
+	info, err := os.Stat(keyFile)
+	if err != nil {
+		t.Fatalf("Stat() error = %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("credential key mode = %o", info.Mode().Perm())
+	}
+}
+
+func TestLoadKeepsPushDisabledWithoutServerKey(t *testing.T) {
+	setRequiredEnvironment(t)
+	keyFile := filepath.Join(t.TempDir(), "credential.key")
+	t.Setenv("PUSH_CREDENTIAL_KEY_FILE", keyFile)
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if !cfg.Push.Enabled || len(cfg.Push.CredentialEncryptionKey) != 32 || len(cfg.Push.PreviousEncryptionKeys) != 1 || cfg.Push.ServerKey != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
-		t.Fatalf("Push configuration is invalid: enabled=%v key_bytes=%d previous_keys=%d has_server_key=%v", cfg.Push.Enabled, len(cfg.Push.CredentialEncryptionKey), len(cfg.Push.PreviousEncryptionKeys), cfg.Push.ServerKey != "")
+	if cfg.Push.Enabled {
+		t.Fatal("Push.Enabled = true, want false")
 	}
-}
-
-func TestLoadRequiresPushEncryptionKeyWhenEnabled(t *testing.T) {
-	setRequiredEnvironment(t)
-	t.Setenv("PUSH_GATEWAY_ENABLED", "true")
-	t.Setenv("PUSH_CREDENTIAL_ENCRYPTION_KEY", "")
-	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "PUSH_CREDENTIAL_ENCRYPTION_KEY") {
-		t.Fatalf("Load() error = %v", err)
-	}
-}
-
-func TestLoadRequiresPushServerKeyWhenEnabled(t *testing.T) {
-	setRequiredEnvironment(t)
-	t.Setenv("PUSH_GATEWAY_ENABLED", "true")
-	t.Setenv("PUSH_CREDENTIAL_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(make([]byte, 32)))
-	t.Setenv("PUSH_GATEWAY_SERVER_KEY", "")
-	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "PUSH_GATEWAY_SERVER_KEY") {
-		t.Fatalf("Load() error = %v", err)
+	if _, err := os.Stat(keyFile); !os.IsNotExist(err) {
+		t.Fatalf("credential key file error = %v, want not exist", err)
 	}
 }
 
 func TestLoadRejectsInvalidPushServerKey(t *testing.T) {
 	setRequiredEnvironment(t)
-	t.Setenv("PUSH_GATEWAY_ENABLED", "true")
-	t.Setenv("PUSH_CREDENTIAL_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(make([]byte, 32)))
 	t.Setenv("PUSH_GATEWAY_SERVER_KEY", "invalid")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "PUSH_GATEWAY_SERVER_KEY") {
 		t.Fatalf("Load() error = %v", err)
@@ -220,7 +228,6 @@ func TestLoadRejectsInvalidEnvironment(t *testing.T) {
 		{name: "large expiration non-integer", envName: "LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS", envValue: "abc", errorText: "LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS"},
 		{name: "large expiration overflow", envName: "LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS", envValue: "2147483648", errorText: "LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS"},
 		{name: "multipart expiration", envName: "S3_ABORT_MULTIPART_DAYS", envValue: "abc", errorText: "S3_ABORT_MULTIPART_DAYS"},
-		{name: "push enabled", envName: "PUSH_GATEWAY_ENABLED", envValue: "sometimes", errorText: "PUSH_GATEWAY_ENABLED"},
 	}
 
 	for _, test := range tests {
@@ -273,6 +280,8 @@ func setRequiredEnvironment(t *testing.T) {
 		"TEMPORARY_ASSETS_EXPIRE_DAYS":       "180",
 		"LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS": "180",
 		"S3_ABORT_MULTIPART_DAYS":            "7",
+		"PUSH_GATEWAY_SERVER_KEY":            "",
+		"PUSH_CREDENTIAL_KEY_FILE":           filepath.Join(t.TempDir(), "push", "credential.key"),
 	}
 	for name, value := range values {
 		t.Setenv(name, value)

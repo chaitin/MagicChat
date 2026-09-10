@@ -62,10 +62,8 @@ services:
       TEMPORARY_ASSETS_HOSTNAME: ${TEMPORARY_ASSETS_HOSTNAME:-temporary-assets.localhost}
       AI_ASSISTANT_SECRET: ${AI_ASSISTANT_SECRET:-change-me}
       ASRMODEL_API_KEY: ${ASRMODEL_API_KEY:-change-me}
-      PUSH_GATEWAY_ENABLED: ${PUSH_GATEWAY_ENABLED:-false}
-      PUSH_CREDENTIAL_ENCRYPTION_KEY: ${PUSH_CREDENTIAL_ENCRYPTION_KEY:-}
-      PUSH_CREDENTIAL_PREVIOUS_KEYS: ${PUSH_CREDENTIAL_PREVIOUS_KEYS:-}
       PUSH_GATEWAY_SERVER_KEY: ${PUSH_GATEWAY_SERVER_KEY:-}
+      PUSH_CREDENTIAL_KEY_FILE: /app/push-data/credential.key
       AWS_ENDPOINT_URL_S3: ${AWS_ENDPOINT_URL_S3:-https://s3.example.com}
       AWS_REGION: ${AWS_REGION:-us-east-1}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-change-me}
@@ -80,6 +78,7 @@ services:
       S3_ABORT_MULTIPART_DAYS: ${S3_ABORT_MULTIPART_DAYS:-7}
     volumes:
       - ./data/server/log:/app/log
+      - server-push-data:/app/push-data
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:20080/healthz >/dev/null || exit 1"]
       interval: 10s
@@ -175,3 +174,4 @@ services:
 
 volumes:
   prometheus-data:
+  server-push-data:

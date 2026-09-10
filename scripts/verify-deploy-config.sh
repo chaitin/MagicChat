@@ -86,6 +86,12 @@ assert_contains "compose.yml" 'LLM_API_KEY: ${LLM_API_KEY:-change-me}'
 assert_contains "compose.yml" 'LLM_MODEL_NAME: ${LLM_MODEL_NAME:-change-me}'
 assert_contains "compose.yml" 'MCP_GATEWAY_URL: ${MCP_GATEWAY_URL:-https://mcp.example.com/mcp}'
 assert_contains "compose.yml" 'MCP_GATEWAY_KEY: ${MCP_GATEWAY_KEY:-change-me}'
+assert_contains "compose.yml" 'PUSH_GATEWAY_SERVER_KEY: ${PUSH_GATEWAY_SERVER_KEY:-}'
+assert_contains "compose.yml" 'PUSH_CREDENTIAL_KEY_FILE: /app/push-data/credential.key'
+assert_contains "compose.yml" 'server-push-data:/app/push-data'
+assert_not_contains "compose.yml" "PUSH_GATEWAY_ENABLED"
+assert_not_contains "compose.yml" "PUSH_CREDENTIAL_ENCRYPTION_KEY"
+assert_not_contains "compose.yml" "PUSH_CREDENTIAL_PREVIOUS_KEYS"
 assert_contains "compose.yml" 'S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}'
 assert_contains "compose.yml" 'PUBLIC_ASSETS_BUCKET: ${PUBLIC_ASSETS_BUCKET:-magicchat-public}'
 assert_contains "compose.yml" 'PRIVATE_ASSETS_BUCKET: ${PRIVATE_ASSETS_BUCKET:-magicchat-private}'
@@ -141,6 +147,10 @@ assert_contains ".env.example" "POSTGRES_DB=magic-chat"
 assert_contains ".env.example" "POSTGRES_USER=magic-chat"
 assert_contains ".env.example" "POSTGRES_HOST=postgres"
 assert_contains ".env.example" "ADMIN_PASSWORD=change-me"
+assert_contains ".env.example" "PUSH_GATEWAY_SERVER_KEY="
+assert_not_contains ".env.example" "PUSH_GATEWAY_ENABLED"
+assert_not_contains ".env.example" "PUSH_CREDENTIAL_ENCRYPTION_KEY"
+assert_not_contains ".env.example" "PUSH_CREDENTIAL_PREVIOUS_KEYS"
 assert_contains ".env.example" "AWS_ENDPOINT_URL_S3=https://s3.example.com"
 assert_contains ".env.example" "AWS_REGION=us-east-1"
 assert_contains ".env.example" "S3_BOOTSTRAP_ENABLED=false"
