@@ -102,6 +102,12 @@ func TestAPIRoutesInstallationGrantAndNotification(t *testing.T) {
 
 func TestAdminServerRoutesUseSessionAndCSRF(t *testing.T) {
 	router := newTestRouter(t)
+	crossSite := requestJSON(t, router, http.MethodPost, "/api/admin/v1/session", map[string]any{
+		"username": "operator", "password": "correct password",
+	}, map[string]string{"Sec-Fetch-Site": "cross-site"})
+	if crossSite.Code != http.StatusForbidden {
+		t.Fatalf("cross-site login status = %d", crossSite.Code)
+	}
 	unauthorized := requestJSON(t, router, http.MethodGet, "/api/admin/v1/servers", nil, nil)
 	if unauthorized.Code != http.StatusUnauthorized {
 		t.Fatalf("unauthorized status = %d", unauthorized.Code)

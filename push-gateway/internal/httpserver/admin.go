@@ -45,6 +45,9 @@ func (s *Server) registerAdminRoutes(router *echo.Echo) {
 }
 
 func (s *Server) adminLogin(c echo.Context) error {
+	if strings.EqualFold(c.Request().Header.Get("Sec-Fetch-Site"), "cross-site") {
+		return &gatewayadmin.Failure{Code: "csrf_invalid"}
+	}
 	if s.admin == nil || !s.admin.Enabled() {
 		return &gatewayadmin.Failure{Code: "admin_unavailable"}
 	}
