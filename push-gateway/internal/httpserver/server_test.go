@@ -219,6 +219,27 @@ func TestMalformedResourceIDReturnsBadRequest(t *testing.T) {
 	}
 }
 
+func TestEmbeddedAdminWebRoutes(t *testing.T) {
+	router := newTestRouter(t)
+	redirect := requestJSON(t, router, http.MethodGet, "/admin", nil, nil)
+	if redirect.Code != http.StatusPermanentRedirect || redirect.Header().Get("Location") != "/admin/" {
+		t.Fatalf("admin redirect status/location = %d/%q", redirect.Code, redirect.Header().Get("Location"))
+	}
+	for _, route := range []string{"/admin/", "/admin/servers"} {
+		response := requestJSON(t, router, http.MethodGet, route, nil, nil)
+		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "即应推送服务") {
+			t.Fatalf("GET %s status/body = %d/%s", route, response.Code, response.Body.String())
+		}
+		if response.Header().Get("Cache-Control") != "no-cache" {
+			t.Fatalf("GET %s cache control = %q", route, response.Header().Get("Cache-Control"))
+		}
+	}
+	missingAsset := requestJSON(t, router, http.MethodGet, "/admin/assets/missing.js", nil, nil)
+	if missingAsset.Code != http.StatusNotFound {
+		t.Fatalf("missing admin asset status = %d", missingAsset.Code)
+	}
+}
+
 func TestOperationalRoutesUseAPIPrefix(t *testing.T) {
 	router := newTestRouter(t)
 	for _, path := range []string{"/api/health/live", "/api/health/ready", "/api/metrics", "/api/openapi.json"} {

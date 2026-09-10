@@ -139,13 +139,9 @@ jobs:
               PUBLIC_BASE_PATH=/
               PUBLIC_GA_ID=${{ vars.HOMEPAGE_GA_ID }}
           - image: push-gateway
-            context: push-gateway
+            context: .
             dockerfile: push-gateway/Dockerfile
             build_args: ""
-          - image: push-gateway-web
-            context: push-gateway-web
-            dockerfile: push-gateway-web/Dockerfile
-            build_args: VITE_BASE_PATH=/admin/
     steps:
       - name: Checkout
         uses: actions/checkout@v7

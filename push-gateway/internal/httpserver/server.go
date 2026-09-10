@@ -21,7 +21,7 @@ import (
 	"gorm.io/gorm"
 )
 
-//go:embed openapi.json
+//go:embed openapi.json admin-dist/*
 var assets embed.FS
 
 type Options struct {
@@ -68,6 +68,7 @@ func New(db *gorm.DB, service *gateway.Service, options ...Options) *echo.Echo {
 	v1.DELETE("/grants/:grant_id", server.revokeGrant)
 	v1.POST("/grants/:grant_id/notifications", server.enqueueNotification)
 	server.registerAdminRoutes(router)
+	server.registerAdminWebRoutes(router)
 	return router
 }
 
