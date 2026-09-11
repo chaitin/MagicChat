@@ -4,8 +4,10 @@
 
 ## 本地开发
 
+本目录统一使用 npm 和 `package-lock.json`，与 CI、Docker 构建保持一致。不要生成 `pnpm-lock.yaml` 或 `pnpm-workspace.yaml`，部署配置检查会拒绝这些文件。
+
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 

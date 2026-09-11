@@ -257,12 +257,16 @@ assert_file "homepage/compose.yml"
 assert_file "homepage/systemd/jiying-homepage-update"
 assert_file "homepage/systemd/jiying-homepage-update.service"
 assert_file "homepage/systemd/jiying-homepage-update.timer"
-assert_contains "homepage/src/styles/global.css" '@import "@fontsource-variable/noto-sans-sc"'
-assert_contains "homepage/src/styles/global.css" '--font-sans: "Noto Sans SC Variable"'
+assert_contains "homepage/src/styles/global.css" '@import "../assets/fonts/maple-mono-cn/font.css"'
+assert_contains "homepage/src/styles/global.css" '--font-sans: "Maple Mono CN"'
+assert_file "homepage/src/assets/fonts/maple-mono-cn/LICENSE"
+assert_file "homepage/src/assets/fonts/maple-mono-cn/font.css"
+assert_file "homepage/src/assets/fonts/maple-mono-cn/metadata.json"
+assert_contains "homepage/src/assets/fonts/maple-mono-cn/font.css" "format('woff2')"
+assert_contains "homepage/src/assets/fonts/maple-mono-cn/font.css" "format('woff')"
 assert_not_contains "homepage/src/styles/global.css" "HarmonyOS Sans SC"
 assert_not_contains "homepage/src/styles/global.css" "harmonyos-sans"
-assert_not_contains "homepage/src/styles/global.css" "Maple Mono CN"
-assert_not_contains "homepage/src/styles/global.css" "maple-mono"
+assert_not_contains "homepage/src/styles/global.css" "@fontsource-variable/noto-sans-sc"
 assert_contains "homepage/src/styles/global.css" "--green: #14b8a6"
 assert_contains "homepage/src/styles/global.css" "--green-dark: #0f766e"
 assert_contains "homepage/src/styles/global.css" "--container: 1280px"
@@ -270,13 +274,14 @@ assert_contains "homepage/src/styles/global.css" "--ease: cubic-bezier"
 assert_contains "homepage/src/styles/global.css" "@media (max-width: 620px)"
 assert_contains "homepage/astro.config.mjs" "plugins: [tailwindcss()]"
 assert_not_contains "homepage/astro.config.mjs" "harmonyos-sans-sc-webfont-splitted"
-assert_contains "homepage/src/components/SiteHeader.astro" 'href="https://github.com/chaitin/MagicChat"'
-assert_contains "homepage/src/components/SiteHeader.astro" 'target="_blank"'
-assert_contains "homepage/src/components/SiteHeader.astro" 'rel="noopener noreferrer"'
-assert_contains "homepage/src/components/SiteHeader.astro" 'name="tabler:brand-github-filled"'
+assert_contains "homepage/src/components/SiteHeader.astro" '<HeaderActions />'
+assert_contains "homepage/src/components/HeaderActions.tsx" 'href="https://github.com/chaitin/MagicChat"'
+assert_contains "homepage/src/components/HeaderActions.tsx" 'target="_blank"'
+assert_contains "homepage/src/components/HeaderActions.tsx" 'rel="noopener noreferrer"'
+assert_contains "homepage/src/components/HeaderActions.tsx" 'aria-label="GitHub 源码"'
 assert_contains "homepage/src/pages/index.astro" 'href="https://app.jiying.chat/"'
-assert_not_contains "homepage/src/components/SiteFooter.astro" 'href={`${import.meta.env.BASE_URL}privacy-policy/`}'
-assert_not_contains "homepage/src/components/SiteFooter.astro" 'href={`${import.meta.env.BASE_URL}user-agreement/`}'
+assert_contains "homepage/src/components/SiteFooter.astro" 'href={`${import.meta.env.BASE_URL}privacy-policy/`}'
+assert_contains "homepage/src/components/SiteFooter.astro" 'href={`${import.meta.env.BASE_URL}user-agreement/`}'
 assert_contains "homepage/src/components/SiteFooter.astro" 'href={`${import.meta.env.BASE_URL}user-service/`}'
 assert_not_contains "homepage/src/pages/index.astro" "chat.chaitin.net"
 assert_not_contains "homepage/src/components/SiteFooter.astro" "chat.chaitin.net"
@@ -284,7 +289,9 @@ assert_not_contains "homepage/src/components/SiteHeader.astro" "desktop-nav"
 assert_not_contains "homepage/src/components/SiteHeader.astro" "mobile-nav"
 assert_contains "homepage/package.json" '"astro-icon"'
 assert_contains "homepage/package.json" '"@iconify-json/tabler"'
-assert_contains "homepage/package.json" '"@fontsource-variable/noto-sans-sc"'
+assert_not_contains "homepage/package.json" '"@fontsource-variable/noto-sans-sc"'
+assert_contains "homepage/package.json" '"@astrojs/react"'
+assert_contains "homepage/package.json" '"react"'
 assert_contains "homepage/package.json" '"@tailwindcss/vite"'
 assert_contains "homepage/package.json" '"tailwindcss"'
 assert_not_contains "homepage/package.json" '"@lucide/astro"'
