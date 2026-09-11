@@ -638,7 +638,7 @@ function resolvePendingRequest(replyTo, envelope) {
 }
 ```
 
-调用应用自动加入并成为群主。用户必须处于应用可见范围，其他应用必须为有效的 `public` 应用，总成员数最多 500。
+调用应用自动加入并成为群主。用户必须处于应用可见范围，其他应用必须为有效的 `public` 应用，总成员数最多 1000。
 
 响应包含 `conversation` 和本次创建产生的系统 `message`。
 

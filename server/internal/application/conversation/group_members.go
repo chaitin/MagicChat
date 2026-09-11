@@ -41,7 +41,7 @@ func (s *Service) AddMembers(ctx context.Context, cmd AddMembersCommand) (Conver
 		case errors.Is(err, ErrNotGroup):
 			return ConversationMutationResult{}, invalidRequest("只能向群聊添加成员", err)
 		case errors.Is(err, ErrMemberCap):
-			return ConversationMutationResult{}, invalidRequest("群聊成员不能超过 500 人", err)
+			return ConversationMutationResult{}, invalidRequest("群聊成员不能超过 1000 人", err)
 		case errors.Is(err, ErrGroupAppUnavailable):
 			return ConversationMutationResult{}, invalidRequest("所选应用不存在、已停用或你无权访问", err)
 		case errors.Is(err, ErrMemberMissing):

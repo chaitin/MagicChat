@@ -138,7 +138,7 @@ func (s *Service) CreateGroupAsApplication(ctx context.Context, cmd CreateGroupA
 	}
 	appIDs = removeApplicationGroupID(appIDs, appID)
 	if len(memberIDs)+len(appIDs)+1 > MaxGroupMembers {
-		return ApplicationGroupMutationResult{}, invalidRequest("群聊成员不能超过 500 人", ErrMemberCap)
+		return ApplicationGroupMutationResult{}, invalidRequest("群聊成员不能超过 1000 人", ErrMemberCap)
 	}
 
 	var actor store.App
@@ -977,7 +977,7 @@ func mapApplicationGroupMutationError(err error) error {
 	case errors.Is(err, ErrNotGroup):
 		return invalidRequest("会话不是群聊", err)
 	case errors.Is(err, ErrMemberCap):
-		return invalidRequest("群聊成员不能超过 500 人", err)
+		return invalidRequest("群聊成员不能超过 1000 人", err)
 	case errors.Is(err, ErrGroupAppUnavailable):
 		return invalidRequest("只有已启用且所有人可见的应用才能加入群聊", err)
 	case errors.Is(err, ErrMemberMissing):

@@ -10644,7 +10644,7 @@ func TestClientJoinPublicGroupCreatesMemberAndSystemMessage(t *testing.T) {
 	requireSystemEventActorBody(t, storedMessage.Body, "group_member_joined", bob.ID, "Bob")
 }
 
-func TestClientJoinPublicGroupEnforcesVisibilityAnd500MemberLimit(t *testing.T) {
+func TestClientJoinPublicGroupEnforcesVisibilityAnd1000MemberLimit(t *testing.T) {
 	server, db := newTestRouter(t)
 	defer server.Close()
 
@@ -10668,7 +10668,7 @@ func TestClientJoinPublicGroupEnforcesVisibilityAnd500MemberLimit(t *testing.T) 
 	requireError(t, privateBody, "forbidden")
 
 	memberIDs := []string{owner.ID}
-	for len(memberIDs) < 499 {
+	for len(memberIDs) < 999 {
 		memberIDs = append(memberIDs, uuid.NewString())
 	}
 	almostFullGroup := insertTestConversation(t, db, testConversationInput{
@@ -10682,11 +10682,11 @@ func TestClientJoinPublicGroupEnforcesVisibilityAnd500MemberLimit(t *testing.T) 
 
 	lastSlotResp, lastSlotBody := postJSON(t, server, "/api/client/conversations/groups/"+almostFullGroup.ID+"/join", map[string]any{}, cookie)
 	if lastSlotResp.StatusCode != http.StatusOK {
-		t.Fatalf("500th member join status = %d, want 200, body = %#v", lastSlotResp.StatusCode, lastSlotBody)
+		t.Fatalf("1000th member join status = %d, want 200, body = %#v", lastSlotResp.StatusCode, lastSlotBody)
 	}
 	joinedConversation := requireSuccess(t, lastSlotBody)["conversation"].(map[string]any)
-	if joinedConversation["member_count"] != float64(500) {
-		t.Fatalf("member_count = %v, want 500", joinedConversation["member_count"])
+	if joinedConversation["member_count"] != float64(1000) {
+		t.Fatalf("member_count = %v, want 1000", joinedConversation["member_count"])
 	}
 
 	fullResp, fullBody := postJSON(t, server, "/api/client/conversations/groups/"+almostFullGroup.ID+"/join", map[string]any{}, loginAsUser(t, server, carol.Email))
@@ -10695,8 +10695,32 @@ func TestClientJoinPublicGroupEnforcesVisibilityAnd500MemberLimit(t *testing.T) 
 	}
 	requireError(t, fullBody, "invalid_request")
 	errorBody := fullBody["error"].(map[string]any)
-	if errorBody["message"] != "群聊成员不能超过 500 人" {
-		t.Fatalf("error.message = %v, want 500-person limit", errorBody["message"])
+	if errorBody["message"] != "群聊成员不能超过 1000 人" {
+		t.Fatalf("error.message = %v, want 1000-member limit", errorBody["message"])
+	}
+
+	// Replacing a user with an application must keep the group at capacity.
+	if err := db.Model(&store.ConversationMember{}).
+		Where("conversation_id = ? AND member_type = ? AND member_id = ?", almostFullGroup.ID, store.ConversationMemberTypeUser, memberIDs[1]).
+		Update("left_at", now).Error; err != nil {
+		t.Fatalf("mark member as left: %v", err)
+	}
+	insertTestAppConversationMember(t, db, uuid.NewString(), almostFullGroup.ID, now)
+	mixedResp, mixedBody := postJSON(t, server, "/api/client/conversations/groups/"+almostFullGroup.ID+"/join", map[string]any{}, loginAsUser(t, server, carol.Email))
+	if mixedResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("full mixed group join status = %d, want 400, body = %#v", mixedResp.StatusCode, mixedBody)
+	}
+	requireError(t, mixedBody, "invalid_request")
+
+	// A departed application frees a slot just like a departed user.
+	if err := db.Model(&store.ConversationMember{}).
+		Where("conversation_id = ? AND member_type = ?", almostFullGroup.ID, store.ConversationMemberTypeApp).
+		Update("left_at", now).Error; err != nil {
+		t.Fatalf("mark application as left: %v", err)
+	}
+	rejoinResp, rejoinBody := postJSON(t, server, "/api/client/conversations/groups/"+almostFullGroup.ID+"/join", map[string]any{}, loginAsUser(t, server, carol.Email))
+	if rejoinResp.StatusCode != http.StatusOK {
+		t.Fatalf("join after application left status = %d, want 200, body = %#v", rejoinResp.StatusCode, rejoinBody)
 	}
 }
 

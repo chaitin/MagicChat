@@ -251,7 +251,7 @@ func (s *Service) Join(ctx context.Context, cmd JoinCommand) (ConversationMutati
 		case errors.Is(err, ErrAccessDenied), errors.Is(err, ErrNotGroup):
 			return ConversationMutationResult{}, forbidden("无权加入群聊", err)
 		case errors.Is(err, ErrMemberCap):
-			return ConversationMutationResult{}, invalidRequest("群聊成员不能超过 500 人", err)
+			return ConversationMutationResult{}, invalidRequest("群聊成员不能超过 1000 人", err)
 		default:
 			return ConversationMutationResult{}, internalError(err)
 		}
@@ -277,7 +277,7 @@ func (s *Service) join(db *gorm.DB, actor store.User, conversationID string) (st
 			return ErrAccessDenied
 		}
 		var members []store.ConversationMember
-		if err := tx.Where("conversation_id = ? AND member_type = ?", conversationID, store.ConversationMemberTypeUser).Find(&members).Error; err != nil {
+		if err := tx.Where("conversation_id = ?", conversationID).Find(&members).Error; err != nil {
 			return err
 		}
 		activeCount := 0
@@ -287,7 +287,7 @@ func (s *Service) join(db *gorm.DB, actor store.User, conversationID string) (st
 			if member.LeftAt == nil {
 				activeCount++
 			}
-			if member.MemberID == actor.ID {
+			if member.MemberType == store.ConversationMemberTypeUser && member.MemberID == actor.ID {
 				existing = member
 			}
 		}

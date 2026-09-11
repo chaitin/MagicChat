@@ -2208,7 +2208,7 @@ func mapAppGroupConversationError(err error) error {
 		return newAppRequestFailure("invalid_request", "只能向群聊添加成员")
 	}
 	if errors.Is(err, conversationapp.ErrMemberCap) {
-		return newAppRequestFailure("invalid_request", "群聊成员不能超过 500 人")
+		return newAppRequestFailure("invalid_request", "群聊成员不能超过 1000 人")
 	}
 	if errors.Is(err, conversationapp.ErrGroupAppUnavailable) {
 		return newAppRequestFailure("invalid_request", "只有已启用且所有人可见的应用才能加入群聊")

@@ -12,7 +12,7 @@ type UserNicknamePolicy interface {
 }
 
 const (
-	MaxGroupMembers            = 500
+	MaxGroupMembers            = 1000
 	MaxGroupNameLength         = 120
 	MaxGroupAnnouncementLength = 200
 	MaxGroupProjects           = 100

@@ -5201,6 +5201,87 @@ paths:
       summary: 批量查询消息表情快照
       tags:
       - 客户端消息
+  /api/client/conversations/{conversation_id}/messages/videos:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 普通用户上传最大 100MiB 的 MP4 或 WebM 视频并发送为会话视频消息，可附带 text 或 markdown 视频说明。
+      parameters:
+      - description: 会话 ID
+        in: path
+        name: conversation_id
+        required: true
+        type: string
+      - description: 客户端消息 ID
+        in: formData
+        name: client_message_id
+        required: true
+        type: string
+      - description: 引用消息 ID
+        in: formData
+        name: reply_to_message_id
+        type: string
+      - description: 视频说明，最多 5000 个字符，支持与文本消息相同的 @ token
+        in: formData
+        name: caption
+        type: string
+      - description: 视频说明类型：text 或 markdown，默认 text
+        in: formData
+        name: caption_type
+        type: string
+      - description: MP4 或 WebM 视频
+        in: formData
+        name: video
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/client.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.createMessageResponse'
+              type: object
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/client.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.createMessageResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+      summary: 发送视频消息
+      tags:
+      - 客户端消息
   /api/client/conversations/{conversation_id}/messages/voices:
     post:
       consumes:

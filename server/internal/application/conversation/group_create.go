@@ -33,7 +33,7 @@ func (s *Service) CreateGroup(ctx context.Context, cmd CreateGroupCommand) (Crea
 		return CreateGroupResult{}, invalidRequest("项目 ID 格式错误", err)
 	}
 	if len(members)+len(apps)+1 > MaxGroupMembers {
-		return CreateGroupResult{}, invalidRequest("群聊成员不能超过 500 人", ErrMemberCap)
+		return CreateGroupResult{}, invalidRequest("群聊成员不能超过 1000 人", ErrMemberCap)
 	}
 	conversation, message, candidates, userIDs, err := s.createGroup(ctx, actor, name, members, apps, projects)
 	if err != nil {
@@ -43,7 +43,7 @@ func (s *Service) CreateGroup(ctx context.Context, cmd CreateGroupCommand) (Crea
 		case errors.Is(err, ErrMemberMissing):
 			return CreateGroupResult{}, invalidRequest("成员不存在或已禁用", err)
 		case errors.Is(err, ErrMemberCap):
-			return CreateGroupResult{}, invalidRequest("群聊成员不能超过 500 人", err)
+			return CreateGroupResult{}, invalidRequest("群聊成员不能超过 1000 人", err)
 		case errors.Is(err, ErrProjectInvalid):
 			return CreateGroupResult{}, invalidRequest("项目 ID 格式错误", err)
 		case errors.Is(err, ErrProjectPersonal):
