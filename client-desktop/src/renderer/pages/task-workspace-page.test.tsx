@@ -166,6 +166,65 @@ describe("TaskWorkspacePage", () => {
     await waitFor(() => expect(mocks.getClientProjectTask).toHaveBeenCalledTimes(2))
   })
 
+  it("uses the shared card workspace layout while preserving responsive panes", async () => {
+    mocks.listClientProjectTasks.mockResolvedValue({
+      nextCursor: null,
+      tasks: [createTask("task-1", "发布任务")],
+    })
+    const { container } = renderTaskWorkspace()
+
+    expect(await screen.findByText("发布任务")).toBeInTheDocument()
+    expect(container.querySelector("main")).toHaveClass("gap-3", "bg-muted", "p-3", "pt-10")
+
+    const taskList = screen.getByLabelText("任务列表工作区")
+    expect(taskList).toHaveClass("rounded-xl", "border", "bg-background", "shadow-xs")
+    expect(taskList).not.toHaveClass("border-r")
+
+    const taskContent = screen.getByLabelText("任务内容工作区")
+    expect(taskContent).toHaveClass("rounded-xl", "border", "bg-background", "shadow-xs", "hidden")
+  })
+
+  it("shows project avatars in the dropdown and navigates on selection", async () => {
+    const user = userEvent.setup()
+    mocks.getClientProject.mockResolvedValue(createProject("project-1", "发布项目"))
+    mocks.listClientProjects.mockResolvedValue({
+      nextCursor: null,
+      personalProject: null,
+      projects: [createProject("project-1", "发布项目"), createProject("project-2", "研发项目")],
+    })
+    mocks.listClientProjectTasks.mockResolvedValue({
+      nextCursor: null,
+      tasks: [createTask("task-1", "发布任务")],
+    })
+
+    render(
+      <MemoryRouter initialEntries={["/tasks/project-1"]}>
+        <Routes>
+          <Route
+            element={
+              <>
+                <TaskWorkspacePage />
+                <CurrentPath />
+              </>
+            }
+            path="/tasks/:projectId/:taskId?"
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const trigger = await screen.findByRole("button", { name: "切换项目" })
+    expect(trigger).toHaveTextContent("发布项目")
+    expect(trigger.querySelector("svg")).toBeInTheDocument()
+    await user.click(trigger)
+
+    const option = await screen.findByRole("menuitemradio", { name: /研发项目/ })
+    expect(option.querySelector("svg")).toBeInTheDocument()
+    await user.click(option)
+
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/tasks/project-2")
+  })
+
   it("returns to chat from the task workspace", async () => {
     const user = userEvent.setup()
     mocks.listClientProjectTasks.mockResolvedValue({
@@ -226,6 +285,17 @@ function TaskNavigation() {
 function CurrentPath() {
   const { pathname } = useLocation()
   return <output data-testid="current-path">{pathname}</output>
+}
+
+function createProject(id: string, name: string, isPersonal = false) {
+  return {
+    avatar: "",
+    description: "",
+    id,
+    isPersonal,
+    name,
+    updatedAt: "2026-07-14T08:00:00Z",
+  }
 }
 
 function createTask(id: string, title: string): ProjectTask {

@@ -1,5 +1,6 @@
 import { appendFile } from "node:fs/promises"
 import path from "node:path"
+import { fetchPublishedDesktopBuild } from "./release-build.mjs"
 import { prepareReleaseWorktree } from "./release-worktree.mjs"
 assertArguments(["tag", "commit", "github-output"])
 const repository = path.resolve(import.meta.dirname, "../..")
@@ -9,6 +10,7 @@ if (!tag)
 
 const result = await prepareReleaseWorktree({
   expectedCommit: argument("commit"),
+  readPublishedDesktopBuild: fetchPublishedDesktopBuild,
   repository,
   tag,
 })
@@ -16,7 +18,7 @@ const githubOutput = argument("github-output")
 if (githubOutput) {
   await appendFile(
     githubOutput,
-    `desktop-directory=${result.desktopDirectory}\nworktree=${result.worktree}\ntag=${result.tag}\ncommit=${result.commit}\nversion=${result.version}\n`,
+    `desktop-directory=${result.desktopDirectory}\nworktree=${result.worktree}\ntag=${result.tag}\ncommit=${result.commit}\nversion=${result.version}\nbuild=${result.build}\n`,
   )
 }
 console.log(JSON.stringify(result))

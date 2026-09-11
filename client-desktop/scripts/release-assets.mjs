@@ -110,6 +110,7 @@ export async function prepareReleaseAssets({
     const plan = {
       schemaVersion: 1,
       assets,
+      build,
       commit,
       notes: "release-notes.md",
       notesSha256: await fileSha256(notesPath),

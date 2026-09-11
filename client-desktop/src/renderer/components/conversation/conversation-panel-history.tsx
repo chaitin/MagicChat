@@ -37,6 +37,7 @@ export const ConversationPanelHistory = React.memo(function ConversationPanelHis
   onCreateTopic,
   onLoadAfterMessages,
   onLoadBeforeMessages,
+  onRetry,
   onStartMessageSelection,
   onInsertMention,
   onOpenTopic,
@@ -70,6 +71,7 @@ export const ConversationPanelHistory = React.memo(function ConversationPanelHis
   onCreateTopic?: (message: ConversationPanelMessage) => void
   onLoadAfterMessages?: () => void
   onLoadBeforeMessages: () => void
+  onRetry?: () => void
   onStartMessageSelection?: (message: ConversationPanelMessage) => void
   onInsertMention: (target: ConversationPanelMentionTarget) => void
   onOpenTopic?: (conversationId: string) => void
@@ -391,10 +393,15 @@ export const ConversationPanelHistory = React.memo(function ConversationPanelHis
   if (error && messages.length === 0 && !header) {
     return (
       <div
-        className="flex min-h-0 flex-1 items-center justify-center bg-muted/10 px-6 text-center text-sm text-muted-foreground"
+        className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 bg-muted/10 px-6 text-center text-sm text-muted-foreground"
         data-testid="conversation-history-error"
       >
-        {error}
+        <p>{error}</p>
+        {onRetry && (
+          <Button onClick={onRetry} size="sm" type="button" variant="outline">
+            {t("history.retry")}
+          </Button>
+        )}
       </div>
     )
   }
@@ -423,7 +430,16 @@ export const ConversationPanelHistory = React.memo(function ConversationPanelHis
                 <span>{t("history.loadingTopics")}</span>
               </div>
             )}
-            {error && <div className="text-center text-xs text-muted-foreground">{error}</div>}
+            {error && (
+              <div className="grid justify-items-center gap-2 text-center text-xs text-muted-foreground">
+                <p>{error}</p>
+                {onRetry && (
+                  <Button onClick={onRetry} size="sm" type="button" variant="outline">
+                    {t("history.retry")}
+                  </Button>
+                )}
+              </div>
+            )}
             {status && <ConversationStatusBubble status={status} />}
           </div>
         </ScrollArea>

@@ -1147,6 +1147,7 @@ describe("桌面设置服务器管理", () => {
 
   it("发现 OTA 新版本后在左侧栏底部提供图标下载入口", async () => {
     const bridge = createDesktopBridge({
+      currentBuild: 1,
       currentVersion: "1.0.0",
       installMode: "ota",
       installationSource: "nsis",
@@ -1173,6 +1174,7 @@ describe("桌面设置服务器管理", () => {
 
   it("未配置服务器时仍订阅更新但不展示入口", async () => {
     const bridge = createDesktopBridge({
+      currentBuild: 1,
       currentVersion: "1.0.0",
       installMode: "ota",
       installationSource: "nsis",
@@ -1198,6 +1200,7 @@ describe("桌面设置服务器管理", () => {
     Object.defineProperty(window, "desktop", {
       configurable: true,
       value: createDesktopBridge({
+        currentBuild: 1,
         currentVersion: "1.0.0",
         installMode: "ota",
         installationSource: "nsis",
@@ -1226,8 +1229,32 @@ describe("桌面设置服务器管理", () => {
     expect(window.desktop.updater.download).not.toHaveBeenCalled()
   })
 
+  it("下载进度未知时显示正在下载而不是 0%", async () => {
+    Object.defineProperty(window, "desktop", {
+      configurable: true,
+      value: createDesktopBridge({
+        currentBuild: 1,
+        currentVersion: "1.0.0",
+        installMode: "ota",
+        installationSource: "nsis",
+        retryable: false,
+        status: "downloading",
+        targetVersion: "1.1.0",
+      }),
+    })
+    render(<DesktopRoot />)
+
+    expect(await screen.findByRole("button", { name: "正在下载" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    )
+    expect(screen.getByRole("status")).toHaveTextContent("正在下载")
+    expect(screen.queryByText("下载中 0%")).not.toBeInTheDocument()
+  })
+
   it("更新状态变化时同步刷新无障碍实时文本", async () => {
     const bridge = createDesktopBridge({
+      currentBuild: 1,
       currentVersion: "1.0.0",
       installMode: "ota",
       installationSource: "nsis",
@@ -1250,6 +1277,7 @@ describe("桌面设置服务器管理", () => {
 
     act(() => {
       publish?.({
+        currentBuild: 1,
         currentVersion: "1.0.0",
         installMode: "ota",
         installationSource: "nsis",
@@ -1269,6 +1297,7 @@ describe("桌面设置服务器管理", () => {
 
   it("下载调用失败时展示可恢复提示", async () => {
     const bridge = createDesktopBridge({
+      currentBuild: 1,
       currentVersion: "1.0.0",
       installMode: "ota",
       installationSource: "nsis",
@@ -1291,6 +1320,7 @@ describe("桌面设置服务器管理", () => {
 
   it("手动升级来源从左下角入口打开匹配的安装包", async () => {
     const bridge = createDesktopBridge({
+      currentBuild: 1,
       currentVersion: "1.0.0",
       installMode: "manual",
       installationSource: "deb",
@@ -1314,6 +1344,7 @@ describe("桌面设置服务器管理", () => {
 
   it("更新下载完成后从左下角执行重启安装", async () => {
     const bridge = createDesktopBridge({
+      currentBuild: 1,
       currentVersion: "1.0.0",
       installMode: "ota",
       installationSource: "nsis",
@@ -1337,6 +1368,7 @@ describe("桌面设置服务器管理", () => {
 
   it("安装被活跃传输阻止时展示准确提示", async () => {
     const bridge = createDesktopBridge({
+      currentBuild: 1,
       currentVersion: "1.0.0",
       installMode: "ota",
       installationSource: "nsis",
@@ -1363,6 +1395,7 @@ describe("桌面设置服务器管理", () => {
 
   it("可重试错误从左下角入口重新检查更新", async () => {
     const bridge = createDesktopBridge({
+      currentBuild: 1,
       currentVersion: "1.0.0",
       errorCode: "network",
       installMode: "ota",
@@ -1372,6 +1405,7 @@ describe("桌面设置服务器管理", () => {
       targetVersion: "1.1.0",
     })
     vi.mocked(bridge.updater.check).mockResolvedValue({
+      currentBuild: 1,
       currentVersion: "1.0.0",
       installMode: "ota",
       installationSource: "nsis",
@@ -1395,6 +1429,7 @@ describe("桌面设置服务器管理", () => {
 
   it("macOS 更新入口同样位于左侧栏底部", async () => {
     const bridge = createDesktopBridge({
+      currentBuild: 1,
       currentVersion: "1.0.0",
       installMode: "ota",
       installationSource: "mac_app",
@@ -1424,6 +1459,7 @@ describe("桌面设置服务器管理", () => {
 
   it("展示实验性更新信息并支持键盘触发手动升级", async () => {
     const bridge = createDesktopBridge({
+      currentBuild: 1,
       currentVersion: "1.0.0",
       installMode: "manual",
       installationSource: "deb",
@@ -1490,6 +1526,7 @@ describe("桌面设置服务器管理", () => {
 
   it("订阅事件先到时不使用较旧的状态快照", async () => {
     const snapshot: UpdaterState = {
+      currentBuild: 1,
       currentVersion: "1.0.0",
       installMode: "ota",
       installationSource: "mac_app",
@@ -1541,6 +1578,7 @@ describe("桌面设置服务器管理", () => {
     Object.defineProperty(window, "desktop", {
       configurable: true,
       value: createDesktopBridge({
+        currentBuild: 1,
         currentVersion: "1.0.0",
         errorCode: "platform_signature_required",
         installMode: "ota",
@@ -1564,6 +1602,7 @@ describe("桌面设置服务器管理", () => {
 
   it("安装器未能启动时展示准确的恢复提示", async () => {
     const bridge = createDesktopBridge({
+      currentBuild: 1,
       currentVersion: "1.0.0",
       installMode: "ota",
       installationSource: "nsis",
@@ -1773,6 +1812,7 @@ function createDesktopBridge(
 ): DesktopBridge {
   const unsubscribe = () => undefined
   const initialUpdaterState: UpdaterState = updaterState ?? {
+    currentBuild: 0,
     currentVersion: "0.1.0",
     installMode: "manual",
     installationSource: "development",

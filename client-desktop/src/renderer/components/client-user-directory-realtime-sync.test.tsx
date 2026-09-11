@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const callbacks = new Map<string, (payload: unknown) => void>()
 const invalidateUsers = vi.fn()
 const refreshFriendData = vi.fn().mockResolvedValue(undefined)
+const refreshMe = vi.fn().mockResolvedValue(undefined)
 const updateUserPresence = vi.fn()
 let realtimeReady = false
 
@@ -21,6 +22,7 @@ vi.mock("@/lib/client-data-context", () => ({
   useClientData: () => ({
     invalidateUsers: (...args: Parameters<typeof invalidateUsers>) => invalidateUsers(...args),
     refreshFriendData,
+    refreshMe,
     updateUserPresence,
     usersById: {
       "user-1": {
@@ -46,6 +48,8 @@ describe("ClientUserDirectoryRealtimeSync", () => {
     invalidateUsers.mockClear()
     refreshFriendData.mockReset()
     refreshFriendData.mockResolvedValue(undefined)
+    refreshMe.mockReset()
+    refreshMe.mockResolvedValue(undefined)
     updateUserPresence.mockClear()
     realtimeReady = false
   })
@@ -72,6 +76,40 @@ describe("ClientUserDirectoryRealtimeSync", () => {
 
     expect(invalidateUsers).toHaveBeenCalledWith(["user-1"], "2026-08-02T00:00:00.000Z")
     expect(updateUserPresence).toHaveBeenCalledWith("user-1", true, "2026-08-02T00:00:00.000Z")
+  })
+
+  it("昵称策略变化时失效全部缓存资料并刷新当前用户", async () => {
+    render(<ClientUserDirectoryRealtimeSync />)
+
+    act(() => {
+      callbacks.get("user.nickname.policy.updated")?.(null)
+      callbacks.get("user.nickname.policy.updated")?.({})
+      callbacks.get("user.nickname.policy.updated")?.({ updated_at: "invalid" })
+      callbacks.get("user.nickname.policy.updated")?.({
+        updated_at: "2026-08-28T12:00:00.000Z",
+      })
+    })
+
+    expect(invalidateUsers).toHaveBeenCalledOnce()
+    expect(invalidateUsers).toHaveBeenCalledWith(["user-1"], "2026-08-28T12:00:00.000Z")
+    await waitFor(() => expect(refreshMe).toHaveBeenCalledOnce())
+  })
+
+  it("昵称策略刷新失败不会中断后续 realtime 事件", async () => {
+    refreshMe.mockRejectedValueOnce(new Error("请求失败"))
+    render(<ClientUserDirectoryRealtimeSync />)
+
+    act(() => {
+      callbacks.get("user.nickname.policy.updated")?.({
+        updated_at: "2026-08-28T12:00:00.000Z",
+      })
+    })
+    await waitFor(() => expect(refreshMe).toHaveBeenCalledOnce())
+
+    act(() => {
+      callbacks.get("user.presence.updated")?.({ online: true, user_id: "user-1" })
+    })
+    expect(updateUserPresence).toHaveBeenCalledWith("user-1", true, undefined)
   })
 
   it("在聊天页也会仅刷新好友申请", async () => {
@@ -173,7 +211,7 @@ describe("ClientUserDirectoryRealtimeSync", () => {
 
   it("卸载时清理全部 realtime 订阅", () => {
     const view = render(<ClientUserDirectoryRealtimeSync />)
-    expect(callbacks.size).toBe(7)
+    expect(callbacks.size).toBe(8)
     view.unmount()
     expect(callbacks.size).toBe(0)
   })

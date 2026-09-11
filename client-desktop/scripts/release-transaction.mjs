@@ -149,6 +149,8 @@ async function validateLocalAssets(planDirectory, assets) {
 function validatePlan(plan, repository) {
   if (
     plan.schemaVersion !== 1 ||
+    !Number.isSafeInteger(plan.build) ||
+    plan.build <= 0 ||
     plan.repository !== repository ||
     !/^desktop-v\d+\.\d+\.\d+$/.test(plan.tag)
   ) {

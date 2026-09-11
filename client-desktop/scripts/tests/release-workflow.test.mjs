@@ -28,10 +28,10 @@ describe("Desktop Stable Release 配置", () => {
     }
   })
 
-  it("使用同一版本的 workflow 执行轮次作为 build", async () => {
+  it("使用 quality 输出的 Desktop build", async () => {
     const source = await readFile(workflowPath, "utf8")
-    expect(source).toContain("${{ github.run_attempt }}")
-    expect(source).not.toContain("${{ github.run_number }}")
+    expect(source).toContain("${{ needs.quality.outputs.build }}")
+    expect(source).not.toContain("${{ github.run_attempt }}")
   })
 
   it("固定应用身份并禁止 electron-builder 生成旧版更新清单", async () => {

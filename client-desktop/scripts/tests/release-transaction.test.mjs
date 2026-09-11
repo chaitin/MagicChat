@@ -176,6 +176,7 @@ async function createPlan() {
         size: 5,
       },
     ],
+    build: 2,
     commit: "0123456789012345678901234567890123456789",
     notes: "release-notes.md",
     notesSha256: await fileSha256(path.join(directory, "release-notes.md")),

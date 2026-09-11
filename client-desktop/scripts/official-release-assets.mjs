@@ -34,7 +34,11 @@ export async function prepareOfficialReleaseAssets({ inputDirectory, outputDirec
       }
       const targetName = path.basename(new URL(officialUrl).pathname)
       await copyFile(sourcePath, path.join(staging, targetName))
-      officialManifest[key] = { ...entry, url: officialUrl }
+      officialManifest[key] = {
+        build: entry.build,
+        url: officialUrl,
+        version: entry.version,
+      }
       copied.push(targetName)
     }
     validateVersionFile(officialManifest)

@@ -10,17 +10,20 @@ Desktop 只使用官网 `https://jiying.chat/releases/version.json` 发现更新
 
 ```text
 desktop-v<version> Tag
+  -> CI 读取其他正式 Tag 的 Desktop build（旧提交中的 release-version-base.json，或已公开 Release 的 version.json），自动取 max+1
   -> GitHub Actions 构建并验证 7 个完整安装包
   -> GitHub Release 发布 7 个安装包 + version.json
   -> Actions 生成官网六文件上传目录
   -> 运维上传安装包与 SHA256SUMS.txt
   -> 运维最后上传 version.json
   -> Desktop 启动后约 60 秒或用户手动检查
-  -> 比较 version；同版本时再比较 build
+  -> 只比较远端 build 是否大于已安装 build
   -> 下载对应平台完整包并更新或提示手工安装
 ```
 
-`version` 判断功能版本，`build` 表示同一版本的第几次有效构建。同版本下只有官网 `build` 更大时才视为新构建；更高 `version` 总是优先。
+`build` 是唯一更新依据，并在每次新的正式 Desktop 发布中跨 SemVer 严格递增。`version` 只用于展示、唯一 Tag、资产名称和手动恢复 URL；即使远端 version 更高，只要 build 没有增加就不更新。线上现有 build 1 之后的首个 build-only 发布使用 build 2。
+
+CI 在每次新的 `desktop-v<semver>` 正式发布中，将四个 Desktop 平台的统一 `build` 设为上一正式版本 + 1。历史 build 优先来自该 Tag 提交中遗留的 `release-version-base.json`，否则来自该 Tag 已公开 Release 的 `version.json`。Android 和 iOS 字段从当前官网 `version.json` 原样带入，独立维护。本地开发、失败重跑和同一个 Tag 的 workflow 重试不得递增。同一个 SemVer 和 Tag 不重复发布。
 
 ## 平台映射
 
@@ -70,8 +73,8 @@ SHA256SUMS.txt
 ## 发布门禁
 
 - Tag 必须是严格的 `desktop-v<semver>` Annotated 或 signed Tag。
-- 版本写入临时 worktree，不污染发布者 checkout。
-- Windows 校验 NSIS 与包内 PE 架构和版本；macOS 校验 DMG、Universal 架构、签名、公证和 Gatekeeper；Linux 校验 AppImage ELF 与 deb 元数据。
+- 版本和正整数 build 写入临时 worktree，不污染发布者 checkout。
+- Windows 校验 NSIS 与包内 PE 架构、版本和 build；macOS 校验 DMG、Universal 架构、包内 build、签名、公证和 Gatekeeper；Linux 校验 AppImage/deb 架构、版本和包内 build。
 - Release 聚合拒绝缺失、重复、额外文件以及任何旧更新清单、ZIP 或外置 blockmap。
 - 发布脚本只上传 `release-plan.json` 列出的八个文件，并在公开前复核远端资产摘要。
 - 官网六文件目录继续生成 SHA-256 清单，运维上传前后都应复核。
@@ -79,8 +82,8 @@ SHA256SUMS.txt
 ## 验收重点
 
 1. 公开 Release 精确包含 8 个文件，官网 artifact 精确包含 6 个文件。
-2. 官网 `version.json` 的桌面字段版本和 build 正确，URL 匿名可访问。
+2. 官网 `version.json` 的四个桌面字段使用本轮同一个递增 build，且与包内 build 一致，URL 匿名可访问。
 3. 1.8.1 能发现 1.8.2；1.8.0 及更早版本按手工迁移说明安装。
 4. macOS 安装即应后保留登录和本地数据，且用户确认无误后只移除旧 `MagicChat.app`。
-5. 1.8.2 到后续版本能够通过官网 JSON 发现、下载并完成平台允许的更新路径。
+5. 桥接版本之后只在远端 build 更大时通过官网 JSON 发现、下载并完成平台允许的更新路径。
 6. 失败时旧版本仍可运行，并提供完整安装包手工恢复。

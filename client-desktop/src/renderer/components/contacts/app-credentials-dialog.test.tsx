@@ -1,9 +1,11 @@
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import type { ReactElement } from "react"
 import { describe, expect, it, vi } from "vitest"
 
 import { AppCredentialsDialog } from "@/components/contacts/app-credentials-dialog"
 import type { ClientAppCredentials } from "@/lib/client-api/apps"
+import { DesktopTargetContext } from "@/lib/desktop-target-context"
 
 const mocks = vi.hoisted(() => ({
   regenerateClientAppSecret: vi.fn(),
@@ -30,7 +32,7 @@ describe("AppCredentialsDialog", () => {
     const nextCredentials = createCredentials("new-secret")
     mocks.regenerateClientAppSecret.mockResolvedValueOnce(nextCredentials)
 
-    render(
+    renderDialog(
       <AppCredentialsDialog
         credentials={createCredentials("current-secret")}
         onCredentialsChange={onCredentialsChange}
@@ -42,6 +44,12 @@ describe("AppCredentialsDialog", () => {
     expect(screen.getByRole("dialog", { name: "开发指南" })).toBeInTheDocument()
     expect(screen.getByLabelText("连接密钥")).toHaveValue("current-secret")
     expect(screen.getByLabelText("应用 ID")).toHaveValue("app-1")
+    expect(screen.getByLabelText("WebSocket 地址")).toHaveValue("wss://chat.example.com/api/app/ws")
+    expect(screen.getByRole("link", { name: "开发文档" })).toHaveAttribute(
+      "href",
+      "https://github.com/chaitin/MagicChat/blob/main/APPLICATION_DEVELOPMENT.md",
+    )
+    expect(screen.getByRole("link", { name: "开发文档" })).toHaveAttribute("target", "_blank")
 
     await user.click(screen.getByRole("button", { name: "重置连接密钥" }))
     const confirmation = screen.getByRole("alertdialog", {
@@ -55,6 +63,16 @@ describe("AppCredentialsDialog", () => {
     expect(confirmation).not.toBeInTheDocument()
   })
 })
+
+function renderDialog(ui: ReactElement) {
+  return render(
+    <DesktopTargetContext.Provider
+      value={{ id: "server-1", normalizedUrl: "https://chat.example.com", userId: "user-1" }}
+    >
+      {ui}
+    </DesktopTargetContext.Provider>,
+  )
+}
 
 function createCredentials(connectionSecret: string): ClientAppCredentials {
   return {

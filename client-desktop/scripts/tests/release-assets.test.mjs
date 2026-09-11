@@ -54,6 +54,7 @@ describe("确定性发布资产计划", () => {
     await prepareReleaseAssets({ ...release, inputs, outputDirectory: output })
     const plan = JSON.parse(await readFile(path.join(output, "release-plan.json"), "utf8"))
 
+    expect(plan.build).toBe(42)
     expect(new Set(plan.assets.map((asset) => asset.name))).toEqual(
       expectedReleaseAssetNames("1.2.3"),
     )

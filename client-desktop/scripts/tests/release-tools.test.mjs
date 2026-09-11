@@ -1,7 +1,10 @@
+import { execFile } from "node:child_process"
 import { createHash } from "node:crypto"
 import { mkdtemp, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { promisify } from "node:util"
+import { pathToFileURL } from "node:url"
 import { describe, expect, it } from "vitest"
 import {
   fileDigests,
@@ -10,7 +13,20 @@ import {
   parseDesktopTag,
 } from "../release-tools.mjs"
 
+const execute = promisify(execFile)
+
 describe("Desktop Stable 发布工具", () => {
+  it("可被真实 Node ESM 直接加载", async () => {
+    const moduleUrl = pathToFileURL(path.resolve(import.meta.dirname, "../release-tools.mjs"))
+    await expect(
+      execute(process.execPath, [
+        "--input-type=module",
+        "--eval",
+        `await import(${JSON.stringify(moduleUrl.href)})`,
+      ]),
+    ).resolves.toBeDefined()
+  })
+
   it("流式读取文件并在一次遍历中生成双摘要", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "jiying-release-"))
     const filePath = path.join(directory, "large-asset.bin")

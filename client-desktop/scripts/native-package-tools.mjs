@@ -45,9 +45,10 @@ export async function verifyWindowsPackage({
   arch,
   applicationDirectory,
   artifact,
+  expectedBuild,
   expectedVersion,
   executeCommand = execute,
-  readAsarVersion = packagedVersion,
+  readAsarMetadata = packagedMetadata,
 }) {
   const installerMachine = await readPeMachine(artifact)
   const installerVersion = await windowsProductVersion(artifact, executeCommand)
@@ -65,10 +66,10 @@ export async function verifyWindowsPackage({
   const asar = path.join(applicationDirectory, "resources", "app.asar")
   const asarStat = await lstat(asar).catch(() => undefined)
   if (!asarStat?.isFile()) throw new Error("Windows 打包应用缺少 app.asar")
-  if ((await readAsarVersion(asar)) !== expectedVersion)
-    throw new Error("app.asar 内应用版本与 Tag 不一致")
+  await assertPackagedMetadata(asar, expectedVersion, expectedBuild, readAsarMetadata)
   return {
     arch,
+    build: expectedBuild,
     installerMachine,
     machine: PE_MACHINES[arch],
     platform: "win",
@@ -80,9 +81,10 @@ export async function verifyLinuxPackage({
   arch,
   appImage,
   deb,
+  expectedBuild,
   expectedVersion,
   executeCommand = execute,
-  readAsarVersion = packagedVersion,
+  readAsarMetadata = packagedMetadata,
 }) {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "magicchat-linux-package-"))
   await executeCommand(appImage, ["--appimage-extract"], { cwd: workspace })
@@ -94,8 +96,7 @@ export async function verifyLinuxPackage({
   )
   assertMachine(parseElfMachine(await readFile(appImageExecutable)), arch, "ELF")
   const appImageAsar = await findUnique(appImageRoot, "app.asar", "AppImage 内缺少 app.asar")
-  if ((await readAsarVersion(appImageAsar)) !== expectedVersion)
-    throw new Error("AppImage 应用版本与 Tag 不一致")
+  await assertPackagedMetadata(appImageAsar, expectedVersion, expectedBuild, readAsarMetadata)
 
   const expectedDebArch = arch === "x64" ? "amd64" : "arm64"
   const architectureMetadata = await executeCommand("dpkg-deb", ["-f", deb, "Architecture"])
@@ -112,9 +113,12 @@ export async function verifyLinuxPackage({
   await executeCommand("dpkg-deb", ["-x", deb, debRoot])
   const debExecutable = await findUnique(debRoot, "magicchat-desktop", "deb 内缺少主程序")
   assertMachine(parseElfMachine(await readFile(debExecutable)), arch, "ELF")
+  const debAsar = await findUnique(debRoot, "app.asar", "deb 内缺少 app.asar")
+  await assertPackagedMetadata(debAsar, expectedVersion, expectedBuild, readAsarMetadata)
   return {
     arch,
     appImageMachine: ELF_MACHINES[arch],
+    build: expectedBuild,
     debArchitecture: debArch,
     platform: "linux",
     version: expectedVersion,
@@ -123,10 +127,11 @@ export async function verifyLinuxPackage({
 
 export async function verifyMacPackage({
   dmg,
+  expectedBuild,
   expectedTeamId,
   expectedVersion,
   executeCommand = execute,
-  readAsarVersion = packagedVersion,
+  readAsarMetadata = packagedMetadata,
 }) {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "magicchat-mac-package-"))
   const mountpoint = path.join(workspace, "dmg")
@@ -143,16 +148,18 @@ export async function verifyMacPackage({
     const dmgApp = await findUnique(mountpoint, "即应.app", "DMG 内缺少即应.app", true)
     await verifyMacApplication(
       dmgApp,
+      expectedBuild,
       expectedVersion,
       expectedTeamId,
       executeCommand,
-      readAsarVersion,
+      readAsarMetadata,
     )
   } finally {
     await executeCommand("/usr/bin/hdiutil", ["detach", mountpoint])
   }
   return {
     architectures: ["x86_64", "arm64"],
+    build: expectedBuild,
     platform: "mac",
     signed: true,
     teamId: expectedTeamId,
@@ -162,10 +169,11 @@ export async function verifyMacPackage({
 
 async function verifyMacApplication(
   application,
+  expectedBuild,
   expectedVersion,
   expectedTeamId,
   executeCommand,
-  readAsarVersion,
+  readAsarMetadata,
 ) {
   const plist = path.join(application, "Contents", "Info.plist")
   const identifier = await executeCommand("/usr/bin/plutil", [
@@ -195,8 +203,7 @@ async function verifyMacApplication(
     throw new Error("macOS 主二进制不是 x86_64/arm64 Universal")
   }
   const asar = path.join(application, "Contents", "Resources", "app.asar")
-  if ((await readAsarVersion(asar)) !== expectedVersion)
-    throw new Error("app.asar 内应用版本与 Tag 不一致")
+  await assertPackagedMetadata(asar, expectedVersion, expectedBuild, readAsarMetadata)
 
   await executeCommand("/usr/bin/codesign", [
     "--verify",
@@ -223,9 +230,19 @@ async function verifyMacApplication(
   ])
 }
 
-async function packagedVersion(asarPath) {
+async function packagedMetadata(asarPath) {
   const metadata = JSON.parse(extractFile(asarPath, "package.json").toString("utf8"))
-  return metadata.version
+  return { build: metadata.desktopBuild, version: metadata.version }
+}
+
+async function assertPackagedMetadata(asarPath, expectedVersion, expectedBuild, readMetadata) {
+  const metadata = await readMetadata(asarPath)
+  if (metadata?.version !== expectedVersion) {
+    throw new Error("app.asar 内应用版本与 Tag 不一致")
+  }
+  if (metadata?.build !== expectedBuild) {
+    throw new Error("app.asar 内 Desktop build 与发布元数据不一致")
+  }
 }
 
 async function readPeMachine(filePath) {

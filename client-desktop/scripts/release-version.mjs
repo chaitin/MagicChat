@@ -8,10 +8,16 @@ export function parseDesktopTag(tag) {
   return match.slice(1).join(".")
 }
 
-export async function writePackageVersion(packagePath, version) {
+export async function writePackageMetadata(packagePath, { build, version }) {
   assertStableVersion(version)
+  if (!Number.isSafeInteger(build) || build <= 0) {
+    throw new Error("Desktop build 必须是正整数")
+  }
   const original = JSON.parse(await readFile(packagePath, "utf8"))
-  await writeFile(packagePath, `${JSON.stringify({ ...original, version }, null, 2)}\n`)
+  await writeFile(
+    packagePath,
+    `${JSON.stringify({ ...original, desktopBuild: build, version }, null, 2)}\n`,
+  )
 }
 
 function assertStableVersion(version) {

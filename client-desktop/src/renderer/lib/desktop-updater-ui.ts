@@ -32,7 +32,9 @@ export function updateStatusText(state: UpdaterState, t: Translator): string {
   if (state.status === "unsupported") return t("settings.update.status.unsupported")
   if (state.status === "installing") return t("settings.update.status.installing")
   if (state.status === "downloading") {
-    return t("settings.update.status.downloading", { percent: Math.round(state.progress ?? 0) })
+    return state.progress === undefined
+      ? t("settings.update.status.downloadingUnknown")
+      : t("settings.update.status.downloading", { percent: Math.round(state.progress) })
   }
   if (state.status === "error") {
     return state.errorCode === "platform_signature_required"

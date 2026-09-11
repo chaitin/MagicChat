@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useLocale } from "@/components/locale-provider"
-import { Copy, RotateCcw } from "lucide-react"
+import { BookOpen, Copy, RotateCcw } from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -26,11 +26,15 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { writeHostClipboardText } from "@/lib/desktop-host"
+import { DesktopTargetContext } from "@/lib/desktop-target-context"
 import {
   buildAppWebSocketURL,
   regenerateClientAppSecret,
   type ClientAppCredentials,
 } from "@/lib/client-api/apps"
+
+const APP_DEVELOPMENT_DOCS_URL =
+  "https://github.com/chaitin/MagicChat/blob/main/APPLICATION_DEVELOPMENT.md"
 
 export function AppCredentialsDialog({
   credentials,
@@ -44,15 +48,19 @@ export function AppCredentialsDialog({
   open: boolean
 }) {
   const { t } = useLocale()
+  const target = React.useContext(DesktopTargetContext)
   const [resetOpen, setResetOpen] = React.useState(false)
   const [resetting, setResetting] = React.useState(false)
 
   if (!credentials) {
     return null
   }
+  if (!target) {
+    throw new Error("开发指南缺少认证服务器")
+  }
 
   const { app, connectionSecret } = credentials
-  const webSocketURL = buildAppWebSocketURL(window.location)
+  const webSocketURL = buildAppWebSocketURL(new URL(target.normalizedUrl))
 
   async function handleResetSecret() {
     if (resetting) {
@@ -98,15 +106,23 @@ export function AppCredentialsDialog({
           </div>
 
           <DialogFooter className="sm:justify-between">
-            <Button
-              disabled={resetting}
-              onClick={() => setResetOpen(true)}
-              type="button"
-              variant="secondary"
-            >
-              <RotateCcw />
-              {t("credentials.resetAction")}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                disabled={resetting}
+                onClick={() => setResetOpen(true)}
+                type="button"
+                variant="secondary"
+              >
+                <RotateCcw />
+                {t("credentials.resetAction")}
+              </Button>
+              <Button asChild variant="secondary">
+                <a href={APP_DEVELOPMENT_DOCS_URL} rel="noopener noreferrer" target="_blank">
+                  <BookOpen />
+                  {t("credentials.docs")}
+                </a>
+              </Button>
+            </div>
             <Button disabled={resetting} onClick={() => onOpenChange(false)} type="button">
               {t("credentials.close")}
             </Button>

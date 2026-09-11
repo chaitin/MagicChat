@@ -7,6 +7,7 @@ import type {
   UpdaterStatus,
 } from "@shared/bridge"
 import { releaseChannel } from "@main/diagnostics"
+import { desktopBuild } from "@main/desktop-build"
 import { RELEASE_ASSET_PREFIX, STABLE_UPDATER_CACHE_DIRECTORY_NAME } from "@main/app-identity"
 import { determineUpdateEligibility, type UpdateEligibilityInput } from "@main/updater-eligibility"
 import { installDesktopPackage } from "@main/desktop-package-installer"
@@ -39,6 +40,7 @@ export type UpdaterClock = {
 
 type UpdaterContext = UpdateEligibilityInput &
   Readonly<{
+    currentBuild: number
     currentVersion: string
   }>
 
@@ -52,7 +54,7 @@ type UpdaterServiceOptions = Readonly<{
   hasActiveTransfers?: () => boolean
   openExternal?: (url: string) => Promise<void>
   prepareInstall?: () => Promise<InstallRollback | void>
-  recordInstallIntent?: (targetVersion: string) => Promise<void>
+  recordInstallIntent?: (targetVersion: string, targetBuild: number) => Promise<void>
   updaterCachePath?: string
 }>
 
@@ -78,7 +80,10 @@ export class UpdaterService {
   private readonly listeners = new Set<(state: UpdaterState) => void>()
   private readonly openExternal: (url: string) => Promise<void>
   private readonly prepareInstall: () => Promise<InstallRollback | void>
-  private readonly recordInstallIntent: (targetVersion: string) => Promise<void>
+  private readonly recordInstallIntent: (
+    targetVersion: string,
+    targetBuild: number,
+  ) => Promise<void>
   private readonly updaterListeners: ReadonlyArray<
     readonly [UpdaterEvent, (payload?: unknown) => void]
   >
@@ -140,7 +145,7 @@ export class UpdaterService {
       return Promise.resolve()
     }
     if (this.downloadPromise) return this.downloadPromise
-    this.transition({ ...this.state, progress: 0, status: "downloading" })
+    this.transition({ ...this.state, progress: undefined, status: "downloading" })
     this.downloadPromise = this.adapter
       .downloadUpdate()
       .then(() => undefined)
@@ -166,6 +171,7 @@ export class UpdaterService {
       ...this.baseState(),
       retryable: true,
       status: "available",
+      targetBuild: this.state.targetBuild,
       targetVersion: this.state.targetVersion,
     })
     return this.state
@@ -180,7 +186,13 @@ export class UpdaterService {
     }
     if (this.installIntent) return { reason: "install_in_progress", status: "blocked" }
     const targetVersion = this.state.targetVersion
-    if (!targetVersion || !isStableVersion(targetVersion)) {
+    const targetBuild = this.state.targetBuild
+    if (
+      !targetVersion ||
+      !isStableVersion(targetVersion) ||
+      !Number.isSafeInteger(targetBuild) ||
+      Number(targetBuild) <= 0
+    ) {
       this.handleError(new Error("metadata invalid"))
       return { reason: "install_failed", status: "failed" }
     }
@@ -189,7 +201,7 @@ export class UpdaterService {
     try {
       const rollback = await this.prepareInstall()
       this.installRollback = typeof rollback === "function" ? rollback : undefined
-      await this.recordInstallIntent(targetVersion)
+      await this.recordInstallIntent(targetVersion, Number(targetBuild))
     } catch (error) {
       this.handleError(error)
       return { reason: "prepare_failed", status: "failed" }
@@ -232,6 +244,7 @@ export class UpdaterService {
       ...this.baseState(),
       retryable: true,
       status: "available",
+      targetBuild: this.state.targetBuild,
       targetVersion: this.state.targetVersion,
     })
   }
@@ -258,6 +271,7 @@ export class UpdaterService {
 
   private baseState(): Omit<UpdaterState, "status"> {
     return {
+      currentBuild: this.context.currentBuild,
       currentVersion: this.context.currentVersion,
       installMode: this.eligibility.mode,
       installationSource: this.eligibility.installationSource,
@@ -339,6 +353,7 @@ export class UpdaterService {
       manualAction: this.manualAction(),
       retryable: this.eligibility.mode === "ota",
       status: "available",
+      targetBuild: info.build,
       targetVersion: info.version,
     })
   }
@@ -365,6 +380,7 @@ export class UpdaterService {
       progress: 100,
       retryable: true,
       status: "downloaded",
+      targetBuild: info?.build ?? this.state.targetBuild,
       targetVersion: info?.version ?? this.state.targetVersion,
     })
   }
@@ -446,12 +462,15 @@ export function classifyUpdateError(error: unknown): UpdaterErrorCode {
   return "update_failed"
 }
 
-function updateInfo(value: unknown): { url?: string; version: string } | undefined {
+function updateInfo(value: unknown): { build: number; url?: string; version: string } | undefined {
   if (!value || typeof value !== "object" || !("version" in value)) return undefined
   const version = value.version
-  if (typeof version !== "string") return undefined
+  const build = "build" in value ? value.build : undefined
+  if (typeof version !== "string" || !Number.isSafeInteger(build) || Number(build) <= 0) {
+    return undefined
+  }
   const url = "url" in value && typeof value.url === "string" ? value.url : undefined
-  return { ...(url ? { url } : {}), version }
+  return { build: Number(build), ...(url ? { url } : {}), version }
 }
 
 function progressPercent(value: unknown): number | undefined {
@@ -467,6 +486,7 @@ function systemContext(): UpdaterContext {
     appImagePath: process.env.APPIMAGE,
     arch: process.arch,
     channel: releaseChannel(),
+    currentBuild: desktopBuild(),
     currentVersion: app.getVersion(),
     packaged: app.isPackaged,
     platform: process.platform,
@@ -488,6 +508,7 @@ function versionJsonUpdaterAdapter(
   return new VersionJsonUpdater({
     arch: context.arch,
     cacheDirectory,
+    currentBuild: context.currentBuild,
     currentVersion: context.currentVersion,
     fetcher: (url, init) => net.fetch(url, init),
     installPackage: (downloadedPath) =>

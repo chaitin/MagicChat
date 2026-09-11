@@ -21,7 +21,7 @@ describe("UpdateCacheLifecycle", () => {
     const service = createService(paths, "1.1.0")
     const cachePath = path.join(paths.updaterCache, "update.zip")
     await writeBytes(cachePath, 1024)
-    await service.recordInstallIntent("1.1.0")
+    await service.recordInstallIntent("1.1.0", 2)
 
     await expect(service.clearAfterHealthyStart()).resolves.toBe("cleared")
     await expect(readFile(cachePath)).rejects.toThrow()
@@ -35,7 +35,7 @@ describe("UpdateCacheLifecycle", () => {
     const service = createService(paths, "1.0.0")
     const cachePath = path.join(paths.updaterCache, "update.zip")
     await writeBytes(cachePath, 1024)
-    await service.recordInstallIntent("1.1.0")
+    await service.recordInstallIntent("1.1.0", 2)
 
     await expect(service.clearAfterHealthyStart()).resolves.toBe("version_mismatch")
     await expect(readFile(cachePath)).resolves.toBeInstanceOf(Buffer)
@@ -68,7 +68,7 @@ describe("UpdateCacheLifecycle", () => {
     }
     const firstStart = createService(paths, "1.1.0", removePath)
     await writeBytes(cachePath, 1024)
-    await firstStart.recordInstallIntent("1.1.0")
+    await firstStart.recordInstallIntent("1.1.0", 2)
 
     await expect(firstStart.clearAfterHealthyStart()).resolves.toBe("retry_pending")
     await expect(readFile(cachePath)).resolves.toBeInstanceOf(Buffer)
@@ -88,11 +88,35 @@ describe("UpdateCacheLifecycle", () => {
     const paths = await createPaths()
     const service = createService(paths, "1.0.0")
 
-    await service.recordInstallIntent("1.1.0")
+    await service.recordInstallIntent("1.1.0", 2)
 
     await expect(
       readFile(path.join(paths.userData, "update-install-intent.json"), "utf8"),
-    ).resolves.toBe('{"schemaVersion":1,"targetVersion":"1.1.0"}\n')
+    ).resolves.toBe('{"schemaVersion":2,"targetBuild":2,"targetVersion":"1.1.0"}\n')
+  })
+
+  it("版本相同但 build 不匹配时保留缓存和安装意图", async () => {
+    const paths = await createPaths()
+    const service = createService(paths, "1.1.0", undefined, 1)
+    const cachePath = path.join(paths.updaterCache, "update.zip")
+    await writeBytes(cachePath, 1024)
+    await service.recordInstallIntent("1.1.0", 2)
+
+    await expect(service.clearAfterHealthyStart()).resolves.toBe("build_mismatch")
+    await expect(readFile(cachePath)).resolves.toBeInstanceOf(Buffer)
+  })
+
+  it("兼容 schema 1 的 version-only 安装意图", async () => {
+    const paths = await createPaths()
+    const service = createService(paths, "1.1.0")
+    await writeBytes(path.join(paths.updaterCache, "update.zip"), 1024)
+    await mkdir(paths.userData, { recursive: true })
+    await writeFile(
+      path.join(paths.userData, "update-install-intent.json"),
+      '{"schemaVersion":1,"targetVersion":"1.1.0"}\n',
+    )
+
+    await expect(service.clearAfterHealthyStart()).resolves.toBe("cleared")
   })
 })
 
@@ -109,8 +133,10 @@ function createService(
   paths: { updaterCache: string; userData: string },
   currentVersion: string,
   removePath?: RemovePath,
+  currentBuild = 2,
 ): UpdateCacheLifecycle {
   return new UpdateCacheLifecycle({
+    currentBuild,
     currentVersion,
     removePath,
     updaterCachePath: paths.updaterCache,

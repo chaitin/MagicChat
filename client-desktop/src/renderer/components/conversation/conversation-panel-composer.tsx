@@ -125,6 +125,9 @@ export const ConversationPanelComposer = React.forwardRef<
   const previousSendingRef = React.useRef(sending)
   const shouldFocusAfterSendingRef = React.useRef(false)
   const sendInFlightRef = React.useRef(false)
+  const conversationIdRef = React.useRef(conversation.id)
+  conversationIdRef.current = conversation.id
+  const draftEditRevisionRef = React.useRef(0)
   const draftRef = React.useRef({ mentions: draftMentions, text: draft })
   draftRef.current = { mentions: draftMentions, text: draft }
   const [expressionPickerOpen, setExpressionPickerOpen] = React.useState(false)
@@ -303,8 +306,13 @@ export const ConversationPanelComposer = React.forwardRef<
     const cursor = event.target.selectionStart
     const nextMentions = syncDraftMentions(draftMentions, draft, nextDraft)
 
-    onDraftChange(nextDraft, nextMentions)
+    updateDraftFromUser(nextDraft, nextMentions)
     updateMentionTrigger(nextDraft, cursor)
+  }
+
+  function updateDraftFromUser(nextDraft: string, nextMentions: ConversationDraftMention[]) {
+    draftEditRevisionRef.current += 1
+    onDraftChange(nextDraft, nextMentions)
   }
 
   function updateMentionTrigger(value: string, cursor: number) {
@@ -324,23 +332,29 @@ export const ConversationPanelComposer = React.forwardRef<
   async function handleSendMessage() {
     const submitted = draftRef.current
     if (!submitted.text.trim() || sendInFlightRef.current) return
+    const submittedConversationId = conversation.id
+    const submittedRevision = draftEditRevisionRef.current
     shouldFocusAfterSendingRef.current = true
     sendInFlightRef.current = true
     setMentionTrigger(null)
     setSelectedMentionIndex(0)
+    draftRef.current = { mentions: [], text: "" }
+    onDraftChange("", [])
+    let accepted = false
     try {
-      const accepted = await onSendMessage(
-        createDraftMentionTemplate(submitted.text, submitted.mentions),
-      )
-      if (
-        accepted &&
-        draftRef.current.text === submitted.text &&
-        draftRef.current.mentions === submitted.mentions
-      ) {
-        onDraftChange("", [])
-      }
+      accepted = await onSendMessage(createDraftMentionTemplate(submitted.text, submitted.mentions))
     } finally {
       sendInFlightRef.current = false
+      if (
+        !accepted &&
+        conversationIdRef.current === submittedConversationId &&
+        draftEditRevisionRef.current === submittedRevision &&
+        draftRef.current.text === "" &&
+        draftRef.current.mentions.length === 0
+      ) {
+        draftRef.current = submitted
+        onDraftChange(submitted.text, submitted.mentions)
+      }
     }
   }
 
@@ -403,7 +417,7 @@ export const ConversationPanelComposer = React.forwardRef<
   }
 
   function handleTextareaValueChange(value: string, cursor?: number) {
-    onDraftChange(value, syncDraftMentions(draftMentions, draft, value))
+    updateDraftFromUser(value, syncDraftMentions(draftMentions, draft, value))
     updateMentionTrigger(value, cursor ?? value.length)
   }
 
@@ -455,7 +469,7 @@ export const ConversationPanelComposer = React.forwardRef<
       nextMention,
     ].sort((mentionA, mentionB) => mentionA.start - mentionB.start)
 
-    onDraftChange(nextDraft, nextMentions)
+    updateDraftFromUser(nextDraft, nextMentions)
     setMentionTrigger(null)
     setSelectedMentionIndex(0)
 
@@ -708,7 +722,7 @@ export const ConversationPanelComposer = React.forwardRef<
           </div>
         )}
         <div className="relative" data-testid="conversation-panel-editor-row">
-          <InputGroup>
+          <InputGroup className="workspace-composer-editor">
             <InputGroupTextarea
               ref={textareaRef}
               value={draft}
@@ -805,7 +819,7 @@ export const ConversationPanelComposer = React.forwardRef<
                 </InputGroupButton>
                 <InputGroupButton
                   aria-label={t("composer.send")}
-                  className="h-8 px-3"
+                  className="workspace-send-button h-8 px-3"
                   disabled={sending}
                   onClick={handleSendMessage}
                   size="sm"

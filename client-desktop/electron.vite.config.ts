@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import path from "node:path"
 import { defineConfig } from "electron-vite"
 import react from "@vitejs/plugin-react"
@@ -56,6 +57,13 @@ const releaseChannel =
   configuredReleaseChannel === "stable" || configuredReleaseChannel === "preview"
     ? configuredReleaseChannel
     : "test"
+const packageMetadata = JSON.parse(
+  readFileSync(path.resolve(__dirname, "package.json"), "utf8"),
+) as { desktopBuild?: unknown }
+const desktopBuild = packageMetadata.desktopBuild
+if (!Number.isSafeInteger(desktopBuild) || Number(desktopBuild) < 0) {
+  throw new Error("Desktop build 必须是非负整数")
+}
 
 export default defineConfig({
   main: {
@@ -66,6 +74,7 @@ export default defineConfig({
       },
     },
     define: {
+      "process.env.MAGICCHAT_DESKTOP_BUILD": JSON.stringify(String(desktopBuild)),
       "process.env.MAGICCHAT_RELEASE_CHANNEL": JSON.stringify(releaseChannel),
     },
     resolve: { alias: processAliases },

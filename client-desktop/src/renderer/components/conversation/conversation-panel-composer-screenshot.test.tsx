@@ -1,5 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { useState } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type {
   ScreenshotConversationResult,
@@ -298,7 +299,63 @@ describe("ConversationPanelComposer 截图", () => {
     await user.keyboard("{Meta>}{Enter}{/Meta}")
     expect(onSendMessage).toHaveBeenCalledWith("你好")
   })
+
+  it("发送时立即清空草稿，成功后保留发送期间的新输入", async () => {
+    const user = userEvent.setup()
+    const pending = deferred<boolean>()
+    const onSendMessage = vi.fn(() => pending.promise)
+    render(<ControlledComposer initialDraft="第一条" onSendMessage={onSendMessage} />)
+
+    const input = screen.getByPlaceholderText("输入消息")
+    await user.click(input)
+    await user.keyboard("{Enter}")
+
+    expect(onSendMessage).toHaveBeenCalledWith("第一条")
+    expect(input).toHaveValue("")
+
+    await user.type(input, "第二条")
+    pending.resolve(true)
+
+    await waitFor(() => expect(input).toHaveValue("第二条"))
+  })
+
+  it("发送失败时恢复原草稿，并阻止请求完成前重复发送", async () => {
+    const user = userEvent.setup()
+    const pending = deferred<boolean>()
+    const onSendMessage = vi.fn(() => pending.promise)
+    render(<ControlledComposer initialDraft="待重试" onSendMessage={onSendMessage} />)
+
+    const input = screen.getByPlaceholderText("输入消息")
+    await user.click(input)
+    await user.keyboard("{Enter}{Enter}")
+
+    expect(onSendMessage).toHaveBeenCalledOnce()
+    expect(input).toHaveValue("")
+
+    pending.resolve(false)
+
+    await waitFor(() => expect(input).toHaveValue("待重试"))
+  })
 })
+
+function ControlledComposer({
+  initialDraft,
+  onSendMessage,
+}: {
+  initialDraft: string
+  onSendMessage: (content?: string) => Promise<boolean>
+}) {
+  const [draft, setDraft] = useState(initialDraft)
+  return composerElement(conversation, { draft, onDraftChange: setDraft, onSendMessage })
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+  return { promise, resolve }
+}
 
 function renderComposer() {
   return render(composerElement(conversation))

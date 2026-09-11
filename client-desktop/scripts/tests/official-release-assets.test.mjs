@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest"
 import { prepareOfficialReleaseAssets } from "../official-release-assets.mjs"
 
 describe("官网手工上传资产", () => {
-  it("将版本化全量包改为官网固定文件名并最后提供完整清单", async () => {
+  it("将版本化全量包改为官网固定文件名并输出三字段清单", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "magicchat-official-assets-"))
     const input = path.join(root, "release")
     const output = path.join(root, "official")
@@ -52,10 +52,11 @@ describe("官网手工上传资产", () => {
     ])
     const manifest = JSON.parse(await readFile(path.join(output, "version.json"), "utf8"))
     expect(manifest.android.url).toBe("https://jiying.chat/releases/jiying.apk")
-    expect(manifest.windows.url).toBe("https://jiying.chat/releases/jiying.exe")
-    expect(manifest.windows.sha512).toBe(
-      createHash("sha512").update(files.windows).digest("base64"),
-    )
+    expect(manifest.windows).toEqual({
+      build: 18,
+      url: "https://jiying.chat/releases/jiying.exe",
+      version,
+    })
     expect(await readFile(path.join(output, "SHA256SUMS.txt"), "utf8")).toContain(
       "jiying.arm.AppImage",
     )

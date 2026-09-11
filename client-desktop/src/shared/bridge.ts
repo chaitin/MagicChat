@@ -234,6 +234,7 @@ export type UpdaterErrorCode =
   | "update_failed"
 
 export type UpdaterState = Readonly<{
+  currentBuild: number
   currentVersion: string
   errorCode?: UpdaterErrorCode
   installMode: "manual" | "ota" | "unsupported"
@@ -242,6 +243,7 @@ export type UpdaterState = Readonly<{
   progress?: number
   retryable: boolean
   status: UpdaterStatus
+  targetBuild?: number
   targetVersion?: string
 }>
 

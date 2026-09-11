@@ -85,10 +85,17 @@ export function validateDesktopReleaseWorkflow(workflow) {
   const releaseCommands = commands(jobs.release)
   assert(releaseCommands.includes("release:prepare-assets"), "release 必须使用单一资产准备入口")
   assert(
-    releaseCommands.includes("github.run_attempt"),
-    "Desktop build 必须使用同一 workflow run 的执行轮次",
+    !releaseCommands.includes("release-version-base.json"),
+    "不得再依赖仓库中的 release-version-base.json",
   )
-  assert(!releaseCommands.includes("github.run_number"), "Desktop build 不得使用仓库累计运行编号")
+  assert(
+    releaseCommands.includes("needs.quality.outputs.build"),
+    "Desktop build 必须来自 quality 输出",
+  )
+  assert(
+    !releaseCommands.includes("github.run_attempt"),
+    "Desktop build 不得使用 workflow 重试次数",
+  )
   assert(releaseCommands.includes("release:prepare-official"), "release 必须生成官网手工上传目录")
   assert(releaseCommands.includes("release:publish"), "release 必须使用 Draft 发布事务")
   assert(!releaseCommands.includes("gh release delete"), "禁止按 Tag 删除 Release")

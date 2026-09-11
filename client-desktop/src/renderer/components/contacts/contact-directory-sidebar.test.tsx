@@ -7,6 +7,7 @@ import { ContactDirectorySidebar } from "@/components/contacts/contact-directory
 import { SidebarProvider } from "@/components/ui/sidebar"
 import type { ContactApp, ContactUser } from "@/lib/client-data-api"
 import type { ClientAppCredentials } from "@/lib/client-api/apps"
+import { DesktopTargetContext } from "@/lib/desktop-target-context"
 
 const appApiMocks = vi.hoisted(() => ({
   createClientApp: vi.fn(),
@@ -168,16 +169,20 @@ describe("ContactDirectorySidebar", () => {
     }
 
     render(
-      <SidebarProvider>
-        <ContactDirectorySidebar
-          {...createSidebarProps({
-            activeTab: "app",
-            appGrantUsers: [grantableUser],
-            apps: [createApp("owned-app", "我的助手", "current-user")],
-            onRefresh,
-          })}
-        />
-      </SidebarProvider>,
+      <DesktopTargetContext.Provider
+        value={{ id: "server-1", normalizedUrl: "https://chat.example.com", userId: "user-1" }}
+      >
+        <SidebarProvider>
+          <ContactDirectorySidebar
+            {...createSidebarProps({
+              activeTab: "app",
+              appGrantUsers: [grantableUser],
+              apps: [createApp("owned-app", "我的助手", "current-user")],
+              onRefresh,
+            })}
+          />
+        </SidebarProvider>
+      </DesktopTargetContext.Provider>,
     )
 
     await user.click(screen.getByRole("button", { name: "创建应用" }))
@@ -226,9 +231,13 @@ describe("ContactDirectorySidebar", () => {
       name: "开发指南",
     })
     expect(within(credentialsDialog).getByLabelText("连接密钥")).toHaveValue("app-secret")
-    expect(
-      (within(credentialsDialog).getByLabelText("WebSocket 地址") as HTMLInputElement).value,
-    ).toMatch(/\/api\/app\/ws$/)
+    expect(within(credentialsDialog).getByLabelText("WebSocket 地址")).toHaveValue(
+      "wss://chat.example.com/api/app/ws",
+    )
+    expect(within(credentialsDialog).getByRole("link", { name: "开发文档" })).toHaveAttribute(
+      "href",
+      "https://github.com/chaitin/MagicChat/blob/main/APPLICATION_DEVELOPMENT.md",
+    )
     expect(screen.queryByRole("dialog", { name: "创建应用" })).not.toBeInTheDocument()
     expect(toastMocks.success).toHaveBeenCalledWith("应用创建成功")
     expect(onRefresh).toHaveBeenCalledOnce()

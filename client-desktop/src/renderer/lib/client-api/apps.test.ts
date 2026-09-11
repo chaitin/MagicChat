@@ -204,6 +204,9 @@ describe("client app API", () => {
         protocol: "https:",
       }),
     ).toBe("wss://chat.example.com/api/app/ws")
+    expect(buildAppWebSocketURL(new URL("http://localhost:20080"))).toBe(
+      "ws://localhost:20080/api/app/ws",
+    )
   })
 })
 

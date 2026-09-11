@@ -18,6 +18,7 @@ jobs:
     timeout-minutes: 20
     outputs:
       commit: ${{ steps.release.outputs.commit }}
+      build: ${{ steps.release.outputs.build }}
       tag: ${{ steps.release.outputs.tag }}
       version: ${{ steps.release.outputs.version }}
     steps:
@@ -129,7 +130,7 @@ jobs:
         run: pnpm exec electron-builder --${{ matrix.platform }} ${{ matrix.target }} --${{ matrix.arch }} --config electron-builder.yml --publish never
       - name: 校验安装包真实版本与架构
         working-directory: ${{ steps.worktree.outputs.desktop-directory }}
-        run: pnpm verify:package -- --platform ${{ matrix.platform }} --arch ${{ matrix.arch }} --tag "${{ needs.quality.outputs.tag }}"
+        run: pnpm verify:package -- --platform ${{ matrix.platform }} --arch ${{ matrix.arch }} --tag "${{ needs.quality.outputs.tag }}" --build "${{ needs.quality.outputs.build }}"
       - uses: actions/upload-artifact@v4
         with:
           name: jiying-desktop-${{ matrix.platform }}-${{ matrix.arch }}
@@ -168,8 +169,7 @@ jobs:
         run: |
           pnpm release:prepare-assets -- \
             --tag "${{ needs.quality.outputs.tag }}" \
-            --build "${{ github.run_attempt }}" \
-            --version-base release-version-base.json \
+            --build "${{ needs.quality.outputs.build }}" \
             --commit "${{ needs.quality.outputs.commit }}" \
             --output ../release-assets \
             --input win:x64:../artifacts/jiying-desktop-win-x64 \

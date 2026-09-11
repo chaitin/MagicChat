@@ -53,7 +53,11 @@ describe("桌面 version.json", () => {
   })
 
   it("读取当前平台字段并拒绝不安全元数据", () => {
-    expect(selectDesktopVersionEntry(manifest, "win32", "x64")).toEqual(manifest.windows)
+    expect(selectDesktopVersionEntry(manifest, "win32", "x64")).toEqual({
+      build: manifest.windows.build,
+      url: manifest.windows.url,
+      version: manifest.windows.version,
+    })
     for (const url of [
       "http://jiying.chat/releases/jiying.exe",
       "https://evil.example/Jiying-1.8.0-win-x64.exe",
@@ -80,18 +84,23 @@ describe("桌面 version.json", () => {
     ).toThrow("version")
   })
 
-  it("强制要求安装包大小和 SHA-512", () => {
-    const missingSize = { ...manifest.windows } as Partial<typeof manifest.windows>
-    delete missingSize.size
-    expect(() =>
-      selectDesktopVersionEntry({ ...manifest, windows: missingSize }, "win32", "x64"),
-    ).toThrow("size")
-
-    const missingSha512 = { ...manifest.windows } as Partial<typeof manifest.windows>
-    delete missingSha512.sha512
-    expect(() =>
-      selectDesktopVersionEntry({ ...manifest, windows: missingSha512 }, "win32", "x64"),
-    ).toThrow("sha512")
+  it("只读取 build、version 和 url，忽略额外完整性字段", () => {
+    expect(
+      selectDesktopVersionEntry(
+        {
+          ...manifest,
+          windows: {
+            build: 8,
+            sha512: "ignored",
+            size: "ignored",
+            url: manifest.windows.url,
+            version: "1.8.0",
+          },
+        },
+        "win32",
+        "x64",
+      ),
+    ).toEqual({ build: 8, url: manifest.windows.url, version: "1.8.0" })
   })
 
   it("只接受官网固定的 manifest 地址和单一缓存参数", () => {

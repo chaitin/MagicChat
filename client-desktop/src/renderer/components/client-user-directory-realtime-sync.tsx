@@ -7,7 +7,13 @@ type FriendRefreshIntent = "directory" | "requests"
 
 export function ClientUserDirectoryRealtimeSync() {
   const { ready, subscribeRealtimeEvent } = useRealtime()
-  const { invalidateUsers, refreshFriendData, updateUserPresence, usersById = {} } = useClientData()
+  const {
+    invalidateUsers,
+    refreshFriendData,
+    refreshMe,
+    updateUserPresence,
+    usersById = {},
+  } = useClientData()
   const usersByIdRef = React.useRef(usersById)
   const requestFriendRefreshRef = React.useRef<((intent: FriendRefreshIntent) => void) | null>(null)
   const wasReadyRef = React.useRef(false)
@@ -27,11 +33,21 @@ export function ClientUserDirectoryRealtimeSync() {
       const update = readPresenceUpdate(payload)
       if (update) updateUserPresence?.(update.userId, update.online, update.lastOnlineAt)
     })
+    const unsubscribeNicknamePolicy = subscribeRealtimeEvent(
+      "user.nickname.policy.updated",
+      (payload) => {
+        const update = readNicknamePolicyUpdate(payload)
+        if (!update) return
+        invalidateUsers?.(Object.keys(usersByIdRef.current), update.updatedAt)
+        void refreshMe().catch(() => undefined)
+      },
+    )
     return () => {
       unsubscribeProfile()
       unsubscribePresence()
+      unsubscribeNicknamePolicy()
     }
-  }, [invalidateUsers, subscribeRealtimeEvent, updateUserPresence])
+  }, [invalidateUsers, refreshMe, subscribeRealtimeEvent, updateUserPresence])
 
   React.useEffect(() => {
     let active = true
@@ -153,6 +169,15 @@ function readPresenceUpdate(payload: unknown) {
     online: value.online,
     userId: value.user_id,
   }
+}
+
+function readNicknamePolicyUpdate(payload: unknown) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null
+  const value = payload as { updated_at?: unknown }
+  if (typeof value.updated_at !== "string" || Number.isNaN(Date.parse(value.updated_at))) {
+    return null
+  }
+  return { updatedAt: value.updated_at }
 }
 
 function isFriendRequestEvent(payload: unknown) {

@@ -1,6 +1,7 @@
 {
   "name": "magicchat-desktop",
   "version": "0.1.0",
+  "desktopBuild": 0,
   "private": true,
   "description": "即应三平台桌面客户端",
   "homepage": "https://jiying.chat",

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { createDesktopVersionFile, validateVersionFile } from "../desktop-version-file.mjs"
+import {
+  createDesktopVersionFile,
+  OFFICIAL_VERSION_MANIFEST_URL,
+  readOfficialVersionBase,
+  validateVersionFile,
+} from "../desktop-version-file.mjs"
 
 const sha512 = Buffer.alloc(64, 0x5a).toString("base64")
 const integrity = {
@@ -81,5 +86,47 @@ describe("桌面发布 version.json", () => {
         windows: { ...generated.windows, url: "https://evil.example/Jiying-1.8.0-win-x64.exe" },
       }),
     ).toThrow("受信任")
+  })
+
+  it("优先从官网读取 version.json 作为移动端字段来源", async () => {
+    const fetchImpl = async (url) => {
+      expect(url).toBe(OFFICIAL_VERSION_MANIFEST_URL)
+      return { ok: true, json: async () => base }
+    }
+    await expect(readOfficialVersionBase({ fetchImpl })).resolves.toEqual(base)
+  })
+
+  it("官网失败时回退到最新 GitHub Release 的 version.json", async () => {
+    const urls = []
+    const fetchImpl = async (url) => {
+      urls.push(url)
+      if (url === OFFICIAL_VERSION_MANIFEST_URL) return { ok: false, status: 502 }
+      return { ok: true, json: async () => base }
+    }
+    await expect(readOfficialVersionBase({ fetchImpl })).resolves.toEqual(base)
+    expect(urls).toEqual([
+      OFFICIAL_VERSION_MANIFEST_URL,
+      "https://github.com/ptonlix/MagicChat/releases/latest/download/version.json",
+    ])
+  })
+
+  it("官网和 GitHub 都不可用时失败", async () => {
+    await expect(
+      readOfficialVersionBase({
+        fetchImpl: async () => {
+          throw new Error("offline")
+        },
+      }),
+    ).rejects.toThrow("无法读取移动端 version 字段")
+  })
+
+  it("拒绝缺少移动端字段的官网 version.json", async () => {
+    const missingIos = structuredClone(base)
+    delete missingIos.ios
+    await expect(
+      readOfficialVersionBase({
+        fetchImpl: async () => ({ ok: true, json: async () => missingIos }),
+      }),
+    ).rejects.toThrow("ios")
   })
 })

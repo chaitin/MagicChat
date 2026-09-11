@@ -4,8 +4,6 @@ export type DesktopVersionKey = "linux-amd" | "linux-arm" | "macos" | "windows"
 
 export type DesktopVersionEntry = Readonly<{
   build: number
-  sha512: string
-  size: number
   url: string
   version: string
 }>
@@ -100,7 +98,7 @@ export function isAllowedDesktopPackageUrl(
 
 function parseDesktopVersionEntry(value: unknown, key: DesktopVersionKey): DesktopVersionEntry {
   if (!isObject(value)) throw new Error(`metadata invalid ${key}`)
-  const { build, sha512, size, url, version } = value
+  const { build, url, version } = value
   if (!Number.isSafeInteger(build) || (build as number) <= 0) {
     throw new Error(`metadata invalid ${key} build`)
   }
@@ -108,16 +106,8 @@ function parseDesktopVersionEntry(value: unknown, key: DesktopVersionKey): Deskt
   if (typeof url !== "string" || !isAllowedDesktopPackageUrl(url, key, version)) {
     throw new Error(`metadata invalid ${key} url`)
   }
-  if (!Number.isSafeInteger(size) || (size as number) <= 0) {
-    throw new Error(`metadata invalid ${key} size`)
-  }
-  if (typeof sha512 !== "string" || !isSha512(sha512)) {
-    throw new Error(`metadata invalid ${key} sha512`)
-  }
   return {
     build: build as number,
-    sha512,
-    size: size as number,
     url,
     version,
   }
@@ -136,15 +126,6 @@ function parseUrl(value: string): URL | undefined {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
-}
-
-function isSha512(value: string): boolean {
-  try {
-    const decoded = Buffer.from(value, "base64")
-    return decoded.byteLength === 64 && decoded.toString("base64") === value
-  } catch {
-    return false
-  }
 }
 
 function stableVersionParts(value: string): [number, number, number] {

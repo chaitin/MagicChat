@@ -15,6 +15,7 @@ import { FileDocumentWindowStateStore } from "@main/document-window-state"
 import { ConfigStore } from "@main/config-store"
 import { CredentialStore } from "@main/credential-store"
 import { Diagnostics } from "@main/diagnostics"
+import { desktopBuild } from "@main/desktop-build"
 import { normalizeDiagnosticProcessExitReason } from "@shared/diagnostics-contract"
 import { parseDeepLink } from "@main/deep-links"
 import { FileService } from "@main/file-service"
@@ -158,6 +159,7 @@ async function start(): Promise<void> {
   })
   const uploads = new StreamingUploadController(profiles, sessions)
   const updateCache = new UpdateCacheLifecycle({
+    currentBuild: desktopBuild(),
     currentVersion: app.getVersion(),
     updaterCachePath: updaterCachePath(),
     userDataPath: app.getPath("userData"),
@@ -166,7 +168,8 @@ async function start(): Promise<void> {
     discardInstallIntent: () => updateCache.discardInstallIntent(),
     hasActiveTransfers: () => files.hasActiveTransfers() || uploads.hasActiveTransfers(),
     prepareInstall: () => prepareUpdateInstall({ documentWindows, messageCache, windows }),
-    recordInstallIntent: (targetVersion) => updateCache.recordInstallIntent(targetVersion),
+    recordInstallIntent: (targetVersion, targetBuild) =>
+      updateCache.recordInstallIntent(targetVersion, targetBuild),
     updaterCachePath: updaterCachePath(),
   })
   const storage = new StorageService({

@@ -41,8 +41,9 @@ describe("原生安装包真实性解析", () => {
       verifyWindowsPackage({
         ...fixture,
         executeCommand: async () => ({ stdout: calls++ === 0 ? "1.2.3\n" : "1.2.3.0\n" }),
+        expectedBuild: 2,
         expectedVersion: "1.2.3",
-        readAsarVersion: async () => "1.2.3",
+        readAsarMetadata: async () => ({ build: 2, version: "1.2.3" }),
       }),
     ).resolves.toMatchObject({
       installerMachine: 0x14c,
@@ -58,8 +59,9 @@ describe("原生安装包真实性解析", () => {
         verifyWindowsPackage({
           ...fixture,
           executeCommand: async () => ({ stdout: `${productVersion}\n` }),
+          expectedBuild: 2,
           expectedVersion: "1.2.3",
-          readAsarVersion: async () => "1.2.3",
+          readAsarMetadata: async () => ({ build: 2, version: "1.2.3" }),
         }),
       ).rejects.toThrow(`期望 1.2.3，实际 ${productVersion}`)
     },
@@ -72,8 +74,9 @@ describe("原生安装包真实性解析", () => {
       verifyWindowsPackage({
         ...fixture,
         executeCommand: async () => ({ stdout: calls++ === 0 ? "1.2.3\n" : "1.2.30.0\n" }),
+        expectedBuild: 2,
         expectedVersion: "1.2.3",
-        readAsarVersion: async () => "1.2.3",
+        readAsarMetadata: async () => ({ build: 2, version: "1.2.3" }),
       }),
     ).rejects.toThrow("Windows 打包应用文件版本与 Tag 不一致")
   })
@@ -90,6 +93,7 @@ describe("原生安装包真实性解析", () => {
         applicationDirectory: "missing",
         artifact: brokenArtifact,
         executeCommand: async () => ({ stdout: "1.2.3\n" }),
+        expectedBuild: 2,
         expectedVersion: "1.2.3",
       }),
     ).rejects.toThrow("有效 PE")
@@ -106,8 +110,9 @@ describe("原生安装包真实性解析", () => {
         applicationDirectory,
         artifact,
         executeCommand: async () => ({ stdout: "1.2.3\n" }),
+        expectedBuild: 2,
         expectedVersion: "1.2.3",
-        readAsarVersion: async () => "1.2.3",
+        readAsarMetadata: async () => ({ build: 2, version: "1.2.3" }),
       }),
     ).rejects.toThrow("目标架构不一致")
   })
@@ -136,8 +141,9 @@ describe("原生安装包真实性解析", () => {
         dmg: path.join(root, "app.dmg"),
         executeCommand,
         expectedTeamId: "8RK3WCWST9",
+        expectedBuild: 2,
         expectedVersion: "1.2.3",
-        readAsarVersion: async () => "1.2.3",
+        readAsarMetadata: async () => ({ build: 2, version: "1.2.3" }),
       }),
     ).resolves.toMatchObject({ architectures: ["x86_64", "arm64"] })
     await expect(
@@ -148,8 +154,9 @@ describe("原生安装包真实性解析", () => {
           return command.endsWith("lipo") ? { stdout: "arm64\n" } : result
         },
         expectedTeamId: "8RK3WCWST9",
+        expectedBuild: 2,
         expectedVersion: "1.2.3",
-        readAsarVersion: async () => "1.2.3",
+        readAsarMetadata: async () => ({ build: 2, version: "1.2.3" }),
       }),
     ).rejects.toThrow("Universal")
 
@@ -168,8 +175,9 @@ describe("原生安装包真实性解析", () => {
           return result
         },
         expectedTeamId: "8RK3WCWST9",
+        expectedBuild: 2,
         expectedVersion: "1.2.3",
-        readAsarVersion: async () => "1.2.3",
+        readAsarMetadata: async () => ({ build: 2, version: "1.2.3" }),
       }),
     ).rejects.toThrow("Team ID")
   })
@@ -187,8 +195,9 @@ describe("原生安装包真实性解析", () => {
           arch,
           deb: fixture.deb,
           executeCommand: fixture.executeCommand,
+          expectedBuild: 2,
           expectedVersion: "1.2.3",
-          readAsarVersion: async () => "1.2.3",
+          readAsarMetadata: async () => ({ build: 2, version: "1.2.3" }),
         }),
       ).resolves.toMatchObject({ appImageMachine: machine, debArchitecture: debArch })
       expect(fixture.metadataFields).toEqual(["Architecture", "Version"])
@@ -206,8 +215,9 @@ describe("原生安装包真实性解析", () => {
         arch: "x64",
         deb: fixture.deb,
         executeCommand: fixture.executeCommand,
+        expectedBuild: 2,
         expectedVersion: "1.2.3",
-        readAsarVersion: async () => "1.2.3",
+        readAsarMetadata: async () => ({ build: 2, version: "1.2.3" }),
       }),
     ).rejects.toThrow(message)
   })
@@ -259,11 +269,12 @@ async function createLinuxPackageFixture({ debArch = "amd64", debVersion = "1.2.
       metadataFields.push(args[2])
       return { stdout: `${args[2] === "Architecture" ? debArch : debVersion}\n` }
     } else if (command === "dpkg-deb" && args[0] === "-x") {
-      await mkdir(path.join(args[2], "usr/lib/magicchat"), { recursive: true })
+      await mkdir(path.join(args[2], "usr/lib/magicchat/resources"), { recursive: true })
       await writeFile(
         path.join(args[2], "usr/lib/magicchat/magicchat-desktop"),
         elfFixture(machine),
       )
+      await writeFile(path.join(args[2], "usr/lib/magicchat/resources/app.asar"), "asar")
     }
     return { stdout: "" }
   }

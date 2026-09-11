@@ -342,6 +342,7 @@ function DesktopRoutedWorkspace() {
 
 function useDesktopUpdaterState() {
   const [updater, setUpdater] = useState<UpdaterState>({
+    currentBuild: 0,
     currentVersion: "",
     installMode: "manual",
     installationSource: "development",
@@ -645,7 +646,9 @@ function DesktopHostedApp({
 
 function updatePromptLabel(state: UpdaterState, t: ReturnType<typeof useLocale>["t"]): string {
   if (state.status === "downloading") {
-    return t("settings.update.prompt.downloading", { percent: Math.round(state.progress ?? 0) })
+    return state.progress === undefined
+      ? t("settings.update.prompt.downloadingUnknown")
+      : t("settings.update.prompt.downloading", { percent: Math.round(state.progress) })
   }
   if (state.status === "downloaded") return t("settings.update.prompt.downloaded")
   if (state.status === "installing") return t("settings.update.prompt.installing")

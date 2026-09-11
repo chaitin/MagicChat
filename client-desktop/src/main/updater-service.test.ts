@@ -33,6 +33,7 @@ describe("UpdaterService", () => {
     const service = createService(adapter, clock)
     const check = service.check()
     adapter.emit("update-available", {
+      build: 2,
       releaseNotes: "<b>修复</b> https://evil.example/token\u0000",
       version: "1.1.0",
     })
@@ -40,17 +41,18 @@ describe("UpdaterService", () => {
     expect(service.current()).toMatchObject({ status: "available", targetVersion: "1.1.0" })
     expect(service.current()).not.toHaveProperty("releaseNotes")
     const download = service.download()
+    expect(service.current().progress).toBeUndefined()
     adapter.emit("download-progress", { percent: 60 })
     adapter.emit("download-progress", { percent: 20 })
     expect(service.current().progress).toBe(60)
-    adapter.emit("update-downloaded", { version: "1.1.0" })
+    adapter.emit("update-downloaded", { build: 2, version: "1.1.0" })
     await download
     expect(service.current()).toMatchObject({ progress: 100, status: "downloaded" })
   })
 
   it("拒绝乱序事件并在错误后使用不少于 15 分钟的退避", async () => {
     const service = createService(adapter, clock)
-    adapter.emit("update-downloaded", { version: "1.1.0" })
+    adapter.emit("update-downloaded", { build: 2, version: "1.1.0" })
     expect(service.current().status).toBe("idle")
     adapter.checkResult = Promise.reject(new Error("status code 429"))
     await service.check()
@@ -70,11 +72,12 @@ describe("UpdaterService", () => {
   it("下载失败保持当前版本并进入可重试错误", async () => {
     const service = createService(adapter, clock)
     const check = service.check()
-    adapter.emit("update-available", { version: "1.1.0" })
+    adapter.emit("update-available", { build: 2, version: "1.1.0" })
     await check
     adapter.downloadResult = Promise.reject(new Error("checksum mismatch"))
     await service.download()
     expect(service.current()).toMatchObject({
+      currentBuild: 1,
       currentVersion: "1.0.0",
       errorCode: "checksum_invalid",
       retryable: true,
@@ -85,10 +88,10 @@ describe("UpdaterService", () => {
   it("丢弃已下载更新后恢复为可重新下载状态", async () => {
     const service = createService(adapter, clock)
     const check = service.check()
-    adapter.emit("update-available", { version: "1.1.0" })
+    adapter.emit("update-available", { build: 2, version: "1.1.0" })
     await check
     const download = service.download()
-    adapter.emit("update-downloaded", { version: "1.1.0" })
+    adapter.emit("update-downloaded", { build: 2, version: "1.1.0" })
     await download
 
     expect(service.canDiscardDownloadedUpdate()).toBe(true)
@@ -106,7 +109,7 @@ describe("UpdaterService", () => {
     adapter.downloadResult = pending.promise
     const service = createService(adapter, clock)
     const check = service.check()
-    adapter.emit("update-available", { version: "1.1.0" })
+    adapter.emit("update-available", { build: 2, version: "1.1.0" })
     await check
     const download = service.download()
 
@@ -120,7 +123,7 @@ describe("UpdaterService", () => {
     adapter.downloadResult = pending.promise
     const service = createService(adapter, clock)
     const check = service.check()
-    adapter.emit("update-available", { version: "1.1.0" })
+    adapter.emit("update-available", { build: 2, version: "1.1.0" })
     await check
     const download = service.download()
 
@@ -141,6 +144,7 @@ describe("UpdaterService", () => {
       context: {
         arch: "arm64",
         channel: "stable",
+        currentBuild: 1,
         currentVersion: "1.0.0",
         packaged: true,
         platform: "darwin",
@@ -150,7 +154,7 @@ describe("UpdaterService", () => {
       },
     })
     const check = service.check()
-    adapter.emit("update-available", { version: "1.1.0" })
+    adapter.emit("update-available", { build: 2, version: "1.1.0" })
     await check
 
     await service.openReleasePage()
@@ -175,6 +179,7 @@ describe("UpdaterService", () => {
           appImagePath,
           arch,
           channel: "stable",
+          currentBuild: 1,
           currentVersion: "1.0.0",
           packaged: true,
           platform,
@@ -184,7 +189,7 @@ describe("UpdaterService", () => {
         },
       })
       const check = service.check()
-      adapter.emit("update-available", { version: "1.1.0" })
+      adapter.emit("update-available", { build: 2, version: "1.1.0" })
       await check
 
       await service.openManualDownload()
@@ -206,15 +211,15 @@ describe("UpdaterService", () => {
       prepareInstall: async () => {
         order.push("prepare")
       },
-      recordInstallIntent: async (targetVersion) => {
-        order.push(`record:${targetVersion}`)
+      recordInstallIntent: async (targetVersion, targetBuild) => {
+        order.push(`record:${targetVersion}:${targetBuild}`)
       },
     })
     const check = service.check()
-    adapter.emit("update-available", { version: "1.1.0" })
+    adapter.emit("update-available", { build: 2, version: "1.1.0" })
     await check
     const download = service.download()
-    adapter.emit("update-downloaded", { version: "1.1.0" })
+    adapter.emit("update-downloaded", { build: 2, version: "1.1.0" })
     await download
     await expect(service.install()).resolves.toEqual({
       reason: "active_transfers",
@@ -222,7 +227,7 @@ describe("UpdaterService", () => {
     })
     active = false
     await expect(service.install()).resolves.toEqual({ status: "started" })
-    expect(order).toEqual(["prepare", "record:1.1.0", "quit"])
+    expect(order).toEqual(["prepare", "record:1.1.0:2", "quit"])
     expect(service.isInstallIntent()).toBe(true)
     await expect(service.install()).resolves.toEqual({
       reason: "not_downloaded",
@@ -235,10 +240,10 @@ describe("UpdaterService", () => {
       prepareInstall: () => Promise.reject(new Error("permission denied")),
     })
     const check = service.check()
-    adapter.emit("update-available", { version: "1.1.0" })
+    adapter.emit("update-available", { build: 2, version: "1.1.0" })
     await check
     const download = service.download()
-    adapter.emit("update-downloaded", { version: "1.1.0" })
+    adapter.emit("update-downloaded", { build: 2, version: "1.1.0" })
     await download
     await expect(service.install()).resolves.toEqual({
       reason: "prepare_failed",
@@ -260,17 +265,17 @@ describe("UpdaterService", () => {
       recordInstallIntent,
     })
     const check = service.check()
-    adapter.emit("update-available", { version: "1.1.0" })
+    adapter.emit("update-available", { build: 2, version: "1.1.0" })
     await check
     const download = service.download()
-    adapter.emit("update-downloaded", { version: "1.1.0" })
+    adapter.emit("update-downloaded", { build: 2, version: "1.1.0" })
     await download
 
     await expect(service.install()).resolves.toEqual({
       reason: "prepare_failed",
       status: "failed",
     })
-    expect(recordInstallIntent).toHaveBeenCalledWith("1.1.0")
+    expect(recordInstallIntent).toHaveBeenCalledWith("1.1.0", 2)
     expect(rollback).toHaveBeenCalledOnce()
     expect(service.current()).toMatchObject({
       errorCode: "permission_denied",
@@ -290,10 +295,10 @@ describe("UpdaterService", () => {
       prepareInstall: async () => rollback,
     })
     const check = service.check()
-    adapter.emit("update-available", { version: "1.1.0" })
+    adapter.emit("update-available", { build: 2, version: "1.1.0" })
     await check
     const download = service.download()
-    adapter.emit("update-downloaded", { version: "1.1.0" })
+    adapter.emit("update-downloaded", { build: 2, version: "1.1.0" })
     await download
 
     await expect(service.install()).resolves.toEqual({
@@ -316,10 +321,10 @@ describe("UpdaterService", () => {
       prepareInstall: async () => rollback,
     })
     const check = service.check()
-    adapter.emit("update-available", { version: "1.1.0" })
+    adapter.emit("update-available", { build: 2, version: "1.1.0" })
     await check
     const download = service.download()
-    adapter.emit("update-downloaded", { version: "1.1.0" })
+    adapter.emit("update-downloaded", { build: 2, version: "1.1.0" })
     await download
 
     await expect(service.install()).resolves.toEqual({ status: "started" })
@@ -350,6 +355,7 @@ describe("UpdaterService", () => {
         appImagePath,
         arch: "x64",
         channel: "stable",
+        currentBuild: 1,
         currentVersion: "1.0.0",
         packaged: true,
         platform,
@@ -359,10 +365,10 @@ describe("UpdaterService", () => {
       },
     })
     const check = service.check()
-    adapter.emit("update-available", { version: "1.1.0" })
+    adapter.emit("update-available", { build: 2, version: "1.1.0" })
     await check
     const download = service.download()
-    adapter.emit("update-downloaded", { version: "1.1.0" })
+    adapter.emit("update-downloaded", { build: 2, version: "1.1.0" })
     await download
     await expect(service.install()).resolves.toEqual({ status: "started" })
     expect(order).toEqual(["prepare", "quit"])
@@ -381,6 +387,7 @@ describe("更新错误归一化", () => {
   it("分类稳定错误码", () => {
     expect(classifyUpdateError(new Error("ENOSPC: no space"))).toBe("disk_full")
     expect(classifyUpdateError(new Error("checksum mismatch"))).toBe("checksum_invalid")
+    expect(classifyUpdateError(new Error("package empty"))).toBe("update_failed")
     expect(classifyUpdateError(new Error("Gatekeeper signature"))).toBe(
       "platform_signature_required",
     )
@@ -398,6 +405,7 @@ function createService(
     context: {
       arch: "x64",
       channel: "stable",
+      currentBuild: 1,
       currentVersion: "1.0.0",
       packaged: true,
       platform: "win32",

@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto"
 import { createReadStream } from "node:fs"
-import { parseDesktopTag, writePackageVersion } from "./release-version.mjs"
+import { parseDesktopTag } from "./release-version.mjs"
 
-export { parseDesktopTag, writePackageVersion }
+export { parseDesktopTag }
 
 export async function fileSha512(filePath) {
   return fileDigest(filePath, "sha512", "base64")

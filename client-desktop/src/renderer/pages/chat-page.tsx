@@ -442,12 +442,29 @@ export function ChatPage() {
   )
 
   React.useEffect(() => {
-    if (!activeConversationId) {
+    if (
+      !activeConversationId ||
+      activeMessageState?.loaded ||
+      activeMessageState?.loading ||
+      activeMessageState?.error
+    ) {
       return
     }
 
-    ensureConversationMessages(activeConversationId)
-  }, [activeConversationId, ensureConversationMessages])
+    let active = true
+    queueMicrotask(() => {
+      if (active) ensureConversationMessages(activeConversationId)
+    })
+    return () => {
+      active = false
+    }
+  }, [
+    activeConversationId,
+    activeMessageState?.error,
+    activeMessageState?.loaded,
+    activeMessageState?.loading,
+    ensureConversationMessages,
+  ])
 
   React.useEffect(() => {
     if (
@@ -1105,10 +1122,10 @@ export function ChatPage() {
 
   return (
     <SidebarProvider
-      className="min-h-0 min-w-0 flex-1"
+      className="workspace-page-layout workspace-chat-layout min-h-0 min-w-0 flex-1"
       style={
         {
-          "--sidebar-width": "18rem",
+          "--sidebar-width": "var(--workspace-sidebar-width)",
         } as React.CSSProperties
       }
     >
@@ -1185,6 +1202,9 @@ export function ChatPage() {
         onSendVoice={sendVoiceMessage}
         onLoadAfterMessages={loadAfterMessages}
         onLoadBeforeMessages={loadBeforeMessages}
+        onRetryHistory={
+          activeConversationId ? () => ensureConversationMessages(activeConversationId) : undefined
+        }
         onOpenTopic={openTopicDrawer}
         onReturnToLatestMessages={returnToLatestMessages}
         onSendMessage={sendMessage}
