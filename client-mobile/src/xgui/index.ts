@@ -95,7 +95,3 @@ export {
   type XGUIColorScheme,
 } from "@/xgui/theme/colors"
 export { useXGUITheme } from "@/xgui/theme/use-xgui-theme"
-export {
-  XGUIMediaPicker,
-  type XGUIMediaPickerProps,
-} from "@/xgui/components/xgui-media-picker"

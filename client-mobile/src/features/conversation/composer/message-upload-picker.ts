@@ -32,6 +32,32 @@ export async function pickCameraImageMessage() {
   return preparePickedImage(result, "camera.jpg", "image/jpeg")
 }
 
+export async function pickLibraryMediaMessage() {
+  const result = await ImagePicker.launchImageLibraryAsync({
+    allowsEditing: false,
+    allowsMultipleSelection: false,
+    exif: false,
+    mediaTypes: ["images", "videos"],
+    quality: 1,
+    selectionLimit: 1,
+  })
+  if (result.canceled) return null
+
+  const asset = result.assets[0]
+  if (!asset) return null
+  if (asset.type === "video") {
+    const file = new File(asset.uri)
+    return prepareVideoMessage({
+      mimeType: asset.mimeType || file.type,
+      name: asset.fileName?.trim() || file.name || "video.mp4",
+      sizeBytes: asset.fileSize ?? file.size,
+      uri: asset.uri,
+    })
+  }
+
+  return preparePickedImage(result, "image", "image/jpeg")
+}
+
 export function prepareVideoMessage(input: {
   mimeType?: string
   name: string
@@ -56,26 +82,6 @@ export function prepareVideoMessage(input: {
       uri: input.uri,
     },
   }
-}
-
-export async function pickLibraryImageMessage() {
-  const permission = await requestPermissionForUserAction(
-    ImagePicker.getMediaLibraryPermissionsAsync,
-    ImagePicker.requestMediaLibraryPermissionsAsync
-  )
-  if (permission === "denied") return null
-  if (permission === "settings") {
-    throw new MediaPermissionSettingsRequiredError("photos")
-  }
-
-  const result = await ImagePicker.launchImageLibraryAsync({
-    allowsEditing: false,
-    exif: false,
-    mediaTypes: ["images"],
-    quality: 1,
-  })
-
-  return preparePickedImage(result, "image", "")
 }
 
 export async function pickFileMessage(): Promise<PreparedClientMessageUpload | null> {

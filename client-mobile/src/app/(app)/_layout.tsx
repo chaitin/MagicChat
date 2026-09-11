@@ -22,7 +22,10 @@ export default function AppStackLayout() {
     >
       <Stack.Screen name="(drawer)" />
       <Stack.Screen name="create-group" />
-      <Stack.Screen name="conversation/[conversationId]" />
+      <Stack.Screen
+        name="conversation/[conversationId]"
+        options={{ animation: "ios_from_right" }}
+      />
       <Stack.Screen name="conversation/[conversationId]/details" />
       <Stack.Screen name="conversation/[conversationId]/report" />
       <Stack.Screen name="conversation/[conversationId]/add-members" />
@@ -37,7 +40,6 @@ export default function AppStackLayout() {
       <Stack.Screen name="profile" />
       <Stack.Screen name="profile-nickname" />
       <Stack.Screen name="account-deactivation" />
-      <Stack.Screen name="media-picker" />
       <Stack.Screen name="qr-scanner" />
       <Stack.Screen name="qr-result" />
       <Stack.Screen name="qr-webview" />

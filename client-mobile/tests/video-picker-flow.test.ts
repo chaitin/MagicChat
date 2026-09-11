@@ -5,45 +5,41 @@ import test from "node:test"
 const root = new URL("../", import.meta.url)
 const source = (path: string) => readFile(new URL(path, root), "utf8")
 
-test("相册入口混合展示照片和视频并限制单选", async () => {
-  const [accessory, composer, picker, route] = await Promise.all([
+test("相册入口使用 Expo 系统选择器混合选择照片和视频", async () => {
+  const [accessory, composer, picker] = await Promise.all([
     source("src/features/conversation/composer/composer-accessory-panel.tsx"),
     source("src/features/conversation/composer/message-composer.tsx"),
-    source("src/xgui/components/xgui-media-picker.tsx"),
-    source("src/app/(app)/media-picker.tsx"),
+    source("src/features/conversation/composer/message-upload-picker.ts"),
   ])
 
   assert.doesNotMatch(accessory, /label="视频"|onVideoPress/)
-  assert.match(
-    composer,
-    /createMediaPickerRequest\(\{[\s\S]*?maxSelection: 1,[\s\S]*?mediaKind: "mixed",[\s\S]*?mode: "single"/
-  )
-  assert.doesNotMatch(composer, /handleVideoPick|pickLibraryVideoMessage/)
-  assert.match(
-    composer,
-    /Platform\.OS === "android"[\s\S]*?MediaLibrary\.getAssetContentUriAsync\(asset\)[\s\S]*?: await MediaLibrary\.getAssetInfoAsync\(asset\)/
-  )
+  assert.match(composer, /handleUploadPick\(pickLibraryMediaMessage\)/)
+  assert.doesNotMatch(composer, /createMediaPickerRequest|MediaLibrary/)
+  assert.match(picker, /ImagePicker\.launchImageLibraryAsync\(\{/)
+  assert.match(picker, /mediaTypes: \["images", "videos"\]/)
+  assert.match(picker, /allowsMultipleSelection: false/)
+  assert.match(picker, /selectionLimit: 1/)
   assert.match(
     picker,
-    /mediaKind === "mixed"[\s\S]*?MediaLibrary\.MediaType\.photo,[\s\S]*?MediaLibrary\.MediaType\.video/
+    /if \(asset\.type === "video"\)[\s\S]*?prepareVideoMessage/
   )
-  assert.match(
-    picker,
-    /item\.mediaType === MediaLibrary\.MediaType\.video[\s\S]*?VideoAssetThumbnail/
-  )
-  assert.match(route, /mediaKind=\{request\.mediaKind\}/)
+  assert.match(picker, /preparePickedImage\(result, "image", "image\/jpeg"\)/)
 })
 
-test("Android 原生清单声明视频读取权限且等待页有状态提示", async () => {
-  const [manifest, picker] = await Promise.all([
-    source("android/app/src/main/AndroidManifest.xml"),
-    source("src/xgui/components/xgui-media-picker.tsx"),
+test("系统相册选择器不依赖自定义媒体库页面和读取权限", async () => {
+  const [layout, profile, picker] = await Promise.all([
+    source("src/app/(app)/_layout.tsx"),
+    source("src/features/me/profile-screen.tsx"),
+    source("src/features/conversation/composer/message-upload-picker.ts"),
   ])
 
-  assert.match(manifest, /android\.permission\.READ_MEDIA_VIDEO/)
-  assert.match(picker, /PermissionsAndroid\.PERMISSIONS\.READ_MEDIA_IMAGES/)
-  assert.match(picker, /PermissionsAndroid\.PERMISSIONS\.READ_MEDIA_VIDEO/)
-  assert.match(picker, /正在请求照片和视频访问权限/)
+  assert.doesNotMatch(layout, /name="media-picker"/)
+  assert.match(profile, /ImagePicker\.launchImageLibraryAsync\(options\)/)
+  assert.doesNotMatch(profile, /createMediaPickerRequest|MediaLibrary/)
+  assert.doesNotMatch(
+    picker,
+    /getMediaLibraryPermissionsAsync|requestMediaLibraryPermissionsAsync/
+  )
 })
 
 test("视频选择完成后的确认页只展示预览和文件信息", async () => {

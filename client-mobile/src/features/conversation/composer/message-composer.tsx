@@ -18,9 +18,6 @@ import {
   Text,
   useWindowDimensions,
 } from "react-native"
-import * as MediaLibrary from "expo-media-library/legacy"
-import { File } from "expo-file-system"
-import { useRouter, type Href } from "expo-router"
 import {
   type TamaguiElement,
   XStack,
@@ -53,7 +50,7 @@ import { MentionPickerSheet } from "@/features/conversation/composer/mention-pic
 import {
   pickCameraImageMessage,
   pickFileMessage,
-  prepareVideoMessage,
+  pickLibraryMediaMessage,
 } from "@/features/conversation/composer/message-upload-picker"
 import { MessageUploadDialog } from "@/features/conversation/composer/message-upload-dialog"
 import { useComposerUpload } from "@/features/conversation/composer/use-composer-upload"
@@ -66,9 +63,7 @@ import {
 import { useComposerVoice } from "@/features/conversation/voice/use-composer-voice"
 import { VoiceRecordButton } from "@/features/conversation/voice/voice-record-button"
 import { XGUIButton, useXGUITheme } from "@/xgui"
-import { createMediaPickerRequest } from "@/features/media-picker/media-picker-registry"
 import { MediaPermissionSettingsDialog } from "@/components/permissions/media-permission-settings-dialog"
-import { prepareImageMessage } from "@/data/messages/message-image"
 
 export type MessageComposerHandle = {
   dismissAccessory: () => void
@@ -120,7 +115,6 @@ export const MessageComposer = forwardRef<
   ref
 ) {
   const { colors } = useXGUITheme()
-  const router = useRouter()
   const windowDimensions = useWindowDimensions()
   const inputRef = useRef<TamaguiElement>(null)
   const contentRef = useRef("")
@@ -129,18 +123,11 @@ export const MessageComposer = forwardRef<
   const selectionRef = useRef<TextSelection>({ end: 0, start: 0 })
   const shouldFocusAfterPickerCloseRef = useRef(false)
   const restoreKeyboardAfterMediaPickerRef = useRef(false)
-  const pendingImageUploadsRef = useRef<PreparedClientMessageUpload[]>([])
-  const imageConfirmationPendingRef = useRef(false)
-  const videoConfirmationPendingRef = useRef(false)
   const [content, setContent] = useState("")
   const [inputHeight, setInputHeight] = useState(COMPOSER_CONTROL_HEIGHT)
   const [accessoryMode, setAccessoryMode] =
     useState<ComposerAccessoryMode>(null)
   const [mentionPickerOpen, setMentionPickerOpen] = useState(false)
-  const [pendingImageUploads, setPendingImageUploads] = useState<
-    PreparedClientMessageUpload[]
-  >([])
-  const [imageBatchSending, setImageBatchSending] = useState(false)
   const [pendingSelection, setPendingSelection] =
     useState<TextSelection>()
   const upload = useComposerUpload({
@@ -178,15 +165,6 @@ export const MessageComposer = forwardRef<
     const frame = requestAnimationFrame(() => setPendingSelection(undefined))
     return () => cancelAnimationFrame(frame)
   }, [pendingSelection])
-
-  useEffect(() => {
-    return () => {
-      pendingImageUploadsRef.current.forEach((selection) =>
-        selection.cleanup?.()
-      )
-      pendingImageUploadsRef.current = []
-    }
-  }, [])
 
   useImperativeHandle(ref, () => ({
     dismissAccessory() {
@@ -433,105 +411,12 @@ export const MessageComposer = forwardRef<
   }
 
   function handleUploadCancel() {
-    if (pendingImageUploadsRef.current.length > 0) {
-      pendingImageUploadsRef.current.forEach((selection) =>
-        selection.cleanup?.()
-      )
-      pendingImageUploadsRef.current = []
-      imageConfirmationPendingRef.current = false
-      setPendingImageUploads([])
-    } else {
-      upload.cancel()
-      videoConfirmationPendingRef.current = false
-    }
+    upload.cancel()
     restoreKeyboardAfterMediaPicker()
   }
 
   async function handleUploadConfirm() {
-    if (pendingImageUploadsRef.current.length === 0) {
-      if (await upload.confirm()) {
-        videoConfirmationPendingRef.current = false
-        restoreKeyboardAfterMediaPicker()
-      }
-      return
-    }
-    if (imageBatchSending) return
-
-    setImageBatchSending(true)
-    try {
-      while (pendingImageUploadsRef.current.length > 0) {
-        const selection = pendingImageUploadsRef.current[0]
-        if (!selection || !(await onSendUpload(selection))) break
-
-        // Successful enqueue transfers cleanup ownership to the optimistic send,
-        // so the local preview remains available for failure and retry.
-        pendingImageUploadsRef.current = pendingImageUploadsRef.current.slice(1)
-        setPendingImageUploads(pendingImageUploadsRef.current)
-      }
-    } finally {
-      setImageBatchSending(false)
-    }
-
-    if (pendingImageUploadsRef.current.length === 0) {
-      imageConfirmationPendingRef.current = false
-      restoreKeyboardAfterMediaPicker()
-    }
-  }
-
-  function handleLibraryPick() {
-    if (interactionDisabled) return
-    setAccessoryMode(null)
-    const requestId = createMediaPickerRequest({
-      confirmLabel: "发送",
-      maxSelection: 1,
-      mediaKind: "mixed",
-      mode: "single",
-      onClose: () => {
-        if (
-          !imageConfirmationPendingRef.current &&
-          !videoConfirmationPendingRef.current
-        ) {
-          restoreKeyboardAfterMediaPicker()
-        }
-      },
-      onSelect: async ([asset]) => {
-        if (!asset) return
-        const uri =
-          Platform.OS === "android"
-            ? await MediaLibrary.getAssetContentUriAsync(asset)
-            : await MediaLibrary.getAssetInfoAsync(asset).then(
-                (info) => info.localUri ?? info.uri
-              )
-
-        if (asset.mediaType === MediaLibrary.MediaType.video) {
-          const file = new File(uri)
-          const selection = prepareVideoMessage({
-            mimeType: file.type,
-            name: asset.filename,
-            sizeBytes: file.size,
-            uri,
-          })
-          const selected = await upload.pick(async () => selection)
-          videoConfirmationPendingRef.current = selected?.kind === "video"
-          return
-        }
-
-        const selection = await prepareImageMessage({
-          height: asset.height,
-          mimeType: imageMimeType(asset.filename),
-          name: asset.filename,
-          uri,
-          width: asset.width,
-        })
-        pendingImageUploadsRef.current.forEach((pending) =>
-          pending.cleanup?.()
-        )
-        pendingImageUploadsRef.current = [selection]
-        imageConfirmationPendingRef.current = true
-        setPendingImageUploads([selection])
-      },
-    })
-    router.push({ pathname: "/media-picker", params: { requestId } } as unknown as Href)
+    if (await upload.confirm()) restoreKeyboardAfterMediaPicker()
   }
 
   return (
@@ -663,7 +548,7 @@ export const MessageComposer = forwardRef<
           onCameraPress={() => void handleUploadPick(pickCameraImageMessage)}
           onEmojiPress={handleEmojiPress}
           onFilePress={() => void handleUploadPick(pickFileMessage)}
-          onLibraryPress={handleLibraryPick}
+          onLibraryPress={() => void handleUploadPick(pickLibraryMediaMessage)}
         />
       </YStack>
 
@@ -683,14 +568,8 @@ export const MessageComposer = forwardRef<
       <MessageUploadDialog
         onCancel={handleUploadCancel}
         onConfirm={() => void handleUploadConfirm()}
-        selections={
-          pendingImageUploads.length > 0
-            ? pendingImageUploads
-            : upload.selected
-              ? [upload.selected]
-              : []
-        }
-        sending={disabled || sending || imageBatchSending}
+        selections={upload.selected ? [upload.selected] : []}
+        sending={disabled || sending}
       />
       <MessageVoiceGestureOverlay
         active={voice.gestureActive}
@@ -715,14 +594,6 @@ export const MessageComposer = forwardRef<
     </>
   )
 })
-
-function imageMimeType(name: string) {
-  const extension = name.split(".").pop()?.toLowerCase()
-  if (extension === "png") return "image/png"
-  if (extension === "webp") return "image/webp"
-  if (extension === "heic" || extension === "heif") return "image/heic"
-  return "image/jpeg"
-}
 
 function clampSelection(selection: TextSelection, valueLength: number) {
   const start = Math.max(0, Math.min(selection.start, valueLength))

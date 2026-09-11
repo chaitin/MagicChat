@@ -5,6 +5,18 @@ import test from "node:test"
 
 const root = path.resolve(import.meta.dirname, "..")
 
+test("聊天页进入和退出使用 iOS 风格横向过渡", async () => {
+  const layout = await readFile(
+    path.join(root, "src/app/(app)/_layout.tsx"),
+    "utf8"
+  )
+
+  assert.match(
+    layout,
+    /name="conversation\/\[conversationId\]"[\s\S]*?options=\{\{ animation: "ios_from_right" \}\}/
+  )
+})
+
 test("底部 Tab 使用原生淡入平滑复杂页面切换", async () => {
   const layout = await readFile(
     path.join(root, "src/app/(app)/(drawer)/(tabs)/_layout.tsx"),

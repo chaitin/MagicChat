@@ -46,12 +46,17 @@ test("权限设置 Dialog 打开设置时保持显示，仅取消会关闭", asy
   assert.match(dialog, /open=\{kind !== null\}/)
 })
 
-test("自定义相册首次直接申请，永久拒绝才显示 Dialog", async () => {
-  const picker = await source("src/xgui/components/xgui-media-picker.tsx")
-  assert.match(picker, /if \(!permission\.canAskAgain\) \{[\s\S]*?setPermissionDialogOpen\(true\)/)
-  assert.match(picker, /void requestPermission\(\)[\s\S]*?if \(!response\.granted\) onCancel\(\)/)
-  assert.match(picker, /MediaPermissionSettingsDialog[\s\S]*?kind=\{permissionDialogOpen \? "photos" : null\}/)
-  assert.doesNotMatch(picker, /permissionSheetOpen|title="访问照片"|label: "允许访问"/)
+test("系统相册选择器不提前申请照片库读取权限", async () => {
+  const [composerPicker, profile] = await Promise.all([
+    source("src/features/conversation/composer/message-upload-picker.ts"),
+    source("src/features/me/profile-screen.tsx"),
+  ])
+  assert.match(composerPicker, /ImagePicker\.launchImageLibraryAsync/)
+  assert.match(profile, /ImagePicker\.launchImageLibraryAsync/)
+  assert.doesNotMatch(
+    `${composerPicker}\n${profile}`,
+    /getMediaLibraryPermissionsAsync|requestMediaLibraryPermissionsAsync/
+  )
 })
 
 test("相机入口统一使用直接申请和永久拒绝 Dialog", async () => {

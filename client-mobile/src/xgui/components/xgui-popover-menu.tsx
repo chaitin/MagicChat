@@ -3,12 +3,13 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react"
 import {
   Animated,
+  BackHandler,
   Dimensions,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -16,6 +17,7 @@ import {
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import Svg, { Path } from "react-native-svg"
+import { Portal } from "tamagui"
 
 import {
   calculateXGUIPopoverLayout,
@@ -67,19 +69,23 @@ export function XGUIPopoverMenu({
   const menuBackground = backgroundColor ?? colors.background4
   const menuForeground = foregroundColor ?? colors.textOnColor
   const insets = useSafeAreaInsets()
-  const [mounted, setMounted] = useState(open)
+  const [rendered, setRendered] = useState(false)
   const [layout, setLayout] = useState<XGUIPopoverLayout | null>(null)
-  const [progress] = useState(() => new Animated.Value(0))
+  const [progress] = useState(() => new Animated.Value(0.01))
+  const animationRef = useRef<Animated.CompositeAnimation | null>(null)
+  const openRef = useRef(open)
 
+  const close = useCallback(() => onOpenChange(false), [onOpenChange])
   const measure = useCallback(() => {
     const anchor = anchorRef.current
     if (!anchor) {
-      onOpenChange(false)
+      close()
       return
     }
     anchor.measureInWindow((x, y, anchorWidth, anchorHeight) => {
+      if (!openRef.current) return
       if (anchorWidth <= 0 || anchorHeight <= 0) {
-        onOpenChange(false)
+        close()
         return
       }
       const window = Dimensions.get("window")
@@ -94,39 +100,64 @@ export function XGUIPopoverMenu({
           windowWidth: window.width,
         })
       )
+      setRendered(true)
     })
-  }, [anchorRef, insets, items.length, onOpenChange, placement, width])
+  }, [anchorRef, close, insets, items.length, placement, width])
 
   useEffect(() => {
+    openRef.current = open
+  }, [open])
+
+  useEffect(() => {
+    animationRef.current?.stop()
     if (open) {
-      const frame = requestAnimationFrame(() => {
-        setMounted(true)
-        measure()
-      })
-      return () => cancelAnimationFrame(frame)
+      if (!rendered) measure()
+      return
     }
-    if (!mounted) return
-    Animated.timing(progress, {
+    if (!rendered) return
+
+    const animation = Animated.timing(progress, {
       duration: ANIMATION_DURATION,
       toValue: 0,
       useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) {
-        setMounted(false)
+    })
+    animationRef.current = animation
+    animation.start(({ finished }) => {
+      if (finished && !openRef.current) {
+        setRendered(false)
         setLayout(null)
       }
     })
-  }, [measure, mounted, open, progress])
+  }, [measure, open, progress, rendered])
 
   useEffect(() => {
-    if (!open || !layout) return
-    progress.setValue(0)
-    Animated.timing(progress, {
-      duration: ANIMATION_DURATION,
-      toValue: 1,
-      useNativeDriver: true,
-    }).start()
-  }, [layout, open, progress])
+    if (!open || !layout || !rendered) return
+    animationRef.current?.stop()
+    progress.setValue(0.01)
+    let animationFrame: number | undefined
+    const preparationFrame = requestAnimationFrame(() => {
+      animationFrame = requestAnimationFrame(() => {
+        const animation = Animated.timing(progress, {
+          duration: ANIMATION_DURATION,
+          toValue: 1,
+          useNativeDriver: true,
+        })
+        animationRef.current = animation
+        animation.start()
+      })
+    })
+    return () => {
+      cancelAnimationFrame(preparationFrame)
+      if (animationFrame !== undefined) cancelAnimationFrame(animationFrame)
+    }
+  }, [layout, open, progress, rendered])
+
+  useEffect(
+    () => () => {
+      animationRef.current?.stop()
+    },
+    []
+  )
 
   useEffect(() => {
     if (!open) return
@@ -134,94 +165,100 @@ export function XGUIPopoverMenu({
     return () => subscription.remove()
   }, [measure, open])
 
-  const close = () => onOpenChange(false)
+  useEffect(() => {
+    if (!rendered) return
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      close()
+      return true
+    })
+    return () => subscription.remove()
+  }, [close, rendered])
+
   const pressItem = (item: XGUIPopoverMenuItem) => {
     if (item.disabled) return
     close()
     setTimeout(item.onPress, ANIMATION_DURATION)
   }
 
-  if (!mounted) return null
+  if (!rendered || !layout) return null
 
-  const isBottom = layout?.placement.startsWith("bottom")
+  const isBottom = layout.placement.startsWith("bottom")
+  const translateY = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [isBottom ? -4 : 4, 0],
+  })
+
   return (
-    <Modal
-      animationType="none"
-      onRequestClose={close}
-      statusBarTranslucent
-      transparent
-      visible={mounted}
-    >
-      <View accessibilityViewIsModal style={styles.fill}>
+    <Portal stackZIndex={100_000}>
+      <View accessibilityViewIsModal style={styles.portal}>
         <Pressable accessibilityRole="button" onPress={close} style={styles.fill} />
-        {layout ? (
-          <Animated.View
-            needsOffscreenAlphaCompositing
-            renderToHardwareTextureAndroid
-            shouldRasterizeIOS
+        <Animated.View
+          needsOffscreenAlphaCompositing
+          renderToHardwareTextureAndroid
+          shouldRasterizeIOS
+          style={[
+            styles.positioned,
+            {
+              left: layout.menuX,
+              opacity: progress,
+              paddingBottom: isBottom ? 0 : ARROW_HEIGHT,
+              paddingTop: isBottom ? ARROW_HEIGHT : 0,
+              top: layout.menuY - (isBottom ? ARROW_HEIGHT : 0),
+              transform: [{ translateY }],
+              width,
+            },
+          ]}
+        >
+          <Svg
+            height={ARROW_HEIGHT}
+            pointerEvents="none"
             style={[
-              styles.positioned,
+              styles.arrow,
               {
-                left: layout.menuX,
-                opacity: progress,
-                paddingBottom: isBottom ? 0 : ARROW_HEIGHT,
-                paddingTop: isBottom ? ARROW_HEIGHT : 0,
-                top: layout.menuY - (isBottom ? ARROW_HEIGHT : 0),
-                width,
+                left: layout.arrowX,
+                transform: [{ rotate: isBottom ? "0deg" : "180deg" }],
+                [isBottom ? "top" : "bottom"]: 0,
               },
             ]}
+            viewBox={`0 0 ${ARROW_WIDTH} ${ARROW_HEIGHT}`}
+            width={ARROW_WIDTH}
           >
-            <Svg
-              height={ARROW_HEIGHT}
-              pointerEvents="none"
-              style={[
-                styles.arrow,
-                {
-                  left: layout.arrowX,
-                  transform: [{ rotate: isBottom ? "0deg" : "180deg" }],
-                  [isBottom ? "top" : "bottom"]: 0,
-                },
-              ]}
-              viewBox={`0 0 ${ARROW_WIDTH} ${ARROW_HEIGHT}`}
-              width={ARROW_WIDTH}
-            >
-              <Path
-                d="M0 8 L7.2 0.8 Q8 0 8.8 0.8 L16 8 Z"
-                fill={menuBackground}
-              />
-            </Svg>
-            <View
-              accessibilityRole="menu"
-              style={[styles.menu, { backgroundColor: menuBackground }]}
-            >
-              {items.map((item, index) => {
-                const color = item.destructive ? colors.destructive : menuForeground
-                return (
-                  <Pressable
-                    accessibilityLabel={item.accessibilityLabel ?? item.label}
-                    accessibilityRole="button"
-                    accessibilityState={{ disabled: item.disabled }}
-                    disabled={item.disabled}
-                    key={`${item.label}-${index}`}
-                    onPress={() => pressItem(item)}
-                    style={({ pressed }) => [
-                      styles.item,
-                      item.disabled && styles.disabled,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    {item.icon?.({ color, size: 24, strokeWidth: 2 })}
-                    <Text numberOfLines={1} style={[styles.label, { color }]}>
-                      {item.label}
-                    </Text>
-                  </Pressable>
-                )
-              })}
-            </View>
-          </Animated.View>
-        ) : null}
+            <Path
+              d="M0 8 L7.2 0.8 Q8 0 8.8 0.8 L16 8 Z"
+              fill={menuBackground}
+            />
+          </Svg>
+          <View
+            accessibilityRole="menu"
+            style={[styles.menu, { backgroundColor: menuBackground }]}
+          >
+            {items.map((item, index) => {
+              const color = item.destructive ? colors.destructive : menuForeground
+              return (
+                <Pressable
+                  accessibilityLabel={item.accessibilityLabel ?? item.label}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: item.disabled }}
+                  disabled={item.disabled}
+                  key={`${item.label}-${index}`}
+                  onPress={() => pressItem(item)}
+                  style={({ pressed }) => [
+                    styles.item,
+                    item.disabled && styles.disabled,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  {item.icon?.({ color, size: 24, strokeWidth: 2 })}
+                  <Text numberOfLines={1} style={[styles.label, { color }]}>
+                    {item.label}
+                  </Text>
+                </Pressable>
+              )
+            })}
+          </View>
+        </Animated.View>
       </View>
-    </Modal>
+    </Portal>
   )
 }
 
@@ -248,6 +285,14 @@ const styles = StyleSheet.create({
     shadowOffset: { height: 3, width: 0 },
     shadowOpacity: 0.24,
     shadowRadius: 8,
+  },
+  portal: {
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    zIndex: 100_000,
   },
   positioned: { position: "absolute" },
   pressed: { backgroundColor: "rgba(255,255,255,0.12)" },
