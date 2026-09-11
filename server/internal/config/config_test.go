@@ -121,8 +121,9 @@ func TestLoadUsesEnvironmentDefaults(t *testing.T) {
 
 func TestLoadEnablesPushFromServerKeyAndPersistsGeneratedCredentialKey(t *testing.T) {
 	setRequiredEnvironment(t)
-	keyFile := filepath.Join(t.TempDir(), "push", "credential.key")
-	t.Setenv("PUSH_CREDENTIAL_KEY_FILE", keyFile)
+	workingDirectory := t.TempDir()
+	t.Chdir(workingDirectory)
+	keyFile := filepath.Join(workingDirectory, defaultPushCredentialKeyFile)
 	t.Setenv("PUSH_GATEWAY_SERVER_KEY", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 
 	first, err := Load()
@@ -150,8 +151,9 @@ func TestLoadEnablesPushFromServerKeyAndPersistsGeneratedCredentialKey(t *testin
 
 func TestLoadKeepsPushDisabledWithoutServerKey(t *testing.T) {
 	setRequiredEnvironment(t)
-	keyFile := filepath.Join(t.TempDir(), "credential.key")
-	t.Setenv("PUSH_CREDENTIAL_KEY_FILE", keyFile)
+	workingDirectory := t.TempDir()
+	t.Chdir(workingDirectory)
+	keyFile := filepath.Join(workingDirectory, defaultPushCredentialKeyFile)
 
 	cfg, err := Load()
 	if err != nil {
@@ -281,7 +283,6 @@ func setRequiredEnvironment(t *testing.T) {
 		"LARGE_TEMPORARY_ASSETS_EXPIRE_DAYS": "180",
 		"S3_ABORT_MULTIPART_DAYS":            "7",
 		"PUSH_GATEWAY_SERVER_KEY":            "",
-		"PUSH_CREDENTIAL_KEY_FILE":           filepath.Join(t.TempDir(), "push", "credential.key"),
 	}
 	for name, value := range values {
 		t.Setenv(name, value)

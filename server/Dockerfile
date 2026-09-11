@@ -21,8 +21,8 @@ COPY --from=build /out/server /app/server
 COPY server/migrations /app/migrations
 COPY api-docs /app/api-docs
 
-RUN mkdir -p /app/log /app/push-data \
-  && chmod 700 /app/push-data \
+RUN mkdir -p /app/log /app/data/push \
+  && chmod 700 /app/data/push \
   && chown -R app:app /app
 
 USER app
