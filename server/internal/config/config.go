@@ -192,11 +192,7 @@ func loadPushConfig() (PushConfig, error) {
 	if !validPushGatewayServerKey(serverKey) {
 		return PushConfig{}, fmt.Errorf("PUSH_GATEWAY_SERVER_KEY has an invalid format")
 	}
-	keyFile := strings.TrimSpace(os.Getenv("PUSH_CREDENTIAL_KEY_FILE"))
-	if keyFile == "" {
-		keyFile = defaultPushCredentialKeyFile
-	}
-	credentialKey, err := loadOrCreatePushCredentialKey(keyFile)
+	credentialKey, err := loadOrCreatePushCredentialKey(defaultPushCredentialKeyFile)
 	if err != nil {
 		return PushConfig{}, fmt.Errorf("load push credential key: %w", err)
 	}
