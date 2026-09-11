@@ -20,7 +20,7 @@ func TestArgon2idPasswordRoundTrip(t *testing.T) {
 }
 
 func TestServerKeyRoundTrip(t *testing.T) {
-	publicID, key, err := GenerateServerKey()
+	key, err := GenerateServerKey()
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
@@ -30,12 +30,11 @@ func TestServerKeyRoundTrip(t *testing.T) {
 	if _, err := hex.DecodeString(key); err != nil {
 		t.Fatalf("key is not hexadecimal: %v", err)
 	}
-	parsed, valid := ServerKeyPublicID(key)
-	if !valid || parsed != publicID || len(publicID) != 24 {
-		t.Fatalf("parsed public id = %q/%v, want %q", parsed, valid, publicID)
+	if !ValidServerKey(key) {
+		t.Fatal("generated key is invalid")
 	}
 	for _, invalid := range []string{"wrong", strings.ToUpper(key), key + "00"} {
-		if _, valid := ServerKeyPublicID(invalid); valid {
+		if ValidServerKey(invalid) {
 			t.Fatalf("invalid key %q was accepted", invalid)
 		}
 	}

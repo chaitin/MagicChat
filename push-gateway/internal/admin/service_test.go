@@ -16,9 +16,9 @@ import (
 )
 
 func TestPlaintextAdminPasswordIsHashedAtStartup(t *testing.T) {
-	db, cipher := newAdminDependencies(t)
+	db := newAdminDependencies(t)
 	service, err := New(Options{
-		DB: db, Cipher: cipher, Username: "admin", Password: "admin",
+		DB: db, Username: "admin", Password: "admin",
 	})
 	if err != nil {
 		t.Fatalf("create service: %v", err)
@@ -60,9 +60,8 @@ func TestAdminSessionAndServerLifecycle(t *testing.T) {
 	if err != nil || issued.Server.Name != "生产环境一号" || issued.Key == "" {
 		t.Fatalf("created = %#v, err = %v", issued, err)
 	}
-	publicID, valid := secure.ServerKeyPublicID(issued.Key)
-	if !valid {
-		t.Fatalf("issued key is invalid: public id=%q", publicID)
+	if !secure.ValidServerKey(issued.Key) {
+		t.Fatal("issued key is invalid")
 	}
 	revealed, err := service.RevealServerKey(t.Context(), issued.Server.ID, "request-reveal")
 	if err != nil || revealed != issued.Key {
@@ -72,12 +71,12 @@ func TestAdminSessionAndServerLifecycle(t *testing.T) {
 	if err != nil || rotated.Key == issued.Key {
 		t.Fatalf("rotated = %#v, err = %v", rotated, err)
 	}
-	var oldKey model.ServerKey
-	if err := db.Where("key_hash = ?", secure.HashToken(issued.Key)).First(&oldKey).Error; err != nil {
-		t.Fatalf("load old key: %v", err)
+	var storedServer model.Server
+	if err := db.First(&storedServer, "id = ?", issued.Server.ID).Error; err != nil {
+		t.Fatalf("load rotated server: %v", err)
 	}
-	if oldKey.Status != model.ServerKeyStatusRevoked || len(oldKey.KeyCiphertext) != 0 || oldKey.RevokedAt == nil {
-		t.Fatalf("old key = %#v", oldKey)
+	if storedServer.ServerKey != rotated.Key || storedServer.ServerKey == issued.Key {
+		t.Fatalf("stored server key was not replaced")
 	}
 	disabled, err := service.SetServerStatus(t.Context(), issued.Server.ID, model.ServerStatusDisabled, "request-disable")
 	if err != nil || disabled.Status != model.ServerStatusDisabled {
@@ -105,9 +104,9 @@ func TestAdminSessionAndServerLifecycle(t *testing.T) {
 
 func newTestAdmin(t *testing.T) (*Service, *gorm.DB) {
 	t.Helper()
-	db, cipher := newAdminDependencies(t)
+	db := newAdminDependencies(t)
 	service, err := New(Options{
-		DB: db, Cipher: cipher, Username: "operator", PasswordHash: testPasswordHash("correct password"),
+		DB: db, Username: "operator", PasswordHash: testPasswordHash("correct password"),
 		Now: func() time.Time { return time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC) },
 	})
 	if err != nil {
@@ -116,7 +115,7 @@ func newTestAdmin(t *testing.T) (*Service, *gorm.DB) {
 	return service, db
 }
 
-func newAdminDependencies(t *testing.T) (*gorm.DB, *secure.TokenCipher) {
+func newAdminDependencies(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{TranslateError: true})
 	if err != nil {
@@ -124,16 +123,11 @@ func newAdminDependencies(t *testing.T) (*gorm.DB, *secure.TokenCipher) {
 	}
 	if err := db.AutoMigrate(
 		&model.RateLimit{}, &model.Installation{}, &model.Grant{}, &model.Server{},
-		&model.ServerKey{}, &model.ServerDailyUsage{}, &model.AdminSession{},
-		&model.AdminAuditEvent{}, &model.Job{},
+		&model.ServerDailyUsage{}, &model.AdminSession{}, &model.AdminAuditEvent{}, &model.Job{},
 	); err != nil {
 		t.Fatalf("migrate database: %v", err)
 	}
-	cipher, err := secure.NewTokenCipher(make([]byte, 32))
-	if err != nil {
-		t.Fatalf("create cipher: %v", err)
-	}
-	return db, cipher
+	return db
 }
 
 func testPasswordHash(password string) string {

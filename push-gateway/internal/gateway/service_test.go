@@ -9,7 +9,6 @@ import (
 
 	"push-gateway/internal/model"
 	"push-gateway/internal/provider"
-	"push-gateway/internal/secure"
 
 	"github.com/glebarez/sqlite"
 	"github.com/google/uuid"
@@ -55,6 +54,13 @@ func TestInstallationGrantAndNotificationLifecycle(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("register installation: %v", err)
+	}
+	var storedInstallation model.Installation
+	if err := db.First(&storedInstallation, "id = ?", credential.InstallationID).Error; err != nil {
+		t.Fatalf("load installation: %v", err)
+	}
+	if storedInstallation.ProviderToken != "provider-token-123" {
+		t.Fatalf("stored provider token = %q", storedInstallation.ProviderToken)
 	}
 	grant, err := service.CreateActiveGrant(t.Context(), credential.InstallationID, credential.ManagementToken)
 	if err != nil {
@@ -226,45 +232,6 @@ func TestRegisteringExistingProviderTokenRevokesOldGrant(t *testing.T) {
 	}
 }
 
-func TestDispatchLazilyRotatesProviderTokenEncryption(t *testing.T) {
-	oldService, db, pushProvider, now := newTestService(t)
-	credential, _ := oldService.RegisterInstallation(t.Context(), RegisterInstallationInput{
-		Provider: "fake", ProviderToken: "rotation-device-token", Platform: "android",
-	})
-	grant, _ := oldService.CreateActiveGrant(t.Context(), credential.InstallationID, credential.ManagementToken)
-	_, _ = oldService.EnqueueNotification(t.Context(), grant.GrantID, grant.SendToken, testServerKey, NotificationInput{
-		Event: EventMessageCreated, RouteToken: "rotation-route", IdempotencyKey: "rotation-message",
-	})
-	newKey := make([]byte, 32)
-	for index := range newKey {
-		newKey[index] = byte(index + 1)
-	}
-	rotatedCipher, err := secure.NewTokenCipher(newKey, make([]byte, 32))
-	if err != nil {
-		t.Fatalf("create rotated cipher: %v", err)
-	}
-	rotatedService, err := New(Options{
-		DB: db, Cipher: rotatedCipher, Providers: []provider.Provider{pushProvider},
-		Now: func() time.Time { return *now },
-	})
-	if err != nil {
-		t.Fatalf("create rotated service: %v", err)
-	}
-	var before model.Installation
-	_ = db.First(&before, "id = ?", credential.InstallationID).Error
-	if !rotatedCipher.NeedsRotation(before.ProviderTokenCiphertext) {
-		t.Fatal("old provider token ciphertext does not need rotation")
-	}
-	if _, err := rotatedService.DispatchBatch(t.Context(), 1); err != nil {
-		t.Fatalf("dispatch with rotated keyring: %v", err)
-	}
-	var after model.Installation
-	_ = db.First(&after, "id = ?", credential.InstallationID).Error
-	if rotatedCipher.NeedsRotation(after.ProviderTokenCiphertext) {
-		t.Fatal("provider token ciphertext was not rotated")
-	}
-}
-
 func TestInvalidDeviceDisablesInstallation(t *testing.T) {
 	service, db, pushProvider, _ := newTestService(t)
 	pushProvider.errors = []error{&provider.SendError{Kind: provider.ErrorInvalidDevice, Code: "device_unregistered"}}
@@ -325,9 +292,8 @@ func TestStaleInvalidDeviceResponseDoesNotDisableRotatedToken(t *testing.T) {
 	if installation.Status != model.InstallationStatusActive {
 		t.Fatalf("installation status = %q", installation.Status)
 	}
-	providerToken, err := service.cipher.Decrypt(installation.ProviderTokenCiphertext, []byte(installation.ID))
-	if err != nil || providerToken != "new-rotation-device-token" {
-		t.Fatalf("provider token = %q, %v", providerToken, err)
+	if installation.ProviderToken != "new-rotation-device-token" {
+		t.Fatalf("provider token = %q", installation.ProviderToken)
 	}
 	var storedGrant model.Grant
 	if err := db.First(&storedGrant, "id = ?", grant.GrantID).Error; err != nil {
@@ -460,37 +426,21 @@ func newTestService(t *testing.T) (*Service, *gorm.DB, *recordingProvider, *time
 	}
 	if err := db.AutoMigrate(
 		&model.RateLimit{}, &model.Installation{}, &model.Grant{}, &model.Server{},
-		&model.ServerKey{}, &model.ServerDailyUsage{}, &model.AdminSession{},
-		&model.AdminAuditEvent{}, &model.Job{},
+		&model.ServerDailyUsage{}, &model.AdminSession{}, &model.AdminAuditEvent{}, &model.Job{},
 	); err != nil {
 		t.Fatalf("migrate test database: %v", err)
 	}
 	serverID := uuid.NewString()
 	if err := db.Create(&model.Server{
-		ID: serverID, Name: "test", Status: model.ServerStatusActive,
+		ID: serverID, Name: "test", ServerKey: testServerKey, Status: model.ServerStatusActive,
 		DailyQuota: 1000, Revision: 1, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}).Error; err != nil {
 		t.Fatalf("create test server: %v", err)
 	}
-	publicID, valid := secure.ServerKeyPublicID(testServerKey)
-	if !valid {
-		t.Fatal("test server key is invalid")
-	}
-	if err := db.Create(&model.ServerKey{
-		ID: uuid.NewString(), ServerID: serverID, PublicID: publicID,
-		KeyHash: secure.HashToken(testServerKey), Status: model.ServerKeyStatusActive,
-		CreatedAt: time.Now(), KeyCiphertext: []byte{1},
-	}).Error; err != nil {
-		t.Fatalf("create test server key: %v", err)
-	}
-	cipher, err := secure.NewTokenCipher(make([]byte, 32))
-	if err != nil {
-		t.Fatalf("create cipher: %v", err)
-	}
 	now := time.Date(2026, 8, 21, 9, 0, 0, 0, time.UTC)
 	pushProvider := &recordingProvider{}
 	service, err := New(Options{
-		DB: db, Cipher: cipher, Providers: []provider.Provider{pushProvider}, Now: func() time.Time { return now },
+		DB: db, Providers: []provider.Provider{pushProvider}, Now: func() time.Time { return now },
 		GrantTTL: 30 * 24 * time.Hour, NotificationTTL: 5 * time.Minute,
 		MaxNotificationTTL: time.Hour, MaxJobsPerGrantMinute: 120,
 	})

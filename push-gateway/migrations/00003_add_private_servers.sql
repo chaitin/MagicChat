@@ -2,35 +2,17 @@
 CREATE TABLE push_servers (
   id uuid PRIMARY KEY,
   name text NOT NULL,
+  server_key text NOT NULL UNIQUE,
   status text NOT NULL,
   daily_quota bigint NOT NULL,
   revision bigint NOT NULL DEFAULT 1,
   created_at timestamptz NOT NULL,
   updated_at timestamptz NOT NULL,
   CONSTRAINT push_servers_name_check CHECK (char_length(name) BETWEEN 1 AND 64),
+  CONSTRAINT push_servers_key_check CHECK (server_key ~ '^[0-9a-f]{32}$'),
   CONSTRAINT push_servers_status_check CHECK (status IN ('active', 'disabled')),
   CONSTRAINT push_servers_daily_quota_check CHECK (daily_quota BETWEEN 1 AND 100000000)
 );
-
-CREATE TABLE push_server_keys (
-  id uuid PRIMARY KEY,
-  server_id uuid NOT NULL REFERENCES push_servers(id) ON DELETE CASCADE,
-  public_id text NOT NULL UNIQUE,
-  key_hash bytea NOT NULL UNIQUE,
-  key_ciphertext bytea,
-  status text NOT NULL,
-  created_at timestamptz NOT NULL,
-  revoked_at timestamptz,
-  CONSTRAINT push_server_keys_status_check CHECK (status IN ('active', 'revoked')),
-  CONSTRAINT push_server_keys_active_ciphertext_check CHECK (
-    (status = 'active' AND key_ciphertext IS NOT NULL AND revoked_at IS NULL) OR
-    (status = 'revoked' AND key_ciphertext IS NULL AND revoked_at IS NOT NULL)
-  )
-);
-
-CREATE UNIQUE INDEX push_server_keys_one_active_per_server
-  ON push_server_keys (server_id)
-  WHERE status = 'active';
 
 CREATE TABLE push_server_daily_usage (
   server_id uuid NOT NULL REFERENCES push_servers(id) ON DELETE CASCADE,
@@ -74,5 +56,4 @@ ALTER TABLE push_jobs DROP COLUMN quota_date, DROP COLUMN server_id;
 DROP TABLE push_admin_audit_events;
 DROP TABLE push_admin_sessions;
 DROP TABLE push_server_daily_usage;
-DROP TABLE push_server_keys;
 DROP TABLE push_servers;

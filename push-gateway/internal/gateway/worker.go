@@ -182,21 +182,7 @@ func (s *Service) dispatchJob(ctx context.Context, job model.Job) error {
 	if !ok {
 		return s.finishJob(ctx, job, model.JobStatusFailed, "provider_unavailable", "")
 	}
-	providerToken, err := s.cipher.Decrypt(job.Grant.Installation.ProviderTokenCiphertext, []byte(job.Grant.Installation.ID))
-	if err != nil {
-		return s.finishJob(ctx, job, model.JobStatusFailed, "provider_token_decryption_failed", "")
-	}
-	if s.cipher.NeedsRotation(job.Grant.Installation.ProviderTokenCiphertext) {
-		rotated, err := s.cipher.Encrypt(providerToken, []byte(job.Grant.Installation.ID))
-		if err != nil {
-			return err
-		}
-		if err := s.db.WithContext(ctx).Model(&model.Installation{}).
-			Where("id = ? AND provider_token_ciphertext = ?", job.Grant.Installation.ID, job.Grant.Installation.ProviderTokenCiphertext).
-			Update("provider_token_ciphertext", rotated).Error; err != nil {
-			return err
-		}
-	}
+	providerToken := job.Grant.Installation.ProviderToken
 	template, ok := notificationTemplates[job.EventType]
 	if !ok {
 		return s.finishJob(ctx, job, model.JobStatusFailed, "unsupported_event", "")
@@ -284,7 +270,7 @@ func (s *Service) disableInstallation(ctx context.Context, job model.Job, code s
 			return nil
 		}
 		disabled := tx.Model(&model.Installation{}).
-			Where("id = ? AND provider_token_hash = ?", job.Grant.InstallationID, job.Grant.Installation.ProviderTokenHash).
+			Where("id = ? AND provider_token = ?", job.Grant.InstallationID, job.Grant.Installation.ProviderToken).
 			Updates(map[string]any{"status": model.InstallationStatusDisabled, "updated_at": now})
 		if disabled.Error != nil || disabled.RowsAffected == 0 {
 			return disabled.Error

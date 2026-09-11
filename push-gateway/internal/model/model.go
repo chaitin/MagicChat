@@ -19,9 +19,6 @@ const (
 
 	ServerStatusActive   = "active"
 	ServerStatusDisabled = "disabled"
-
-	ServerKeyStatusActive  = "active"
-	ServerKeyStatusRevoked = "revoked"
 )
 
 type RateLimit struct {
@@ -35,18 +32,17 @@ type RateLimit struct {
 func (RateLimit) TableName() string { return "push_rate_limits" }
 
 type Installation struct {
-	ID                      string    `gorm:"type:uuid;primaryKey"`
-	Provider                string    `gorm:"not null"`
-	ProviderTokenCiphertext []byte    `gorm:"not null"`
-	ProviderTokenHash       []byte    `gorm:"not null;uniqueIndex"`
-	Platform                string    `gorm:"not null"`
-	Environment             string    `gorm:"not null"`
-	AppVersion              string    `gorm:"not null"`
-	ManagementTokenHash     []byte    `gorm:"not null"`
-	Status                  string    `gorm:"not null"`
-	LastSeenAt              time.Time `gorm:"not null"`
-	CreatedAt               time.Time `gorm:"not null"`
-	UpdatedAt               time.Time `gorm:"not null;index:push_installations_retention_index"`
+	ID                  string    `gorm:"type:uuid;primaryKey"`
+	Provider            string    `gorm:"not null;uniqueIndex:push_installations_provider_token_unique,priority:1"`
+	ProviderToken       string    `gorm:"not null;uniqueIndex:push_installations_provider_token_unique,priority:3"`
+	Platform            string    `gorm:"not null"`
+	Environment         string    `gorm:"not null;uniqueIndex:push_installations_provider_token_unique,priority:2"`
+	AppVersion          string    `gorm:"not null"`
+	ManagementTokenHash []byte    `gorm:"not null"`
+	Status              string    `gorm:"not null"`
+	LastSeenAt          time.Time `gorm:"not null"`
+	CreatedAt           time.Time `gorm:"not null"`
+	UpdatedAt           time.Time `gorm:"not null;index:push_installations_retention_index"`
 }
 
 func (Installation) TableName() string { return "push_installations" }
@@ -95,6 +91,7 @@ func (Job) TableName() string { return "push_jobs" }
 type Server struct {
 	ID         string    `gorm:"type:uuid;primaryKey"`
 	Name       string    `gorm:"not null"`
+	ServerKey  string    `gorm:"not null;uniqueIndex"`
 	Status     string    `gorm:"not null"`
 	DailyQuota int64     `gorm:"not null"`
 	Revision   int64     `gorm:"not null"`
@@ -103,19 +100,6 @@ type Server struct {
 }
 
 func (Server) TableName() string { return "push_servers" }
-
-type ServerKey struct {
-	ID            string `gorm:"type:uuid;primaryKey"`
-	ServerID      string `gorm:"type:uuid;not null;index"`
-	PublicID      string `gorm:"not null;uniqueIndex"`
-	KeyHash       []byte `gorm:"not null;uniqueIndex"`
-	KeyCiphertext []byte
-	Status        string    `gorm:"not null"`
-	CreatedAt     time.Time `gorm:"not null"`
-	RevokedAt     *time.Time
-}
-
-func (ServerKey) TableName() string { return "push_server_keys" }
 
 type ServerDailyUsage struct {
 	ServerID      string    `gorm:"type:uuid;primaryKey"`

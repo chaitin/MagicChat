@@ -30,7 +30,6 @@ const (
 
 type Options struct {
 	DB                                *gorm.DB
-	Cipher                            *secure.TokenCipher
 	Providers                         []provider.Provider
 	Now                               func() time.Time
 	GrantTTL                          time.Duration
@@ -47,7 +46,6 @@ type Options struct {
 
 type Service struct {
 	db                                *gorm.DB
-	cipher                            *secure.TokenCipher
 	providers                         map[string]provider.Provider
 	now                               func() time.Time
 	grantTTL                          time.Duration
@@ -64,8 +62,8 @@ type Service struct {
 }
 
 func New(options Options) (*Service, error) {
-	if options.DB == nil || options.Cipher == nil {
-		return nil, fmt.Errorf("database and token cipher are required")
+	if options.DB == nil {
+		return nil, fmt.Errorf("database is required")
 	}
 	providers := make(map[string]provider.Provider, len(options.Providers))
 	for _, value := range options.Providers {
@@ -128,7 +126,7 @@ func New(options Options) (*Service, error) {
 		notificationsGlobal = 10000
 	}
 	return &Service{
-		db: options.DB, cipher: options.Cipher, providers: providers, now: now,
+		db: options.DB, providers: providers, now: now,
 		grantTTL: grantTTL, notificationTTL: notificationTTL,
 		maxNotificationTTL: maxNotificationTTL, jobRetention: jobRetention,
 		installationRetention:             installationRetention,
@@ -164,7 +162,7 @@ func (s *Service) RegisterInstallation(ctx context.Context, input RegisterInstal
 	if err != nil {
 		return InstallationCredential{}, err
 	}
-	tokenHash := providerTokenHash(input.Provider, input.Environment, input.ProviderToken)
+	lockKey := providerTokenLockKey(input.Provider, input.Environment, input.ProviderToken)
 	now := s.now().UTC()
 	var installation model.Installation
 
@@ -175,11 +173,12 @@ func (s *Service) RegisterInstallation(ctx context.Context, input RegisterInstal
 		if err := s.enforceRateLimit(tx, "installation_client", input.ClientKey, s.maxRegistrationsPerIPMinute, now); err != nil {
 			return err
 		}
-		if err := lockProviderToken(tx, tokenHash); err != nil {
+		if err := lockProviderToken(tx, lockKey); err != nil {
 			return err
 		}
 		queryErr := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("provider_token_hash = ?", tokenHash).First(&installation).Error
+			Where("provider = ? AND environment = ? AND provider_token = ?", input.Provider, input.Environment, input.ProviderToken).
+			First(&installation).Error
 		switch {
 		case queryErr == nil:
 			if err := revokeActiveGrants(tx, installation.ID, now); err != nil {
@@ -192,13 +191,8 @@ func (s *Service) RegisterInstallation(ctx context.Context, input RegisterInstal
 			return queryErr
 		}
 
-		ciphertext, err := s.cipher.Encrypt(input.ProviderToken, []byte(installation.ID))
-		if err != nil {
-			return err
-		}
 		installation.Provider = input.Provider
-		installation.ProviderTokenCiphertext = ciphertext
-		installation.ProviderTokenHash = tokenHash
+		installation.ProviderToken = input.ProviderToken
 		installation.Platform = input.Platform
 		installation.Environment = input.Environment
 		installation.AppVersion = input.AppVersion
@@ -243,13 +237,13 @@ func (s *Service) UpdateProviderToken(ctx context.Context, installationID, manag
 		}); err != nil {
 			return newFailure("invalid_request", "设备 Token 格式错误")
 		}
-		tokenHash := providerTokenHash(installation.Provider, installation.Environment, providerToken)
-		if err := lockProviderToken(tx, tokenHash); err != nil {
+		lockKey := providerTokenLockKey(installation.Provider, installation.Environment, providerToken)
+		if err := lockProviderToken(tx, lockKey); err != nil {
 			return err
 		}
 		var duplicate model.Installation
 		duplicateErr := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("provider_token_hash = ? AND id <> ?", tokenHash, installation.ID).
+			Where("provider = ? AND environment = ? AND provider_token = ? AND id <> ?", installation.Provider, installation.Environment, providerToken, installation.ID).
 			First(&duplicate).Error
 		if duplicateErr == nil {
 			if err := tx.Delete(&duplicate).Error; err != nil {
@@ -258,17 +252,12 @@ func (s *Service) UpdateProviderToken(ctx context.Context, installationID, manag
 		} else if !errors.Is(duplicateErr, gorm.ErrRecordNotFound) {
 			return duplicateErr
 		}
-		ciphertext, err := s.cipher.Encrypt(providerToken, []byte(installation.ID))
-		if err != nil {
-			return err
-		}
 		return tx.Model(&model.Installation{}).Where("id = ?", installation.ID).Updates(map[string]any{
-			"provider_token_ciphertext": ciphertext,
-			"provider_token_hash":       tokenHash,
-			"app_version":               appVersion,
-			"status":                    model.InstallationStatusActive,
-			"last_seen_at":              now,
-			"updated_at":                now,
+			"provider_token": providerToken,
+			"app_version":    appVersion,
+			"status":         model.InstallationStatusActive,
+			"last_seen_at":   now,
+			"updated_at":     now,
 		}).Error
 	})
 }
@@ -572,7 +561,7 @@ func (s *Service) enforceRateLimit(tx *gorm.DB, scope, key string, limit int64, 
 		ON CONFLICT (scope, key_hash, window_start)
 		DO UPDATE SET count = push_rate_limits.count + 1, updated_at = EXCLUDED.updated_at
 		RETURNING count
-	`, scope, s.cipher.BlindIndex(scope+"\x00"+key), now.Truncate(time.Minute), now).Scan(&count).Error
+	`, scope, secure.HashToken(scope+"\x00"+key), now.Truncate(time.Minute), now).Scan(&count).Error
 	if err != nil {
 		return err
 	}
@@ -590,7 +579,7 @@ func normalizeID(value string) (string, error) {
 	return parsed.String(), nil
 }
 
-func providerTokenHash(providerName, environment, token string) []byte {
+func providerTokenLockKey(providerName, environment, token string) []byte {
 	return secure.HashToken(providerName + "\x00" + environment + "\x00" + token)
 }
 

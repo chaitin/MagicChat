@@ -18,7 +18,6 @@ import (
 	"push-gateway/internal/provider/apns"
 	"push-gateway/internal/provider/fake"
 	"push-gateway/internal/provider/jpush"
-	"push-gateway/internal/secure"
 	"push-gateway/internal/store"
 )
 
@@ -42,19 +41,13 @@ func main() {
 		logger.Error("migrate database", "error", err)
 		os.Exit(1)
 	}
-	encryptionKeys := append([][]byte{cfg.DataEncryptionKey}, cfg.PreviousDataEncryptionKeys...)
-	cipher, err := secure.NewTokenCipher(encryptionKeys...)
-	if err != nil {
-		logger.Error("create token cipher", "error", err)
-		os.Exit(1)
-	}
 	providers, err := configuredProviders(cfg)
 	if err != nil {
 		logger.Error("configure push providers", "error", err)
 		os.Exit(1)
 	}
 	service, err := gateway.New(gateway.Options{
-		DB: db, Cipher: cipher, Providers: providers,
+		DB: db, Providers: providers,
 		GrantTTL: cfg.GrantTTL, NotificationTTL: cfg.NotificationTTL,
 		MaxNotificationTTL: cfg.MaxNotificationTTL, JobRetention: cfg.JobRetention,
 		InstallationRetention:             cfg.InstallationRetention,
@@ -69,7 +62,7 @@ func main() {
 		os.Exit(1)
 	}
 	adminService, err := gatewayadmin.New(gatewayadmin.Options{
-		DB: db, Cipher: cipher, Username: cfg.Admin.Username,
+		DB: db, Username: cfg.Admin.Username,
 		Password: cfg.Admin.Password, PasswordHash: cfg.Admin.PasswordHash,
 	})
 	if err != nil {

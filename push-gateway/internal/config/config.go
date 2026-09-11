@@ -13,8 +13,6 @@ import (
 type Config struct {
 	HTTPAddr                          string
 	DatabaseURL                       string
-	DataEncryptionKey                 []byte
-	PreviousDataEncryptionKeys        [][]byte
 	Providers                         []string
 	TrustedProxyCIDRs                 []string
 	APNS                              APNSConfig
@@ -74,25 +72,7 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("DATABASE_URL is required")
 	}
 
-	encodedKey := strings.TrimSpace(os.Getenv("DATA_ENCRYPTION_KEY"))
-	if encodedKey == "" {
-		return Config{}, fmt.Errorf("DATA_ENCRYPTION_KEY is required")
-	}
-	key, err := base64.StdEncoding.DecodeString(encodedKey)
-	if err != nil || len(key) != 32 {
-		return Config{}, fmt.Errorf("DATA_ENCRYPTION_KEY must be a base64-encoded 32-byte key")
-	}
-	cfg.DataEncryptionKey = key
-	if previousKeys := strings.TrimSpace(os.Getenv("DATA_ENCRYPTION_PREVIOUS_KEYS")); previousKeys != "" {
-		for index, encodedPreviousKey := range strings.Split(previousKeys, ",") {
-			previousKey, decodeErr := base64.StdEncoding.DecodeString(strings.TrimSpace(encodedPreviousKey))
-			if decodeErr != nil || len(previousKey) != 32 {
-				return Config{}, fmt.Errorf("DATA_ENCRYPTION_PREVIOUS_KEYS entry %d must be a base64-encoded 32-byte key", index)
-			}
-			cfg.PreviousDataEncryptionKeys = append(cfg.PreviousDataEncryptionKeys, previousKey)
-		}
-	}
-
+	var err error
 	cfg.Admin.Username = strings.TrimSpace(os.Getenv("PUSH_ADMIN_USERNAME"))
 	cfg.Admin.Password = os.Getenv("PUSH_ADMIN_PASSWORD")
 	cfg.Admin.PasswordHash = strings.TrimSpace(os.Getenv("PUSH_ADMIN_PASSWORD_HASH"))

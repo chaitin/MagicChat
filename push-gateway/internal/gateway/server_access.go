@@ -15,31 +15,17 @@ import (
 var beijing = time.FixedZone("Asia/Shanghai", 8*60*60)
 
 func authenticateServer(tx *gorm.DB, rawKey string) (model.Server, error) {
-	publicID, valid := secure.ServerKeyPublicID(rawKey)
-	if !valid {
+	serverKey := strings.TrimSpace(rawKey)
+	if !secure.ValidServerKey(serverKey) {
 		return model.Server{}, newFailure("server_unauthorized", "服务器认证失败")
-	}
-	var key model.ServerKey
-	err := tx.Where("public_id = ?", publicID).First(&key).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return model.Server{}, newFailure("server_unauthorized", "服务器认证失败")
-	}
-	if err != nil {
-		return model.Server{}, err
 	}
 	var server model.Server
-	err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&server, "id = ?", key.ServerID).Error
+	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&server, "server_key = ?", serverKey).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return model.Server{}, newFailure("server_unauthorized", "服务器认证失败")
 	}
 	if err != nil {
 		return model.Server{}, err
-	}
-	if err := tx.First(&key, "id = ?", key.ID).Error; err != nil {
-		return model.Server{}, err
-	}
-	if key.Status != model.ServerKeyStatusActive || !secure.MatchesToken(key.KeyHash, strings.TrimSpace(rawKey)) {
-		return model.Server{}, newFailure("server_unauthorized", "服务器认证失败")
 	}
 	return server, nil
 }

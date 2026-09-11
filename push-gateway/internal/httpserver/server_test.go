@@ -17,7 +17,6 @@ import (
 	"push-gateway/internal/model"
 	"push-gateway/internal/provider"
 	"push-gateway/internal/provider/fake"
-	"push-gateway/internal/secure"
 
 	"github.com/glebarez/sqlite"
 	"github.com/google/uuid"
@@ -264,36 +263,27 @@ func newTestRouter(t *testing.T) *echo.Echo {
 	}
 	if err := db.AutoMigrate(
 		&model.RateLimit{}, &model.Installation{}, &model.Grant{}, &model.Server{},
-		&model.ServerKey{}, &model.ServerDailyUsage{}, &model.AdminSession{},
-		&model.AdminAuditEvent{}, &model.Job{},
+		&model.ServerDailyUsage{}, &model.AdminSession{}, &model.AdminAuditEvent{}, &model.Job{},
 	); err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
 	}
 	serverID := uuid.NewString()
-	if err := db.Create(&model.Server{ID: serverID, Name: "http", Status: model.ServerStatusActive, DailyQuota: 1000, Revision: 1, CreatedAt: time.Now(), UpdatedAt: time.Now()}).Error; err != nil {
+	if err := db.Create(&model.Server{
+		ID: serverID, Name: "http", ServerKey: testHTTPServerKey, Status: model.ServerStatusActive,
+		DailyQuota: 1000, Revision: 1, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}).Error; err != nil {
 		t.Fatalf("create server: %v", err)
-	}
-	publicID, valid := secure.ServerKeyPublicID(testHTTPServerKey)
-	if !valid {
-		t.Fatal("test server key is invalid")
-	}
-	if err := db.Create(&model.ServerKey{ID: uuid.NewString(), ServerID: serverID, PublicID: publicID, KeyHash: secure.HashToken(testHTTPServerKey), KeyCiphertext: []byte{1}, Status: model.ServerKeyStatusActive, CreatedAt: time.Now()}).Error; err != nil {
-		t.Fatalf("create server key: %v", err)
-	}
-	cipher, err := secure.NewTokenCipher(make([]byte, 32))
-	if err != nil {
-		t.Fatalf("create cipher: %v", err)
 	}
 	now := time.Now().UTC()
 	service, err := gateway.New(gateway.Options{
-		DB: db, Cipher: cipher, Providers: []provider.Provider{fake.New()},
+		DB: db, Providers: []provider.Provider{fake.New()},
 		Now: func() time.Time { return now },
 	})
 	if err != nil {
 		t.Fatalf("create gateway: %v", err)
 	}
 	adminService, err := gatewayadmin.New(gatewayadmin.Options{
-		DB: db, Cipher: cipher, Username: "operator", PasswordHash: httpTestPasswordHash("correct password"),
+		DB: db, Username: "operator", PasswordHash: httpTestPasswordHash("correct password"),
 		Now: func() time.Time { return now },
 	})
 	if err != nil {

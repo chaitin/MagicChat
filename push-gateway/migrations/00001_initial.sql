@@ -14,8 +14,7 @@ CREATE INDEX push_rate_limits_updated_index ON push_rate_limits (updated_at);
 CREATE TABLE push_installations (
   id uuid PRIMARY KEY,
   provider text NOT NULL,
-  provider_token_ciphertext bytea NOT NULL,
-  provider_token_hash bytea NOT NULL UNIQUE,
+  provider_token text NOT NULL,
   platform text NOT NULL,
   environment text NOT NULL DEFAULT 'production',
   app_version text NOT NULL DEFAULT '',
@@ -27,7 +26,8 @@ CREATE TABLE push_installations (
   CONSTRAINT push_installations_provider_check CHECK (provider IN ('apns', 'jpush', 'getui', 'fake')),
   CONSTRAINT push_installations_platform_check CHECK (platform IN ('android', 'ios')),
   CONSTRAINT push_installations_environment_check CHECK (environment IN ('development', 'production')),
-  CONSTRAINT push_installations_status_check CHECK (status IN ('active', 'disabled'))
+  CONSTRAINT push_installations_status_check CHECK (status IN ('active', 'disabled')),
+  CONSTRAINT push_installations_provider_token_unique UNIQUE (provider, environment, provider_token)
 );
 
 CREATE INDEX push_installations_retention_index ON push_installations (updated_at);

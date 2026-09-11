@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/base64"
 	"strings"
 	"testing"
 	"time"
@@ -9,7 +8,6 @@ import (
 
 func TestLoadUsesDefaultHTTPAddress(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://db/push")
-	t.Setenv("DATA_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(make([]byte, 32)))
 	t.Setenv("PUSH_PROVIDERS", "fake")
 	t.Setenv("HTTP_ADDR", "")
 	cfg, err := Load()
@@ -22,13 +20,7 @@ func TestLoadUsesDefaultHTTPAddress(t *testing.T) {
 }
 
 func TestLoadReadsConfiguration(t *testing.T) {
-	key := make([]byte, 32)
-	for index := range key {
-		key[index] = byte(index)
-	}
 	t.Setenv("DATABASE_URL", "postgres://push:test@db/push")
-	t.Setenv("DATA_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(key))
-	t.Setenv("DATA_ENCRYPTION_PREVIOUS_KEYS", base64.StdEncoding.EncodeToString(make([]byte, 32)))
 	t.Setenv("HTTP_ADDR", ":9090")
 	t.Setenv("PUSH_PROVIDERS", "fake, fake")
 	t.Setenv("DEFAULT_GRANT_TTL", "168h")
@@ -41,7 +33,7 @@ func TestLoadReadsConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.HTTPAddr != ":9090" || len(cfg.Providers) != 1 || cfg.Providers[0] != "fake" || cfg.WorkerBatchSize != 25 || len(cfg.PreviousDataEncryptionKeys) != 1 {
+	if cfg.HTTPAddr != ":9090" || len(cfg.Providers) != 1 || cfg.Providers[0] != "fake" || cfg.WorkerBatchSize != 25 {
 		t.Fatalf("configuration = %#v", cfg)
 	}
 	if cfg.GrantTTL != 168*time.Hour || cfg.NotificationTTL != 2*time.Minute || cfg.MaxNotificationTTL != 30*time.Minute || cfg.InstallationRetention != 240*time.Hour {
@@ -50,9 +42,7 @@ func TestLoadReadsConfiguration(t *testing.T) {
 }
 
 func TestLoadReadsPlaintextAdminConfiguration(t *testing.T) {
-	key := make([]byte, 32)
 	t.Setenv("DATABASE_URL", "postgres://db/push")
-	t.Setenv("DATA_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(key))
 	t.Setenv("PUSH_PROVIDERS", "fake")
 	t.Setenv("PUSH_ADMIN_USERNAME", "operator")
 	t.Setenv("PUSH_ADMIN_PASSWORD", "local admin password")
@@ -66,9 +56,7 @@ func TestLoadReadsPlaintextAdminConfiguration(t *testing.T) {
 }
 
 func TestLoadReadsOptionalAdminConfiguration(t *testing.T) {
-	key := make([]byte, 32)
 	t.Setenv("DATABASE_URL", "postgres://db/push")
-	t.Setenv("DATA_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(key))
 	t.Setenv("PUSH_PROVIDERS", "fake")
 	t.Setenv("PUSH_ADMIN_USERNAME", "operator")
 	t.Setenv("PUSH_ADMIN_PASSWORD_HASH", "$argon2id$v=19$m=65536,t=3,p=2$c2FsdHNhbHRzYWx0c2FsdA$aGFzaGhhc2hoYXNoaGFzaGhhc2g")
@@ -82,9 +70,7 @@ func TestLoadReadsOptionalAdminConfiguration(t *testing.T) {
 }
 
 func TestLoadRejectsBothAdminPasswordForms(t *testing.T) {
-	key := make([]byte, 32)
 	t.Setenv("DATABASE_URL", "postgres://db/push")
-	t.Setenv("DATA_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(key))
 	t.Setenv("PUSH_PROVIDERS", "fake")
 	t.Setenv("PUSH_ADMIN_USERNAME", "operator")
 	t.Setenv("PUSH_ADMIN_PASSWORD", "local admin password")
@@ -95,9 +81,7 @@ func TestLoadRejectsBothAdminPasswordForms(t *testing.T) {
 }
 
 func TestLoadRejectsPartialAdminConfiguration(t *testing.T) {
-	key := make([]byte, 32)
 	t.Setenv("DATABASE_URL", "postgres://db/push")
-	t.Setenv("DATA_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(key))
 	t.Setenv("PUSH_PROVIDERS", "fake")
 	t.Setenv("PUSH_ADMIN_USERNAME", "operator")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "admin password credential") {
@@ -106,9 +90,7 @@ func TestLoadRejectsPartialAdminConfiguration(t *testing.T) {
 }
 
 func TestLoadRequiresJPushCredentialsWhenEnabled(t *testing.T) {
-	key := make([]byte, 32)
 	t.Setenv("DATABASE_URL", "postgres://db/push")
-	t.Setenv("DATA_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(key))
 	t.Setenv("PUSH_PROVIDERS", "jpush")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "JPUSH_APP_KEY") {
 		t.Fatalf("missing JPush credential error = %v", err)
@@ -125,9 +107,7 @@ func TestLoadRequiresJPushCredentialsWhenEnabled(t *testing.T) {
 }
 
 func TestLoadRejectsInstallationRetentionShorterThanJobs(t *testing.T) {
-	key := make([]byte, 32)
 	t.Setenv("DATABASE_URL", "postgres://db/push")
-	t.Setenv("DATA_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(key))
 	t.Setenv("PUSH_PROVIDERS", "fake")
 	t.Setenv("JOB_RETENTION", "168h")
 	t.Setenv("INSTALLATION_RETENTION", "24h")
@@ -137,9 +117,7 @@ func TestLoadRejectsInstallationRetentionShorterThanJobs(t *testing.T) {
 }
 
 func TestLoadRejectsInvalidTrustedProxyCIDR(t *testing.T) {
-	key := make([]byte, 32)
 	t.Setenv("DATABASE_URL", "postgres://db/push")
-	t.Setenv("DATA_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(key))
 	t.Setenv("PUSH_PROVIDERS", "fake")
 	t.Setenv("TRUSTED_PROXY_CIDRS", "not-a-cidr")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "TRUSTED_PROXY_CIDRS") {
@@ -148,25 +126,16 @@ func TestLoadRejectsInvalidTrustedProxyCIDR(t *testing.T) {
 }
 
 func TestLoadRequiresAnExplicitProvider(t *testing.T) {
-	key := make([]byte, 32)
 	t.Setenv("DATABASE_URL", "postgres://db/push")
-	t.Setenv("DATA_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(key))
 	t.Setenv("PUSH_PROVIDERS", "")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "PUSH_PROVIDERS") {
 		t.Fatalf("missing provider error = %v", err)
 	}
 }
 
-func TestLoadRejectsMissingAndInvalidSecrets(t *testing.T) {
+func TestLoadRequiresDatabaseURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
-	t.Setenv("DATA_ENCRYPTION_KEY", "")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "DATABASE_URL") {
 		t.Fatalf("missing database error = %v", err)
-	}
-
-	t.Setenv("DATABASE_URL", "postgres://db/push")
-	t.Setenv("DATA_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString([]byte("short")))
-	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "32-byte") {
-		t.Fatalf("invalid key error = %v", err)
 	}
 }

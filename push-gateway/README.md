@@ -9,7 +9,7 @@ The gateway stores no MagicChat account, conversation, server URL, or message co
 Implemented:
 
 - PostgreSQL migrations embedded in the binary
-- versioned provider-token encryption with rolling keyring rotation
+- plaintext provider-token storage for direct provider delivery
 - installation registration and provider-token rotation
 - one active grant per installation
 - grant renewal, revocation, and expiration
@@ -42,17 +42,15 @@ Set the variables documented in `.env.example`, create the PostgreSQL database, 
 go run ./cmd/gateway
 ```
 
-No development service is started automatically by tests or builds.
+No development service is started automatically by tests or builds. Deployments upgrading from the former encrypted-storage schema must recreate the Gateway database; no compatibility migration is provided.
 
 Production traffic must terminate TLS at a trusted reverse proxy. Configure that proxy to replace (not append untrusted values to) `X-Forwarded-For`, and list its network in `TRUSTED_PROXY_CIDRS`; otherwise the gateway deliberately derives rate-limit identity from the direct peer address. Never expose the plain HTTP listener directly to the public internet.
-
-To rotate `DATA_ENCRYPTION_KEY`, move the old value into `DATA_ENCRYPTION_PREVIOUS_KEYS` and deploy the new value as the current key. Active installation tokens are lazily re-encrypted by the worker; retain previous keys until old-key ciphertext has drained.
 
 `INSTALLATION_RETENTION` controls how long expired/revoked grants and abandoned installations remain after they are no longer active. It must not be shorter than `JOB_RETENTION`.
 
 The embedded management frontend is available at `/admin/`. Its management API is enabled when `PUSH_ADMIN_USERNAME` and one password credential are configured. `PUSH_ADMIN_PASSWORD` accepts plaintext from a protected environment file and is converted to an Argon2id hash during startup; the plaintext is not retained by the service. Alternatively, set `PUSH_ADMIN_PASSWORD_HASH` to an Argon2id PHC hash generated with `go run ./cmd/hash-password`. Never configure both forms. Admin sessions always last 12 hours. Session cookies automatically use `Secure` for HTTPS requests, including TLS terminated by a reverse proxy that supplies `X-Forwarded-Proto: https`.
 
-Notification admission requires `X-MagicChat-Server-Key` in addition to the grant Bearer token. Server keys are 32-character lowercase hexadecimal strings created in the management console. The active key is encrypted at rest so an administrator can reveal it; authentication and database lookup use a separate SHA-256 digest. Rotating a key erases the old ciphertext and revokes the old key immediately.
+Notification admission requires `X-MagicChat-Server-Key` in addition to the grant Bearer token. Server keys are 32-character lowercase hexadecimal strings created in the management console and stored in plaintext. Authentication performs a direct lookup by the supplied key. Rotating a key replaces the stored value and revokes the old key immediately.
 
 ## API
 

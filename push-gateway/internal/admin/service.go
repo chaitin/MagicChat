@@ -25,7 +25,6 @@ var beijing = time.FixedZone("Asia/Shanghai", 8*60*60)
 
 type Options struct {
 	DB           *gorm.DB
-	Cipher       *secure.TokenCipher
 	Username     string
 	Password     string
 	PasswordHash string
@@ -34,7 +33,6 @@ type Options struct {
 
 type Service struct {
 	db           *gorm.DB
-	cipher       *secure.TokenCipher
 	username     string
 	passwordHash string
 	now          func() time.Time
@@ -55,8 +53,8 @@ func FailureOf(err error) (*Failure, bool) {
 }
 
 func New(options Options) (*Service, error) {
-	if options.DB == nil || options.Cipher == nil {
-		return nil, fmt.Errorf("database and cipher are required")
+	if options.DB == nil {
+		return nil, fmt.Errorf("database is required")
 	}
 	username := strings.TrimSpace(options.Username)
 	password := options.Password
@@ -82,8 +80,8 @@ func New(options Options) (*Service, error) {
 		now = time.Now
 	}
 	return &Service{
-		db: options.DB, cipher: options.Cipher, username: username,
-		passwordHash: passwordHash, now: now, sessionTTL: adminSessionTTL,
+		db: options.DB, username: username, passwordHash: passwordHash,
+		now: now, sessionTTL: adminSessionTTL,
 		enabled: username != "",
 	}, nil
 }
@@ -213,23 +211,23 @@ func (s *Service) CreateServer(ctx context.Context, name string, dailyQuota int6
 		return IssuedServer{}, err
 	}
 	now := s.now().UTC()
-	server := model.Server{ID: uuid.NewString(), Name: name, Status: model.ServerStatusActive, DailyQuota: dailyQuota, Revision: 1, CreatedAt: now, UpdatedAt: now}
-	key, plaintext, err := s.newServerKey(server.ID, now)
+	serverKey, err := secure.GenerateServerKey()
 	if err != nil {
 		return IssuedServer{}, err
 	}
+	server := model.Server{
+		ID: uuid.NewString(), Name: name, ServerKey: serverKey, Status: model.ServerStatusActive,
+		DailyQuota: dailyQuota, Revision: 1, CreatedAt: now, UpdatedAt: now,
+	}
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&server).Error; err != nil {
-			return err
-		}
-		if err := tx.Create(&key).Error; err != nil {
 			return err
 		}
 		return createAudit(tx, "server.create", &server.ID, requestID, now)
 	}); err != nil {
 		return IssuedServer{}, err
 	}
-	return IssuedServer{Server: serverView(server, 0), Key: plaintext}, nil
+	return IssuedServer{Server: serverView(server, 0), Key: serverKey}, nil
 }
 
 func (s *Service) UpdateServer(ctx context.Context, id, name string, dailyQuota int64, requestID string) (ServerView, error) {
@@ -287,57 +285,29 @@ func (s *Service) SetServerStatus(ctx context.Context, id, status, requestID str
 }
 
 func (s *Service) RevealServerKey(ctx context.Context, id, requestID string) (string, error) {
-	var plaintext string
+	var server model.Server
 	now := s.now().UTC()
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var key model.ServerKey
-		if err := tx.Where("server_id = ? AND status = ?", strings.TrimSpace(id), model.ServerKeyStatusActive).First(&key).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return &Failure{Code: "server_not_found"}
-			}
+		if err := loadServerForUpdate(tx, id, &server); err != nil {
 			return err
 		}
-		value, err := s.cipher.Decrypt(key.KeyCiphertext, []byte(key.ID))
-		if err != nil {
-			return err
-		}
-		plaintext = value
-		if s.cipher.NeedsRotation(key.KeyCiphertext) {
-			rotated, err := s.cipher.Encrypt(value, []byte(key.ID))
-			if err != nil {
-				return err
-			}
-			if err := tx.Model(&model.ServerKey{}).Where("id = ?", key.ID).Update("key_ciphertext", rotated).Error; err != nil {
-				return err
-			}
-		}
-		return createAudit(tx, "server.key.reveal", &key.ServerID, requestID, now)
+		return createAudit(tx, "server.key.reveal", &server.ID, requestID, now)
 	})
-	return plaintext, err
+	return server.ServerKey, err
 }
 
 func (s *Service) RotateServerKey(ctx context.Context, id, requestID string) (IssuedServer, error) {
 	now := s.now().UTC()
 	var server model.Server
-	var plaintext string
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	serverKey, err := secure.GenerateServerKey()
+	if err != nil {
+		return IssuedServer{}, err
+	}
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := loadServerForUpdate(tx, id, &server); err != nil {
 			return err
 		}
-		if err := tx.Model(&model.ServerKey{}).Where("server_id = ? AND status = ?", server.ID, model.ServerKeyStatusActive).Updates(map[string]any{
-			"status": model.ServerKeyStatusRevoked, "key_ciphertext": nil, "revoked_at": now,
-		}).Error; err != nil {
-			return err
-		}
-		key, value, err := s.newServerKey(server.ID, now)
-		if err != nil {
-			return err
-		}
-		plaintext = value
-		if err := tx.Create(&key).Error; err != nil {
-			return err
-		}
-		server.Revision, server.UpdatedAt = server.Revision+1, now
+		server.ServerKey, server.Revision, server.UpdatedAt = serverKey, server.Revision+1, now
 		if err := tx.Save(&server).Error; err != nil {
 			return err
 		}
@@ -347,17 +317,7 @@ func (s *Service) RotateServerKey(ctx context.Context, id, requestID string) (Is
 		return IssuedServer{}, err
 	}
 	usage, err := s.todayUsage(ctx, server.ID)
-	return IssuedServer{Server: serverView(server, usage), Key: plaintext}, err
-}
-
-func (s *Service) newServerKey(serverID string, now time.Time) (model.ServerKey, string, error) {
-	publicID, plaintext, err := secure.GenerateServerKey()
-	if err != nil {
-		return model.ServerKey{}, "", err
-	}
-	key := model.ServerKey{ID: uuid.NewString(), ServerID: serverID, PublicID: publicID, KeyHash: secure.HashToken(plaintext), Status: model.ServerKeyStatusActive, CreatedAt: now}
-	key.KeyCiphertext, err = s.cipher.Encrypt(plaintext, []byte(key.ID))
-	return key, plaintext, err
+	return IssuedServer{Server: serverView(server, usage), Key: serverKey}, err
 }
 
 func (s *Service) todayUsage(ctx context.Context, serverID string) (int64, error) {
