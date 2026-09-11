@@ -1,103 +1,30 @@
 ---
 import { Icon } from 'astro-icon/components';
 import BaseLayout from '../layouts/BaseLayout.astro';
-import HeroFlowBackground from '../components/HeroFlowBackground.astro';
-import SiteFooter from '../components/SiteFooter.astro';
-import SiteHeader from '../components/SiteHeader.astro';
+import StudioHero from '../components/StudioHero.astro';
+import StudioWorkspace from '../components/StudioWorkspace.astro';
+import DeploymentSection from '../components/DeploymentSection.astro';
+import ClientsSection from '../components/ClientsSection.astro';
+import OpennessSection from '../components/OpennessSection.astro';
+import { ActionButton } from '../components/ActionButton';
+import { FaqQuestion } from '../components/FaqQuestion';
+import '../styles/homepage.css';
 
-const title = '即应｜AI 时代的团队协作入口';
+const title = '即应 - AI 时代的团队协作入口';
 const description = '即应是一款开源的即时通讯工具，连接消息、知识与任务，让 Agent 深度融入工作流，成为真正能参与协作、推动执行的数字员工。';
 const siteOrigin = Astro.site ?? Astro.url.origin;
 const pageUrl = new URL(import.meta.env.BASE_URL, siteOrigin).href;
 const logoUrl = new URL(`${import.meta.env.BASE_URL}favicon.webp`, siteOrigin).href;
-
 const schema = [
   { '@context': 'https://schema.org', '@type': 'Organization', name: '即应', url: pageUrl, logo: logoUrl },
   { '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: '即应', alternateName: 'MagicChat', applicationCategory: 'BusinessApplication', operatingSystem: 'Web, macOS, Windows, Linux, iOS, Android', description, url: pageUrl },
 ];
-
-const painPoints = [
-  ['01', '沟通与上下文严重割裂', '消息、文件、成员和项目分散在不同工具里。每次寻求 AI 或同事协助，都不得不重新翻找资料、复制背景、重复解释需求。'],
-  ['02', '传统 AI 缺乏协同记忆', '普通 AI 助手仅停留在“一问一答”的单机对话框。看不见团队成员、缺乏长期项目上下文、无法跨会话追踪，答完即结束。'],
-  ['03', '信息过载与重复爬楼', '每日面对数百条群聊消息与邮件，人工爬楼抓重点耗时耗力；同一个业务背景需要向不同部门的干系人反复口述交代。'],
-  ['04', '讨论与行动断层严重', '会议和聊天中达成的共识缺乏自动跟进机制，仍需人工手动整理待办、指派负责人并反复催办，沟通经常止于“收到”。'],
-  ['05', '数据隐私与风控隐患', '公共 AI 无法保障企业核心业务数据的私有可控，且缺乏对敏感数据读取隔离及高风险操作（如发公告、改状态）的人工审核屏障。'],
+const teamBenefits = [
+  ['tabler:messages', '上下文不再散落各处', '消息、文档与项目连在一起，让 AI 理解工作背景，减少翻找资料和反复解释。'],
+  ['tabler:brain', '从讨论中找到重点', '让 AI 整理群聊、归纳进展、提取待办，把人的精力留给判断与创造。'],
+  ['tabler:checkbox', '让每件事都有下一步', '将共识整理为任务，明确负责人和时间，确认后创建并持续跟进。'],
+  ['tabler:shield-check', '信息与操作自主可控', 'AI 遵循用户权限，重要操作由你确认；通过私有化部署，让数据留在自己的环境中。'],
 ];
-
-const capabilities = [
-  ['全域感知·记得住', '上下文自动沉淀在会话、任务与项目日志中，跨会话长期记忆，告别每次对话重新交代背景的繁琐。', '上下文工作台', 'tabler:brain', '5 个关联会话'],
-  ['主动协同·会办事', '主动梳理待办、自动起草通知、智能催办跟进，将零散沟通自动转化为可执行、有反馈的闭环行动。', '项目推进面板', 'tabler:checkbox', '3 项待跟进'],
-  ['严密风控·守边界', '严格遵循企业级权限体系，敏感数据读取可控，所有重要写操作与外部通知均需经由人工明确确认。', '权限确认中心', 'tabler:shield-check', '需确认 2 项'],
-  ['自主可控·易扩展', '支持企业自建环境私有化部署，核心代码开源，可自由接入企业已有大模型、API 及业务系统。', '扩展连接中心', 'tabler:plug-connected', '6 个已连接'],
-];
-
-const featureVisuals = [
-  {
-    inboxTitle: '消息',
-    inboxTabs: ['全部', '未读', '群聊'],
-    threads: [
-      ['AI 助理', 'assistant', 'AI', '已关联 5 个上下文', true],
-      ['创新产品', 'team', '团', '项目讨论与任务动态', false],
-      ['项目资料', 'doc', '文', '已同步更新', false],
-    ],
-    chat: ['AI 助理', 'assistant', 'AI', '跨会话上下文', 'tabler:brain'],
-    assistant: 'AI 助理',
-    prompt: '@AI 助理，帮我把产品项目群的历史信息总结一下发给李XX',
-    processLabel: '正在整理中',
-    response: '已整理产品项目群的历史信息，并将摘要发给李XX。',
-    responseStatus: '已发送',
-    streamResponse: false,
-  },
-  {
-    inboxTitle: '任务',
-    inboxTabs: ['待办', '进行中', '已完成'],
-    threads: [
-      ['创新产品', 'team', '团', '3 项待跟进', true],
-      ['AI 助理', 'assistant', 'AI', '正在推进任务', false],
-      ['项目资料', 'doc', '文', '待同步 2 项', false],
-    ],
-    chat: ['创新产品', 'team', '团', '项目推进 · 8 人', 'tabler:checkbox'],
-    assistant: 'AI 助理',
-    prompt: '@AI 助理，给@xxx创建个任务，星期三前完成销售报表的制作',
-    processLabel: '正在创建中',
-    response: '任务创建成功',
-    responseStatus: '已创建',
-    streamResponse: true,
-  },
-  {
-    inboxTitle: '权限',
-    inboxTabs: ['待确认', '已通过', '审计'],
-    threads: [
-      ['权限确认中心', 'permission', '权', '待人工确认', true],
-      ['项目资料', 'doc', '文', '敏感资料 4 项', false],
-      ['AI 助理', 'assistant', 'AI', '策略已同步', false],
-    ],
-    chat: ['权限确认中心', 'permission', '权', '待人工确认', 'tabler:shield-check'],
-    assistant: 'AI 助理',
-    prompt: '@AI 助理，查看一下XXX项目的情况',
-    processLabel: '正在查找中',
-    response: '当前你不在项目中无法查看',
-    responseStatus: '已拦截',
-    streamResponse: true,
-  },
-  {
-    inboxTitle: '连接',
-    inboxTabs: ['全部', '已连接', '待接入'],
-    threads: [
-      ['扩展服务', 'connect', '扩', '6 个已连接', true],
-      ['模型服务', 'team', '模', 'API 运行正常', false],
-      ['AI 助理', 'assistant', 'AI', '可调用工作流', false],
-    ],
-    chat: ['扩展连接中心', 'connect', '扩', '6 个已连接', 'tabler:plug-connected'],
-    assistant: 'AI 助理',
-    prompt: '@AI 助理，我想创建一个应用对接到即应怎么操作',
-    processLabel: '正在查找中',
-    response: '可以通过开放 API 创建应用并接入即应。',
-    responseStatus: '已找到',
-    streamResponse: false,
-  },
-];
-
 const comparisonRows = [
   ['企业即时通讯', true, true, true, true, true, true, true],
   ['Web、桌面与移动端', true, true, true, true, true, true, true],
@@ -110,554 +37,63 @@ const comparisonRows = [
   ['开放 API 与应用扩展', true, true, true, true, true, true, true],
   ['内置 AI 助手', true, true, true, true, true, false, false],
 ];
-
 const faqs = [
-  ['即应和飞书、钉钉等企业 IM 是什么关系？', '飞书和钉钉是成熟的大而全团队生态；即应聚焦于“助理优先”的 AI 原生协作模式，让 AI 以明确身份与员工同频工作，且支持完全私有化部署与开源二次开发。'],
-  ['使用即应，我们的企业数据安全有保障吗？', '非常安全。即应支持全套代码私有化部署在企业自有服务器或云基础设施中。数据读取与操作均遵循企业权限隔离策略，关键动作必须经由人工二次确认，核心代码开源可随时审计。'],
-  ['AI 助理具体能帮我们做什么？', '在授权范围内，AI 助理可跨聊天与项目查询历史上下文、总结会议与讨论共识、结构化提取待办任务、智能起草通知与公文、自动追踪项目进展，并在需要决策时安全地将控制权交还给人。'],
-  ['部署即应需要什么样的基础条件？', '即应采用容器化部署方案（提供 Docker / Compose 等依赖配置），支持 Web、桌面客户端（macOS / Windows / Linux）及移动端。您既可以在线体验 Demo，也可一键部署至私有服务器。'],
-  ['即应是免费开源的吗？', '即应的核心产品代码基于 AGPL-3.0 许可证开源，支持企业与个人免费安装、使用和私有化部署。具体授权细则与商业支持可参阅 GitHub 官方发布说明。'],
-  ['我们团队可以基于即应进行二次开发吗？', '完全可以！即应采用模块化架构与开源代码库，欢迎开发者根据自身业务需求定制 UI、扩展 Agent 插件或接入特定的企业工作流。'],
+  ['即应和飞书、钉钉等企业 IM 有什么不同？', '飞书和钉钉提供成熟的团队协作生态；即应聚焦 AI 参与团队工作，让助理以独立应用身份接入消息、项目和任务，同时支持私有化部署与开源二次开发。'],
+  ['我们的企业数据如何保持自主可控？', '即应支持部署在企业自有服务器或云基础设施中，数据访问遵循用户权限。团队可以自主选择接入的模型和外部工具，并根据业务要求管理数据流向。'],
+  ['AI 助理具体能帮我们做什么？', '在授权范围内，AI 助理可以查询聊天记录和项目信息、总结讨论、整理待办、起草内容，并在用户明确授权后代发消息。创建和修改任务前，助理会展示参数并请求确认。'],
+  ['部署即应需要什么样的基础条件？', '即应提供 Docker / Compose 等容器化部署配置，支持 Web、桌面与移动客户端。可以先在线体验，再参考部署文档准备自己的服务器和相关服务。'],
+  ['即应是免费开源的吗？', '即应的核心产品代码基于 AGPL-3.0 许可证开源，支持企业与个人免费安装、使用和私有化部署。使用、修改或分发时，请遵循许可证的具体要求。'],
+  ['我们团队可以基于即应进行二次开发吗？', '可以。你可以根据业务需求定制界面、创建应用，并接入模型、MCP 工具或已有业务系统，扩展团队的工作方式。'],
 ];
-
 ---
 
-<BaseLayout title={title} description={description} schema={schema} bodyClass="page-scene">
-  <SiteHeader />
-  <main id="main-content" class="scene-page">
-    <section class="scene scene-hero" aria-labelledby="hero-title">
-      <HeroFlowBackground />
-      <div class="hero-icon-cloud" aria-hidden="true">
-        <span class="hero-orbit-icon hero-orbit-icon-message"><span class="hero-orbit-icon-card"><Icon name="tabler:message-circle" size={23} is:inline /></span></span>
-        <span class="hero-orbit-icon hero-orbit-icon-ai"><span class="hero-orbit-icon-card"><Icon name="tabler:brain" size={24} is:inline /></span></span>
-        <span class="hero-orbit-icon hero-orbit-icon-document"><span class="hero-orbit-icon-card"><Icon name="tabler:file-text" size={23} is:inline /></span></span>
-        <span class="hero-orbit-icon hero-orbit-icon-task"><span class="hero-orbit-icon-card"><Icon name="tabler:checkbox" size={23} is:inline /></span></span>
-        <span class="hero-orbit-icon hero-orbit-icon-security"><span class="hero-orbit-icon-card"><Icon name="tabler:shield-check" size={23} is:inline /></span></span>
-      </div>
-      <div class="scene-content scene-content-bottom"><span class="scene-eyebrow"><Icon name="tabler:sparkles" size={16} is:inline aria-hidden="true" />即应是什么</span><h1 id="hero-title" class="hero-title-motion motion-reveal"><span class="hero-title-name">即应</span><span class="hero-title-accent">AI 时代的团队协作入口</span></h1><p class="scene-lead" data-hero-typing aria-label="即应是一款开源的即时通讯工具，连接消息、知识与任务。让 Agent 深度融入工作流，成为真正能参与协作、推动执行的数字员工。"><span class="scene-lead-line" data-typing-line aria-hidden="true">即应是一款开源的即时通讯工具，连接消息、知识与任务</span><span class="scene-lead-line" data-typing-line aria-hidden="true">让 Agent 深度融入工作流，成为真正能参与协作、推动执行的数字员工</span></p><div class="scene-actions"><a class="scene-button scene-button-primary" href="https://app.jiying.chat/" target="_blank" rel="noopener noreferrer">在线体验</a><details class="scene-download-menu download-menu"><summary class="scene-button scene-button-outline scene-install-toggle" aria-label="免费安装" data-tooltip="免费安装">免费安装</summary><div class="download-menu-panel scene-download-menu-panel"><article class="download-option"><div><h3>Windows 下载</h3><p>Windows 桌面客户端</p></div><a class="download-option-action" data-release-platform="windows" href="https://jiying.chat/releases/jiying.exe" target="_blank" rel="noopener noreferrer">下载<Icon name="tabler:download" size={15} aria-hidden="true" /></a></article><article class="download-option"><div><h3>Mac 下载</h3><p>macOS 桌面客户端</p></div><a class="download-option-action" data-release-platform="macos" href="https://jiying.chat/releases/jiying.dmg" target="_blank" rel="noopener noreferrer">下载<Icon name="tabler:download" size={15} aria-hidden="true" /></a></article><article class="download-option"><div><h3>Linux 下载</h3><p>Linux客户端</p></div><a class="download-option-action" data-release-platform="linux-amd" href="https://jiying.chat/releases/jiying.amd.AppImage" target="_blank" rel="noopener noreferrer">下载<Icon name="tabler:download" size={15} aria-hidden="true" /></a></article><article class="download-option"><div><h3>iOS 下载</h3><p>iPhone 与 iPad</p></div><a class="download-option-action" data-release-platform="ios" href="https://jiying.chat/releases/jiying.dmg" target="_blank" rel="noopener noreferrer">下载<Icon name="tabler:download" size={15} aria-hidden="true" /></a></article><article class="download-option"><div><h3>安卓 下载</h3><p>Android 手机和平板</p></div><a class="download-option-action" data-release-platform="android" href="https://jiying.chat/releases/jiying.apk" target="_blank" rel="noopener noreferrer">下载<Icon name="tabler:download" size={15} aria-hidden="true" /></a></article></div></details></div><div class="scene-tags"><span>开源</span><span>内置 AI 助理</span><span>支持私有化部署</span></div></div>
-    </section>
-
-    <section class="scene scene-why" id="why" aria-labelledby="why-title">
-      <div class="scene-content scene-content-bottom"><div class="scene-text-block"><span class="scene-eyebrow"><Icon name="tabler:users" size={16} is:inline aria-hidden="true" />为什么需要即应</span><h2 id="why-title"><span class="title-line">一个空间，连接</span><span class="title-line title-accent">团队与 AI</span></h2><p>在即应中不仅可以提供完整的团队协作能力，让沟通与执行在同一个空间完成。同时也内置了 AI 智能体能自然接入相关流程，让每个人都能轻松定义专属智能体，完成更多定制化工作。</p></div><div class="pain-showcase"><div class="pain-showcase-main"><section class="pain-mosaic" aria-label="需求与痛点">{painPoints.map(([number, itemTitle, body], index) => <article class:list={['pain-banner', `pain-tile-${index + 1}`]} id={`pain-slide-${number}`} tabindex="0" aria-label={`${index + 1} / ${painPoints.length}`}><div class="pain-banner-content"><p class="pain-banner-meta"><span>{number}</span><i></i></p><h3>{itemTitle}</h3><p>{body}</p></div><span class="pain-banner-ordinal" aria-hidden="true">{number}</span></article>)}</section></div></div></div>
-    </section>
-
-    <section class="scene scene-solution" id="solution" aria-labelledby="solution-title">
-      <div class="scene-content scene-content-top scene-solution-content">
-        <div class="scene-text-block"><span class="scene-eyebrow"><Icon name="tabler:robot" size={16} is:inline aria-hidden="true" />功能介绍</span><h2 id="solution-title"><span class="title-line">让 AI 真正成为<span class="title-accent">团队的一员</span></span></h2><p>即应希望 AI 不是与工作割裂的聊天机器人，而是能接手实际流程的数字员工——沟通、项目、时间、文档，处处替你分担；团队进展一目了然，人的精力回归真正重要的判断与创造。</p></div>
-        <section class="feature-explorer" aria-label="即应核心能力">
-          <div class="feature-pagination" role="tablist" aria-label="选择核心能力">
-            {capabilities.map(([itemTitle, body], index) => (
-              <div
-                class:list={['feature-page']}
-                role="tab"
-                tabindex="0"
-                aria-selected="false"
-                aria-label={`查看第 ${index + 1} 项：${itemTitle}`}
-                title={itemTitle}
-                data-feature-page={index}
-              >
-                <div class="feature-page-summary">
-                  <strong>{itemTitle}</strong>
-                  <span>{body}</span>
-                  <i class="feature-scratch-light" aria-hidden="true"></i>
-                </div>
-              </div>
-            ))}
-          </div>
-          <template data-feature-template>
-            {capabilities.map(([_itemTitle, _body, label, icon, status], index) => (
-              <article
-                class:list={['feature-preview-screen', `feature-preview-${index + 1}`]}
-                id={`feature-preview-${index + 1}`}
-                data-feature-preview={index}
-                data-feature-prompt={featureVisuals[index].prompt}
-                data-feature-process={featureVisuals[index].processLabel}
-                data-feature-response={featureVisuals[index].response}
-                data-feature-result={featureVisuals[index].responseStatus}
-                data-feature-stream={featureVisuals[index].streamResponse}
-                aria-label={label}
-                aria-expanded="false"
-                tabindex="-1"
-              >
-                <div class="product-window">
-                    <div class="product-app">
-                      <aside class="app-dock" aria-hidden="true">
-                        <span class="app-dock-logo">即</span>
-                        <span class:list={['app-dock-item', index === 0 && 'is-current']}><Icon name="tabler:message-circle" size={14} is:inline /></span>
-                        <span class:list={['app-dock-item', index === 1 && 'is-current']}><Icon name="tabler:checkbox" size={14} is:inline /></span>
-                        <span class:list={['app-dock-item', index === 2 && 'is-current']}><Icon name="tabler:shield-check" size={14} is:inline /></span>
-                        <span class:list={['app-dock-item', index === 3 && 'is-current']}><Icon name="tabler:plug-connected" size={14} is:inline /></span>
-                      </aside>
-                      <aside class="app-inbox">
-                        <header>
-                          <strong>{featureVisuals[index].inboxTitle}</strong>
-                          <Icon name="tabler:search" size={15} />
-                        </header>
-                        <div class="app-inbox-tabs">
-                          {featureVisuals[index].inboxTabs.map((tab, tabIndex) => tabIndex === 0 ? <b>{tab}</b> : <span>{tab}</span>)}
-                        </div>
-                        {featureVisuals[index].threads.map(([threadName, avatar, avatarText, threadStatus, current]) => <div class:list={['app-thread', current && 'is-current']}><i class:list={['app-avatar', `app-avatar-${avatar}`]}>{avatarText}</i><span><strong>{threadName}</strong><small>{threadStatus}</small></span></div>)}
-                      </aside>
-                      <section class="app-chat">
-                        <header>
-                          <i class:list={['app-avatar', `app-avatar-${featureVisuals[index].chat[1]}`]}>{featureVisuals[index].chat[2]}</i>
-                          <span><strong>{featureVisuals[index].chat[0]}</strong><small>{featureVisuals[index].chat[3]}</small></span>
-                          <Icon name={featureVisuals[index].chat[4]} size={15} />
-                        </header>
-                        <div class="app-chat-history">
-                          <time>今天 17:19</time>
-                          <div class="app-message app-message-assistant" data-assistant-message>
-                            <i class="app-avatar app-avatar-assistant">AI</i>
-                            <div>
-                              <small data-assistant-label>{featureVisuals[index].assistant}</small>
-                              <article data-assistant-card>
-                                <div class="app-message-heading">
-                                  <Icon name={icon} size={14} />
-                                  <strong>{label}</strong>
-                                  <b data-assistant-result>{status}</b>
-                                </div>
-                                <p data-assistant-response>{featureVisuals[index].response}</p>
-                                {index === 0 && <div class="app-context-sources"><span>客户反馈</span><span>项目看板</span><span>历史会话</span></div>}
-                                {index === 1 && <div class="app-task-list"><span><i></i>销售报表制作 <b>进行中</b></span><span><i></i>任务创建成功 <b>已完成</b></span></div>}
-                                {index === 2 && <div class="app-permission-list"><span><Icon name="tabler:eye" size={11} />读取上下文</span><span><Icon name="tabler:edit" size={11} />创建任务待确认</span></div>}
-                                {index === 3 && <div class="app-integration-list"><span><i></i>团队知识库 <b>已连接</b></span><span><i></i>模型服务 API <b>已连接</b></span></div>}
-                              </article>
-                            </div>
-                          </div>
-                          <div class="app-message app-message-brief" data-user-message>
-                            <i class="app-avatar app-avatar-user">你</i>
-                            <div>
-                              <small>你 · 刚刚</small>
-                              <span data-user-request>{featureVisuals[index].prompt}</span>
-                            </div>
-                          </div>
-                          <div class="app-typing" data-assistant-typing aria-label={`${featureVisuals[index].assistant} ${featureVisuals[index].processLabel}`}>
-                            <span data-assistant-status>{featureVisuals[index].assistant} {featureVisuals[index].processLabel}</span>
-                            <i></i>
-                            <i></i>
-                            <i></i>
-                          </div>
-                        </div>
-                        <footer class="app-composer" data-feature-composer>
-                          <span class="app-typing-text" data-composer-text>{featureVisuals[index].prompt}</span>
-                          <span class="app-composer-send" data-send-control aria-hidden="true">
-                            <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                              <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14 21 3m0 0-6.5 18a.55.55 0 0 1-1 0L10 14l-7-3.5a.55.55 0 0 1 0-1z" />
-                            </svg>
-                          </span>
-                          <span class="app-mouse-pointer" data-mouse-pointer aria-hidden="true">
-                            <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                              <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m14.185 13.14 5.644-2.202c1.625-.634 1.538-2.962-.13-3.473L5.38 3.083c-1.41-.431-2.73.888-2.298 2.298l4.382 14.318c.51 1.668 2.84 1.755 3.473.13l2.202-5.644a1.84 1.84 0 0 1 1.045-1.045" />
-                            </svg>
-                          </span>
-                        </footer>
-                      </section>
-                    </div>
-                  </div>
-                </article>
-            ))}
-          </template>
-        </section>
-      </div>
-    </section>
-
-    <section class="dual-section dual-section-comparison" id="capabilities" aria-labelledby="capability-title">
-      <div class="comparison-inner" id="comparison">
-        <div class="comparison-heading"><span class="scene-eyebrow"><Icon name="tabler:layout-kanban" size={16} is:inline aria-hidden="true" />竞品对比</span><h2 id="capability-title">产品能力，一目了然</h2><p>围绕团队协作、部署方式与 AI 接入能力，快速了解即应与常见协作产品的覆盖范围。</p></div>
-        <div class="comparison-panel comparison-panel-full" aria-label="同类产品对比">
-          <div class="comparison-showcase">
-            <div class="compare-wrap"><table class="compare-table"><thead><tr><th>比较维度</th><th class="jiying">即应</th><th>飞书</th><th>钉钉</th><th>企业微信</th><th>Slack</th><th>Mattermost</th><th>Rocket.Chat</th></tr></thead><tbody>{comparisonRows.map(([dimension, ...support]) => <tr><th>{dimension}</th>{support.map((supported, index) => <td class:list={[index === 0 && 'jiying']}><span class="sr-only">{supported ? '支持' : '不支持'}</span><Icon name={supported ? 'tabler:check' : 'tabler:x'} size={17} aria-hidden="true" /></td>)}</tr>)}</tbody></table></div>
-          </div>
-          <p class="compare-note">对比基于各产品公开定位与常见使用方式整理；“私有化部署”指可部署到企业自有基础设施。具体能力可能随版本、套餐和企业配置变化。</p>
+<BaseLayout title={title} description={description} schema={schema} bodyClass="page-studio">
+  <main id="main-content" class="studio-main">
+    <section class="studio-hero studio-container" aria-labelledby="hero-title">
+      <div class="studio-hero-copy">
+        <h1 id="hero-title"><span class="studio-title-shadow" aria-hidden="true">即应 Chat</span>即应 Chat</h1>
+        <p class="studio-hero-tagline">AI 时代的团队协作入口</p>
+        <p class="studio-hero-description">即应是一款开源的即时通讯工具。让沟通与执行在同一个空间完成，让 AI 助理融入你的日常工作。连接消息、知识与任务，让 AI 真正成为团队的一员。</p>
+        <div class="studio-actions">
+          <ActionButton href="#deployment" label="独立部署" icon="server" size="lg" />
+          <ActionButton href="#clients" label="下载客户端" icon="download" variant="outline" size="lg" />
         </div>
       </div>
+      <StudioHero />
     </section>
 
-    <section class="scene scene-faq" id="faq" aria-labelledby="faq-title">
-      <div class="faq-inner">
-        <div class="faq-heading"><span class="scene-eyebrow"><Icon name="tabler:message-circle" size={16} is:inline aria-hidden="true" />FAQ</span><h2 id="faq-title">常见问题</h2><p class="faq-intro">从产品能力、部署方式到 AI 助理的使用边界，这里整理了团队最常关心的问题。</p></div>
-        <div class="faq-carousel">
-          <button class="faq-carousel-control faq-carousel-control-prev" type="button" aria-label="查看上一个常见问题" aria-controls="faq-marquee-track" data-faq-direction="prev"><Icon name="tabler:arrow-right" size={20} aria-hidden="true" /></button>
-          <div class="faq-list" aria-label="常见问题走马灯">
-            <div class="faq-marquee-track" id="faq-marquee-track">
-              {faqs.map(([question, answer]) => <article class="faq-card" tabindex="0" aria-label={question}><h3>{question}<Icon name="tabler:arrow-right" size={17} aria-hidden="true" /></h3><p>{answer}</p></article>)}
-              {faqs.map(([question, answer]) => <article class="faq-card" aria-hidden="true"><h3>{question}<Icon name="tabler:arrow-right" size={17} aria-hidden="true" /></h3><p>{answer}</p></article>)}
-            </div>
-          </div>
-          <button class="faq-carousel-control faq-carousel-control-next" type="button" aria-label="查看下一个常见问题" aria-controls="faq-marquee-track" data-faq-direction="next"><Icon name="tabler:arrow-right" size={20} aria-hidden="true" /></button>
-        </div>
+    <div class="studio-foundation studio-container" aria-label="即应协作能力">
+      <span>一个入口，连接所有工作</span>
+      <div><span><Icon name="tabler:message-circle" size={20} />即时沟通</span><span><Icon name="tabler:layout-kanban" size={20} />项目协作</span><span><Icon name="tabler:checkbox" size={20} />任务管理</span><span><Icon name="tabler:file-text" size={20} />协作文档</span><span><Icon name="tabler:robot" size={20} />AI 助理</span></div>
+    </div>
+
+    <DeploymentSection />
+
+    <section class="studio-section studio-container" id="solution" aria-labelledby="solution-title">
+      <div class="studio-section-heading"><span class="studio-eyebrow"><i></i>产品能力 <span>THE WORKSPACE</span></span><h2 id="solution-title">让 AI 真正成为<span>团队的一员</span></h2><p>把分散的信息连起来，让 AI 理解背景、参与协作。<br class="studio-mobile-break" />少一些反复，多一些进展。</p></div>
+      <StudioWorkspace />
+      <div class="studio-capabilities" id="why" aria-label="为什么选择即应">{teamBenefits.map(([icon, heading, body]) => <article><Icon name={icon} size={23} aria-hidden="true" /><h3>{heading}</h3><p>{body}</p></article>)}</div>
+    </section>
+
+    <ClientsSection />
+
+    <OpennessSection />
+
+    <section class="studio-section-band" id="capabilities" aria-labelledby="capability-title">
+      <div class="studio-container">
+      <div class="studio-section-heading"><span class="studio-eyebrow"><i></i>产品对比 <span>THE DIFFERENCE</span></span><h2 id="capability-title">飞书、钉钉、企微的<span>开源平替</span></h2><p>从团队协作到部署方式，找到适合你的工作空间。</p></div>
+      <div class="studio-comparison" role="region" aria-label="产品能力对比，可横向滚动" tabindex="0"><table><thead><tr><th scope="col">比较维度</th><th scope="col" class="studio-highlight">即应</th>{['飞书', '钉钉', '企业微信', 'Slack', 'Mattermost', 'Rocket.Chat'].map((product) => <th scope="col">{product}</th>)}</tr></thead><tbody>{comparisonRows.map(([dimension, ...support]) => <tr><th scope="row">{dimension}</th>{support.map((supported, index) => <td class:list={[index === 0 && 'studio-highlight', !supported && 'studio-unsupported']}><span class="sr-only">{supported ? '支持' : '不支持'}</span><Icon name={supported ? 'tabler:check' : 'tabler:x'} size={17} aria-hidden="true" /></td>)}</tr>)}</tbody></table></div>
       </div>
-      <SiteFooter />
     </section>
 
+    <section class="studio-section studio-container studio-faq" id="faq" aria-labelledby="faq-title">
+      <div class="studio-section-heading"><span class="studio-eyebrow"><i></i>常见问题 <span>FAQ</span></span><h2 id="faq-title">你可能还想了解</h2><p>关于产品、部署和 AI 协作。</p><ActionButton className="studio-text-action" href="https://jiying.docs.baizhi.cloud/" label="查看产品文档" trailingIcon="arrow-up-right" variant="link" external /></div>
+      <div class="studio-faq-list">{faqs.map(([question, answer], index) => <details name="homepage-faq" open={index === 0}><FaqQuestion question={question} /><p>{answer}</p></details>)}</div>
+    </section>
+
+    <section class="studio-start studio-container" id="get-started" aria-labelledby="start-title">
+      <div><h2 id="start-title">现在开始使用<span>即用</span></h2><p>在线体验即应，或在自己的环境中部署。</p></div>
+      <div class="studio-actions"><ActionButton href="https://app.jiying.chat/" label="在线体验" icon="monitor-play" size="lg" external /><ActionButton href="https://jiying.docs.baizhi.cloud/" label="私有化部署" icon="server" variant="outline" size="lg" external /></div>
+    </section>
   </main>
-  <button class="back-to-top" type="button" aria-label="回到页面顶部" title="回到顶部" data-back-to-top>
-    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M12 19V5M6 11l6-6 6 6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
-    </svg>
-  </button>
-  <script>
-    const heroTypingLines = Array.from(document.querySelectorAll<HTMLElement>('[data-typing-line]'));
-    const heroTypingReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const heroIconCloud = document.querySelector<HTMLElement>('.hero-icon-cloud');
-    const heroScene = heroIconCloud?.closest<HTMLElement>('.scene-hero') ?? null;
-    const heroOrbitIcons = Array.from(document.querySelectorAll<HTMLElement>('.hero-orbit-icon'));
-    const heroTitleName = document.querySelector<HTMLElement>('.hero-title-motion .hero-title-name');
-    const revealHeroIcons = () => {
-      heroScene?.classList.add('is-icon-entering');
-      heroScene?.classList.add('is-icon-reveal-ready');
-      heroIconCloud?.classList.add('is-icon-reveal-ready');
-      window.dispatchEvent(new Event('hero-icons-reveal'));
-      window.setTimeout(() => heroScene?.classList.remove('is-icon-entering'), 1500);
-    };
-    heroOrbitIcons.forEach((icon) => icon.addEventListener('animationend', (event) => {
-      if (event.animationName === 'hero-icon-spread') icon.classList.add('is-spread-settled');
-    }, { once: true }));
-    if (heroTypingReducedMotion) revealHeroIcons();
-    else heroTitleName?.addEventListener('animationstart', (event) => {
-      if (event.animationName === 'hero-title-fade-in-down') revealHeroIcons();
-    }, { once: true });
-    if (heroTypingLines.length > 0 && !heroTypingReducedMotion) {
-      const heroTypingText = heroTypingLines.map((line) => line.textContent ?? '');
-      heroTypingLines.forEach((line) => { line.textContent = ''; });
-      const typeHeroLine = (line: HTMLElement, value: string) => new Promise<void>((resolve) => {
-        const characters = Array.from(value);
-        let position = 0;
-        line.classList.add('is-typing');
-        const typeNext = () => {
-          position += 1;
-          line.textContent = characters.slice(0, position).join('');
-          if (position < characters.length) window.setTimeout(typeNext, 42);
-          else {
-            line.classList.remove('is-typing');
-            resolve();
-          }
-        };
-        typeNext();
-      });
-      window.setTimeout(async () => {
-        for (const [index, line] of heroTypingLines.entries()) {
-          await typeHeroLine(line, heroTypingText[index] ?? '');
-          if (index < heroTypingLines.length - 1) await new Promise((resolve) => window.setTimeout(resolve, 420));
-        }
-        heroTypingLines.at(-1)?.classList.add('is-typed');
-      }, 1650);
-    }
-    const revealItems = Array.from(new Set(Array.from(document.querySelectorAll<HTMLElement>('.scene-hero .scene-content > *, .scene-why .scene-text-block, .scene-why .pain-mosaic, .scene-solution .scene-text-block, .feature-explorer, .comparison-heading, .comparison-panel, .faq-inner, .footer-grid > *'))));
-    revealItems.forEach((item, index) => { item.classList.add('motion-reveal'); item.style.setProperty('--reveal-delay', `${(index % 5) * 70}ms`); });
-    if ('IntersectionObserver' in window) { const observer = new IntersectionObserver((entries) => entries.forEach((entry) => { if (entry.isIntersecting) { entry.target.classList.add('is-visible'); observer.unobserve(entry.target); } }), { threshold: 0.16 }); revealItems.forEach((item) => observer.observe(item)); } else revealItems.forEach((item) => item.classList.add('is-visible'));
-    const sectionTitleGroups = Array.from(document.querySelectorAll<HTMLElement>('.scene-why .scene-text-block, .scene-solution .scene-text-block, .dual-section-comparison .comparison-heading, .scene-faq .faq-heading'));
-    sectionTitleGroups.forEach((group) => group.classList.add('section-title-fade'));
-    if ('IntersectionObserver' in window && !heroTypingReducedMotion) {
-      const sectionTitleObserver = new IntersectionObserver((entries) => {
-        entries.forEach((entry) => entry.target.classList.toggle('is-title-visible', entry.isIntersecting));
-      }, { threshold: 0.35, rootMargin: '-8% 0px -12% 0px' });
-      sectionTitleGroups.forEach((group) => sectionTitleObserver.observe(group));
-    } else sectionTitleGroups.forEach((group) => group.classList.add('is-title-visible'));
-    const featureTemplate = document.querySelector<HTMLTemplateElement>('template[data-feature-template]');
-    const featurePages = Array.from(document.querySelectorAll<HTMLElement>('[data-feature-page]'));
-    const featureExplorer = document.querySelector<HTMLElement>('.feature-explorer');
-    const featurePagination = document.querySelector<HTMLElement>('.feature-pagination');
-    const faqMarqueeTrack = document.querySelector<HTMLElement>('.faq-marquee-track');
-    const faqList = document.querySelector<HTMLElement>('.faq-list');
-    const faqControls = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-faq-direction]'));
-    const siteFooter = document.querySelector<HTMLElement>('.site-footer');
-    const ambientAnimationRegions = [heroScene, siteFooter].filter((region): region is HTMLElement => region !== null);
-    let shownFeatureIndex = -1;
-    let mountedPreview: HTMLElement | null = null;
-    let featureAutoTimer = 0;
-    let featureInView = true;
-    let faqInView = true;
-    let faqStepTimer = 0;
-    let faqResumeTimer = 0;
-    let faqManualIndex = 0;
-    const featureAutoInterval = 5000;
-    const featureDemoTimers = new WeakMap<HTMLElement, number[]>();
-    const featureDemoStartDelay = 1000;
-    const featureDemoClasses = ['is-demo-clicking', 'is-demo-sent', 'is-demo-processing', 'is-demo-streaming', 'is-demo-complete'];
-    const resumeFaqMarquee = () => {
-      if (!faqMarqueeTrack || !faqInView || document.hidden || faqList?.matches(':hover, :focus-within')) return;
-      faqMarqueeTrack.getAnimations()[0]?.play();
-    };
-    const stepFaqMarquee = (direction: 'prev' | 'next') => {
-      if (!faqMarqueeTrack) return;
-      const cards = Array.from(faqMarqueeTrack.querySelectorAll<HTMLElement>('.faq-card:not([aria-hidden="true"])'));
-      const firstCard = cards[0];
-      if (!firstCard || cards.length === 0) return;
-      const trackStyle = window.getComputedStyle(faqMarqueeTrack);
-      const gap = Number.parseFloat(trackStyle.columnGap || trackStyle.gap) || 0;
-      const stepWidth = firstCard.getBoundingClientRect().width + gap;
-      const animation = faqMarqueeTrack.getAnimations()[0];
-      window.clearTimeout(faqStepTimer);
-      window.clearTimeout(faqResumeTimer);
-
-      if (!animation || heroTypingReducedMotion) {
-        faqManualIndex = (faqManualIndex + (direction === 'next' ? 1 : -1) + cards.length) % cards.length;
-        faqMarqueeTrack.style.transform = `translate3d(${-faqManualIndex * stepWidth}px, 0, 0)`;
-        return;
-      }
-
-      const durationValue = animation.effect?.getTiming().duration;
-      const duration = typeof durationValue === 'number' ? durationValue : 42000;
-      const cycleWidth = Math.max(faqMarqueeTrack.scrollWidth / 2, stepWidth);
-      const timelineStep = duration * (stepWidth / cycleWidth);
-      const directionRate = direction === 'next' ? 10.5 : -10.5;
-      const currentTime = Number(animation.currentTime ?? 0);
-      if (directionRate < 0 && currentTime < timelineStep) animation.currentTime = currentTime + duration;
-      animation.playbackRate = directionRate;
-      animation.play();
-      faqStepTimer = window.setTimeout(() => {
-        animation.pause();
-        animation.playbackRate = 1;
-        faqResumeTimer = window.setTimeout(resumeFaqMarquee, 3000);
-      }, timelineStep / Math.abs(directionRate));
-    };
-    faqControls.forEach((control) => control.addEventListener('click', () => {
-      stepFaqMarquee(control.dataset.faqDirection === 'prev' ? 'prev' : 'next');
-    }));
-    const stopFeatureDemo = (preview: HTMLElement) => {
-      featureDemoTimers.get(preview)?.forEach((timer) => window.clearTimeout(timer));
-      featureDemoTimers.delete(preview);
-      featureDemoClasses.forEach((className) => preview.classList.remove(className));
-    };
-    const runFeatureDemo = (preview: HTMLElement) => {
-      stopFeatureDemo(preview);
-      const prompt = preview.dataset.featurePrompt ?? '';
-      const processLabel = preview.dataset.featureProcess ?? '正在处理中';
-      const response = preview.dataset.featureResponse ?? '';
-      const resultLabel = preview.dataset.featureResult ?? '已完成';
-      const shouldStream = preview.dataset.featureStream === 'true' && response.length > 0;
-      const composerText = preview.querySelector<HTMLElement>('[data-composer-text]');
-      const userRequest = preview.querySelector<HTMLElement>('[data-user-request]');
-      const assistantStatus = preview.querySelector<HTMLElement>('[data-assistant-status]');
-      const assistantResponse = preview.querySelector<HTMLElement>('[data-assistant-response]');
-      const assistantResult = preview.querySelector<HTMLElement>('[data-assistant-result]');
-      const chatHistory = preview.querySelector<HTMLElement>('.app-chat-history');
-      if (!composerText || !userRequest || !assistantStatus || !assistantResponse || !assistantResult) return;
-      const timers: number[] = [];
-      featureDemoTimers.set(preview, timers);
-      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const later = (callback: () => void, delay: number) => { timers.push(window.setTimeout(callback, delay)); };
-      const scrollHistory = () => { if (chatHistory) chatHistory.scrollTop = chatHistory.scrollHeight; };
-      composerText.textContent = reducedMotion ? prompt : '';
-      userRequest.textContent = prompt;
-      assistantStatus.textContent = `AI 助理 ${processLabel}`;
-      assistantResponse.textContent = '';
-      assistantResult.textContent = '待处理';
-      if (reducedMotion) {
-        preview.classList.add('is-demo-sent', 'is-demo-processing');
-        if (shouldStream) {
-          preview.classList.add('is-demo-streaming', 'is-demo-complete');
-          assistantResponse.textContent = response;
-          assistantResult.textContent = resultLabel;
-        }
-        scrollHistory();
-        return;
-      }
-      const typePrompt = (position: number) => {
-        composerText.textContent = prompt.slice(0, position);
-        if (position < prompt.length) later(() => typePrompt(position + 1), 14);
-        else later(() => {
-          preview.classList.add('is-demo-clicking');
-          later(() => {
-            preview.classList.remove('is-demo-clicking');
-            preview.classList.add('is-demo-sent', 'is-demo-processing');
-            composerText.textContent = '已发送';
-            assistantStatus.textContent = `AI 助理 ${processLabel}`;
-            scrollHistory();
-          }, 460);
-        }, 120);
-      };
-      later(() => typePrompt(0), featureDemoStartDelay);
-      if (!shouldStream) return;
-      later(() => {
-        preview.classList.add('is-demo-streaming');
-        assistantResponse.textContent = '';
-        assistantResult.textContent = '处理中';
-        const streamResponse = (position: number) => {
-          assistantResponse.textContent = response.slice(0, position);
-          scrollHistory();
-          if (position < response.length) later(() => streamResponse(position + 1), 30);
-          else {
-            preview.classList.add('is-demo-complete');
-            assistantResult.textContent = resultLabel;
-          }
-        };
-        streamResponse(0);
-      }, featureDemoStartDelay + 1850);
-    };
-    const unmountFeature = () => {
-      if (!mountedPreview) return;
-      stopFeatureDemo(mountedPreview);
-      featureTemplate?.content.appendChild(mountedPreview);
-      mountedPreview = null;
-    };
-    const pauseFeatureDemo = () => {
-      if (!mountedPreview) return;
-      stopFeatureDemo(mountedPreview);
-    };
-    const resumeFeatureDemo = () => {
-      if (!mountedPreview) return;
-      runFeatureDemo(mountedPreview);
-    };
-    const mountFeature = (index: number) => {
-      unmountFeature();
-      if (index < 0 || !featureTemplate) return;
-      const preview = featureTemplate.content.querySelector<HTMLElement>(`[data-feature-preview="${index}"]`);
-      if (!preview) return;
-      preview.classList.add('is-active');
-      preview.setAttribute('aria-expanded', 'true');
-      featurePages[index]?.appendChild(preview);
-      mountedPreview = preview;
-      runFeatureDemo(preview);
-    };
-    const applyFeature = (index: number) => {
-      if (document.documentElement.classList.contains('is-resizing')) return;
-      if (index === shownFeatureIndex) return;
-      shownFeatureIndex = index;
-      mountFeature(index);
-      featurePagination?.classList.toggle('has-active', index >= 0);
-      featurePages.forEach((page, pageIndex) => { const active = pageIndex === index; page.classList.toggle('is-active', active); page.setAttribute('aria-selected', String(active)); });
-    };
-    const stopFeatureAuto = () => {
-      window.clearTimeout(featureAutoTimer);
-      featureAutoTimer = 0;
-    };
-    const startFeatureAuto = () => {
-      stopFeatureAuto();
-      if (featurePages.length === 0 || !featureInView || document.documentElement.classList.contains('is-resizing')) return;
-      featureAutoTimer = window.setTimeout(() => {
-        applyFeature((shownFeatureIndex + 1) % featurePages.length);
-        startFeatureAuto();
-      }, featureAutoInterval);
-    };
-    const isNearViewport = (element: HTMLElement, offset = 180) => {
-      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-      const rect = element.getBoundingClientRect();
-      return rect.bottom >= -offset && rect.top <= viewportHeight + offset;
-    };
-    const syncFeatureVisibility = () => {
-      featureExplorer?.classList.toggle('is-animation-paused', !featureInView);
-      if (featureInView) {
-        resumeFeatureDemo();
-        startFeatureAuto();
-      } else {
-        stopFeatureAuto();
-        pauseFeatureDemo();
-      }
-    };
-    let resizeTimer = 0;
-    window.addEventListener('resize', () => {
-      if (!document.documentElement.classList.contains('is-resizing')) {
-        document.documentElement.classList.add('is-resizing');
-        stopFeatureAuto();
-        pauseFeatureDemo();
-      }
-      window.clearTimeout(resizeTimer);
-      resizeTimer = window.setTimeout(() => {
-        document.documentElement.classList.remove('is-resizing');
-        syncFeatureVisibility();
-      }, 360);
-    }, { passive: true });
-    if ('IntersectionObserver' in window) {
-      if (featureExplorer) {
-        const featureObserver = new IntersectionObserver((entries) => {
-          featureInView = entries.some((entry) => entry.isIntersecting);
-          syncFeatureVisibility();
-        }, { threshold: 0.28 });
-        featureObserver.observe(featureExplorer);
-      }
-      if (faqMarqueeTrack) {
-        const faqObserver = new IntersectionObserver((entries) => {
-          faqInView = entries.some((entry) => entry.isIntersecting);
-          faqMarqueeTrack.classList.toggle('is-in-view', faqInView);
-        }, { threshold: 0.18 });
-        faqObserver.observe(faqMarqueeTrack);
-      }
-      if (ambientAnimationRegions.length > 0) {
-        const ambientObserver = new IntersectionObserver((entries) => {
-          entries.forEach((entry) => entry.target.classList.toggle('is-animation-paused', !entry.isIntersecting));
-        }, { rootMargin: '0px', threshold: 0 });
-        ambientAnimationRegions.forEach((region) => {
-          region.classList.toggle('is-animation-paused', !isNearViewport(region, 180));
-          ambientObserver.observe(region);
-        });
-      }
-    } else {
-      faqMarqueeTrack?.classList.add('is-in-view');
-    }
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) {
-        featureInView = false;
-        stopFeatureAuto();
-        pauseFeatureDemo();
-        featureExplorer?.classList.add('is-animation-paused');
-        faqMarqueeTrack?.classList.remove('is-in-view');
-        ambientAnimationRegions.forEach((region) => region.classList.add('is-animation-paused'));
-      } else {
-        featureInView = featureExplorer ? isNearViewport(featureExplorer) : true;
-        faqInView = faqMarqueeTrack ? isNearViewport(faqMarqueeTrack) : true;
-        syncFeatureVisibility();
-        if (faqInView) faqMarqueeTrack?.classList.add('is-in-view');
-        ambientAnimationRegions.forEach((region) => region.classList.toggle('is-animation-paused', !isNearViewport(region, 180)));
-      }
-    });
-    featurePages.forEach((page, index) => {
-      page.addEventListener('click', () => {
-        applyFeature(index);
-        startFeatureAuto();
-      });
-      page.addEventListener('keydown', (event) => {
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        event.preventDefault();
-        applyFeature(index);
-        startFeatureAuto();
-      });
-    });
-    applyFeature(0);
-    syncFeatureVisibility();
-    const downloadMenus = Array.from(document.querySelectorAll<HTMLDetailsElement>('.download-menu'));
-    const scenePage = document.querySelector<HTMLElement>('.scene-page');
-    const syncDownloadOpenState = () => {
-      const openSceneMenu = document.querySelector<HTMLDetailsElement>('.scene-download-menu[open]');
-      const anyOpenMenu = downloadMenus.some((menu) => menu.open);
-      scenePage?.classList.toggle('is-download-open', anyOpenMenu);
-      document.querySelectorAll<HTMLElement>('.scene-actions.is-download-open, .scene.is-download-open').forEach((element) => element.classList.remove('is-download-open'));
-      if (openSceneMenu) {
-        openSceneMenu.closest<HTMLElement>('.scene-actions')?.classList.add('is-download-open');
-        openSceneMenu.closest<HTMLElement>('.scene')?.classList.add('is-download-open');
-      }
-    };
-    const closeDownloadMenus = () => downloadMenus.forEach((menu) => { menu.open = false; });
-    downloadMenus.forEach((menu) => {
-      menu.addEventListener('toggle', () => {
-        if (menu.open) downloadMenus.forEach((other) => { if (other !== menu) other.open = false; });
-        window.requestAnimationFrame(syncDownloadOpenState);
-      });
-    });
-    document.addEventListener('pointerdown', (event) => {
-      const target = event.target instanceof Element ? event.target : null;
-      if (target?.closest('.download-menu')) return;
-      closeDownloadMenus();
-    });
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') closeDownloadMenus();
-    });
-    const backToTop = document.querySelector<HTMLButtonElement>('[data-back-to-top]');
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const syncBackToTop = () => backToTop?.classList.toggle('is-visible', window.scrollY > window.innerHeight * .65);
-    let backToTopFrame = 0;
-    window.addEventListener('scroll', () => {
-      if (backToTopFrame) return;
-      backToTopFrame = window.requestAnimationFrame(() => {
-        backToTopFrame = 0;
-        syncBackToTop();
-      });
-    }, { passive: true });
-    window.addEventListener('resize', syncBackToTop, { passive: true });
-    backToTop?.addEventListener('click', () => {
-      window.scrollTo({ top: 0, behavior: reducedMotion.matches ? 'auto' : 'smooth' });
-    });
-    syncBackToTop();
-  </script>
 </BaseLayout>

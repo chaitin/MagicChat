@@ -1,0 +1,45 @@
+---
+import { Icon } from 'astro-icon/components';
+import { ActionButton } from './ActionButton';
+import '../styles/openness.css';
+
+const principles = [
+  {
+    icon: 'tabler:brand-github-filled', title: '项目开源', label: 'OPEN SOURCE',
+    description: '源代码公开可查，支持自主部署、审查与二次开发。按团队需要理解和修改产品，把协作空间掌握在自己手中。',
+  },
+  {
+    icon: 'tabler:code', title: '所有 API 完全开放', label: 'OPEN API',
+    description: '所有 API 均向开发者开放。消息、项目、任务、文档等能力都能通过接口接入，让已有系统直接参与团队协作。',
+  },
+  {
+    icon: 'tabler:robot', title: '所有能力，AI 直接控制', label: 'AI CONTROL',
+    description: '所有产品能力均可由 AI 在授权范围内直接调用。从查询信息到推进任务，用自然语言安排工作，重要操作由用户确认。',
+  },
+  {
+    icon: 'tabler:plug-connected', title: '应用开发简单，第三方轻松接入', label: 'BUILD & CONNECT',
+    description: '通过清晰的应用接入方式，轻松连接第三方服务、业务系统与 MCP 工具。让应用以独立身份加入即应，快速扩展团队的协作能力。',
+  },
+];
+---
+
+<section class="studio-section studio-container studio-openness" id="openness" aria-labelledby="openness-title">
+  <div class="studio-section-heading">
+    <span class="studio-eyebrow"><i></i>开放性 <span>OPEN BY DESIGN</span></span>
+    <h2 id="openness-title">从代码到能力，<span>全面开放</span></h2>
+    <p>看得见源代码，调得通 API，也能让 AI 直接参与执行。<br class="studio-mobile-break" />把已有系统接进来，让团队按自己的方式工作。</p>
+  </div>
+
+  <div class="studio-openness-grid">
+    {principles.map((principle, index) => <article class="studio-openness-item">
+      <div class="studio-openness-top"><Icon name={principle.icon} size={28} aria-hidden="true" /><span>{String(index + 1).padStart(2, '0')} / {principle.label}</span></div>
+      <h3>{principle.title}</h3>
+      <p>{principle.description}</p>
+    </article>)}
+  </div>
+
+  <div class="studio-actions">
+    <ActionButton href="https://github.com/chaitin/MagicChat" label="查看源代码" icon="code" variant="outline" external />
+    <ActionButton href="https://github.com/chaitin/MagicChat/blob/main/APPLICATION_DEVELOPMENT.md" label="查看开发文档" icon="book-open" variant="outline" external />
+  </div>
+</section>

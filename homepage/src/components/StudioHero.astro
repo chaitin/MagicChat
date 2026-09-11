@@ -1,0 +1,63 @@
+---
+import { Icon } from 'astro-icon/components';
+import '../styles/hero-network.css';
+
+const members = [
+  { name: '成员 A', color: 'amber' },
+  { name: '成员 B', color: 'blue' },
+  { name: '成员 C', color: 'violet' },
+  { name: '成员 D', color: 'rose' },
+];
+const agents = [
+  ['tabler:code', '研发'],
+  ['tabler:chart-line', '运营'],
+  ['tabler:receipt', '财务'],
+  ['tabler:users', '人事'],
+];
+const sources = [
+  ['tabler:layout-kanban', '项目'],
+  ['tabler:checkbox', '任务'],
+  ['tabler:file-text', '文档'],
+  ['tabler:messages', '消息'],
+  ['tabler:database', '知识库'],
+];
+const memberPaths = [72, 132, 192, 252].map(y => `M 162 ${y} C 216 ${y}, 226 162, 280 162`);
+const agentPaths = [72, 132, 192, 252].map(y => `M 280 162 C 346 162, 344 ${y}, 398 ${y}`);
+const dataPath = 'M 280 162 L 280 350';
+---
+
+<figure class="studio-network" aria-label="即应连接团队成员、多个 AI Agent，以及项目、任务、文档、消息和知识库">
+  <svg class="studio-network-links" viewBox="0 0 560 460" preserveAspectRatio="none" fill="none" aria-hidden="true">
+    <g class="studio-network-traces">
+      {[...memberPaths, ...agentPaths, dataPath].map(path => <path d={path} />)}
+    </g>
+    <g class="studio-network-particles">
+      {[memberPaths[0], memberPaths[2], agentPaths[1], agentPaths[3], dataPath].map((path, index) => (
+        <circle r="2.5" class:list={[index === 1 && 'studio-network-particle-blue', index === 3 && 'studio-network-particle-violet']}>
+          <animateMotion path={path} dur={`${4 + index * .6}s`} begin={`${-index * 1.3}s`} repeatCount="indefinite" />
+        </circle>
+      ))}
+    </g>
+  </svg>
+
+  <div class="studio-network-side studio-network-members">
+    <ul>
+      {members.map(member => <li class="studio-network-node"><span class:list={['studio-network-avatar', `studio-network-avatar-${member.color}`]} aria-hidden="true"><Icon name="tabler:user" size={16} /></span><span>{member.name}</span></li>)}
+    </ul>
+  </div>
+
+  <div class="studio-network-hub">
+    <span class="studio-network-name">即应</span>
+    <div class="studio-network-core"><Icon name="tabler:bolt" size={38} aria-hidden="true" /></div>
+  </div>
+
+  <div class="studio-network-side studio-network-agents">
+    <ul>
+      {agents.map(([icon, label]) => <li class="studio-network-node"><Icon name={icon} size={22} aria-hidden="true" /><span>{label} <span>Agent</span></span></li>)}
+    </ul>
+  </div>
+
+  <div class="studio-network-data">
+    <ul>{sources.map(([icon, label]) => <li><span class="studio-network-data-icon"><Icon name={icon} size={20} aria-hidden="true" /></span><span>{label}</span></li>)}</ul>
+  </div>
+</figure>

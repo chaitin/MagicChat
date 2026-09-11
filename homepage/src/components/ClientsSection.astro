@@ -1,0 +1,37 @@
+---
+import tabler from '@iconify-json/tabler/icons.json';
+import { ClientPlatformButton } from './ClientPlatformButton';
+import '../styles/clients.css';
+
+const clients = [
+  { label: 'Web', icon: 'world', description: '浏览器中打开', href: 'https://app.jiying.chat/' },
+  { label: 'Android', icon: 'brand-android', description: '下载客户端', platform: 'android', href: 'https://jiying.chat/releases/jiying.apk' },
+  { label: 'iOS', icon: 'brand-apple', description: 'App Store', href: 'https://jiying.docs.baizhi.cloud/' },
+  { label: 'Windows', icon: 'brand-windows', description: '下载客户端', platform: 'windows', href: 'https://jiying.chat/releases/jiying.exe' },
+  { label: 'macOS', icon: 'brand-apple', description: '下载客户端', platform: 'macos', href: 'https://jiying.chat/releases/jiying.dmg' },
+  { label: 'Linux AMD', icon: 'brand-ubuntu', description: 'AMD64 下载', platform: 'linux-amd', href: 'https://jiying.chat/releases/jiying.amd.AppImage' },
+  { label: 'Linux ARM', icon: 'brand-ubuntu', description: 'ARM64 下载', platform: 'linux-arm', href: 'https://jiying.chat/releases/jiying.arm.AppImage' },
+] as const;
+---
+
+<section class="studio-section-band studio-clients" id="clients" aria-labelledby="clients-title">
+  <div class="studio-container">
+    <div class="studio-section-heading">
+      <span class="studio-eyebrow"><i></i>全平台支持 <span>YOUR WORKSPACE, EVERYWHERE</span></span>
+      <h2 id="clients-title">Web / 桌面 / 移动端，<span>全平台支持</span></h2>
+      <p>不必为了协作更换设备。电脑、手机或浏览器，都能连接同一个团队。</p>
+    </div>
+
+    <ul class="studio-client-platforms" aria-label="选择即应客户端">
+      {clients.map(client => <li>
+        <ClientPlatformButton href={client.href} label={client.label} description={client.description} iconBody={tabler.icons[client.icon].body} platform={'platform' in client ? client.platform : undefined} />
+      </li>)}
+    </ul>
+
+    <div class="studio-client-benefits">
+      <article><h3>设备不同，团队同在</h3><p>沿用熟悉的设备，进入同一个工作空间，减少跨平台沟通的障碍。</p></article>
+      <article><h3>切换设备，接着协作</h3><p>电脑上集中处理工作，手机上查看消息与进展，让协作延续下去。</p></article>
+      <article><h3>随时接入，灵活办公</h3><p>办公室、出差途中或远程办公，安装客户端或打开浏览器即可接入。</p></article>
+    </div>
+  </div>
+</section>

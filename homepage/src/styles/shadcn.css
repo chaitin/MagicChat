@@ -1,0 +1,138 @@
+/* Use the site's existing reset; keep utilities unlayered so they can override it. */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+body.site-theme {
+  --radius: 0.5rem;
+  --background: var(--studio-bg);
+  --foreground: var(--studio-text);
+  --card: var(--studio-surface);
+  --card-foreground: var(--studio-text);
+  --popover: var(--studio-surface);
+  --popover-foreground: var(--studio-text);
+  --primary: var(--green);
+  --primary-foreground: var(--green-deep);
+  --secondary: var(--studio-raised);
+  --secondary-foreground: var(--studio-text);
+  --muted: var(--studio-raised);
+  --muted-foreground: var(--footer-text);
+  --accent: var(--studio-raised);
+  --accent-foreground: var(--green);
+  --destructive: #ef4444;
+  --border: var(--studio-line);
+  --input: var(--studio-line-hover);
+  --ring: var(--green);
+}
+
+/* Background feedback for the header, hero and final call to action. */
+body.site-theme :is(.header-actions, .studio-hero .studio-actions, .studio-start .studio-actions) [data-slot='button'] {
+  position: relative;
+  isolation: isolate;
+}
+body.site-theme :is(.header-actions, .studio-hero .studio-actions, .studio-start .studio-actions) [data-slot='button'][data-variant='default']::after {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 8%) 48%, transparent 66%);
+  background-size: 300% 100%;
+  background-position: 100% 0;
+  opacity: 0;
+  pointer-events: none;
+  content: '';
+  transition: background-position 650ms ease, opacity 180ms ease;
+}
+body.site-theme :is(.header-actions, .studio-hero .studio-actions, .studio-start .studio-actions) [data-slot='button'][data-variant='default']:not(:disabled):hover::after {
+  background-position: 0 0;
+  opacity: 1;
+}
+body.site-theme :is(.header-actions, .studio-hero .studio-actions, .studio-start .studio-actions) [data-slot='button'][data-variant='default']:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--green) 85%, white);
+}
+body.site-theme :is(.header-actions, .studio-hero .studio-actions, .studio-start .studio-actions) [data-slot='button'][data-variant='outline']:not(:disabled):hover {
+  background-color: color-mix(in oklab, var(--input) 30%, transparent);
+  border-color: color-mix(in srgb, var(--green) 60%, var(--studio-line));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--green) 60%, var(--studio-line));
+}
+@media (prefers-reduced-motion: reduce) {
+  body.site-theme :is(.header-actions, .studio-hero .studio-actions, .studio-start .studio-actions) [data-slot='button']::after { display: none; }
+}
+
+/* Shared feedback for shadcn buttons, including server-rendered links. */
+body.site-theme [data-slot='button'] {
+  cursor: pointer;
+  transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease,
+    box-shadow 180ms ease, transform 180ms ease;
+}
+body.site-theme a[data-slot='button']:not([data-variant='link']) {
+  text-decoration: none;
+}
+body.site-theme [data-slot='button'][data-variant='default'] { color: var(--primary-foreground); }
+body.site-theme [data-slot='button'][data-variant='outline'] { color: var(--foreground); }
+body.site-theme [data-slot='button'][data-variant='link'] { color: var(--primary); }
+body.site-theme [data-slot='button']:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+@media (any-hover: hover) {
+  body.site-theme [data-slot='button'][data-motion='true']:not(:disabled):hover {
+    box-shadow: 0 5px 18px color-mix(in srgb, var(--primary) 20%, transparent);
+  }
+  body.site-theme [data-slot='button'][data-variant='default']:not(:disabled):hover {
+    background-color: var(--color-teal-400);
+  }
+  body.site-theme [data-slot='button'][data-variant='outline']:not(:disabled):hover {
+    color: var(--primary);
+    border-color: var(--primary);
+    background-color: color-mix(in srgb, var(--primary) 12%, var(--background));
+  }
+  body.site-theme [data-slot='button'][data-variant='link']:hover {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+    box-shadow: none;
+  }
+}
+body.site-theme [data-slot='button'][data-motion='true']:not(:disabled):active {
+  box-shadow: inset 0 2px 5px rgb(0 0 0 / 20%);
+}
+@media (prefers-reduced-motion: no-preference) {
+  @media (any-hover: hover) {
+    body.site-theme [data-slot='button'][data-motion='true']:not(:disabled):hover {
+      transform: translateY(-2px);
+    }
+  }
+  body.site-theme [data-slot='button'][data-motion='true']:not(:disabled):active {
+    transform: translateY(0) scale(.97);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.site-theme [data-slot='button'] { transform: none; }
+}

@@ -1,7 +1,7 @@
-@import "@fontsource-variable/noto-sans-sc";
+@import "../assets/fonts/maple-mono-cn/font.css";
 
 :root {
-  --font-sans: "Noto Sans SC Variable", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-sans: "Maple Mono CN", "PingFang SC", "Microsoft YaHei", monospace;
   --body-font: var(--font-sans);
   --green: #14b8a6;
   --green-dark: #0f766e;
@@ -36,6 +36,7 @@ img, video { max-width: 100%; height: auto; }
 body.page-legal .site-header { position: fixed; inset: 0 0 auto; z-index: 50; background: rgb(4 13 12 / 85%); border: 0; }
 body.page-legal .nav-shell { width: min(calc(100% - 40px), var(--container)); min-height: 62px; }
 .site-header .nav-shell { display: flex; align-items: center; justify-content: space-between; }
+.site-header .brand span { color: var(--green); }
 .brand { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 800; letter-spacing: .08em; }
 .brand img { width: 27px; height: 27px; border-radius: 6px; }
 body.page-legal .brand { color: #fff; letter-spacing: .13em; text-transform: uppercase; }
@@ -399,6 +400,7 @@ body.page-legal .brand img { filter: saturate(.75) brightness(1.1); }
 .community-qr figcaption { color: rgb(227 241 236 / 76%); font-size: 12px; line-height: 1.4; text-align: center; white-space: nowrap; }
 .footer-bottom { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 28px; width: min(calc(100% - 40px), var(--container)); margin: 0 auto; padding: 19px var(--content-gutter) 28px; border-top: 1px solid rgb(255 255 255 / 18%); color: rgb(227 241 236 / 48%); font-size: 11px; }
 .footer-bottom p { margin: 0; }
+.footer-bottom p:last-child { margin-left: auto; text-align: right; }
 .footer-bottom a { color: rgb(227 241 236 / 76%); text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: color 160ms var(--ease), text-decoration-color 160ms var(--ease); }
 .footer-bottom a:hover { color: var(--green); text-decoration-color: currentColor; }
 

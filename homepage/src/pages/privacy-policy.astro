@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import SiteFooter from '../components/SiteFooter.astro';
-import SiteHeader from '../components/SiteHeader.astro';
+import LegalNav from '../components/LegalNav.astro';
+import { ActionButton } from '../components/ActionButton';
 
 const title = '隐私政策｜即应';
 const description = '即应隐私政策，说明即应官网、官方在线体验及相关客户端中个人信息的收集、使用、存储和保护方式。';
@@ -21,22 +21,17 @@ const sections = [
 ---
 
 <BaseLayout title={title} description={description} pathname="/privacy-policy/" type="article" bodyClass="page-legal">
-  <SiteHeader />
   <main id="main-content" class="legal-page">
     <article class="container legal-content legal-document">
       <div class="legal-body">
-        <nav class="legal-nav" aria-label="隐私政策导航" data-legal-nav>
-          <div class="legal-nav-track" data-legal-nav-track>
-            <ol>{sections.map(([id, label], index) => <li><a href={`#${id}`}><b>{String(index + 1).padStart(2, '0')}</b>{label}</a></li>)}</ol>
-          </div>
-        </nav>
+        <LegalNav label="隐私政策导航" sections={sections} />
 
         <div class="legal-main">
           <header class="legal-header">
             <span class="eyebrow">PRIVACY POLICY</span>
             <div class="legal-title-row">
               <h1>即应隐私政策</h1>
-              <a class="legal-home-link" href={`${import.meta.env.BASE_URL}user-service/`}>返回</a>
+              <ActionButton href={`${import.meta.env.BASE_URL}user-service/`} label="返回" icon="arrow-left" variant="outline" />
             </div>
             <p class="legal-lead">本政策适用于北京长亭科技有限公司运营的即应官网、官方在线体验及相关客户端。即应是一款开源的即时通讯工具，连接消息、知识与任务，让 Agent 融入团队工作流，并支持企业在自有基础设施中私有化部署。</p>
             <p class="legal-updated">生效及更新日期：{updatedAt}</p>
@@ -107,31 +102,4 @@ const sections = [
       </div>
     </article>
   </main>
-  <SiteFooter />
-  <script>
-    const nav = document.querySelector<HTMLElement>('[data-legal-nav]');
-    const sections = Array.from(document.querySelectorAll<HTMLElement>('.legal-sections > section'));
-
-    if (nav && sections.length) {
-      const links = new Map(Array.from(nav.querySelectorAll<HTMLAnchorElement>('a')).map((link) => [link.hash.slice(1), link]));
-      let currentId = '';
-
-      const updateCurrentSection = () => {
-        const activeSection = sections.reduce((current, section) => section.getBoundingClientRect().top <= 112 ? section : current, sections[0]);
-        if (activeSection.id !== currentId) {
-          currentId = activeSection.id;
-          links.forEach((link, id) => {
-            const isCurrent = id === currentId;
-            link.classList.toggle('is-current', isCurrent);
-            if (isCurrent) link.setAttribute('aria-current', 'true');
-            else link.removeAttribute('aria-current');
-          });
-        }
-      };
-
-      updateCurrentSection();
-      window.addEventListener('scroll', updateCurrentSection, { passive: true });
-      window.addEventListener('resize', updateCurrentSection);
-    }
-  </script>
 </BaseLayout>

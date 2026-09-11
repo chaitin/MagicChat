@@ -1,0 +1,110 @@
+---
+import { Icon } from 'astro-icon/components';
+import { WorkspaceTab } from './WorkspaceTab';
+import '../styles/capability-flow.css';
+
+const views = [
+  {
+    id: 'context', title: '连接上下文', heading: '从一周的讨论里，找到下一步',
+    prompt: '本周项目有哪些进展，还有什么需要跟进？', sources: ['团队讨论', '项目背景'],
+    processLabel: 'AI 如何协作', steps: ['读取当前用户可访问的讨论', '结合项目背景，归纳已达成的共识', '整理待办和仍需确认的问题'],
+    resultTitle: '一份清晰的进展梳理', results: ['已明确：首页内容结构', '进行中：客户端体验优化', '待跟进：发布前设计验收'],
+    note: '在授权范围内查询消息与项目，让团队带着共同的背景继续协作。',
+  },
+  {
+    id: 'tasks', title: '推进工作', heading: '把一句工作安排，变成明确的任务',
+    prompt: '为成员 B 创建首页设计验收任务，周三前完成。', sources: ['工作安排', '项目成员'],
+    processLabel: 'AI 如何协作', steps: ['识别任务内容、负责人和截止时间', '补全创建任务所需的项目信息', '整理任务信息，交由用户确认'],
+    resultTitle: '一项待确认的任务', results: ['任务：首页设计验收', '负责人：成员 B', '截止时间：本周三'],
+    note: '用户确认后创建任务，再到项目中继续跟踪进度。',
+  },
+  {
+    id: 'permissions', title: '权限可控', heading: '让协作更高效，也让边界更清楚',
+    prompt: '帮我查看另一个团队的私有项目。', sources: ['当前用户身份', '项目权限'],
+    processLabel: 'AI 如何协作', steps: ['使用授权用户的身份访问数据', '检查项目成员身份与访问权限', '无权访问时停止查询并说明原因'],
+    resultTitle: '信息访问有明确边界', results: ['当前用户未加入该项目', '不返回无权访问的项目内容', '可向项目负责人申请访问权限'],
+    note: 'AI 遵循用户的访问权限，任务创建与修改前仍需用户确认。',
+  },
+  {
+    id: 'integrations', title: '开放扩展', heading: '把已有工具，接进团队的协作方式',
+    prompt: '将团队自己的业务应用接入即应。', sources: ['业务应用', '已有工具'],
+    processLabel: '如何接入', steps: ['为应用建立独立身份', '连接适合的模型与 MCP 工具', '按业务需求开发、配置和扩展'],
+    resultTitle: '团队专属的协作空间', results: ['自有应用参与团队协作', '模型和工具按需选择', '支持私有化部署与二次开发'],
+    note: '通过开放协议连接业务系统，按团队需要定制具体能力。',
+  },
+] as const;
+---
+
+<div class="studio-capability-examples" data-workspace>
+  <div class="studio-capability-tabs" aria-label="选择核心能力" hidden>
+    {views.map(view => <WorkspaceTab id={view.id} title={view.title} />)}
+  </div>
+  {views.map(view => (
+    <div class="studio-capability-panel" id={`panel-${view.id}`} data-workspace-panel={view.id} aria-labelledby={`scenario-${view.id}`}>
+      <h3 id={`scenario-${view.id}`}>{view.heading}</h3>
+      <ol class="studio-capability-flow">
+        <li class="studio-capability-scenario">
+          <div class="studio-capability-step"><span aria-hidden="true">01</span><h4>工作场景</h4></div>
+          <blockquote>{view.prompt}</blockquote>
+          <ul class="studio-capability-sources" aria-label="相关信息">{view.sources.map(source => <li>{source}</li>)}</ul>
+          <Icon class="studio-capability-arrow" name="tabler:arrow-right" size={22} aria-hidden="true" />
+        </li>
+        <li class="studio-capability-process">
+          <div class="studio-capability-step"><span aria-hidden="true">02</span><h4>{view.processLabel}</h4></div>
+          <ul class="studio-capability-steps">{view.steps.map(step => <li><Icon name="tabler:check" size={17} aria-hidden="true" /><span>{step}</span></li>)}</ul>
+          <Icon class="studio-capability-arrow" name="tabler:arrow-right" size={22} aria-hidden="true" />
+        </li>
+        <li class="studio-capability-result">
+          <div class="studio-capability-step"><span aria-hidden="true">03</span><h4>工作结果</h4></div>
+          <div class="studio-capability-outcome">
+            <h5>{view.resultTitle}</h5>
+            <ul>{view.results.map(result => <li>{result}</li>)}</ul>
+          </div>
+        </li>
+      </ol>
+      <p class="studio-capability-note"><Icon name="tabler:shield-check" size={17} aria-hidden="true" /><span>{view.note}</span></p>
+    </div>
+  ))}
+</div>
+
+<script>
+  const workspace = document.querySelector<HTMLElement>('[data-workspace]');
+  if (workspace) {
+    const tabs = Array.from(workspace.querySelectorAll<HTMLButtonElement>('[data-workspace-tab]'));
+    const panels = Array.from(workspace.querySelectorAll<HTMLElement>('[data-workspace-panel]'));
+    const tablist = workspace.querySelector<HTMLElement>('.studio-capability-tabs');
+    const activate = (tab: HTMLButtonElement, focus = false) => {
+      tabs.forEach(item => {
+        const selected = item === tab;
+        item.setAttribute('aria-selected', String(selected));
+        item.tabIndex = selected ? 0 : -1;
+      });
+      panels.forEach(panel => { panel.hidden = panel.dataset.workspacePanel !== tab.dataset.workspaceTab; });
+      if (focus) tab.focus();
+    };
+    tabs.forEach((tab, index) => {
+      tab.setAttribute('role', 'tab');
+      tab.addEventListener('click', () => activate(tab));
+      tab.addEventListener('keydown', event => {
+        let next = index;
+        if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+        else if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+        else if (event.key === 'Home') next = 0;
+        else if (event.key === 'End') next = tabs.length - 1;
+        else return;
+        event.preventDefault();
+        activate(tabs[next], true);
+      });
+    });
+    panels.forEach(panel => {
+      panel.setAttribute('role', 'tabpanel');
+      panel.setAttribute('aria-labelledby', `tab-${panel.dataset.workspacePanel}`);
+      panel.tabIndex = 0;
+    });
+    activate(tabs[0]);
+    if (tablist) {
+      tablist.setAttribute('role', 'tablist');
+      tablist.hidden = false;
+    }
+  }
+</script>

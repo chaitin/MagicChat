@@ -1,4 +1,4 @@
-type ReleasePlatform = "android" | "ios" | "linux-amd" | "macos" | "windows";
+type ReleasePlatform = "android" | "ios" | "linux-amd" | "linux-arm" | "macos" | "windows";
 
 type ReleaseManifestEntry = {
   url?: unknown;
@@ -12,11 +12,13 @@ const OFFICIAL_RELEASE_PATHS: Readonly<Record<ReleasePlatform, string>> = {
   android: "/releases/jiying.apk",
   ios: "/releases/jiying.dmg",
   "linux-amd": "/releases/jiying.amd.AppImage",
+  "linux-arm": "/releases/jiying.arm.AppImage",
   macos: "/releases/jiying.dmg",
   windows: "/releases/jiying.exe",
 };
 const GITHUB_DESKTOP_SUFFIXES: Partial<Record<ReleasePlatform, string>> = {
   "linux-amd": "linux-x86_64.AppImage",
+  "linux-arm": "linux-arm64.AppImage",
   macos: "mac-universal.dmg",
   windows: "win-x64.exe",
 };
@@ -28,6 +30,7 @@ function isReleasePlatform(
     value === "android" ||
     value === "ios" ||
     value === "linux-amd" ||
+    value === "linux-arm" ||
     value === "macos" ||
     value === "windows"
   );

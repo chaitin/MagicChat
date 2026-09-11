@@ -1,64 +1,15 @@
 ---
-import { Icon } from 'astro-icon/components';
+import { HeaderActions } from './HeaderActions';
 ---
 
 <header class="site-header">
   <div class="container nav-shell">
-    <a class="brand" href={import.meta.env.BASE_URL} aria-label="即应官网首页">
+    <a class="brand" href={import.meta.env.BASE_URL} aria-label="即应 Chat 官网首页">
       <img src={`${import.meta.env.BASE_URL}favicon.webp`} width="36" height="36" alt="" />
-      <span>即应</span>
+      <span>即应 Chat</span>
     </a>
-    <nav class="header-actions" id="download" aria-label="快捷入口">
-      <details class="header-download-menu download-menu">
-        <summary class="header-download-link header-icon-download" aria-label="PC 端" data-tooltip="PC 端">
-          <span class="sr-only"><strong>PC 端</strong><small>MacOS客户端 / Windows客户端 / Linux客户端</small></span>
-          <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <rect x="3" y="4" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"></rect>
-            <path d="M8 20h8M12 16v4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-          </svg>
-        </summary>
-        <div class="download-menu-panel">
-          <article class="download-option">
-            <div><h3>Mac客户端</h3><p>macOS 桌面客户端</p></div>
-            <a class="download-option-action" data-release-platform="macos" href="https://jiying.chat/releases/jiying.dmg" target="_blank" rel="noopener noreferrer">下载<Icon name="tabler:download" size={15} aria-hidden="true" /></a>
-          </article>
-          <article class="download-option">
-            <div><h3>Windows客户端</h3><p>Windows 桌面客户端</p></div>
-            <a class="download-option-action" data-release-platform="windows" href="https://jiying.chat/releases/jiying.exe" target="_blank" rel="noopener noreferrer">下载<Icon name="tabler:download" size={15} aria-hidden="true" /></a>
-          </article>
-          <article class="download-option">
-            <div><h3>Linux 下载</h3><p>Linux客户端</p></div>
-            <a class="download-option-action" data-release-platform="linux-amd" href="https://jiying.chat/releases/jiying.amd.AppImage" target="_blank" rel="noopener noreferrer">下载<Icon name="tabler:download" size={15} aria-hidden="true" /></a>
-          </article>
-        </div>
-      </details>
-      <details class="header-download-menu download-menu">
-        <summary class="header-download-link header-icon-download" aria-label="移动端" data-tooltip="移动端">
-          <span class="sr-only"><strong>移动端</strong><small>iOS / Android</small></span>
-          <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <rect x="7" y="2.5" width="10" height="19" rx="2" fill="none" stroke="currentColor" stroke-width="2"></rect>
-            <path d="M11 18h2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-          </svg>
-        </summary>
-        <div class="download-menu-panel">
-          <article class="download-option">
-            <div><h3>iOS</h3><p>iPhone 与 iPad</p></div>
-            <a class="download-option-action" data-release-platform="ios" href="https://jiying.chat/releases/jiying.dmg" target="_blank" rel="noopener noreferrer">下载<Icon name="tabler:download" size={15} aria-hidden="true" /></a>
-          </article>
-          <article class="download-option">
-            <div><h3>Android</h3><p>Android 手机和平板</p></div>
-            <a class="download-option-action" data-release-platform="android" href="https://jiying.chat/releases/jiying.apk" target="_blank" rel="noopener noreferrer">下载<Icon name="tabler:download" size={15} aria-hidden="true" /></a>
-          </article>
-        </div>
-      </details>
-      <a class="header-download-link header-icon-download" href="https://github.com/chaitin/MagicChat" target="_blank" rel="noopener noreferrer" aria-label="GitHub 源码" data-tooltip="GitHub 源码">
-        <span class="sr-only"><strong>GitHub 源码</strong><small>AGPL-3.0 · 私有化部署</small></span>
-        <Icon name="tabler:brand-github-filled" size={17} aria-hidden="true" />
-      </a>
-      <a class="header-download-link header-download-link-primary" href="https://app.jiying.chat/" target="_blank" rel="noopener noreferrer">
-        <span><strong>在线体验</strong><small>直接进入即应空间</small></span>
-      </a>
-    </nav>
+    <nav class="site-section-nav" aria-label="网站导航"><a href="https://jiying.docs.baizhi.cloud/" target="_blank" rel="noopener noreferrer">帮助文档</a></nav>
+    <HeaderActions />
   </div>
 </header>
 

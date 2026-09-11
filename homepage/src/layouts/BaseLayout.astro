@@ -1,5 +1,11 @@
 ---
 import '../styles/global.css';
+import '../styles/site.css';
+import '../styles/legal.css';
+import '../styles/shadcn.css';
+import '../styles/typography.css';
+import SiteHeader from '../components/SiteHeader.astro';
+import SiteFooter from '../components/SiteFooter.astro';
 
 interface Props {
   title: string;
@@ -30,7 +36,7 @@ const hasValidGaId = /^G-[A-Z0-9]+$/.test(gaId);
 ---
 
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -38,8 +44,8 @@ const hasValidGaId = /^G-[A-Z0-9]+$/.test(gaId);
     <title>{title}</title>
     <meta name="description" content={description} />
     <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
-    <meta name="theme-color" content="#14b8a6" />
-    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#050507" />
+    <meta name="color-scheme" content="dark" />
     <link rel="canonical" href={canonical} />
     <link rel="alternate" hreflang="zh-CN" href={canonical} />
     <link rel="alternate" hreflang="x-default" href={canonical} />
@@ -73,8 +79,10 @@ const hasValidGaId = /^G-[A-Z0-9]+$/.test(gaId);
       </>
     )}
   </head>
-  <body class={bodyClass}>
+  <body class:list={['site-theme', bodyClass]}>
     <a class="skip-link" href="#main-content">跳到主要内容</a>
+    <SiteHeader />
     <slot />
+    <SiteFooter />
   </body>
 </html>

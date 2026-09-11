@@ -1,23 +1,31 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import SiteFooter from '../components/SiteFooter.astro';
-import SiteHeader from '../components/SiteHeader.astro';
+import LegalNav from '../components/LegalNav.astro';
+import { ActionButton } from '../components/ActionButton';
 
-const title = '用户服务｜即应';
-const description = '即应用户服务，提供常见问题、支持联系方式、账号与数据说明及系统要求。';
+const title = '服务协议｜即应';
+const description = '即应服务协议，提供常见问题、支持联系方式、账号与数据说明及系统要求。';
 const updatedAt = '2026 年 8 月';
+const sections = [
+  ['contact', '联系我们'],
+  ['faq', '常见问题'],
+  ['account-data', '账号与数据'],
+  ['requirements', '系统要求'],
+  ['developer', '开发者信息'],
+];
 ---
 
 <BaseLayout title={title} description={description} pathname="/user-service/" type="article" bodyClass="page-legal">
-  <SiteHeader />
   <main id="main-content" class="legal-page">
     <article class="container legal-content legal-document user-service-document">
-      <div class="legal-main">
+      <div class="legal-body">
+        <LegalNav label="服务协议导航" sections={sections} />
+        <div class="legal-main">
         <header class="legal-header">
-          <span class="eyebrow">USER SUPPORT</span>
+          <span class="eyebrow">SERVICE AGREEMENT</span>
           <div class="legal-title-row">
-            <h1>即应 AI 用户支持</h1>
-            <a class="legal-home-link" href={import.meta.env.BASE_URL}>返回首页</a>
+            <h1>即应服务协议</h1>
+            <ActionButton href={import.meta.env.BASE_URL} label="返回首页" icon="arrow-left" variant="outline" />
           </div>
           <p class="legal-lead">欢迎使用即应 AI。</p>
           <p class="legal-lead">即应是一款开源的即时通讯工具，连接消息、知识与任务让 Agent 深度融入工作流，成为真正能参与协作、推动执行的数字员工。如果您在使用过程中遇到问题，可以查阅以下常见问题或联系我们。我们会尽力协助您排查并解决问题。</p>
@@ -127,8 +135,8 @@ const updatedAt = '2026 年 8 月';
             <p><strong>最近更新：</strong>{updatedAt}</p>
           </section>
         </div>
+        </div>
       </div>
     </article>
   </main>
-  <SiteFooter />
 </BaseLayout>
