@@ -8,7 +8,7 @@ Android Development Build 默认使用仓库内固定的官方 JPush AppKey：
 JPUSH_CHANNEL=development pnpm android
 ```
 
-仅在连接独立开发/测试 JPush 应用时，才通过 `JPUSH_APP_KEY` 环境变量覆盖默认值。厂商插件按环境变量条件打包；变量定义见 `client-mobile/.env.example`。小米、vivo、OPPO 必须一次提供该通道的全部变量，华为通过 `JPUSH_HUAWEI_AGCONNECT_SERVICES` 指向从 AppGallery Connect 下载的 JSON 文件。未配置的厂商插件不会进入 APK。
+仅在连接独立开发/测试 JPush 应用时，才通过 `JPUSH_APP_KEY` 环境变量覆盖默认值。厂商插件按环境变量条件打包；变量定义见 `client/mobile/.env.example`。小米、vivo、OPPO 必须一次提供该通道的全部变量，华为通过 `JPUSH_HUAWEI_AGCONNECT_SERVICES` 指向从 AppGallery Connect 下载的 JSON 文件。未配置的厂商插件不会进入 APK。
 
 公共 Push Gateway 才能持有 Master Secret：
 

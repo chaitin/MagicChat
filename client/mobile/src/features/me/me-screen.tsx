@@ -9,6 +9,8 @@ import IconDeviceDesktop from "@tabler/icons-react-native/IconDeviceDesktop"
 // eslint-disable-next-line import/no-unresolved
 import IconHelpCircle from "@tabler/icons-react-native/IconHelpCircle"
 // eslint-disable-next-line import/no-unresolved
+import IconInfoCircle from "@tabler/icons-react-native/IconInfoCircle"
+// eslint-disable-next-line import/no-unresolved
 import IconLogout from "@tabler/icons-react-native/IconLogout"
 // eslint-disable-next-line import/no-unresolved
 import IconMoon from "@tabler/icons-react-native/IconMoon"
@@ -406,6 +408,12 @@ export function MeScreen() {
           },
         ]
 
+  function openAboutWebsite() {
+    void Linking.openURL(appConfig.websiteUrl).catch(() => {
+      Alert.alert("无法打开即应官网", "请稍后重试。")
+    })
+  }
+
   function openHelpCenter() {
     void Linking.openURL(appConfig.helpCenterUrl).catch(() => {
       Alert.alert("无法打开帮助中心", "请稍后重试。")
@@ -517,6 +525,12 @@ export function MeScreen() {
 
             <XGUIList size="large">
               <XGUIListItem
+                icon={({ size, strokeWidth }) => <IconInfoCircle color={colors.brand} size={size} strokeWidth={strokeWidth} />}
+                onPress={openAboutWebsite}
+                title="关于即应"
+              />
+              <XGUIListItem
+                separator
                 icon={({ size, strokeWidth }) => <IconHelpCircle color={colors.brand} size={size} strokeWidth={strokeWidth} />}
                 onPress={openHelpCenter}
                 title="帮助与反馈"

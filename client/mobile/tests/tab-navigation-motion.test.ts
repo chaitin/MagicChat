@@ -17,6 +17,17 @@ test("聊天页进入和退出使用 iOS 风格横向过渡", async () => {
   )
 })
 
+test("底部 Tab 激活色不叠加按压透明度", async () => {
+  const tabbar = await readFile(
+    path.join(root, "src/xgui/components/xgui-tabbar.tsx"),
+    "utf8"
+  )
+
+  assert.match(tabbar, /const color = active \? colors\.brand : colors\.textPrimary/)
+  assert.match(tabbar, /style=\{styles\.item\}/)
+  assert.doesNotMatch(tabbar, /itemPressed|pressed &&|opacity: 0\.6/)
+})
+
 test("底部 Tab 使用原生淡入平滑复杂页面切换", async () => {
   const layout = await readFile(
     path.join(root, "src/app/(app)/(drawer)/(tabs)/_layout.tsx"),

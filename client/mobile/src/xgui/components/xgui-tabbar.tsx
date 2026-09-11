@@ -66,10 +66,7 @@ export function XGUITabbarItem({
       accessibilityRole="tab"
       accessibilityState={{ selected: active }}
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.item,
-        pressed && styles.itemPressed,
-      ]}
+      style={styles.item}
     >
       <View style={styles.icon}>
         <LabelIcon color={color} size={26} strokeWidth={1} />
@@ -107,9 +104,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingBottom: 6,
     paddingTop: 6,
-  },
-  itemPressed: {
-    opacity: 0.6,
   },
   label: {
     fontSize: 12,

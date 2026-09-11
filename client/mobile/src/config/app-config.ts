@@ -4,4 +4,5 @@ export const appConfig = {
   officialServerUrl: "https://app.jiying.chat",
   helpCenterUrl: "https://jiying.docs.baizhi.cloud/",
   releaseManifestUrl: "https://jiying.chat/releases/version.json",
+  websiteUrl: "https://jiying.chat/",
 } as const

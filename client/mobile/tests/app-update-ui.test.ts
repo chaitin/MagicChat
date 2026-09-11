@@ -12,6 +12,29 @@ test("更新下载使用 XGUI Dialog 并保留进度和取消", async () => {
   assert.doesNotMatch(dialog, /<Progress|\$color(?:3|10)|import \{[^\n]*(?:Dialog|Progress)[^\n]*\} from "tamagui"|正在打开系统安装器/)
 })
 
+test("检查更新保留模态 Loading，Toast Modal 使用完整窗口坐标", async () => {
+  const [meScreen, serverScreen, toast] = await Promise.all([
+    source("src/features/me/me-screen.tsx"),
+    source("src/features/servers/server-management-screen.tsx"),
+    source("src/xgui/components/xgui-toast.tsx"),
+  ])
+
+  for (const screen of [meScreen, serverScreen]) {
+    assert.match(
+      screen,
+      /toast\.show\(\{ duration: 0, message: "正在检查更新", type: "loading" \}\)/
+    )
+    assert.match(
+      screen,
+      /message: "已经是最新版本", modal: false, type: "success"/
+    )
+  }
+  assert.match(
+    toast,
+    /<Modal[\s\S]*?navigationBarTranslucent[\s\S]*?statusBarTranslucent/
+  )
+})
+
 test("安装器跳转使用可清理的模态 XGUI Loading Toast", async () => {
   const hook = await source("src/features/updates/use-app-update.ts")
   assert.match(hook, /setStatus\("installing"\)[\s\S]*?message: "正在打开系统安装器"[\s\S]*?modal: true[\s\S]*?type: "loading"/)

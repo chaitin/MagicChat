@@ -195,7 +195,7 @@ NODE_OPTIONS="--max-old-space-size=512" \
 ## 9. 跨端与发布变更
 
 - 修改 API 路径、字段、状态码、错误码、分页、认证、Cookie、权限、实时协议、文件资源或
-  外链规则时，必须分别核对 `server`、`client/web`、`client-desktop`、`client-mobile`。
+  外链规则时，必须分别核对 `server`、`client/web`、`client-desktop`、`client/mobile`。
 - 在变更说明中记录各端“已修改 / 不受影响 / 尚未实现”，不能默认协议变更只影响 Desktop。
 - 消息分区相关修改还必须核对 `server/internal/store/message_partitions.go` 和
   `server/docs/message-partitions.md`。

@@ -137,6 +137,7 @@ function XGUIToastView({
   return (
     <Modal
       animationType="fade"
+      navigationBarTranslucent
       onRequestClose={() => {
         if (toast.type !== "loading") onDismiss()
       }}
