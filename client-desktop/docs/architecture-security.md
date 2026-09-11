@@ -45,7 +45,7 @@ sessionId 隔离；页面卸载、WebContents 销毁、注销、认证失效、S
 - `src/preload` 只暴露 `DesktopBridge v1`，不向 Renderer 提供 `ipcRenderer`、Node
   或 Electron 对象。
 - `src/renderer` 是本地打包的独立 React 应用，启用 context isolation、sandbox
-  和 webSecurity，不读取 `client-web` 的源码或资源。
+  和 webSecurity，不读取 `client/web` 的源码或资源。
 - `src/shared` 只存放进程间契约，不承载页面或平台业务实现。
 
 生产 Renderer 从 `magicchat-app://app/` 加载。主窗口拒绝远程导航和任意新窗口，
@@ -107,7 +107,7 @@ workArea 夹紧，显示器拔除或完全离屏才回退到主窗口所在显�
 
 ## Renderer 独立策略
 
-Desktop 首轮功能以 `client-web` 提交
+Desktop 首轮功能以 `client/web` 提交
 `e1998bd852ad9bc7feff11355ed47b7889cb7887` 为一次性冻结来源。完成迁移后：
 
 - Web 与 Desktop 的页面、交互和平台能力分别演进，禁止用 Web 目录整体覆盖 Desktop。
@@ -232,7 +232,7 @@ Server 重新建立可信同步边界。
 
 以下能力以 Server 提交 `955c80b`、`8f4eda6`、`1e8c757`、`6532ca3`、`b89b554` 为协议和
 授权事实来源。Desktop 只消费既有受控 HTTP、文档协作和受保护媒体能力，不复制、引用或
-运行时加载 `client-web`。
+运行时加载 `client/web`。
 
 - 好友建立系统消息：Desktop 已支持 `friendship_created` 的归一化、固定摘要和实时会话
   刷新；Server 与 Web 已提供；Mobile 未在本轮 Desktop 变更中修改或验证。

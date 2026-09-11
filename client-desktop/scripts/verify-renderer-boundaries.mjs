@@ -13,9 +13,9 @@ const checkedFiles = [
   path.join(desktopRoot, "vitest.config.ts"),
 ]
 const forbidden = [
-  /client-web[\\/]src/,
-  /client-web[\\/]public/,
-  /\.\.[\\/]client-web/,
+  /client[\\/]web[\\/]src/,
+  /client[\\/]web[\\/]public/,
+  /\.\.[\\/]client[\\/]web/,
   /@magicchat[\\/]client-core/,
   /@desktop[\\/]/,
   /from\s+["'](?:\.\.[\\/])+(?:main|preload|shared)[\\/]/,

@@ -3,7 +3,7 @@
 `client-desktop` 是 MagicChat 的 Electron 桌面客户端，使用一套代码支持 Windows、
 macOS 和 Linux，并通过公开 Stable Release 提供跨版本更新。
 
-Desktop Renderer 已从 `client-web` 独立出来，拥有自己的页面、组件、数据层、样式、
+Desktop Renderer 已从 `client/web` 独立出来，拥有自己的页面、组件、数据层、样式、
 资源和测试。它不直接引用 Web 源码，也不会自动同步 Web 的界面修改。
 
 ## 环境要求

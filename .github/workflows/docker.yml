@@ -71,13 +71,13 @@ jobs:
           node-version: 24
           cache: pnpm
           cache-dependency-path: |
-            client-web/pnpm-lock.yaml
+            client/web/pnpm-lock.yaml
             admin-web/pnpm-lock.yaml
             push-gateway-web/pnpm-lock.yaml
             document-server/pnpm-lock.yaml
 
       - name: Verify client web
-        working-directory: client-web
+        working-directory: client/web
         run: |
           pnpm install --frozen-lockfile
           pnpm test

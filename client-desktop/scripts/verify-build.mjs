@@ -69,7 +69,7 @@ assert(
   "文档路由未按需引用 Markdown 编辑器 chunk",
 )
 assert(markdownDocumentChunk.includes("Markdown 正文"), "Markdown 编辑器 chunk 内容缺失")
-for (const forbidden of ["client-web/src", "client-web/public", 'require("electron")']) {
+for (const forbidden of ["client/web/src", "client/web/public", 'require("electron")']) {
   assert(!documentChunk.includes(forbidden), `文档 chunk 包含禁止内容 ${forbidden}`)
   assert(
     !markdownDocumentChunk.includes(forbidden),

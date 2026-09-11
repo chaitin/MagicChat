@@ -1,16 +1,16 @@
 FROM node:24-bookworm-slim AS client-build
 
-WORKDIR /src/client-web
+WORKDIR /src/client/web
 
 ARG CLIENT_BUILD_COMMIT=development
 ENV VITE_CLIENT_BUILD_COMMIT=${CLIENT_BUILD_COMMIT}
 
 RUN corepack enable && corepack prepare pnpm@10.32.1 --activate
 
-COPY client-web/package.json client-web/pnpm-lock.yaml client-web/pnpm-workspace.yaml ./
+COPY client/web/package.json client/web/pnpm-lock.yaml client/web/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
-COPY client-web/ ./
+COPY client/web/ ./
 COPY admin-web/public/assets/avatars/builtin /src/admin-web/public/assets/avatars/builtin
 RUN pnpm build
 
@@ -42,7 +42,7 @@ FROM caddy:2-alpine
 
 COPY deploy/caddy/Caddyfile /etc/caddy/Caddyfile
 COPY --from=bootstrap-certificate /out /etc/caddy/bootstrap
-COPY --from=client-build /src/client-web/dist /srv/client
+COPY --from=client-build /src/client/web/dist /srv/client
 COPY --from=admin-build /src/admin-web/dist /srv/admin
 
 RUN caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile

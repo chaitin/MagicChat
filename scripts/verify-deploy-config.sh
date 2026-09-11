@@ -228,7 +228,7 @@ assert_contains "server/internal/appregistry/ai_assistant.go" 'AIAssistantAppID 
 assert_contains "deploy/caddy/Dockerfile" "pnpm build"
 assert_contains "deploy/caddy/Dockerfile" "ARG CLIENT_BUILD_COMMIT=development"
 assert_contains "deploy/caddy/Dockerfile" 'ENV VITE_CLIENT_BUILD_COMMIT=${CLIENT_BUILD_COMMIT}'
-assert_contains "deploy/caddy/Dockerfile" "COPY --from=client-build /src/client-web/dist /srv/client"
+assert_contains "deploy/caddy/Dockerfile" "COPY --from=client-build /src/client/web/dist /srv/client"
 assert_contains "deploy/caddy/Dockerfile" "COPY --from=admin-build /src/admin-web/dist /srv/admin"
 assert_contains "deploy/caddy/Dockerfile" "COPY admin-web/public/assets/avatars/builtin"
 

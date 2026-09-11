@@ -1,7 +1,7 @@
 # 对话状态功能设计方案
 
 > 状态：已确认方案
-> 范围：server、client-web、assistant
+> 范围：server、client/web、assistant
 
 ## 1. 核心原则
 
@@ -112,7 +112,7 @@ s.appConnections.SendToApp(appID, event)
 | group/topic | `unsupported_conversation` |
 | 会话拓扑异常或 DB 错误 | `internal_error` |
 
-## 4. client-web
+## 4. client/web
 
 ### 4.1 状态发送条件
 
@@ -131,7 +131,7 @@ s.appConnections.SendToApp(appID, event)
 4. 不要求输入框非空，不依赖 `onChange`。
 5. 发送失败静默处理，不阻塞输入。
 
-建议在 `client-web/src/components/conversation/conversation-panel-composer.tsx` 内维护焦点状态和 interval：
+建议在 `client/web/src/components/conversation/conversation-panel-composer.tsx` 内维护焦点状态和 interval：
 
 ```ts
 useEffect(() => {
@@ -149,7 +149,7 @@ useEffect(() => {
 
 ### 4.2 状态接收与展示
 
-新增 `client-web/src/hooks/use-conversation-status.ts`：
+新增 `client/web/src/hooks/use-conversation-status.ts`：
 
 ```ts
 Map<conversationId, {
@@ -224,7 +224,7 @@ func conversationStatusSender(
 - payload 不能伪造 sender。
 - 不创建 outbox、cursor 或消息 seq。
 
-### client-web
+### client/web
 
 - focus 后立即发送，之后每 3 秒发送。
 - blur、切换会话、卸载、页面隐藏后停止。
@@ -247,7 +247,7 @@ func conversationStatusSender(
 ## 7. 实施顺序
 
 1. Server 双向无状态转发及集成测试。
-2. client-web 状态接收、5 秒 TTL 和展示。
-3. client-web 输入框焦点驱动的 3 秒心跳。
+2. client/web 状态接收、5 秒 TTL 和展示。
+3. client/web 输入框焦点驱动的 3 秒心跳。
 4. assistant agent 运行周期驱动的 3 秒心跳。
 5. 端到端联调：3 秒续发、5 秒消失、离线不补发。

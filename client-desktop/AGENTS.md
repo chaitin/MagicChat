@@ -5,8 +5,8 @@
 - 本文件适用于 `client-desktop/` 下的全部源码、测试、脚本、文档和构建配置。
 - 先阅读 `README.md`、`docs/architecture-security.md`；涉及打包、更新或发布时，再阅读
   `docs/release-recovery.md`。
-- `client-desktop` 是独立的 Electron 桌面客户端，不是 `client-web` 的壳。禁止直接引用、
-  符号链接、运行时加载或整体复制 `client-web` 的源码和资源。
+- `client-desktop` 是独立的 Electron 桌面客户端，不是 `client/web` 的壳。禁止直接引用、
+  符号链接、运行时加载或整体复制 `client/web` 的源码和资源。
 - 优先做范围最小、边界清晰、可验证的修改。不得提交占位实现、静默降级、安全绕过、
   未说明的兼容分支或与任务无关的重构。
 - 用户界面、错误提示、代码注释和项目文档默认使用中文；协议字段、外部 API 名称及已有
@@ -195,7 +195,7 @@ NODE_OPTIONS="--max-old-space-size=512" \
 ## 9. 跨端与发布变更
 
 - 修改 API 路径、字段、状态码、错误码、分页、认证、Cookie、权限、实时协议、文件资源或
-  外链规则时，必须分别核对 `server`、`client-web`、`client-desktop`、`client-mobile`。
+  外链规则时，必须分别核对 `server`、`client/web`、`client-desktop`、`client-mobile`。
 - 在变更说明中记录各端“已修改 / 不受影响 / 尚未实现”，不能默认协议变更只影响 Desktop。
 - 消息分区相关修改还必须核对 `server/internal/store/message_partitions.go` 和
   `server/docs/message-partitions.md`。
