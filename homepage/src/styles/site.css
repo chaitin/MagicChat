@@ -125,12 +125,17 @@ body.site-theme .footer-bottom a:hover { color: var(--green); }
   body.site-theme .footer-bottom p { margin-left: 0; text-align: left; }
 }
 @media (max-width: 520px) {
-  html:has(body.site-theme) { scroll-padding-top: 128px; }
-  body.site-theme .site-header .nav-shell { flex-wrap: wrap; row-gap: 10px; padding-block: 12px; }
-  body.site-theme .site-header .brand { flex-basis: 100%; }
-  body.site-theme .header-actions { margin-left: auto; }
-  body.site-theme .brand { gap: 7px; font-size: 18px; }
-  body.site-theme .brand img { width: 26px; height: 26px; }
+  html:has(body.site-theme) { scroll-padding-top: 80px; }
+  body.site-theme .site-header .nav-shell { flex-wrap: nowrap; gap: 8px; padding-block: 10px; }
+  body.site-theme .site-header .brand { min-width: 0; flex: 0 1 auto; }
+  body.site-theme .header-actions { flex: 0 0 auto; gap: 8px; margin-left: auto; }
+  body.site-theme .site-header .header-actions [data-slot='button'] { min-height: 44px; font-size: 14px; }
+  body.site-theme .site-header .header-github[data-slot='button'] { width: 44px; padding-inline: 0; }
+  body.site-theme .header-github-label { display: none; }
+  body.site-theme .site-header .header-online[data-slot='button'] { padding-inline: 12px; }
+  body.site-theme .header-online svg { display: none; }
+  body.site-theme .brand { gap: 7px; }
+  body.site-theme .brand img { width: 24px; height: 24px; }
   body.site-theme .header-icon-download { width: 31px; min-height: 34px; padding: 6px; }
   body.site-theme .header-download-link-primary { min-height: 34px; padding-inline: 11px; font-size: 11px; }
   body.site-theme .header-download-menu .download-menu-panel { position: fixed; top: 62px; left: auto; right: 20px; width: min(300px, calc(100vw - 40px)); min-width: 0; transform: none; animation: none; }

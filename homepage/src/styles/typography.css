@@ -172,3 +172,7 @@ body.site-theme .site-header .brand { font-size: 20px; }
     --type-section: 24px;
   }
 }
+
+@media (max-width: 520px) {
+  body.site-theme .site-header .brand { font-size: 16px; }
+}
