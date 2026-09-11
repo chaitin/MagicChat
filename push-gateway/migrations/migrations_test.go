@@ -37,6 +37,7 @@ func TestInstallationMigrationStoresProviderTokenPlaintext(t *testing.T) {
 	sql := strings.ToLower(string(rawSQL))
 	for _, expected := range []string{
 		"provider_token text not null",
+		"octet_length(provider_token) between 8 and 255",
 		"unique (provider, environment, provider_token)",
 	} {
 		if !strings.Contains(sql, expected) {

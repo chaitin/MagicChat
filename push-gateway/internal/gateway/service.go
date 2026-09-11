@@ -21,7 +21,7 @@ import (
 const (
 	EventMessageCreated = "message.created"
 
-	maxProviderTokenBytes = 4096
+	maxProviderTokenBytes = 255
 	maxAppVersionBytes    = 64
 	maxIdempotencyBytes   = 200
 	maxRouteTokenBytes    = 512

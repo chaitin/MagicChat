@@ -27,6 +27,7 @@ CREATE TABLE push_installations (
   CONSTRAINT push_installations_platform_check CHECK (platform IN ('android', 'ios')),
   CONSTRAINT push_installations_environment_check CHECK (environment IN ('development', 'production')),
   CONSTRAINT push_installations_status_check CHECK (status IN ('active', 'disabled')),
+  CONSTRAINT push_installations_provider_token_length_check CHECK (octet_length(provider_token) BETWEEN 8 AND 255),
   CONSTRAINT push_installations_provider_token_unique UNIQUE (provider, environment, provider_token)
 );
 

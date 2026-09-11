@@ -98,9 +98,31 @@ func TestSendClassifiesAPNsFailures(t *testing.T) {
 	}
 }
 
+func TestValidateRegistrationRequiresExactDeviceTokenLength(t *testing.T) {
+	pushProvider := newTestProvider(t, "https://example.test")
+	registration := provider.Registration{Platform: "ios", Environment: "production"}
+	registration.Token = strings.Repeat("ab", 32)
+	if err := pushProvider.ValidateRegistration(registration); err != nil {
+		t.Fatalf("valid device token was rejected: %v", err)
+	}
+	for _, token := range []string{
+		"not-hex",
+		strings.Repeat("ab", 31),
+		strings.Repeat("ab", 33),
+		strings.Repeat("ab", 2048),
+	} {
+		registration.Token = token
+		if err := pushProvider.ValidateRegistration(registration); err == nil {
+			t.Fatalf("invalid device token of length %d was accepted", len(token))
+		}
+	}
+}
+
 func TestSendRejectsMalformedDeviceToken(t *testing.T) {
 	pushProvider := newTestProvider(t, "https://example.test")
-	_, err := pushProvider.Send(t.Context(), provider.Notification{Token: "not-hex"})
+	_, err := pushProvider.Send(t.Context(), provider.Notification{
+		Token: "not-hex", Platform: "ios", Environment: "production",
+	})
 	var sendErr *provider.SendError
 	if !errors.As(err, &sendErr) || sendErr.Kind != provider.ErrorInvalidDevice {
 		t.Fatalf("Send() error = %#v", err)

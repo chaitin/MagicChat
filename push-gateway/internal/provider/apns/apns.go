@@ -24,10 +24,11 @@ import (
 )
 
 const (
-	productionEndpoint  = "https://api.push.apple.com"
-	developmentEndpoint = "https://api.sandbox.push.apple.com"
-	maxResponseBytes    = 16 << 10
-	jwtLifetime         = 50 * time.Minute
+	productionEndpoint   = "https://api.push.apple.com"
+	developmentEndpoint  = "https://api.sandbox.push.apple.com"
+	deviceTokenHexLength = 64
+	maxResponseBytes     = 16 << 10
+	jwtLifetime          = 50 * time.Minute
 )
 
 type Config struct {
@@ -100,7 +101,8 @@ func (*Provider) ValidateRegistration(registration provider.Registration) error 
 		return fmt.Errorf("APNs registration platform or environment is invalid")
 	}
 	deviceToken := strings.TrimSpace(registration.Token)
-	if _, err := hex.DecodeString(deviceToken); err != nil || len(deviceToken) < 32 {
+	decoded, err := hex.DecodeString(deviceToken)
+	if err != nil || len(deviceToken) != deviceTokenHexLength || len(decoded) != deviceTokenHexLength/2 {
 		return fmt.Errorf("APNs device token is invalid")
 	}
 	return nil
