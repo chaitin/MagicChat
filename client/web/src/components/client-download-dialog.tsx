@@ -37,6 +37,8 @@ type ClientVersion = {
 type ClientVersionManifest = Record<string, ClientVersion | undefined>
 
 const VERSION_MANIFEST_URL = "https://jiying.chat/releases/version.json"
+const IOS_APP_STORE_URL =
+  "https://apps.apple.com/us/app/%E5%8D%B3%E5%BA%94-ai/id6793547066"
 
 const fallbackDownloads: Record<string, ClientDownload[]> = {
   android: [{ url: "https://jiying.chat/releases/jiying.apk" }],
@@ -179,9 +181,10 @@ function createClientPlatforms(
       released: true,
     },
     {
+      downloads: [{ url: IOS_APP_STORE_URL }],
       icon: AppleIcon,
       name: "iOS",
-      released: false,
+      released: true,
     },
   ]
 }

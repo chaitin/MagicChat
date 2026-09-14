@@ -194,10 +194,13 @@ describe("AppLayout", () => {
       target: "_blank",
     })
     expect(
-      within(dialog).getAllByRole("button", {
-        name: "iOS 客户端敬请期待",
+      within(dialog).getByRole("link", {
+        name: "下载 iOS 客户端",
       })
-    ).toHaveLength(1)
+    ).toMatchObject({
+      href: "https://apps.apple.com/us/app/%E5%8D%B3%E5%BA%94-ai/id6793547066",
+      target: "_blank",
+    })
     await user.click(
       within(dialog).getByRole("button", { name: "下载 Linux 客户端" })
     )
