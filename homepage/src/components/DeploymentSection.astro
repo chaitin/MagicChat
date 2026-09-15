@@ -1,7 +1,7 @@
 ---
 import { Icon } from 'astro-icon/components';
-import { ActionButton } from './ActionButton';
 import { CopyCommandButton } from './CopyCommandButton';
+import SectionTitle from './SectionTitle.astro';
 import '../styles/deployment.css';
 
 const command = 'bash -c "$(curl -sSLk https://jiying.chat/releases/install.sh)"';
@@ -16,7 +16,7 @@ const benefits = [
   <div class="studio-container">
   <div class="studio-section-heading">
     <span class="studio-eyebrow"><i></i>独立部署 <span>SELF-HOSTED</span></span>
-    <h2 id="deployment-title">部署独立的<span>即应服务器</span></h2>
+    <SectionTitle id="deployment-title">部署独立的<span>即应服务器</span></SectionTitle>
     <p>一个命令，搭建属于自己团队的协作空间。<br class="studio-mobile-break" />让数据、环境和扩展能力都由你掌握。</p>
   </div>
 
@@ -24,7 +24,7 @@ const benefits = [
     <div class="studio-install-terminal" aria-label="安装命令终端窗口">
       <div class="studio-terminal-bar">
         <span class="studio-terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-        <div data-copy-controls hidden><CopyCommandButton /></div>
+        <CopyCommandButton client:load command={command} />
       </div>
       <div class="studio-terminal-body">
         <div class="studio-terminal-command"><span aria-hidden="true">$</span><pre><code data-install-command>{command}</code></pre></div>
@@ -32,7 +32,7 @@ const benefits = [
     </div>
     <div class="studio-deploy-requirements" aria-label="运行环境要求">
       <p>仅需 <strong>1 核 CPU + 1 GB 内存</strong>轻量配置</p>
-      <ActionButton href="https://jiying.docs.baizhi.cloud/" label="查看详细部署文档" trailingIcon="arrow-up-right" variant="link" external />
+      <a class="studio-resource-link" href="https://jiying.docs.baizhi.cloud/" target="_blank" rel="noopener noreferrer"><span>查看详细部署文档</span><Icon name="tabler:arrow-up-right" size={20} aria-hidden="true" /></a>
     </div>
     <p class="studio-copy-status" role="status" aria-live="polite" data-copy-status hidden></p>
   </div>
@@ -42,41 +42,3 @@ const benefits = [
   </div>
   </div>
 </section>
-
-<script>
-  const terminal = document.querySelector<HTMLElement>('[data-install-terminal]');
-  if (terminal) {
-    const command = terminal.querySelector<HTMLElement>('[data-install-command]');
-    const button = terminal.querySelector<HTMLButtonElement>('[data-copy-command]');
-    const label = terminal.querySelector<HTMLElement>('[data-copy-label]');
-    const status = terminal.querySelector<HTMLElement>('[data-copy-status]');
-    const controls = terminal.querySelector<HTMLElement>('[data-copy-controls]');
-    if (command && button && label && status && controls) {
-      controls.hidden = false;
-      button.addEventListener('click', async () => {
-        button.disabled = true;
-        try {
-          await navigator.clipboard.writeText(command.textContent ?? '');
-          label.textContent = '已复制';
-          button.dataset.copyState = 'copied';
-          button.setAttribute('aria-label', '已复制安装命令');
-          status.hidden = true;
-          status.textContent = '';
-        } catch {
-          const selection = window.getSelection();
-          const range = document.createRange();
-          range.selectNodeContents(command);
-          selection?.removeAllRanges();
-          selection?.addRange(range);
-          label.textContent = '重新复制';
-          button.dataset.copyState = 'idle';
-          button.setAttribute('aria-label', '重新复制安装命令');
-          status.hidden = false;
-          status.textContent = '自动复制未成功，请手动复制上方安装命令。';
-        } finally {
-          button.disabled = false;
-        }
-      });
-    }
-  }
-</script>

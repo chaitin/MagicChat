@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 import icon from 'astro-icon';
@@ -68,6 +69,11 @@ export default defineConfig({
     format: 'directory',
   },
   vite: {
+    resolve: {
+      alias: {
+        '@': fileURLToPath(new URL('./src', import.meta.url)),
+      },
+    },
     plugins: [tailwindcss()],
   },
 });

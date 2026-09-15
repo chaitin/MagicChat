@@ -33,16 +33,20 @@ SITE_URL=https://example.com PUBLIC_BASE_PATH=/ npm run build
 
 全站最终字号由 `src/styles/typography.css` 统一管理，通过语义分组覆盖组件中的旧字号。主标题 48px、分区标题 32px、小标题 18px、正文 14px、辅助文字 12px；800px 及以下仅将主标题和分区标题改为 32px、24px。品牌固定 24px，正文行高 1.8，按钮和导航行高 1.4。新增文案按这些角色归类，避免增加零散字号。
 
-shadcn/ui 配置位于 `components.json`，组件源码保存在 `src/components/ui/`，`@/` 指向 `src/`。Button 基于官方 New York / Radix 实现，全站实际操作控件共用该组件：`HeaderActions.tsx` 提供页头按钮，`ActionButton.tsx` 提供 Hero、下载、部署、文档与返回操作，`WorkspaceTab.tsx` 提供功能切换，`FaqQuestion.tsx` 通过 `asChild` 保留原生 summary 展开语义。普通导航和正文链接继续使用语义化链接，产品示意图里的控件仅作展示。
+shadcn/ui 配置位于 `components.json`，组件源码保存在 `src/components/ui/`，`@/` 指向 `src/`。`ui/button.tsx` 按源码接入 [beUI Button](https://beui.dev/components/motion/button)，保留官方胶囊尺寸、悬停缩放、弹簧按压及可选 ripple；本地适配补充主题选择器、图标尺寸、禁用保护和共享样式函数；悬停保留官方 `1.02` 倍缩放，不上浮，并通过 CSS 增加主题色边框光晕（不依赖 React hydration）。`Button` 用于实际操作，`ButtonLink` 保留原生链接语义；默认变体为 `primary`、尺寸为 `md`。源码版权声明随站点发布在 `public/licenses/beui.txt`。
 
-这些组件均由 Astro 服务端渲染，不使用 `client:*` 指令，无需加载客户端 React。操作按钮默认通过 `data-motion` 启用统一的悬停颜色、边框、阴影和按压反馈；标签页和 FAQ 设为 `motion={false}`，避免布局位移。系统开启减少动态效果时关闭位移与缩放，保留清晰的颜色及阴影状态。
+`HeaderActions.tsx`、`ActionButton.tsx`、`ClientPlatforms`、`CopyCommandButton.tsx` 和 `WorkspaceTabs` 使用 `client:load` 激活 React / Motion。复制按钮使用 `components/motion/action-swap-cascade.tsx` 中按需接入的 beUI Action Swap Cascade 文本/图标原语，在真实复制结果返回后逐字滚动切换状态；保留失败时手动选择命令和重试，减少动态效果时直接更新内容，并保持 SSR 首次渲染一致。复制状态和标签页键盘交互由 React 管理，下载清单在客户端列表完成 hydration 后只请求一次，避免旧 DOM 脚本与 hydration 冲突。系统开启减少动态效果时关闭缩放与 ripple，触屏不启用悬停缩放。`FaqQuestion.tsx` 使用服务端渲染的原生 `summary`，不套用按钮边框与 hover 样式，保留列表分隔线、展开收起及键盘焦点提示，不将其包进 island 或嵌套按钮；无 JavaScript 时 FAQ、链接和所有场景正文仍可使用。普通导航和正文链接继续使用语义化链接，产品示意图里的控件仅作展示。
+
+Hero 标语通过 `components/motion/text-cascade.tsx` 使用 beUI Text Cascade（复用 Action Swap 的逐字滚动原语）。固定文案在 hydration 后播放，并以原始速度每 5 秒重播一次；SSR 保留完整可见文字，减少动态效果时静态显示，沿用原来的容器自适应字号与配色。
+
+首页正文的 7 个区块主标题共用 `SectionTitle.astro`，标题统一正体，保留后半句主题色。标题前的 `loader-dither.tsx` 按需接入 beUI Loader 的 Dither 变体（4×4 Bayer 点阵），通过 `client:visible` 启动，使用 24px 主题色装饰，不播报加载状态；减少动态效果时改为较柔和的透明度脉动。
 
 `src/styles/shadcn.css` 提供 Tailwind utilities、深色变体和映射到 Tailwind teal 主题的语义颜色。保留现有 CSS reset，不重复引入 Tailwind Preflight；utilities 使用非分层输出，以便覆盖现有非分层基础样式。新增交互组件时，在完整的 React 组件边界上按需使用 `client:load` 或 `client:visible`。
 
 在 `homepage` 目录添加后续组件：
 
 ```bash
-pnpm dlx shadcn@latest add dialog
+npx shadcn@latest add dialog
 ```
 
 组件主题统一在 `shadcn.css` 中维护，页面配色继续由 `site.css` 提供。

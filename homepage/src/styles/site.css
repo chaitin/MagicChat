@@ -52,13 +52,13 @@ body.site-theme .header-actions { gap: 16px; }
 body.site-theme .site-header .header-github[data-slot='button'] {
   position: relative;
   isolation: isolate;
-  border-color: color-mix(in srgb, var(--green) 32%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--green) 32%, transparent), 0 0 12px color-mix(in srgb, var(--green) 14%, transparent);
+  border: 2px solid color-mix(in srgb, var(--green) 32%, transparent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--green) 14%, transparent);
 }
 body.site-theme .site-header .header-github::before {
   position: absolute;
-  inset: -1px;
-  padding: 2.5px;
+  inset: -2px;
+  padding: 2px;
   border-radius: inherit;
   background: conic-gradient(from var(--github-neon-angle), transparent 0% 60%, var(--green) 77%, #ccfbf1 84%, var(--green) 90%, transparent 100%);
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
@@ -70,6 +70,7 @@ body.site-theme .site-header .header-github::before {
   animation: github-neon-orbit 4s linear infinite;
 }
 body.site-theme .site-header .header-github[data-slot='button']:not(:disabled):hover {
+  border-color: var(--green);
   box-shadow: 0 0 18px color-mix(in srgb, var(--green) 28%, transparent), inset 0 0 10px color-mix(in srgb, var(--green) 6%, transparent);
 }
 @keyframes github-neon-orbit {

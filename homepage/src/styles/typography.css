@@ -40,9 +40,6 @@ body.site-theme :is(
 }
 
 body.site-theme :is(.studio-section-heading h2, .studio-start h2) {
-  font-style: italic;
-}
-body.site-theme :is(.studio-section-heading h2, .studio-start h2) > span {
   font-style: normal;
 }
 

@@ -1,6 +1,7 @@
 ---
 import tabler from '@iconify-json/tabler/icons.json';
-import { ClientPlatformButton } from './ClientPlatformButton';
+import { ClientPlatforms } from './ClientPlatformButton';
+import SectionTitle from './SectionTitle.astro';
 import '../styles/clients.css';
 
 const clients = [
@@ -18,15 +19,14 @@ const clients = [
   <div class="studio-container">
     <div class="studio-section-heading">
       <span class="studio-eyebrow"><i></i>全平台支持 <span>YOUR WORKSPACE, EVERYWHERE</span></span>
-      <h2 id="clients-title">Web / 桌面 / 移动端，<span>全平台支持</span></h2>
+      <SectionTitle id="clients-title">Web / 桌面 / 移动端，<span>全平台支持</span></SectionTitle>
       <p>不必为了协作更换设备。电脑、手机或浏览器，都能连接同一个团队。</p>
     </div>
 
-    <ul class="studio-client-platforms" aria-label="选择即应客户端">
-      {clients.map(client => <li>
-        <ClientPlatformButton href={client.href} label={client.label} description={client.description} iconBody={tabler.icons[client.icon].body} platform={'platform' in client ? client.platform : undefined} />
-      </li>)}
-    </ul>
+    <ClientPlatforms client:load clients={clients.map(client => ({
+      href: client.href, label: client.label, description: client.description,
+      iconBody: tabler.icons[client.icon].body, platform: 'platform' in client ? client.platform : undefined,
+    }))} />
 
     <div class="studio-client-benefits">
       <article><h3>设备不同，团队同在</h3><p>沿用熟悉的设备，进入同一个工作空间，减少跨平台沟通的障碍。</p></article>

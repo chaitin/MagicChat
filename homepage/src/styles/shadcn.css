@@ -50,89 +50,25 @@ body.site-theme {
   --border: var(--studio-line);
   --input: var(--studio-line-hover);
   --ring: var(--green);
+  --button-hover-shadow: 0 0 18px color-mix(in srgb, var(--primary) 30%, transparent);
 }
 
-/* Background feedback for the header, hero and final call to action. */
-body.site-theme :is(.header-actions, .studio-hero .studio-actions, .studio-start .studio-actions) [data-slot='button'] {
-  position: relative;
-  isolation: isolate;
-}
-body.site-theme :is(.header-actions, .studio-hero .studio-actions, .studio-start .studio-actions) [data-slot='button'][data-variant='default']::after {
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 8%) 48%, transparent 66%);
-  background-size: 300% 100%;
-  background-position: 100% 0;
-  opacity: 0;
-  pointer-events: none;
-  content: '';
-  transition: background-position 650ms ease, opacity 180ms ease;
-}
-body.site-theme :is(.header-actions, .studio-hero .studio-actions, .studio-start .studio-actions) [data-slot='button'][data-variant='default']:not(:disabled):hover::after {
-  background-position: 0 0;
-  opacity: 1;
-}
-body.site-theme :is(.header-actions, .studio-hero .studio-actions, .studio-start .studio-actions) [data-slot='button'][data-variant='default']:not(:disabled):hover {
-  background-color: color-mix(in srgb, var(--green) 85%, white);
-}
-body.site-theme :is(.header-actions, .studio-hero .studio-actions, .studio-start .studio-actions) [data-slot='button'][data-variant='outline']:not(:disabled):hover {
-  background-color: color-mix(in oklab, var(--input) 30%, transparent);
-  border-color: color-mix(in srgb, var(--green) 60%, var(--studio-line));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--green) 60%, var(--studio-line));
-}
-@media (prefers-reduced-motion: reduce) {
-  body.site-theme :is(.header-actions, .studio-hero .studio-actions, .studio-start .studio-actions) [data-slot='button']::after { display: none; }
-}
-
-/* Shared feedback for shadcn buttons, including server-rendered links. */
+/* beUI owns transform animation through Motion; do not add a CSS transform transition. */
 body.site-theme [data-slot='button'] {
+  border: 2px solid var(--border);
   cursor: pointer;
-  transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease,
-    box-shadow 180ms ease, transform 180ms ease;
+  transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
 }
-body.site-theme a[data-slot='button']:not([data-variant='link']) {
-  text-decoration: none;
-}
-body.site-theme [data-slot='button'][data-variant='default'] { color: var(--primary-foreground); }
+body.site-theme a[data-slot='button'] { text-decoration: none; }
+body.site-theme [data-slot='button'][data-variant='primary'] { color: var(--primary-foreground); border-color: var(--primary); }
 body.site-theme [data-slot='button'][data-variant='outline'] { color: var(--foreground); }
-body.site-theme [data-slot='button'][data-variant='link'] { color: var(--primary); }
 body.site-theme [data-slot='button']:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 3px;
 }
-@media (any-hover: hover) {
-  body.site-theme [data-slot='button'][data-motion='true']:not(:disabled):hover {
-    box-shadow: 0 5px 18px color-mix(in srgb, var(--primary) 20%, transparent);
-  }
-  body.site-theme [data-slot='button'][data-variant='default']:not(:disabled):hover {
-    background-color: var(--color-teal-400);
-  }
-  body.site-theme [data-slot='button'][data-variant='outline']:not(:disabled):hover {
-    color: var(--primary);
-    border-color: var(--primary);
-    background-color: color-mix(in srgb, var(--primary) 12%, var(--background));
-  }
-  body.site-theme [data-slot='button'][data-variant='link']:hover {
-    text-decoration: underline;
-    text-underline-offset: 4px;
-    box-shadow: none;
-  }
-}
-body.site-theme [data-slot='button'][data-motion='true']:not(:disabled):active {
-  box-shadow: inset 0 2px 5px rgb(0 0 0 / 20%);
-}
-@media (prefers-reduced-motion: no-preference) {
-  @media (any-hover: hover) {
-    body.site-theme [data-slot='button'][data-motion='true']:not(:disabled):hover {
-      transform: translateY(-2px);
-    }
-  }
-  body.site-theme [data-slot='button'][data-motion='true']:not(:disabled):active {
-    transform: translateY(0) scale(.97);
-  }
+body.site-theme [data-slot='button']:not(:disabled):is(:hover, :focus-visible) {
+  box-shadow: var(--button-hover-shadow);
 }
 @media (prefers-reduced-motion: reduce) {
-  body.site-theme [data-slot='button'] { transform: none; }
+  body.site-theme [data-slot='button'] { transition: none; }
 }

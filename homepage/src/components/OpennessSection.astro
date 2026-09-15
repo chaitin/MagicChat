@@ -1,6 +1,7 @@
 ---
 import { Icon } from 'astro-icon/components';
-import { ActionButton } from './ActionButton';
+import { Code, BookOpen } from 'lucide-react';
+import SectionTitle from './SectionTitle.astro';
 import '../styles/openness.css';
 
 const principles = [
@@ -26,7 +27,7 @@ const principles = [
 <section class="studio-section studio-container studio-openness" id="openness" aria-labelledby="openness-title">
   <div class="studio-section-heading">
     <span class="studio-eyebrow"><i></i>开放性 <span>OPEN BY DESIGN</span></span>
-    <h2 id="openness-title">从代码到能力，<span>全面开放</span></h2>
+    <SectionTitle id="openness-title">从代码到能力，<span>全面开放</span></SectionTitle>
     <p>看得见源代码，调得通 API，也能让 AI 直接参与执行。<br class="studio-mobile-break" />把已有系统接进来，让团队按自己的方式工作。</p>
   </div>
 
@@ -39,7 +40,7 @@ const principles = [
   </div>
 
   <div class="studio-actions">
-    <ActionButton href="https://github.com/chaitin/MagicChat" label="查看源代码" icon="code" variant="outline" external />
-    <ActionButton href="https://github.com/chaitin/MagicChat/blob/main/APPLICATION_DEVELOPMENT.md" label="查看开发文档" icon="book-open" variant="outline" external />
+    <a class="studio-resource-link" href="https://github.com/chaitin/MagicChat" target="_blank" rel="noopener noreferrer"><Code size={20} aria-hidden="true" /><span>查看源代码</span></a>
+    <a class="studio-resource-link" href="https://github.com/chaitin/MagicChat/blob/main/APPLICATION_DEVELOPMENT.md" target="_blank" rel="noopener noreferrer"><BookOpen size={20} aria-hidden="true" /><span>查看开发文档</span></a>
   </div>
 </section>

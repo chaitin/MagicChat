@@ -9,12 +9,6 @@ import { HeaderActions } from './HeaderActions';
       <span>即应 CHAT</span>
     </a>
     <nav class="site-section-nav" aria-label="网站导航"><a href="https://jiying.docs.baizhi.cloud/" target="_blank" rel="noopener noreferrer">帮助文档</a></nav>
-    <HeaderActions />
+    <HeaderActions client:load />
   </div>
 </header>
-
-<script>
-  import { hydrateReleaseDownloadLinks } from '../lib/release-downloads';
-
-  void hydrateReleaseDownloadLinks();
-</script>

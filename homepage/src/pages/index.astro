@@ -8,6 +8,8 @@ import ClientsSection from '../components/ClientsSection.astro';
 import OpennessSection from '../components/OpennessSection.astro';
 import { ActionButton } from '../components/ActionButton';
 import { FaqQuestion } from '../components/FaqQuestion';
+import { TextCascade } from '../components/motion/text-cascade';
+import SectionTitle from '../components/SectionTitle.astro';
 import '../styles/homepage.css';
 
 const title = '即应 - AI 时代的团队协作入口';
@@ -52,11 +54,11 @@ const faqs = [
     <section class="studio-hero studio-container" aria-labelledby="hero-title">
       <div class="studio-hero-copy">
         <h1 id="hero-title"><span class="studio-title-shadow" aria-hidden="true">即应 Chat</span>即应 Chat</h1>
-        <p class="studio-hero-tagline">AI 时代的团队协作入口</p>
+        <p class="studio-hero-tagline"><TextCascade client:load text="AI 时代的团队协作入口" /></p>
         <p class="studio-hero-description">即应是一款开源的即时通讯工具。让沟通与执行在同一个空间完成，让 AI 助理融入你的日常工作。连接消息、知识与任务，让 AI 真正成为团队的一员。</p>
         <div class="studio-actions">
-          <ActionButton href="#deployment" label="独立部署" icon="server" size="lg" />
-          <ActionButton href="#clients" label="下载客户端" icon="download" variant="outline" size="lg" />
+          <ActionButton client:load href="#deployment" label="独立部署" icon="server" size="lg" />
+          <ActionButton client:load href="#clients" label="下载客户端" icon="download" variant="outline" size="lg" />
         </div>
       </div>
       <StudioHero />
@@ -70,7 +72,7 @@ const faqs = [
     <DeploymentSection />
 
     <section class="studio-section studio-container" id="solution" aria-labelledby="solution-title">
-      <div class="studio-section-heading"><span class="studio-eyebrow"><i></i>产品能力 <span>THE WORKSPACE</span></span><h2 id="solution-title">让 AI 真正成为<span>团队的一员</span></h2><p>把分散的信息连起来，让 AI 理解背景、参与协作。<br class="studio-mobile-break" />少一些反复，多一些进展。</p></div>
+      <div class="studio-section-heading"><span class="studio-eyebrow"><i></i>产品能力 <span>THE WORKSPACE</span></span><SectionTitle id="solution-title">让 AI 真正成为<span>团队的一员</span></SectionTitle><p>把分散的信息连起来，让 AI 理解背景、参与协作。<br class="studio-mobile-break" />少一些反复，多一些进展。</p></div>
       <StudioWorkspace />
       <div class="studio-capabilities" id="why" aria-label="为什么选择即应">{teamBenefits.map(([icon, heading, body]) => <article><Icon name={icon} size={23} aria-hidden="true" /><h3>{heading}</h3><p>{body}</p></article>)}</div>
     </section>
@@ -81,19 +83,19 @@ const faqs = [
 
     <section class="studio-section-band" id="capabilities" aria-labelledby="capability-title">
       <div class="studio-container">
-      <div class="studio-section-heading"><span class="studio-eyebrow"><i></i>产品对比 <span>THE DIFFERENCE</span></span><h2 id="capability-title">飞书、钉钉、企微的<span>开源平替</span></h2><p>从团队协作到部署方式，找到适合你的工作空间。</p></div>
+      <div class="studio-section-heading"><span class="studio-eyebrow"><i></i>产品对比 <span>THE DIFFERENCE</span></span><SectionTitle id="capability-title">飞书、钉钉、企微的<span>开源平替</span></SectionTitle><p>从团队协作到部署方式，找到适合你的工作空间。</p></div>
       <div class="studio-comparison" role="region" aria-label="产品能力对比，可横向滚动" tabindex="0"><table><thead><tr><th scope="col">比较维度</th><th scope="col" class="studio-highlight">即应</th>{['飞书', '钉钉', '企业微信', 'Slack', 'Mattermost', 'Rocket.Chat'].map((product) => <th scope="col">{product}</th>)}</tr></thead><tbody>{comparisonRows.map(([dimension, ...support]) => <tr><th scope="row">{dimension}</th>{support.map((supported, index) => <td class:list={[index === 0 && 'studio-highlight', !supported && 'studio-unsupported']}><span class="sr-only">{supported ? '支持' : '不支持'}</span><Icon name={supported ? 'tabler:check' : 'tabler:x'} size={17} aria-hidden="true" /></td>)}</tr>)}</tbody></table></div>
       </div>
     </section>
 
     <section class="studio-section studio-container studio-faq" id="faq" aria-labelledby="faq-title">
-      <div class="studio-section-heading"><span class="studio-eyebrow"><i></i>常见问题 <span>FAQ</span></span><h2 id="faq-title">你可能还想了解</h2><p>关于产品、部署和 AI 协作。</p><ActionButton className="studio-text-action" href="https://jiying.docs.baizhi.cloud/" label="查看产品文档" trailingIcon="arrow-up-right" variant="link" external /></div>
+      <div class="studio-section-heading"><span class="studio-eyebrow"><i></i>常见问题 <span>FAQ</span></span><SectionTitle id="faq-title">你可能还想了解</SectionTitle><p>关于产品、部署和 AI 协作。</p><a class="studio-resource-link studio-text-action" href="https://jiying.docs.baizhi.cloud/" target="_blank" rel="noopener noreferrer"><span>查看产品文档</span><Icon name="tabler:arrow-up-right" size={20} aria-hidden="true" /></a></div>
       <div class="studio-faq-list">{faqs.map(([question, answer], index) => <details name="homepage-faq" open={index === 0}><FaqQuestion question={question} /><p>{answer}</p></details>)}</div>
     </section>
 
     <section class="studio-start studio-container" id="get-started" aria-labelledby="start-title">
-      <div><h2 id="start-title">现在开始使用<span>即用</span></h2><p>在线体验即应，或在自己的环境中部署。</p></div>
-      <div class="studio-actions"><ActionButton href="https://app.jiying.chat/" label="在线体验" icon="monitor-play" size="lg" external /><ActionButton href="https://jiying.docs.baizhi.cloud/" label="私有化部署" icon="server" variant="outline" size="lg" external /></div>
+      <div><SectionTitle id="start-title">现在开始使用<span>即应</span></SectionTitle><p>在线体验即应，或在自己的环境中部署。</p></div>
+      <div class="studio-actions"><ActionButton client:load href="https://app.jiying.chat/" label="在线体验" icon="monitor-play" size="lg" external /><ActionButton client:load href="https://jiying.docs.baizhi.cloud/" label="私有化部署" icon="server" variant="outline" size="lg" external /></div>
     </section>
   </main>
 </BaseLayout>

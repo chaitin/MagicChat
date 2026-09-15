@@ -1,6 +1,6 @@
 ---
 import { Icon } from 'astro-icon/components';
-import { WorkspaceTab } from './WorkspaceTab';
+import { WorkspaceTabs } from './WorkspaceTab';
 import '../styles/capability-flow.css';
 
 const views = [
@@ -36,9 +36,7 @@ const views = [
 ---
 
 <div class="studio-capability-examples" data-workspace>
-  <div class="studio-capability-tabs" aria-label="选择核心能力" hidden>
-    {views.map(view => <WorkspaceTab id={view.id} title={view.title} />)}
-  </div>
+  <WorkspaceTabs client:load views={views.map(({ id, title }) => ({ id, title }))} />
   {views.map(view => (
     <div class="studio-capability-panel" id={`panel-${view.id}`} data-workspace-panel={view.id} aria-labelledby={`scenario-${view.id}`}>
       <h3 id={`scenario-${view.id}`}>{view.heading}</h3>
@@ -66,45 +64,3 @@ const views = [
     </div>
   ))}
 </div>
-
-<script>
-  const workspace = document.querySelector<HTMLElement>('[data-workspace]');
-  if (workspace) {
-    const tabs = Array.from(workspace.querySelectorAll<HTMLButtonElement>('[data-workspace-tab]'));
-    const panels = Array.from(workspace.querySelectorAll<HTMLElement>('[data-workspace-panel]'));
-    const tablist = workspace.querySelector<HTMLElement>('.studio-capability-tabs');
-    const activate = (tab: HTMLButtonElement, focus = false) => {
-      tabs.forEach(item => {
-        const selected = item === tab;
-        item.setAttribute('aria-selected', String(selected));
-        item.tabIndex = selected ? 0 : -1;
-      });
-      panels.forEach(panel => { panel.hidden = panel.dataset.workspacePanel !== tab.dataset.workspaceTab; });
-      if (focus) tab.focus();
-    };
-    tabs.forEach((tab, index) => {
-      tab.setAttribute('role', 'tab');
-      tab.addEventListener('click', () => activate(tab));
-      tab.addEventListener('keydown', event => {
-        let next = index;
-        if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
-        else if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
-        else if (event.key === 'Home') next = 0;
-        else if (event.key === 'End') next = tabs.length - 1;
-        else return;
-        event.preventDefault();
-        activate(tabs[next], true);
-      });
-    });
-    panels.forEach(panel => {
-      panel.setAttribute('role', 'tabpanel');
-      panel.setAttribute('aria-labelledby', `tab-${panel.dataset.workspacePanel}`);
-      panel.tabIndex = 0;
-    });
-    activate(tabs[0]);
-    if (tablist) {
-      tablist.setAttribute('role', 'tablist');
-      tablist.hidden = false;
-    }
-  }
-</script>

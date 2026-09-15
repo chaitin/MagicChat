@@ -31,7 +31,7 @@ const sections = [
             <span class="eyebrow">PRIVACY POLICY</span>
             <div class="legal-title-row">
               <h1>即应隐私政策</h1>
-              <ActionButton href={`${import.meta.env.BASE_URL}user-service/`} label="返回" icon="arrow-left" variant="outline" />
+              <ActionButton client:load href={`${import.meta.env.BASE_URL}user-service/`} label="返回" icon="arrow-left" variant="outline" />
             </div>
             <p class="legal-lead">本政策适用于北京长亭科技有限公司运营的即应官网、官方在线体验及相关客户端。即应是一款开源的即时通讯工具，连接消息、知识与任务，让 Agent 融入团队工作流，并支持企业在自有基础设施中私有化部署。</p>
             <p class="legal-updated">生效及更新日期：{updatedAt}</p>
