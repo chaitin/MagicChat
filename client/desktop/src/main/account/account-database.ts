@@ -7,12 +7,17 @@ import type {
   DesktopConversation,
   DesktopMessage,
 } from "../../shared/account-data"
+import type { AvatarCacheRecord } from "./avatar-types"
 
-export type StoredConversation = DesktopConversation & { payload: unknown }
+export type StoredConversation = DesktopConversation & { avatar: string; payload: unknown }
 export type StoredMessage = DesktopMessage & { payload: unknown }
-export type StoredContactUser = DesktopContactUser & { updatedAt: string; payload: unknown }
-export type StoredContactGroup = DesktopContactGroup & { payload: unknown }
-export type StoredContactApp = DesktopContactApp & { payload: unknown }
+export type StoredContactUser = DesktopContactUser & {
+  avatar: string
+  updatedAt: string
+  payload: unknown
+}
+export type StoredContactGroup = DesktopContactGroup & { avatar: string; payload: unknown }
+export type StoredContactApp = DesktopContactApp & { avatar: string; payload: unknown }
 
 export class AccountDatabase {
   private readonly database: DatabaseSync
@@ -35,6 +40,8 @@ export class AccountDatabase {
         type TEXT NOT NULL,
         name TEXT NOT NULL,
         avatar TEXT NOT NULL,
+        avatar_type TEXT NOT NULL DEFAULT 'group',
+        avatar_id TEXT NOT NULL DEFAULT '',
         last_message_at TEXT,
         last_message_summary TEXT NOT NULL,
         pinned INTEGER NOT NULL,
@@ -89,19 +96,35 @@ export class AccountDatabase {
         online INTEGER NOT NULL,
         payload_json TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS avatar_cache (
+        type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        source_url TEXT NOT NULL,
+        local_file TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        resource_key TEXT NOT NULL UNIQUE,
+        downloaded_at INTEGER NOT NULL,
+        checked_at INTEGER NOT NULL,
+        PRIMARY KEY (type, entity_id)
+      );
     `)
+    this.ensureColumn("conversations", "avatar_type", "TEXT NOT NULL DEFAULT 'group'")
+    this.ensureColumn("conversations", "avatar_id", "TEXT NOT NULL DEFAULT ''")
   }
 
   replaceCurrentConversations(conversations: StoredConversation[]) {
     const statement = this.database.prepare(`
       INSERT INTO conversations (
-        id, type, name, avatar, last_message_at, last_message_summary,
-        pinned, unread_count, current, payload_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        id, type, name, avatar, avatar_type, avatar_id, last_message_at,
+        last_message_summary, pinned, unread_count, current, payload_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
       ON CONFLICT(id) DO UPDATE SET
         type = excluded.type,
         name = excluded.name,
         avatar = excluded.avatar,
+        avatar_type = excluded.avatar_type,
+        avatar_id = excluded.avatar_id,
         last_message_at = excluded.last_message_at,
         last_message_summary = excluded.last_message_summary,
         pinned = excluded.pinned,
@@ -117,6 +140,8 @@ export class AccountDatabase {
           conversation.type,
           conversation.name,
           conversation.avatar,
+          conversation.avatarType,
+          conversation.avatarId,
           conversation.lastMessageAt,
           conversation.lastMessageSummary,
           Number(conversation.pinned),
@@ -162,8 +187,8 @@ export class AccountDatabase {
   listConversations(): DesktopConversation[] {
     const rows = this.database
       .prepare(
-        `SELECT id, type, name, avatar, last_message_at, last_message_summary,
-                pinned, unread_count
+        `SELECT id, type, name, avatar_type, avatar_id,
+                last_message_at, last_message_summary, pinned, unread_count
          FROM conversations
          WHERE current = 1
          ORDER BY pinned DESC, COALESCE(last_message_at, '') DESC, name ASC`,
@@ -173,7 +198,8 @@ export class AccountDatabase {
       id: String(row.id),
       type: String(row.type),
       name: String(row.name),
-      avatar: String(row.avatar),
+      avatarType: String(row.avatar_type) as DesktopConversation["avatarType"],
+      avatarId: String(row.avatar_id),
       lastMessageAt: typeof row.last_message_at === "string" ? row.last_message_at : null,
       lastMessageSummary: String(row.last_message_summary),
       pinned: row.pinned === 1,
@@ -295,7 +321,8 @@ export class AccountDatabase {
         id: String(row.id),
         name: String(row.name),
         nickname: String(row.nickname),
-        avatar: String(row.avatar),
+        avatarType: "user",
+        avatarId: String(row.id),
         email: String(row.email),
         phone: String(row.phone),
         online: row.online === 1,
@@ -303,7 +330,8 @@ export class AccountDatabase {
       groups: groups.map((row) => ({
         id: String(row.id),
         name: String(row.name),
-        avatar: String(row.avatar),
+        avatarType: "group",
+        avatarId: String(row.id),
         joined: row.joined === 1,
         memberCount: Number(row.member_count),
         visibility: String(row.visibility),
@@ -311,17 +339,117 @@ export class AccountDatabase {
       apps: apps.map((row) => ({
         id: String(row.id),
         name: String(row.name),
-        avatar: String(row.avatar),
+        avatarType: "app",
+        avatarId: String(row.id),
         description: String(row.description),
         online: row.online === 1,
       })),
     }
   }
 
+  getConversationPayload(conversationId: string): unknown {
+    return parsePayload(
+      this.database
+        .prepare("SELECT payload_json FROM conversations WHERE id = ?")
+        .get(conversationId) as Record<string, unknown> | undefined,
+    )
+  }
+
+  getContactPayload(type: "user" | "group" | "app", entityId: string): unknown {
+    const table =
+      type === "user" ? "contact_users" : type === "group" ? "contact_groups" : "contact_apps"
+    return parsePayload(
+      this.database.prepare(`SELECT payload_json FROM ${table} WHERE id = ?`).get(entityId) as
+        | Record<string, unknown>
+        | undefined,
+    )
+  }
+
+  getAvatarCache(type: string, entityId: string): AvatarCacheRecord | undefined {
+    const row = this.database
+      .prepare(
+        `SELECT type, entity_id, source_url, local_file, content_type,
+                resource_key, downloaded_at, checked_at
+         FROM avatar_cache WHERE type = ? AND entity_id = ?`,
+      )
+      .get(type, entityId) as Record<string, unknown> | undefined
+    return row ? avatarCacheRecord(row) : undefined
+  }
+
+  getAvatarCacheByResourceKey(resourceKey: string): AvatarCacheRecord | undefined {
+    const row = this.database
+      .prepare(
+        `SELECT type, entity_id, source_url, local_file, content_type,
+                resource_key, downloaded_at, checked_at
+         FROM avatar_cache WHERE resource_key = ?`,
+      )
+      .get(resourceKey) as Record<string, unknown> | undefined
+    return row ? avatarCacheRecord(row) : undefined
+  }
+
+  upsertAvatarCache(record: AvatarCacheRecord) {
+    this.database
+      .prepare(
+        `INSERT INTO avatar_cache (
+           type, entity_id, source_url, local_file, content_type,
+           resource_key, downloaded_at, checked_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(type, entity_id) DO UPDATE SET
+           source_url = excluded.source_url,
+           local_file = excluded.local_file,
+           content_type = excluded.content_type,
+           resource_key = excluded.resource_key,
+           downloaded_at = excluded.downloaded_at,
+           checked_at = excluded.checked_at`,
+      )
+      .run(
+        record.type,
+        record.entityId,
+        record.sourceUrl,
+        record.localFile,
+        record.contentType,
+        record.resourceKey,
+        record.downloadedAt,
+        record.checkedAt,
+      )
+  }
+
+  touchAvatarCache(type: string, entityId: string, checkedAt: number) {
+    this.database
+      .prepare("UPDATE avatar_cache SET checked_at = ? WHERE type = ? AND entity_id = ?")
+      .run(checkedAt, type, entityId)
+  }
+
+  deleteAvatarCache(type: string, entityId: string): AvatarCacheRecord | undefined {
+    const record = this.getAvatarCache(type, entityId)
+    if (record) {
+      this.database
+        .prepare("DELETE FROM avatar_cache WHERE type = ? AND entity_id = ?")
+        .run(type, entityId)
+    }
+    return record
+  }
+
+  deleteAvatarCaches(types: string[], entityId: string): AvatarCacheRecord[] {
+    return types.flatMap((type) => {
+      const record = this.deleteAvatarCache(type, entityId)
+      return record ? [record] : []
+    })
+  }
+
   close() {
     if (this.closed) return
     this.closed = true
     this.database.close()
+  }
+
+  private ensureColumn(table: string, column: string, definition: string) {
+    const columns = this.database.prepare(`PRAGMA table_info(${table})`).all() as Array<
+      Record<string, unknown>
+    >
+    if (!columns.some((entry) => entry.name === column)) {
+      this.database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+    }
   }
 
   private transaction(operation: () => void) {
@@ -333,5 +461,27 @@ export class AccountDatabase {
       this.database.exec("ROLLBACK")
       throw error
     }
+  }
+}
+
+function parsePayload(row: Record<string, unknown> | undefined): unknown {
+  if (typeof row?.payload_json !== "string") return undefined
+  try {
+    return JSON.parse(row.payload_json)
+  } catch {
+    return undefined
+  }
+}
+
+function avatarCacheRecord(row: Record<string, unknown>): AvatarCacheRecord {
+  return {
+    type: String(row.type) as AvatarCacheRecord["type"],
+    entityId: String(row.entity_id),
+    sourceUrl: String(row.source_url),
+    localFile: String(row.local_file),
+    contentType: String(row.content_type),
+    resourceKey: String(row.resource_key),
+    downloadedAt: Number(row.downloaded_at),
+    checkedAt: Number(row.checked_at),
   }
 }

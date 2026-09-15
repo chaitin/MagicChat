@@ -9,7 +9,7 @@ import {
   Loading03Icon,
   Notification01Icon,
 } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
+import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { AnimatePresence, motion, useReducedMotion, type Transition } from "motion/react"
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"

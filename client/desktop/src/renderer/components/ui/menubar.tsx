@@ -3,7 +3,7 @@
 import * as React from "react"
 import { cn } from "cn"
 import { Menubar as MenubarPrimitive } from "radix-ui"
-import { HugeiconsIcon } from "@hugeicons/react"
+import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { Tick02Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons"
 
 function Menubar({ className, ...props }: React.ComponentProps<typeof MenubarPrimitive.Root>) {

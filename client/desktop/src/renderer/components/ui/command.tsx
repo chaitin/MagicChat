@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { InputGroup, InputGroupAddon } from "@/components/ui/input-group"
-import { HugeiconsIcon } from "@hugeicons/react"
+import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { SearchIcon, Tick02Icon } from "@hugeicons/core-free-icons"
 
 function Command({ className, ...props }: React.ComponentProps<typeof CommandPrimitive>) {

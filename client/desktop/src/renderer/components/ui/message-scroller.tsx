@@ -8,7 +8,7 @@ import {
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
-import { HugeiconsIcon } from "@hugeicons/react"
+import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { ArrowDown02Icon } from "@hugeicons/core-free-icons"
 
 function MessageScrollerProvider(

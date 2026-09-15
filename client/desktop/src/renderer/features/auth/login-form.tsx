@@ -9,6 +9,8 @@ import {
   type SignInResult,
 } from "../../../shared/auth"
 
+const CODE_COUNTDOWN_SECONDS = 30
+
 export type LoginFormProps = {
   connection: Connection
   isPreview: boolean
@@ -99,7 +101,7 @@ export function useLoginForm({ connection, onSignedIn, onBusyChange }: LoginForm
         setNow(time)
         setRetry({
           email: account.toLowerCase(),
-          until: time + result.data.retryAfterSeconds * 1000,
+          until: time + CODE_COUNTDOWN_SECONDS * 1000,
         })
         showToast({ status: "success", title: "验证码已发送" })
       } else {

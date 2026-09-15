@@ -3,20 +3,27 @@ import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import type { Session } from "electron"
 import type {
+  AvatarRequest,
+  AvatarResult,
   DesktopContactDirectory,
   DesktopConversation,
   DesktopMessage,
 } from "../../shared/account-data"
 import { AuthFailure } from "../../shared/auth"
 import { AccountDatabase } from "./account-database"
+import { AvatarManager } from "./avatar-manager"
+import type { AvatarResource } from "./avatar-types"
 import { AuthenticatedClient } from "./authenticated-client"
 import { ContactManager } from "./contact-manager"
 import { ConversationManager } from "./conversation-manager"
+import { ProjectManager } from "./project-manager"
 
 export class AccountRuntime {
   private database?: AccountDatabase
   private conversationManager?: ConversationManager
   private contactManager?: ContactManager
+  private projectManager?: ProjectManager
+  private avatarManager?: AvatarManager
   private initialization?: Promise<void>
   private initialized = false
   private closed = false
@@ -26,6 +33,8 @@ export class AccountRuntime {
       userDataPath: string
       serverUrl: string
       userId: string
+      userName: string
+      userAvatar: string
       session: Session
       token: string
     },
@@ -52,12 +61,29 @@ export class AccountRuntime {
     return this.contactManager!.getDirectory()
   }
 
+  getAvatar(request: Omit<AvatarRequest, "targetId">): Promise<AvatarResult> {
+    this.assertInitialized()
+    return this.avatarManager!.getAvatar(request)
+  }
+
+  async invalidateAvatar(type: AvatarRequest["type"], entityId: string) {
+    this.assertInitialized()
+    await this.avatarManager!.invalidate(type, entityId)
+  }
+
+  async readAvatarResource(resourceKey: string): Promise<AvatarResource> {
+    this.assertInitialized()
+    return this.avatarManager!.readResource(resourceKey)
+  }
+
   close() {
     if (this.closed) return
     this.closed = true
     this.initialized = false
     this.conversationManager = undefined
     this.contactManager = undefined
+    this.projectManager = undefined
+    this.avatarManager = undefined
     this.database?.close()
     this.database = undefined
   }
@@ -79,6 +105,23 @@ export class AccountRuntime {
       )
       this.conversationManager = new ConversationManager(this.database, client, this.input.userId)
       this.contactManager = new ContactManager(this.database, client)
+      const currentUserAvatar = {
+        type: "user" as const,
+        id: this.input.userId,
+        name: this.input.userName,
+        avatarUrl: this.input.userAvatar,
+      }
+      this.projectManager = new ProjectManager(client, this.contactManager, currentUserAvatar)
+      this.avatarManager = new AvatarManager(
+        accountDirectory,
+        this.input.serverUrl,
+        this.database,
+        client,
+        this.conversationManager,
+        this.contactManager,
+        this.projectManager,
+        currentUserAvatar,
+      )
       const results = await Promise.allSettled([
         this.conversationManager.initialize(),
         this.contactManager.initialize(),

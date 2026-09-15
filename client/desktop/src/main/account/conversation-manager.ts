@@ -3,6 +3,7 @@ import { AuthFailure, isRecord } from "../../shared/auth"
 import { AccountDatabase, type StoredConversation, type StoredMessage } from "./account-database"
 import { AuthenticatedClient } from "./authenticated-client"
 import { retryNetworkAction } from "./retry"
+import type { AvatarDescriptor, AvatarMemberDescriptor } from "./avatar-types"
 
 export class ConversationManager {
   constructor(
@@ -24,6 +25,35 @@ export class ConversationManager {
     return this.database.listConversations()
   }
 
+  getAvatarDescriptor(type: "group" | "topic", entityId: string): AvatarDescriptor | undefined {
+    const payload = this.database.getConversationPayload(entityId)
+    if (!isRecord(payload)) return undefined
+    if (type === "topic" && isRecord(payload.topic)) {
+      const parentId = optionalString(payload.topic.parent_conversation_id, 128)
+      const parentType = avatarTypeForConversation(
+        optionalString(payload.topic.parent_conversation_type, 32),
+      )
+      if (parentId) {
+        return {
+          type: parentType,
+          id: parentId,
+          name:
+            optionalString(payload.topic.parent_conversation_name, 256) ||
+            optionalString(payload.name, 256),
+          avatarUrl: optionalString(payload.avatar, 4_096),
+          ...(parentType === "group" ? { members: parseAvatarMembers(payload.members) } : {}),
+        }
+      }
+    }
+    return {
+      type: "group",
+      id: entityId,
+      name: optionalString(payload.name, 256),
+      avatarUrl: optionalString(payload.avatar, 4_096),
+      members: parseAvatarMembers(payload.members),
+    }
+  }
+
   listMessages(conversationId: string): DesktopMessage[] {
     if (!conversationId || conversationId.length > 128) {
       throw new AuthFailure("invalid_conversation", "会话不存在")
@@ -36,7 +66,9 @@ export class ConversationManager {
     if (!isRecord(data) || !Array.isArray(data.conversations)) {
       throw new AuthFailure("invalid_response", "会话列表响应格式不正确")
     }
-    return data.conversations.slice(0, 30).map(parseConversation)
+    return data.conversations
+      .slice(0, 30)
+      .map((conversation) => parseConversation(conversation, this.currentUserId))
   }
 
   private async fetchMessages(conversationId: string): Promise<StoredMessage[]> {
@@ -50,16 +82,19 @@ export class ConversationManager {
   }
 }
 
-function parseConversation(value: unknown): StoredConversation {
+function parseConversation(value: unknown, currentUserId: string): StoredConversation {
   if (!isRecord(value)) throw new AuthFailure("invalid_response", "会话列表响应格式不正确")
   const id = requiredString(value.id, 128, "conversation.id")
   const type = requiredString(value.type, 32, "conversation.type")
   const name = requiredString(value.name, 256, "conversation.name")
+  const avatarIdentity = conversationAvatarIdentity(value, id, type, currentUserId)
   return {
     id,
     type,
     name,
     avatar: optionalString(value.avatar, 4_096),
+    avatarType: avatarIdentity.type,
+    avatarId: avatarIdentity.id,
     lastMessageAt: nullableString(value.last_message_at, 64),
     lastMessageSummary: optionalString(value.last_message_summary, 4_096),
     pinned: value.pinned === true,
@@ -95,6 +130,54 @@ function parseMessage(value: unknown, expectedConversationId: string): StoredMes
     content: messageContent(body),
     payload: value,
   }
+}
+
+function conversationAvatarIdentity(
+  value: Record<string, unknown>,
+  conversationId: string,
+  conversationType: string,
+  currentUserId: string,
+): Pick<AvatarDescriptor, "type" | "id"> {
+  if (conversationType === "topic" && isRecord(value.topic)) {
+    const parentId = optionalString(value.topic.parent_conversation_id, 128)
+    if (parentId) {
+      return {
+        type: avatarTypeForConversation(optionalString(value.topic.parent_conversation_type, 32)),
+        id: parentId,
+      }
+    }
+  }
+  if (conversationType === "direct" || conversationType === "app") {
+    const members = parseAvatarMembers(value.members)
+    const preferred = members.find((member) =>
+      conversationType === "app" ? member.type === "app" : member.id !== currentUserId,
+    )
+    if (preferred) return { type: preferred.type, id: preferred.id }
+  }
+  return { type: "group", id: conversationId }
+}
+
+function avatarTypeForConversation(type: string): AvatarDescriptor["type"] {
+  if (type === "direct" || type === "user") return "user"
+  if (type === "app") return "app"
+  if (type === "project") return "project"
+  return "group"
+}
+
+function parseAvatarMembers(value: unknown): AvatarMemberDescriptor[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((member) => {
+    if (!isRecord(member) || typeof member.id !== "string" || !member.id) return []
+    return [
+      {
+        type: member.type === "app" ? "app" : "user",
+        id: member.id,
+        name: optionalString(member.nickname, 256) || optionalString(member.name, 256),
+        avatarUrl: optionalString(member.avatar, 4_096),
+        role: member.role === "owner" || member.role === "admin" ? member.role : "member",
+      } satisfies AvatarMemberDescriptor,
+    ]
+  })
 }
 
 function messageContent(body: Record<string, unknown>): string {

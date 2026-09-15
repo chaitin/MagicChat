@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
-import { HugeiconsIcon } from "@hugeicons/react"
+import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import {
   ArrowLeftRightIcon,
   Loading03Icon,
@@ -41,18 +41,41 @@ export function LoginPage({
     clearError,
     retry,
   } = useConnection()
-  const [screen, setScreen] = useState<"servers" | "login" | "signing-in" | "chat">("servers")
+  const [screen, setScreen] = useState<"startup" | "servers" | "login" | "signing-in" | "chat">(
+    "startup",
+  )
   const shownConnectionError = useRef("")
   const [busy, setBusy] = useState(false)
   const enterChat = useCallback(() => setScreen("chat"), [])
   const handleInitializationFailure = useCallback(
     (problem: { code: string; message: string }) => {
       if (connection) accept({ ...connection, user: null })
-      setScreen("login")
+      setScreen("servers")
       showToast({ status: "error", title: "账号初始化失败", description: problem.message })
     },
     [accept, connection, showToast],
   )
+  const handleSignOut = useCallback(async () => {
+    if (!connection || !window.desktop) return false
+    try {
+      const result = await window.desktop.auth.signOut(connection.targetId)
+      if (!result.ok) {
+        showToast({ status: "error", title: "退出登录失败", description: result.error.message })
+        return false
+      }
+      accept({ ...connection, user: null })
+      setScreen("login")
+      return true
+    } catch {
+      showToast({ status: "error", title: "退出登录失败", description: "请稍后重试" })
+      return false
+    }
+  }, [accept, connection, showToast])
+
+  useEffect(() => {
+    if (screen !== "startup" || loading) return
+    setScreen(connection?.user ? "signing-in" : "servers")
+  }, [connection?.user, loading, screen])
 
   useEffect(() => {
     if (screen !== "login" || !error || shownConnectionError.current === error.message) return
@@ -60,15 +83,27 @@ export function LoginPage({
     showToast({ status: "error", title: "无法连接服务器", description: error.message })
   }, [error, screen, showToast])
 
+  if (screen === "startup") {
+    return (
+      <AuthBackground theme={resolvedTheme}>
+        <SigningInPage loadingOnly />
+      </AuthBackground>
+    )
+  }
+
   if (screen === "chat") {
     return (
       <ChatPage
         targetId={connection?.targetId ?? ""}
+        userId={connection?.user?.id ?? ""}
         userName={connection?.user?.name ?? "我"}
+        userEmail={connection?.user?.email ?? ""}
+        resolvedTheme={resolvedTheme}
         theme={theme}
         catalog={catalog}
         isPreview={isPreview}
         onThemeChange={onThemeChange}
+        onSignOut={handleSignOut}
         onCatalogChange={acceptCatalog}
       />
     )

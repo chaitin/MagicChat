@@ -5,7 +5,7 @@ import { cn } from "cn"
 import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { Button } from "@/components/ui/button"
-import { HugeiconsIcon } from "@hugeicons/react"
+import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { Cancel01Icon } from "@hugeicons/core-free-icons"
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {

@@ -20,6 +20,7 @@ import {
   type ServerCheck,
   type ServerProfile,
   type SaveServerInput,
+  type RestoredSession,
   type SignInInput,
   type SignInResult,
   type SavedLogin,
@@ -27,25 +28,46 @@ import {
   type ThirdPartySignInInput,
 } from "../shared/auth"
 import type {
+  AvatarRequest,
+  AvatarResult,
   DesktopContactDirectory,
   DesktopConversation,
   DesktopMessage,
 } from "../shared/account-data"
-import type { AppSettings, ThemePreference } from "../shared/desktop"
+import {
+  DEFAULT_SHORTCUTS,
+  type AppSettings,
+  type NotificationSettings,
+  type ShortcutSettings,
+  type ThemePreference,
+} from "../shared/desktop"
 import { AccountRuntime } from "./account/account-runtime"
+import type { AvatarResource } from "./account/avatar-types"
 
 type StoredLogin = {
   method: "password" | "email-code"
   email: string
   encryptedPassword?: string
 }
+type StoredAccountSession = {
+  serverId: string
+  userId: string
+  userEmail: string
+  userName: string
+  token: string
+  expiresAt: string
+  lastUsedAt: number
+}
 type AppConfig = {
   version: 1
   theme: ThemePreference
-  shortcuts: Record<string, string>
+  shortcuts: ShortcutSettings
+  notifications: NotificationSettings
   activeServerId: string
   servers: ServerProfile[]
   serverLogins: Record<string, StoredLogin>
+  accountSessions: Record<string, StoredAccountSession>
+  lastAccountKey: string | null
 }
 type NativeSessionCredential = { token: string; expiresAt: string }
 type ActiveConnection = Connection & {
@@ -78,10 +100,13 @@ export class AuthController {
   private config: AppConfig = {
     version: 1,
     theme: "system",
-    shortcuts: {},
+    shortcuts: { ...DEFAULT_SHORTCUTS },
+    notifications: { soundEnabled: true, desktopEnabled: true },
     activeServerId: OFFICIAL_SERVER_ID,
     servers: [officialServer],
     serverLogins: {},
+    accountSessions: {},
+    lastAccountKey: null,
   }
   private active?: ActiveConnection
   private accountRuntime?: AccountRuntime
@@ -104,9 +129,84 @@ export class AuthController {
     return this.catalog()
   }
 
+  restoreLastSession(): Promise<RestoredSession> {
+    return this.exclusive(async () => {
+      const accountKey = this.config.lastAccountKey
+      const stored = accountKey ? this.config.accountSessions[accountKey] : undefined
+      if (!accountKey || !stored) return { catalog: this.catalog(), connection: null }
+
+      const profile = this.config.servers.find((server) => server.id === stored.serverId)
+      const token = stored.token
+      if (!profile || !token || Date.parse(stored.expiresAt) <= Date.now()) {
+        await this.forgetStoredAccount(accountKey)
+        return { catalog: this.catalog(), connection: null }
+      }
+
+      const serverSession = this.serverSession(profile.url)
+      try {
+        const [infoData, accountData] = await Promise.all([
+          request(serverSession, profile.url, "/api/client/info", undefined, 3_000, {
+            omitOrigin: true,
+            credentials: "omit",
+          }),
+          request(serverSession, profile.url, "/api/client/me", undefined, 8_000, {
+            headers: { Authorization: `Bearer ${token}` },
+            omitOrigin: true,
+            credentials: "omit",
+          }),
+        ])
+        const info = parseAppInfo(infoData)
+        const user = parseUser(accountData)
+        if (user.id !== stored.userId) throw new AuthFailure("unauthorized", "登录已失效")
+        const connection: Connection = {
+          targetId: randomUUID(),
+          server: { ...profile },
+          info,
+          user,
+          savedLogin: this.readSavedLogin(profile.id),
+        }
+        this.destroyAccountRuntime()
+        this.active = {
+          ...connection,
+          session: serverSession,
+          credential: { token, expiresAt: stored.expiresAt },
+        }
+        this.createAccountRuntime(this.active)
+        const accountSessions = {
+          ...this.config.accountSessions,
+          [accountKey]: {
+            ...stored,
+            userEmail: user.email,
+            userName: user.name,
+            lastUsedAt: Date.now(),
+          },
+        }
+        const config = {
+          ...this.config,
+          activeServerId: profile.id,
+          accountSessions,
+          lastAccountKey: accountKey,
+        }
+        await this.saveConfig(config)
+        this.config = config
+        return { catalog: this.catalog(), connection }
+      } catch (error) {
+        if (error instanceof AuthFailure && error.code === "unauthorized") {
+          await this.forgetStoredAccount(accountKey)
+          return { catalog: this.catalog(), connection: null }
+        }
+        throw error
+      }
+    })
+  }
+
   async getAppSettings(): Promise<AppSettings> {
     await this.initialized
-    return { theme: this.config.theme, shortcuts: { ...this.config.shortcuts } }
+    return {
+      theme: this.config.theme,
+      shortcuts: { ...this.config.shortcuts },
+      notifications: { ...this.config.notifications },
+    }
   }
 
   async initializeAccountData(targetId: string): Promise<null> {
@@ -138,6 +238,28 @@ export class AuthController {
     return this.requireAccountRuntime().getContacts()
   }
 
+  async getAvatar(request: AvatarRequest): Promise<AvatarResult> {
+    await this.initialized
+    this.requireTarget(request?.targetId)
+    return this.requireAccountRuntime().getAvatar({
+      type: request.type,
+      id: request.id,
+      theme: request.theme,
+    })
+  }
+
+  async invalidateAvatar(request: Omit<AvatarRequest, "theme">): Promise<null> {
+    await this.initialized
+    this.requireTarget(request?.targetId)
+    await this.requireAccountRuntime().invalidateAvatar(request.type, request.id)
+    return null
+  }
+
+  async readAvatarResource(resourceKey: string): Promise<AvatarResource> {
+    await this.initialized
+    return this.requireAccountRuntime().readAvatarResource(resourceKey)
+  }
+
   close() {
     this.destroyAccountRuntime()
   }
@@ -149,6 +271,46 @@ export class AuthController {
       }
       if (theme === this.config.theme) return null
       const config = { ...this.config, theme }
+      await this.saveConfig(config)
+      this.config = config
+      return null
+    })
+  }
+
+  setNotificationSettings(settings: NotificationSettings): Promise<null> {
+    return this.exclusive(async () => {
+      if (
+        !isRecord(settings) ||
+        typeof settings.soundEnabled !== "boolean" ||
+        typeof settings.desktopEnabled !== "boolean"
+      ) {
+        throw new AuthFailure("invalid_notification_settings", "通知设置不正确")
+      }
+      const config = {
+        ...this.config,
+        notifications: {
+          soundEnabled: settings.soundEnabled,
+          desktopEnabled: settings.desktopEnabled,
+        },
+      }
+      await this.saveConfig(config)
+      this.config = config
+      return null
+    })
+  }
+
+  setShortcutSettings(shortcuts: ShortcutSettings): Promise<null> {
+    return this.exclusive(async () => {
+      if (
+        !isRecord(shortcuts) ||
+        typeof shortcuts.showWindow !== "string" ||
+        typeof shortcuts.screenshot !== "string" ||
+        shortcuts.showWindow.length > 64 ||
+        shortcuts.screenshot.length > 64
+      ) {
+        throw new AuthFailure("invalid_shortcut", "快捷键设置不正确")
+      }
+      const config = { ...this.config, shortcuts: { ...shortcuts } }
       await this.saveConfig(config)
       this.config = config
       return null
@@ -186,8 +348,18 @@ export class AuthController {
         ? this.config.servers.map((item) => (item.id === existing.id ? profile : item))
         : [...this.config.servers, profile]
       const serverLogins = { ...this.config.serverLogins }
-      if (existing && existing.url !== profile.url) delete serverLogins[existing.id]
-      const config = { ...this.config, servers, serverLogins }
+      const accountSessions = { ...this.config.accountSessions }
+      if (existing && existing.url !== profile.url) {
+        delete serverLogins[existing.id]
+        for (const [key, account] of Object.entries(accountSessions)) {
+          if (account.serverId === existing.id) delete accountSessions[key]
+        }
+      }
+      const lastAccountKey =
+        this.config.lastAccountKey && accountSessions[this.config.lastAccountKey]
+          ? this.config.lastAccountKey
+          : null
+      const config = { ...this.config, servers, serverLogins, accountSessions, lastAccountKey }
       await this.saveConfig(config)
       this.config = config
       if (this.active?.server.id === profile.id) this.active.server = { ...profile }
@@ -203,10 +375,21 @@ export class AuthController {
         throw new AuthFailure("active_server", "请先返回服务器选择页并切换服务器，再删除当前服务器")
       const serverLogins = { ...this.config.serverLogins }
       delete serverLogins[profile.id]
+      const accountSessions = Object.fromEntries(
+        Object.entries(this.config.accountSessions).filter(
+          ([, account]) => account.serverId !== profile.id,
+        ),
+      )
+      const lastAccountKey =
+        this.config.lastAccountKey && accountSessions[this.config.lastAccountKey]
+          ? this.config.lastAccountKey
+          : null
       const config = {
         ...this.config,
         servers: this.config.servers.filter((item) => item.id !== profile.id),
         serverLogins,
+        accountSessions,
+        lastAccountKey,
       }
       await this.saveConfig(config)
       this.config = config
@@ -356,10 +539,13 @@ export class AuthController {
         const encryptedPassword = this.encryptPassword(input.secret)
         if (encryptedPassword) savedLogin.encryptedPassword = encryptedPassword
       }
-      const config = {
-        ...this.config,
-        serverLogins: { ...this.config.serverLogins, [active.server.id]: savedLogin },
-      }
+      const config = this.withRememberedAccount(
+        {
+          ...this.config,
+          serverLogins: { ...this.config.serverLogins, [active.server.id]: savedLogin },
+        },
+        active,
+      )
       try {
         await this.saveConfig(config)
         this.config = config
@@ -396,6 +582,13 @@ export class AuthController {
         active.credential = credential
         active.user = user
         await this.clearServerAuthCookies(active.session, active.server.url)
+        try {
+          const config = this.withRememberedAccount(this.config, active)
+          await this.saveConfig(config)
+          this.config = config
+        } catch {
+          // Token 记忆失败不影响已建立的认证会话。
+        }
         this.createAccountRuntime(active)
         return { user }
       } catch (error) {
@@ -410,6 +603,7 @@ export class AuthController {
   signOut(targetId: string): Promise<null> {
     return this.exclusive(async () => {
       const active = this.requireTarget(targetId)
+      const accountKey = active.user ? this.accountKey(active.server.url, active.user.id) : null
       this.destroyAccountRuntime()
       try {
         await request(active.session, active.server.url, "/api/client/auth/logout", {}, 15_000, {
@@ -424,6 +618,7 @@ export class AuthController {
       }
       await active.session.clearStorageData({ storages: ["cookies"] })
       await active.session.cookies.flushStore()
+      if (accountKey) await this.forgetStoredAccount(accountKey).catch(() => undefined)
       active.user = null
       active.credential = null
       return null
@@ -620,6 +815,7 @@ export class AuthController {
     } catch (error) {
       if (this.accountRuntime === runtime) {
         const credential = active.credential
+        const accountKey = active.user ? this.accountKey(active.server.url, active.user.id) : null
         this.destroyAccountRuntime()
         active.user = null
         active.credential = null
@@ -627,6 +823,7 @@ export class AuthController {
           await Promise.allSettled([
             this.revokeCredential(active, credential),
             this.clearServerAuthCookies(active.session, active.server.url),
+            ...(accountKey ? [this.forgetStoredAccount(accountKey)] : []),
           ])
         }
       }
@@ -643,6 +840,8 @@ export class AuthController {
       userDataPath: this.userDataPath,
       serverUrl: active.server.url,
       userId: active.user.id,
+      userName: active.user.name,
+      userAvatar: active.user.avatar,
       session: active.session,
       token: active.credential.token,
     })
@@ -677,6 +876,46 @@ export class AuthController {
     } finally {
       this.busy = false
     }
+  }
+
+  private accountKey(serverUrl: string, userId: string): string {
+    return createHash("sha256").update(serverUrl).update("\0").update(userId).digest("hex")
+  }
+
+  private withRememberedAccount(config: AppConfig, active: ActiveConnection): AppConfig {
+    if (!active.user || !active.credential) return config
+    const key = this.accountKey(active.server.url, active.user.id)
+    return {
+      ...config,
+      activeServerId: active.server.id,
+      lastAccountKey: key,
+      accountSessions: {
+        ...config.accountSessions,
+        [key]: {
+          serverId: active.server.id,
+          userId: active.user.id,
+          userEmail: active.user.email,
+          userName: active.user.name,
+          token: active.credential.token,
+          expiresAt: active.credential.expiresAt,
+          lastUsedAt: Date.now(),
+        },
+      },
+    }
+  }
+
+  private async forgetStoredAccount(accountKey: string) {
+    if (!this.config.accountSessions[accountKey] && this.config.lastAccountKey !== accountKey)
+      return
+    const accountSessions = { ...this.config.accountSessions }
+    delete accountSessions[accountKey]
+    const config = {
+      ...this.config,
+      accountSessions,
+      lastAccountKey: this.config.lastAccountKey === accountKey ? null : this.config.lastAccountKey,
+    }
+    await this.saveConfig(config)
+    this.config = config
   }
 
   private readSavedLogin(serverId: string): SavedLogin | undefined {
@@ -757,13 +996,63 @@ export class AuthController {
         }
       }
 
-      const shortcuts: Record<string, string> = {}
-      if (isRecord(stored.shortcuts)) {
-        for (const [name, shortcut] of Object.entries(stored.shortcuts).slice(0, 100)) {
-          if (name.length <= 128 && typeof shortcut === "string" && shortcut.length <= 128) {
-            shortcuts[name] = shortcut
+      const accountSessions: Record<string, StoredAccountSession> = {}
+      if (isRecord(stored.accountSessions)) {
+        for (const [key, value] of Object.entries(stored.accountSessions).slice(0, 100)) {
+          if (!/^[a-f0-9]{64}$/.test(key) || !isRecord(value)) continue
+          if (
+            typeof value.serverId !== "string" ||
+            !ids.has(value.serverId) ||
+            typeof value.userId !== "string" ||
+            !value.userId ||
+            value.userId.length > 128 ||
+            typeof value.token !== "string" ||
+            !value.token ||
+            value.token.length > 8_192 ||
+            typeof value.expiresAt !== "string" ||
+            !Number.isFinite(Date.parse(value.expiresAt)) ||
+            typeof value.lastUsedAt !== "number" ||
+            !Number.isFinite(value.lastUsedAt)
+          ) {
+            continue
+          }
+          const accountServer = servers.find((server) => server.id === value.serverId)
+          if (!accountServer || this.accountKey(accountServer.url, value.userId) !== key) continue
+          accountSessions[key] = {
+            serverId: value.serverId,
+            userId: value.userId,
+            userEmail:
+              typeof value.userEmail === "string" && value.userEmail.length <= 254
+                ? value.userEmail
+                : "",
+            userName:
+              typeof value.userName === "string" && value.userName.length <= 300
+                ? value.userName
+                : "",
+            token: value.token,
+            expiresAt: value.expiresAt,
+            lastUsedAt: value.lastUsedAt,
           }
         }
+      }
+      const lastAccountKey =
+        typeof stored.lastAccountKey === "string" && accountSessions[stored.lastAccountKey]
+          ? stored.lastAccountKey
+          : null
+
+      const shortcuts: ShortcutSettings = {
+        showWindow:
+          isRecord(stored.shortcuts) &&
+          typeof stored.shortcuts.showWindow === "string" &&
+          stored.shortcuts.showWindow.length <= 64
+            ? stored.shortcuts.showWindow
+            : DEFAULT_SHORTCUTS.showWindow,
+        screenshot:
+          isRecord(stored.shortcuts) &&
+          typeof stored.shortcuts.screenshot === "string" &&
+          stored.shortcuts.screenshot.length <= 64
+            ? stored.shortcuts.screenshot
+            : DEFAULT_SHORTCUTS.screenshot,
       }
       const theme =
         stored.theme === "light" || stored.theme === "dark" || stored.theme === "system"
@@ -773,13 +1062,28 @@ export class AuthController {
         typeof stored.activeServerId === "string" && ids.has(stored.activeServerId)
           ? stored.activeServerId
           : OFFICIAL_SERVER_ID
+      const notifications = isRecord(stored.notifications)
+        ? {
+            soundEnabled:
+              typeof stored.notifications.soundEnabled === "boolean"
+                ? stored.notifications.soundEnabled
+                : true,
+            desktopEnabled:
+              typeof stored.notifications.desktopEnabled === "boolean"
+                ? stored.notifications.desktopEnabled
+                : true,
+          }
+        : { soundEnabled: true, desktopEnabled: true }
       this.config = {
         version: 1,
         theme,
         shortcuts,
+        notifications,
         activeServerId,
         servers,
         serverLogins,
+        accountSessions,
+        lastAccountKey,
       }
     } catch {
       // 缺失或损坏的配置不阻断应用启动。
@@ -957,7 +1261,12 @@ function parseUser(data: unknown): AuthUser {
     !validText(data.user.name)
   )
     throw invalidResponse()
-  return { id: data.user.id, email: data.user.email, name: data.user.name }
+  return {
+    id: data.user.id,
+    email: data.user.email,
+    name: data.user.name,
+    avatar: typeof data.user.avatar === "string" ? data.user.avatar : "",
+  }
 }
 
 function validText(value: unknown): value is string {

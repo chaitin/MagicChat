@@ -2,7 +2,7 @@
 // beui.dev/components/motion/select
 
 import { ArrowDown01Icon, Tick02Icon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
+import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import {
   AnimatePresence,
   motion,

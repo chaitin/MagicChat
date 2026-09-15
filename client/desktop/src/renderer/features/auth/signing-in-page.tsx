@@ -9,12 +9,18 @@ export function SigningInPage({
   targetId,
   onComplete,
   onFailure,
+  loadingOnly = false,
 }: {
-  targetId: string
-  onComplete: () => void
-  onFailure: (error: AuthProblem) => void
+  targetId?: string
+  onComplete?: () => void
+  onFailure?: (error: AuthProblem) => void
+  loadingOnly?: boolean
 }) {
   useEffect(() => {
+    if (loadingOnly || !targetId || !onComplete || !onFailure) return
+    const initializationTarget = targetId
+    const complete = onComplete
+    const fail = onFailure
     let cancelled = false
     const minimumDisplay = new Promise<void>((resolve) => window.setTimeout(resolve, 2_000))
 
@@ -22,22 +28,22 @@ export function SigningInPage({
       let result: AuthResult<null>
       try {
         result = window.desktop
-          ? await window.desktop.accountData.initialize(targetId)
+          ? await window.desktop.accountData.initialize(initializationTarget)
           : { ok: false, error: { code: "bridge", message: "桌面服务暂不可用，请重试" } }
       } catch {
         result = { ok: false, error: { code: "bridge", message: "桌面服务暂不可用，请重试" } }
       }
       await minimumDisplay
       if (cancelled) return
-      if (result.ok) onComplete()
-      else onFailure(result.error)
+      if (result.ok) complete()
+      else fail(result.error)
     }
 
     void initialize()
     return () => {
       cancelled = true
     }
-  }, [onComplete, onFailure, targetId])
+  }, [loadingOnly, onComplete, onFailure, targetId])
 
   return (
     <main className="login-page login-page--shader">

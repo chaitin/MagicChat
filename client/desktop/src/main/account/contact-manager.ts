@@ -8,6 +8,7 @@ import {
 } from "./account-database"
 import { AuthenticatedClient } from "./authenticated-client"
 import { retryNetworkAction } from "./retry"
+import type { AvatarDescriptor, AvatarMemberDescriptor } from "./avatar-types"
 
 type ContactSnapshot = {
   mode: "organization" | "friends"
@@ -17,6 +18,8 @@ type ContactSnapshot = {
 }
 
 export class ContactManager {
+  private readonly refreshedAvatars = new Map<string, AvatarDescriptor>()
+
   constructor(
     private readonly database: AccountDatabase,
     private readonly client: AuthenticatedClient,
@@ -40,6 +43,38 @@ export class ContactManager {
 
   getDirectory(): DesktopContactDirectory {
     return this.database.getContacts()
+  }
+
+  getAvatarDescriptor(
+    type: "user" | "group" | "app",
+    entityId: string,
+  ): AvatarDescriptor | undefined {
+    return (
+      this.refreshedAvatars.get(`${type}:${entityId}`) ??
+      avatarDescriptor(type, entityId, this.database.getContactPayload(type, entityId))
+    )
+  }
+
+  refreshAvatarDescriptor(
+    type: "user" | "group" | "app",
+    entityId: string,
+  ): Promise<AvatarDescriptor | undefined> {
+    return retryNetworkAction(async () => {
+      let descriptor: AvatarDescriptor | undefined
+      if (type === "user") {
+        const user = (await this.resolveUsers([entityId]))[0]
+        descriptor = avatarDescriptor(type, entityId, user.payload)
+      } else {
+        const directory = await this.fetchDirectory()
+        const entry =
+          type === "group"
+            ? directory.groups.find((group) => group.id === entityId)
+            : directory.apps.find((app) => app.id === entityId)
+        descriptor = entry ? avatarDescriptor(type, entityId, entry.payload) : undefined
+      }
+      if (descriptor) this.refreshedAvatars.set(`${type}:${entityId}`, descriptor)
+      return descriptor
+    })
   }
 
   private async fetchDirectory(): Promise<ContactSnapshot> {
@@ -80,11 +115,14 @@ export class ContactManager {
 
 function parseUser(value: unknown): StoredContactUser {
   if (!isRecord(value)) throw new AuthFailure("invalid_response", "通讯录用户响应格式不正确")
+  const id = requiredString(value.id, 128, "contact_user.id")
   return {
-    id: requiredString(value.id, 128, "contact_user.id"),
+    id,
     name: requiredString(value.name, 256, "contact_user.name"),
     nickname: optionalString(value.nickname, 256),
     avatar: optionalString(value.avatar, 4_096),
+    avatarType: "user",
+    avatarId: id,
     email: optionalString(value.email, 254),
     phone: optionalString(value.phone, 64),
     online: value.online === true,
@@ -95,10 +133,13 @@ function parseUser(value: unknown): StoredContactUser {
 
 function parseGroup(value: unknown): StoredContactGroup {
   if (!isRecord(value)) throw new AuthFailure("invalid_response", "通讯录群组响应格式不正确")
+  const id = requiredString(value.id, 128, "contact_group.id")
   return {
-    id: requiredString(value.id, 128, "contact_group.id"),
+    id,
     name: requiredString(value.name, 256, "contact_group.name"),
     avatar: optionalString(value.avatar, 4_096),
+    avatarType: "group",
+    avatarId: id,
     joined: value.joined === true,
     memberCount: nonNegativeInteger(value.member_count),
     visibility: optionalString(value.visibility, 32),
@@ -108,14 +149,50 @@ function parseGroup(value: unknown): StoredContactGroup {
 
 function parseApp(value: unknown): StoredContactApp {
   if (!isRecord(value)) throw new AuthFailure("invalid_response", "通讯录应用响应格式不正确")
+  const id = requiredString(value.id, 128, "contact_app.id")
   return {
-    id: requiredString(value.id, 128, "contact_app.id"),
+    id,
     name: requiredString(value.name, 256, "contact_app.name"),
     avatar: optionalString(value.avatar, 4_096),
+    avatarType: "app",
+    avatarId: id,
     description: optionalString(value.description, 4_096),
     online: value.online === true,
     payload: value,
   }
+}
+
+function avatarDescriptor(
+  type: "user" | "group" | "app",
+  entityId: string,
+  value: unknown,
+): AvatarDescriptor | undefined {
+  if (!isRecord(value)) return undefined
+  return {
+    type,
+    id: entityId,
+    name: optionalString(value.nickname, 256) || optionalString(value.name, 256),
+    avatarUrl: optionalString(value.avatar, 4_096),
+    ...(type === "group" ? { members: parseAvatarMembers(value.avatar_members) } : {}),
+  }
+}
+
+function parseAvatarMembers(value: unknown): AvatarMemberDescriptor[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((member) => {
+    if (!isRecord(member) || typeof member.id !== "string" || !member.id) return []
+    const type = member.type === "app" ? "app" : "user"
+    const role = member.role === "owner" || member.role === "admin" ? member.role : "member"
+    return [
+      {
+        type,
+        id: member.id,
+        name: optionalString(member.nickname, 256) || optionalString(member.name, 256),
+        avatarUrl: optionalString(member.avatar, 4_096),
+        role,
+      } satisfies AvatarMemberDescriptor,
+    ]
+  })
 }
 
 function requiredString(value: unknown, maximum: number, field: string): string {

@@ -1,4 +1,4 @@
-import { HugeiconsIcon } from "@hugeicons/react"
+import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import {
   Add01Icon,
   AlertCircleIcon,

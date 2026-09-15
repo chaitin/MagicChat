@@ -7,6 +7,7 @@ import {
   type Connection,
   type ServerCatalog,
   type ServerProfile,
+  type RestoredSession,
 } from "../../../shared/auth"
 
 const official: ServerProfile = {
@@ -36,7 +37,7 @@ export function useConnection() {
   const [connection, setConnection] = useState<Connection | null>(null)
   const [error, setError] = useState<AuthProblem | null>(null)
   const [loading, setLoading] = useState(true)
-  const initial = useRef<Promise<AuthResult<ServerCatalog>> | null>(null)
+  const initial = useRef<Promise<AuthResult<RestoredSession>> | null>(null)
   const connecting = useRef(false)
   const isPreview = !window.desktop
 
@@ -63,19 +64,26 @@ export function useConnection() {
     // StrictMode 的 effect 会重放，复用同一个启动请求，避免重复读取配置。
     initial.current ??= (
       window.desktop
-        ? window.desktop.auth.getServers()
-        : Promise.resolve({ ok: true, data: previewCatalog } as const)
+        ? window.desktop.auth.restoreLastSession()
+        : Promise.resolve({
+            ok: true,
+            data: { catalog: previewCatalog, connection: null },
+          } as const)
     ).catch(() => ({ ok: false, error: bridgeError }) as const)
     void initial.current.then((result) => {
       if (cancelled) return
       setLoading(false)
-      if (result.ok) acceptCatalog(result.data)
-      else setError(result.error)
+      if (!result.ok) {
+        setError(result.error)
+        return
+      }
+      acceptCatalog(result.data.catalog)
+      if (result.data.connection) accept(result.data.connection)
     })
     return () => {
       cancelled = true
     }
-  }, [acceptCatalog])
+  }, [accept, acceptCatalog])
 
   const connect = useCallback(
     async (serverId: string): Promise<AuthResult<Connection>> => {

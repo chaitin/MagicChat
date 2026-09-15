@@ -168,7 +168,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
             <motion.path
               d="M5 12.5l4.5 4.5L19 7.5"
               stroke="currentColor"
-              strokeWidth={2.5}
+              strokeWidth={2}
               strokeLinecap="round"
               strokeLinejoin="round"
               initial={reduce ? { pathLength: 1 } : { pathLength: 0 }}

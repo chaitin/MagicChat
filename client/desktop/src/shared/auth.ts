@@ -3,6 +3,7 @@ export const OFFICIAL_SERVER_ID = "official"
 export const AUTH_CHANNELS = {
   getServer: "desktop-next:v1:auth-server",
   getServers: "desktop-next:v1:auth-servers",
+  restoreLastSession: "desktop-next:v1:auth-restore-last-session",
   saveServer: "desktop-next:v1:auth-save-server",
   deleteServer: "desktop-next:v1:auth-delete-server",
   checkServer: "desktop-next:v1:auth-check-server",
@@ -34,7 +35,7 @@ export type ServerCheck = {
   organizationName?: string
   message?: string
 }
-export type AuthUser = { id: string; email: string; name: string }
+export type AuthUser = { id: string; email: string; name: string; avatar: string }
 export type ThirdPartyProvider = { key: string; name: string }
 export type AppInfo = {
   appName: string
@@ -55,6 +56,10 @@ export type Connection = {
   user: AuthUser | null
   savedLogin?: SavedLogin
 }
+export type RestoredSession = {
+  catalog: ServerCatalog
+  connection: Connection | null
+}
 export type AuthProblem = { code: string; message: string; retryAfterSeconds?: number }
 export type AuthResult<T> = { ok: true; data: T } | { ok: false; error: AuthProblem }
 export type SignInInput = {
@@ -70,6 +75,7 @@ export type ThirdPartySignInInput = { targetId: string; providerKey: string }
 export interface AuthBridge {
   getServer(): Promise<AuthResult<ServerProfile>>
   getServers(): Promise<AuthResult<ServerCatalog>>
+  restoreLastSession(): Promise<AuthResult<RestoredSession>>
   saveServer(
     input: SaveServerInput,
   ): Promise<AuthResult<{ catalog: ServerCatalog; check: ServerCheck }>>

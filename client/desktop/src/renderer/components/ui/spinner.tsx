@@ -1,5 +1,5 @@
 import { cn } from "cn"
-import { HugeiconsIcon } from "@hugeicons/react"
+import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { Loading03Icon } from "@hugeicons/core-free-icons"
 
 function Spinner({ className, strokeWidth, ...props }: React.ComponentProps<"svg">) {

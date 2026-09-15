@@ -1,7 +1,7 @@
 // shadcn login-03：保留官方单栏 CardHeader/Field 结构；仅适配即应认证。
 import type { ComponentProps, ReactNode } from "react"
 import { cn } from "cn"
-import { HugeiconsIcon } from "@hugeicons/react"
+import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { Login03Icon, Loading03Icon, ViewIcon, ViewOffSlashIcon } from "@hugeicons/core-free-icons"
 import { Button as BeButton } from "@/components/motion/button/base"
 import { Input as BeInput } from "@/components/motion/input"

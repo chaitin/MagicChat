@@ -1,9 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { HugeiconsIcon } from "@hugeicons/react"
+import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import {
+  HardDriveIcon,
   InformationCircleIcon,
+  KeyboardIcon,
+  Notification02Icon,
   PaintBrush01Icon,
   ServerStack01Icon,
   Settings02Icon,
@@ -21,6 +24,9 @@ import { Button as BeButton } from "@/components/motion/button/base"
 import { ServerSettings } from "@/components/server-settings"
 import { AboutSettings } from "@/components/settings/about-settings"
 import { AppearanceSettings } from "@/components/settings/appearance-settings"
+import { NotificationSettings } from "@/components/settings/notification-settings"
+import { StorageSettings } from "@/components/settings/storage-settings"
+import { ShortcutSettingsPage } from "@/components/settings/shortcut-settings"
 import {
   Dialog,
   DialogContent,
@@ -42,11 +48,20 @@ import {
 import type { ServerCatalog } from "../../shared/auth"
 import type { ThemePreference } from "../../shared/desktop"
 
-export type SettingsSection = "appearance" | "servers" | "about"
+export type SettingsSection =
+  | "appearance"
+  | "notifications"
+  | "shortcuts"
+  | "storage"
+  | "servers"
+  | "about"
 
 const sections = [
   { id: "servers" as const, name: "服务器", icon: ServerStack01Icon },
   { id: "appearance" as const, name: "外观", icon: PaintBrush01Icon },
+  { id: "notifications" as const, name: "通知", icon: Notification02Icon },
+  { id: "shortcuts" as const, name: "快捷键", icon: KeyboardIcon },
+  { id: "storage" as const, name: "存储", icon: HardDriveIcon },
   { id: "about" as const, name: "关于", icon: InformationCircleIcon },
 ]
 
@@ -102,7 +117,7 @@ export function SettingsDialog({
       >
         <DialogTitle className="sr-only">设置</DialogTitle>
         <DialogDescription className="sr-only">
-          修改即应桌面端的外观和服务器配置，并查看应用信息。
+          修改即应桌面端的服务器、外观、通知、快捷键和存储配置，并查看应用信息。
         </DialogDescription>
         <SidebarProvider
           className="h-[500px] min-h-0 max-h-[calc(100svh-2rem)] items-stretch"
@@ -175,6 +190,12 @@ export function SettingsDialog({
             <div className="flex min-w-0 flex-1 flex-col overflow-y-auto px-6 pb-6">
               {section === "appearance" ? (
                 <AppearanceSettings theme={theme} onThemeChange={onThemeChange} />
+              ) : section === "notifications" ? (
+                <NotificationSettings disabled={disabled} />
+              ) : section === "shortcuts" ? (
+                <ShortcutSettingsPage disabled={disabled} />
+              ) : section === "storage" ? (
+                <StorageSettings disabled={disabled} />
               ) : section === "servers" ? (
                 <ServerSettings
                   catalog={catalog}
