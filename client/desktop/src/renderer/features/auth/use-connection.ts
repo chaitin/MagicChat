@@ -19,7 +19,6 @@ const previewCatalog: ServerCatalog = { activeServerId: OFFICIAL_SERVER_ID, serv
 const preview: Connection = {
   targetId: "browser-preview",
   server: official,
-  lastEmail: "",
   user: null,
   info: {
     appName: "即应",

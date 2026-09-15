@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron"
+import { ACCOUNT_DATA_CHANNELS } from "../shared/account-data"
 import { DESKTOP_CHANNELS, type DesktopBridge } from "../shared/desktop"
 import { AUTH_CHANNELS } from "../shared/auth"
 
@@ -7,6 +8,15 @@ const bridge: DesktopBridge = {
   openExternalLink: (url) => ipcRenderer.invoke(DESKTOP_CHANNELS.openExternalLink, url),
   checkForUpdates: () => ipcRenderer.invoke(DESKTOP_CHANNELS.checkForUpdates),
   getSystemInfo: () => ipcRenderer.invoke(DESKTOP_CHANNELS.getSystemInfo),
+  getAppSettings: () => ipcRenderer.invoke(DESKTOP_CHANNELS.getAppSettings),
+  setTheme: (theme) => ipcRenderer.invoke(DESKTOP_CHANNELS.setTheme, theme),
+  accountData: {
+    initialize: (targetId) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.initialize, targetId),
+    listConversations: (targetId) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listConversations, targetId),
+    listMessages: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listMessages, input),
+    getContacts: (targetId) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getContacts, targetId),
+  },
   auth: {
     getServer: () => ipcRenderer.invoke(AUTH_CHANNELS.getServer),
     getServers: () => ipcRenderer.invoke(AUTH_CHANNELS.getServers),

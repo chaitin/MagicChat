@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { BrowserWindow, session, type Session } from "electron"
+import { BrowserWindow, safeStorage, session, type Session } from "electron"
 import {
   AuthFailure,
   OFFICIAL_SERVER_ID,
@@ -22,15 +22,30 @@ import {
   type SaveServerInput,
   type SignInInput,
   type SignInResult,
+  type SavedLogin,
   type ThirdPartyProvider,
   type ThirdPartySignInInput,
 } from "../shared/auth"
+import type {
+  DesktopContactDirectory,
+  DesktopConversation,
+  DesktopMessage,
+} from "../shared/account-data"
+import type { AppSettings, ThemePreference } from "../shared/desktop"
+import { AccountRuntime } from "./account/account-runtime"
 
-type Preferences = {
-  version: 2
+type StoredLogin = {
+  method: "password" | "email-code"
+  email: string
+  encryptedPassword?: string
+}
+type AppConfig = {
+  version: 1
+  theme: ThemePreference
+  shortcuts: Record<string, string>
   activeServerId: string
   servers: ServerProfile[]
-  emails: Record<string, string>
+  serverLogins: Record<string, StoredLogin>
 }
 type NativeSessionCredential = { token: string; expiresAt: string }
 type ActiveConnection = Connection & {
@@ -60,29 +75,84 @@ const officialServer: ServerProfile = {
 export class AuthController {
   private readonly filePath: string
   private readonly initialized: Promise<void>
-  private preferences: Preferences = {
-    version: 2,
+  private config: AppConfig = {
+    version: 1,
+    theme: "system",
+    shortcuts: {},
     activeServerId: OFFICIAL_SERVER_ID,
     servers: [officialServer],
-    emails: {},
+    serverLogins: {},
   }
   private active?: ActiveConnection
+  private accountRuntime?: AccountRuntime
+  private accountInitialization?: Promise<null>
   private busy = false
   private readonly cooldowns = new Map<string, number>()
 
-  constructor(userDataPath: string) {
-    this.filePath = path.join(userDataPath, "login-preferences.json")
-    this.initialized = this.loadPreferences()
+  constructor(private readonly userDataPath: string) {
+    this.filePath = path.join(userDataPath, "app-config.json")
+    this.initialized = this.loadConfig()
   }
 
   async getServer(): Promise<ServerProfile> {
     await this.initialized
-    return { ...this.getProfile(this.preferences.activeServerId) }
+    return { ...this.getProfile(this.config.activeServerId) }
   }
 
   async getServers(): Promise<ServerCatalog> {
     await this.initialized
     return this.catalog()
+  }
+
+  async getAppSettings(): Promise<AppSettings> {
+    await this.initialized
+    return { theme: this.config.theme, shortcuts: { ...this.config.shortcuts } }
+  }
+
+  async initializeAccountData(targetId: string): Promise<null> {
+    await this.initialized
+    const active = this.requireTarget(targetId)
+    const runtime = this.accountRuntime
+    if (!active.user || !active.credential || !runtime) {
+      throw new AuthFailure("not_authenticated", "请重新登录账号")
+    }
+    this.accountInitialization ??= this.initializeAccountRuntime(active, runtime)
+    return this.accountInitialization
+  }
+
+  async listConversations(targetId: string): Promise<DesktopConversation[]> {
+    await this.initialized
+    this.requireTarget(targetId)
+    return this.requireAccountRuntime().listConversations()
+  }
+
+  async listMessages(targetId: string, conversationId: string): Promise<DesktopMessage[]> {
+    await this.initialized
+    this.requireTarget(targetId)
+    return this.requireAccountRuntime().listMessages(conversationId)
+  }
+
+  async getContacts(targetId: string): Promise<DesktopContactDirectory> {
+    await this.initialized
+    this.requireTarget(targetId)
+    return this.requireAccountRuntime().getContacts()
+  }
+
+  close() {
+    this.destroyAccountRuntime()
+  }
+
+  setTheme(theme: ThemePreference): Promise<null> {
+    return this.exclusive(async () => {
+      if (!["light", "dark", "system"].includes(theme)) {
+        throw new AuthFailure("invalid_theme", "主题设置不受支持")
+      }
+      if (theme === this.config.theme) return null
+      const config = { ...this.config, theme }
+      await this.saveConfig(config)
+      this.config = config
+      return null
+    })
   }
 
   saveServer(input: SaveServerInput): Promise<{ catalog: ServerCatalog; check: ServerCheck }> {
@@ -91,20 +161,16 @@ export class AuthController {
       const server = normalizeServer(input)
       const existing = input.id ? this.getProfile(input.id) : undefined
       if (existing?.builtin) throw new AuthFailure("builtin_server", "官方服务器不能修改")
-      if (!existing && this.preferences.servers.length >= MAX_SERVERS)
+      if (!existing && this.config.servers.length >= MAX_SERVERS)
         throw new AuthFailure("server_limit", `最多保存 ${MAX_SERVERS} 个服务器`)
       if (
-        this.preferences.servers.some(
+        this.config.servers.some(
           (item) => item.url === server.url && (!existing || item.id !== existing.id),
         )
       ) {
         throw new AuthFailure("duplicate_server", "该服务器地址已存在")
       }
-      if (
-        existing &&
-        existing.id === this.preferences.activeServerId &&
-        existing.url !== server.url
-      ) {
+      if (existing && existing.id === this.config.activeServerId && existing.url !== server.url) {
         throw new AuthFailure(
           "active_server",
           "请先返回服务器选择页并切换服务器，再修改当前服务器地址",
@@ -117,11 +183,13 @@ export class AuthController {
         builtin: false,
       }
       const servers = existing
-        ? this.preferences.servers.map((item) => (item.id === existing.id ? profile : item))
-        : [...this.preferences.servers, profile]
-      const preferences = { ...this.preferences, servers }
-      await this.savePreferences(preferences)
-      this.preferences = preferences
+        ? this.config.servers.map((item) => (item.id === existing.id ? profile : item))
+        : [...this.config.servers, profile]
+      const serverLogins = { ...this.config.serverLogins }
+      if (existing && existing.url !== profile.url) delete serverLogins[existing.id]
+      const config = { ...this.config, servers, serverLogins }
+      await this.saveConfig(config)
+      this.config = config
       if (this.active?.server.id === profile.id) this.active.server = { ...profile }
       return { catalog: this.catalog(), check: await this.inspect(profile) }
     })
@@ -131,14 +199,17 @@ export class AuthController {
     return this.exclusive(async () => {
       const profile = this.getProfile(id)
       if (profile.builtin) throw new AuthFailure("builtin_server", "官方服务器不能删除")
-      if (profile.id === this.preferences.activeServerId)
+      if (profile.id === this.config.activeServerId)
         throw new AuthFailure("active_server", "请先返回服务器选择页并切换服务器，再删除当前服务器")
-      const preferences = {
-        ...this.preferences,
-        servers: this.preferences.servers.filter((item) => item.id !== profile.id),
+      const serverLogins = { ...this.config.serverLogins }
+      delete serverLogins[profile.id]
+      const config = {
+        ...this.config,
+        servers: this.config.servers.filter((item) => item.id !== profile.id),
+        serverLogins,
       }
-      await this.savePreferences(preferences)
-      this.preferences = preferences
+      await this.saveConfig(config)
+      this.config = config
       return this.catalog()
     })
   }
@@ -150,7 +221,7 @@ export class AuthController {
 
   async checkServers(): Promise<ServerCheck[]> {
     await this.initialized
-    const servers = [...this.preferences.servers]
+    const servers = [...this.config.servers]
     return Promise.all(servers.map((item) => this.inspect(item)))
   }
 
@@ -170,11 +241,12 @@ export class AuthController {
         server: { ...profile, ...server },
         info,
         user: null,
-        lastEmail: this.preferences.emails[server.url] ?? "",
+        savedLogin: this.readSavedLogin(profile.id),
       }
-      const preferences = { ...this.preferences, activeServerId: profile.id }
-      await this.savePreferences(preferences)
-      this.preferences = preferences
+      const config = { ...this.config, activeServerId: profile.id }
+      await this.saveConfig(config)
+      this.config = config
+      this.destroyAccountRuntime()
       this.active = { ...connection, session: serverSession, credential: null }
       return connection
     })
@@ -279,17 +351,24 @@ export class AuthController {
         throw error
       }
       active.user = user
-      const preferences = {
-        ...this.preferences,
-        emails: { ...this.preferences.emails, [active.server.url]: email },
+      const savedLogin: StoredLogin = { method: input.method, email }
+      if (password) {
+        const encryptedPassword = this.encryptPassword(input.secret)
+        if (encryptedPassword) savedLogin.encryptedPassword = encryptedPassword
+      }
+      const config = {
+        ...this.config,
+        serverLogins: { ...this.config.serverLogins, [active.server.id]: savedLogin },
       }
       try {
-        await this.savePreferences(preferences)
-        this.preferences = preferences
+        await this.saveConfig(config)
+        this.config = config
+        active.savedLogin = this.readSavedLogin(active.server.id)
       } catch {
-        // 邮箱记忆失败不影响已建立的认证会话。
+        // 登录信息记忆失败不影响已建立的认证会话。
       }
-      return { user }
+      this.createAccountRuntime(active)
+      return { user, savedLogin: active.savedLogin }
     })
   }
 
@@ -317,6 +396,7 @@ export class AuthController {
         active.credential = credential
         active.user = user
         await this.clearServerAuthCookies(active.session, active.server.url)
+        this.createAccountRuntime(active)
         return { user }
       } catch (error) {
         active.credential = null
@@ -330,6 +410,7 @@ export class AuthController {
   signOut(targetId: string): Promise<null> {
     return this.exclusive(async () => {
       const active = this.requireTarget(targetId)
+      this.destroyAccountRuntime()
       try {
         await request(active.session, active.server.url, "/api/client/auth/logout", {}, 15_000, {
           headers: active.credential
@@ -485,14 +566,14 @@ export class AuthController {
 
   private catalog(): ServerCatalog {
     return {
-      activeServerId: this.preferences.activeServerId,
-      servers: this.preferences.servers.map((item) => ({ ...item })),
+      activeServerId: this.config.activeServerId,
+      servers: this.config.servers.map((item) => ({ ...item })),
     }
   }
 
   private getProfile(id: unknown): ServerProfile {
     if (typeof id !== "string") throw new AuthFailure("invalid_server", "服务器不存在")
-    const profile = this.preferences.servers.find((item) => item.id === id)
+    const profile = this.config.servers.find((item) => item.id === id)
     if (!profile) throw new AuthFailure("invalid_server", "服务器不存在或已被删除")
     return profile
   }
@@ -532,6 +613,54 @@ export class AuthController {
     }
   }
 
+  private async initializeAccountRuntime(active: ActiveConnection, runtime: AccountRuntime) {
+    try {
+      await runtime.initialize()
+      return null
+    } catch (error) {
+      if (this.accountRuntime === runtime) {
+        const credential = active.credential
+        this.destroyAccountRuntime()
+        active.user = null
+        active.credential = null
+        if (credential) {
+          await Promise.allSettled([
+            this.revokeCredential(active, credential),
+            this.clearServerAuthCookies(active.session, active.server.url),
+          ])
+        }
+      }
+      throw error
+    }
+  }
+
+  private createAccountRuntime(active: ActiveConnection) {
+    if (!active.user || !active.credential) {
+      throw new AuthFailure("not_authenticated", "请重新登录账号")
+    }
+    this.destroyAccountRuntime()
+    this.accountRuntime = new AccountRuntime({
+      userDataPath: this.userDataPath,
+      serverUrl: active.server.url,
+      userId: active.user.id,
+      session: active.session,
+      token: active.credential.token,
+    })
+  }
+
+  private requireAccountRuntime(): AccountRuntime {
+    if (!this.accountRuntime) {
+      throw new AuthFailure("account_not_ready", "账号数据尚未初始化")
+    }
+    return this.accountRuntime
+  }
+
+  private destroyAccountRuntime() {
+    this.accountRuntime?.close()
+    this.accountRuntime = undefined
+    this.accountInitialization = undefined
+  }
+
   private requireTarget(targetId: unknown): ActiveConnection {
     if (typeof targetId !== "string" || !this.active || targetId !== this.active.targetId) {
       throw new AuthFailure("stale_target", "服务器连接已变化，请重新连接后登录")
@@ -550,37 +679,43 @@ export class AuthController {
     }
   }
 
-  private async loadPreferences() {
+  private readSavedLogin(serverId: string): SavedLogin | undefined {
+    const stored = this.config.serverLogins[serverId]
+    if (!stored) return undefined
+    if (stored.method !== "password" || !stored.encryptedPassword) {
+      return { method: stored.method, email: stored.email }
+    }
+    if (!this.canProtectPassword()) return { method: stored.method, email: stored.email }
+    try {
+      return {
+        method: stored.method,
+        email: stored.email,
+        password: safeStorage.decryptString(Buffer.from(stored.encryptedPassword, "base64")),
+      }
+    } catch {
+      return { method: stored.method, email: stored.email }
+    }
+  }
+
+  private encryptPassword(password: string): string | undefined {
+    if (!this.canProtectPassword()) return undefined
+    try {
+      return safeStorage.encryptString(password).toString("base64")
+    } catch {
+      return undefined
+    }
+  }
+
+  private canProtectPassword(): boolean {
+    if (!safeStorage.isEncryptionAvailable()) return false
+    return process.platform !== "linux" || safeStorage.getSelectedStorageBackend() !== "basic_text"
+  }
+
+  private async loadConfig() {
     try {
       const stored: unknown = JSON.parse(await readFile(this.filePath, "utf8"))
-      if (!isRecord(stored) || ![1, 2].includes(stored.version as number)) return
-      const emails: Record<string, string> = {}
-      if (isRecord(stored.emails)) {
-        for (const [url, email] of Object.entries(stored.emails).slice(0, 100)) {
-          if (typeof email === "string" && email.length <= 254 && url.length <= 2048)
-            emails[url] = email
-        }
-      }
-      if (stored.version === 1 && isRecord(stored.server)) {
-        const server = normalizeServer(stored.server as ServerPreference)
-        const isOfficial = server.url === OFFICIAL_SERVER_URL
-        const migrated: ServerProfile = isOfficial
-          ? officialServer
-          : {
-              id: `legacy-${createHash("sha256").update(server.url).digest("hex").slice(0, 16)}`,
-              name: new URL(server.url).hostname,
-              ...server,
-              builtin: false,
-            }
-        this.preferences = {
-          version: 2,
-          activeServerId: migrated.id,
-          servers: isOfficial ? [officialServer] : [officialServer, migrated],
-          emails,
-        }
-        return
-      }
-      if (stored.version !== 2 || !Array.isArray(stored.servers)) return
+      if (!isRecord(stored) || stored.version !== 1 || !Array.isArray(stored.servers)) return
+
       const servers: ServerProfile[] = [officialServer]
       const ids = new Set([OFFICIAL_SERVER_ID])
       const urls = new Set([OFFICIAL_SERVER_URL])
@@ -598,20 +733,63 @@ export class AuthController {
           // 单条损坏配置不影响其余服务器和官方入口。
         }
       }
+
+      const serverLogins: Record<string, StoredLogin> = {}
+      if (isRecord(stored.serverLogins)) {
+        for (const [serverId, value] of Object.entries(stored.serverLogins).slice(0, MAX_SERVERS)) {
+          if (!ids.has(serverId) || !isRecord(value)) continue
+          if (value.method !== "password" && value.method !== "email-code") continue
+          try {
+            const email = normalizeEmail(value.email)
+            const encryptedPassword =
+              typeof value.encryptedPassword === "string" &&
+              value.encryptedPassword.length <= 16_384
+                ? value.encryptedPassword
+                : undefined
+            serverLogins[serverId] = {
+              method: value.method,
+              email,
+              ...(value.method === "password" && encryptedPassword ? { encryptedPassword } : {}),
+            }
+          } catch {
+            // 单条损坏的登录信息不影响服务器和其他配置。
+          }
+        }
+      }
+
+      const shortcuts: Record<string, string> = {}
+      if (isRecord(stored.shortcuts)) {
+        for (const [name, shortcut] of Object.entries(stored.shortcuts).slice(0, 100)) {
+          if (name.length <= 128 && typeof shortcut === "string" && shortcut.length <= 128) {
+            shortcuts[name] = shortcut
+          }
+        }
+      }
+      const theme =
+        stored.theme === "light" || stored.theme === "dark" || stored.theme === "system"
+          ? stored.theme
+          : "system"
       const activeServerId =
         typeof stored.activeServerId === "string" && ids.has(stored.activeServerId)
           ? stored.activeServerId
           : OFFICIAL_SERVER_ID
-      this.preferences = { version: 2, activeServerId, servers, emails }
+      this.config = {
+        version: 1,
+        theme,
+        shortcuts,
+        activeServerId,
+        servers,
+        serverLogins,
+      }
     } catch {
-      // 缺失或损坏的非敏感配置不阻断官方服务器入口；认证不从此文件恢复。
+      // 缺失或损坏的配置不阻断应用启动。
     }
   }
 
-  private async savePreferences(preferences: Preferences) {
+  private async saveConfig(config: AppConfig) {
     try {
       await mkdir(path.dirname(this.filePath), { recursive: true })
-      await writeFile(`${this.filePath}.tmp`, JSON.stringify(preferences, null, 2), { mode: 0o600 })
+      await writeFile(`${this.filePath}.tmp`, JSON.stringify(config, null, 2), { mode: 0o600 })
       await rename(`${this.filePath}.tmp`, this.filePath)
     } catch {
       throw new AuthFailure("storage", "无法保存登录配置，请检查用户数据目录的写入权限")

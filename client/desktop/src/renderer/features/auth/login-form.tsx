@@ -9,8 +9,6 @@ import {
   type SignInResult,
 } from "../../../shared/auth"
 
-const CODE_COUNTDOWN_SECONDS = 30
-
 export type LoginFormProps = {
   connection: Connection
   isPreview: boolean
@@ -20,9 +18,16 @@ export type LoginFormProps = {
 
 export function useLoginForm({ connection, onSignedIn, onBusyChange }: LoginFormProps) {
   const { showToast } = useAnimatedToast()
-  const [preferred, setPreferred] = useState<LoginMethod>("email-code")
-  const [email, setEmail] = useState(connection.lastEmail)
-  const [secret, setSecret] = useState("")
+  const [preferred, setPreferred] = useState<LoginMethod>(
+    connection.savedLogin?.method ?? "email-code",
+  )
+  const [email, setEmail] = useState(connection.savedLogin?.email ?? "")
+  const [secret, setSecret] = useState(() =>
+    resolveLoginMethod(connection.info, connection.savedLogin?.method ?? "email-code") ===
+    "password"
+      ? (connection.savedLogin?.password ?? "")
+      : "",
+  )
   const [visible, setVisible] = useState(false)
   const [pending, setPending] = useState<"login" | "code" | "third-party" | null>(null)
   const [pendingProvider, setPendingProvider] = useState("")
@@ -94,7 +99,7 @@ export function useLoginForm({ connection, onSignedIn, onBusyChange }: LoginForm
         setNow(time)
         setRetry({
           email: account.toLowerCase(),
-          until: time + CODE_COUNTDOWN_SECONDS * 1000,
+          until: time + result.data.retryAfterSeconds * 1000,
         })
         showToast({ status: "success", title: "验证码已发送" })
       } else {

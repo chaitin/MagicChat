@@ -11,6 +11,9 @@ directories:
 files:
   - out/**/*
   - package.json
+extraResources:
+  - from: resources/icon.png
+    to: tray-icon.png
 extraMetadata:
   description: 即应新桌面客户端 Windows 预览版
 win:

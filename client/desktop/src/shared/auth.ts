@@ -43,12 +43,17 @@ export type AppInfo = {
   passwordLoginEnabled: boolean
   thirdPartyProviders: ThirdPartyProvider[]
 }
+export type SavedLogin = {
+  method: LoginMethod
+  email: string
+  password?: string
+}
 export type Connection = {
   targetId: string
   server: ServerProfile
   info: AppInfo
   user: AuthUser | null
-  lastEmail: string
+  savedLogin?: SavedLogin
 }
 export type AuthProblem = { code: string; message: string; retryAfterSeconds?: number }
 export type AuthResult<T> = { ok: true; data: T } | { ok: false; error: AuthProblem }
@@ -59,7 +64,7 @@ export type SignInInput = {
   secret: string
 }
 export type CodeResult = { expiresInSeconds: number; retryAfterSeconds: number }
-export type SignInResult = { user: AuthUser }
+export type SignInResult = { user: AuthUser; savedLogin?: SavedLogin }
 export type ThirdPartySignInInput = { targetId: string; providerKey: string }
 
 export interface AuthBridge {

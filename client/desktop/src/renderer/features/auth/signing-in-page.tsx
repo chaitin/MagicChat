@@ -1,21 +1,60 @@
-import { Loading03Icon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
+import { useEffect } from "react"
+import { Loader } from "@/components/motion/loader"
+import { TextShimmer } from "@/components/motion/text-shimmer"
 import { Card, CardContent } from "@/components/ui/card"
 import { PoweredBy } from "@/components/powered-by"
+import type { AuthProblem, AuthResult } from "../../../shared/auth"
 
-export function SigningInPage() {
+export function SigningInPage({
+  targetId,
+  onComplete,
+  onFailure,
+}: {
+  targetId: string
+  onComplete: () => void
+  onFailure: (error: AuthProblem) => void
+}) {
+  useEffect(() => {
+    let cancelled = false
+    const minimumDisplay = new Promise<void>((resolve) => window.setTimeout(resolve, 2_000))
+
+    async function initialize() {
+      let result: AuthResult<null>
+      try {
+        result = window.desktop
+          ? await window.desktop.accountData.initialize(targetId)
+          : { ok: false, error: { code: "bridge", message: "桌面服务暂不可用，请重试" } }
+      } catch {
+        result = { ok: false, error: { code: "bridge", message: "桌面服务暂不可用，请重试" } }
+      }
+      await minimumDisplay
+      if (cancelled) return
+      if (result.ok) onComplete()
+      else onFailure(result.error)
+    }
+
+    void initialize()
+    return () => {
+      cancelled = true
+    }
+  }, [onComplete, onFailure, targetId])
+
   return (
     <main className="login-page login-page--shader">
       <div className="auth-surface auth-surface--shader grid min-h-full grid-rows-[1fr_auto] gap-4 p-6 text-foreground md:p-10">
         <div className="flex items-center justify-center">
-          <Card className="w-full max-w-sm">
-            <CardContent className="flex min-h-64 flex-col items-center justify-center gap-4 text-center">
-              <HugeiconsIcon
-                icon={Loading03Icon}
-                className="size-7 animate-spin text-muted-foreground"
-                aria-hidden
+          <Card size="sm" className="w-full max-w-sm">
+            <CardContent className="flex min-h-36 flex-col items-center justify-center gap-6 text-center">
+              <Loader
+                variant="dither"
+                size={64}
+                speed={3}
+                label="正在加载在线数据"
+                className="text-muted-foreground"
               />
-              <h1 className="text-lg font-medium">正在登录</h1>
+              <TextShimmer as="h1" className="text-base font-normal">
+                正在加载在线数据
+              </TextShimmer>
             </CardContent>
           </Card>
         </div>

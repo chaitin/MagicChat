@@ -8,7 +8,7 @@ import {
   PencilEdit02Icon,
   Radar03Icon,
 } from "@hugeicons/core-free-icons"
-import { useEffect, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import { Button as BeButton } from "@/components/motion/button/base"
 import { Input as BeInput } from "@/components/motion/input"
@@ -54,6 +54,7 @@ export function ServerSettings({
   const [checks, setChecks] = useState<Record<string, CheckState>>({})
   const [editor, setEditor] = useState<Editor | null>(null)
   const [checkingAll, setCheckingAll] = useState(false)
+  const checkingAllRef = useRef(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState("")
   const [deleteTarget, setDeleteTarget] = useState<ServerProfile | null>(null)
@@ -62,57 +63,60 @@ export function ServerSettings({
     : undefined
   const activeAddressLocked = editedProfile?.id === catalog.activeServerId
 
-  async function checkAll(targetCatalog = catalog) {
-    if (checkingAll) return
-    if (!window.desktop) {
-      setChecks((value) => failedChecks(value, targetCatalog.servers, "桌面服务暂不可用"))
-      showToast({ status: "error", title: "桌面服务暂不可用" })
-      return
-    }
-    setCheckingAll(true)
-    setChecks((value) => ({
-      ...value,
-      ...Object.fromEntries(targetCatalog.servers.map((item) => [item.id, "checking" as const])),
-    }))
-    try {
-      const failures = await Promise.all(
-        targetCatalog.servers.map(async (server) => {
-          let check: ServerCheck
-          let failure = ""
-          try {
-            const result = await window.desktop!.auth.checkServer(server.id)
-            if (result.ok) {
-              check = result.data
-            } else {
-              failure = result.error.message
+  const checkAll = useCallback(
+    async (targetCatalog: ServerCatalog) => {
+      if (checkingAllRef.current) return
+      if (!window.desktop) {
+        setChecks((value) => failedChecks(value, targetCatalog.servers, "桌面服务暂不可用"))
+        showToast({ status: "error", title: "桌面服务暂不可用" })
+        return
+      }
+      checkingAllRef.current = true
+      setCheckingAll(true)
+      setChecks((value) => ({
+        ...value,
+        ...Object.fromEntries(targetCatalog.servers.map((item) => [item.id, "checking" as const])),
+      }))
+      try {
+        const failures = await Promise.all(
+          targetCatalog.servers.map(async (server) => {
+            let check: ServerCheck
+            let failure = ""
+            try {
+              const result = await window.desktop!.auth.checkServer(server.id)
+              if (result.ok) {
+                check = result.data
+              } else {
+                failure = result.error.message
+                check = unavailableCheck(server.id, failure)
+              }
+            } catch {
+              failure = "无法检测服务器"
               check = unavailableCheck(server.id, failure)
             }
-          } catch {
-            failure = "无法检测服务器"
-            check = unavailableCheck(server.id, failure)
-          }
-          setChecks((value) => ({ ...value, [server.id]: check }))
-          return failure
-        }),
-      )
-      const failed = failures.filter(Boolean)
-      if (failed.length > 0) {
-        showToast({
-          status: "error",
-          title: `${failed.length} 个服务器检测失败`,
-          description: failed[0],
-        })
+            setChecks((value) => ({ ...value, [server.id]: check }))
+            return failure
+          }),
+        )
+        const failed = failures.filter(Boolean)
+        if (failed.length > 0) {
+          showToast({
+            status: "error",
+            title: `${failed.length} 个服务器检测失败`,
+            description: failed[0],
+          })
+        }
+      } finally {
+        checkingAllRef.current = false
+        setCheckingAll(false)
       }
-    } finally {
-      setCheckingAll(false)
-    }
-  }
+    },
+    [showToast],
+  )
 
   useEffect(() => {
-    void checkAll()
-    // 进入服务器页面时检测一次；保存服务器后会再次检测全部服务器。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    void checkAll(catalog)
+  }, [catalog, checkAll])
 
   function beginEdit(profile?: ServerProfile) {
     if (profile?.id === catalog.activeServerId) {
@@ -157,7 +161,6 @@ export function ServerSettings({
       }
       onCatalogChange(result.data.catalog)
       setEditor(null)
-      void checkAll(result.data.catalog)
     } catch {
       showToast({ status: "error", title: "无法保存服务器，请稍后重试" })
     } finally {
@@ -199,7 +202,7 @@ export function ServerSettings({
             variant="outline"
             size="sm"
             disabled={disabled || checkingAll}
-            onClick={() => void checkAll()}
+            onClick={() => void checkAll(catalog)}
           >
             {checkingAll ? (
               <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />

@@ -21,7 +21,14 @@ import {
   ItemGroup,
   ItemTitle,
 } from "@/components/ui/item"
-import type { AuthResult, Connection, ServerCatalog, ServerCheck } from "../../../shared/auth"
+import type {
+  AuthResult,
+  Connection,
+  ServerCatalog,
+  ServerCheck,
+  ServerProfile,
+} from "../../../shared/auth"
+import type { ThemePreference } from "../../../shared/desktop"
 
 type CheckState = ServerCheck | "checking"
 const CHECK_TIMEOUT_MS = 3_500
@@ -62,8 +69,8 @@ export function ServerSelectPage({
   loading: boolean
   isPreview: boolean
   initialError?: string
-  theme: "light" | "dark" | "system"
-  onThemeChange: (theme: "light" | "dark" | "system") => void
+  theme: ThemePreference
+  onThemeChange: (theme: ThemePreference) => void
   onCatalogChange: (catalog: ServerCatalog) => void
   onSelect: (serverId: string) => Promise<AuthResult<Connection>>
 }) {
@@ -198,82 +205,16 @@ export function ServerSelectPage({
                   <div className="max-h-72 overflow-y-auto pr-1">
                     <ItemGroup className="gap-3" aria-label="可选服务器">
                       {catalog.servers.map((server) => (
-                        <Item key={server.id} variant="outline">
-                          <ItemContent className="min-w-0">
-                            <ItemTitle className="max-w-full">
-                              <span className="truncate">{server.name}</span>
-                            </ItemTitle>
-                            <ItemDescription
-                              className="block truncate text-left"
-                              title={server.url}
-                            >
-                              {server.url}
-                            </ItemDescription>
-                          </ItemContent>
-                          <ItemActions>
-                            {(() => {
-                              const check = checks[server.id]
-                              const isConnecting = selectedId === server.id
-                              const isChecking = !isConnecting && (!check || check === "checking")
-                              const isUnavailable =
-                                !isConnecting &&
-                                check !== "checking" &&
-                                check?.status === "unavailable"
-                              return (
-                                <BeButton
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className={cn(
-                                    "gap-2 text-sm",
-                                    (isConnecting || isChecking) &&
-                                      "border-border text-muted-foreground",
-                                    isUnavailable &&
-                                      "border-destructive/80 text-destructive/85 hover:border-destructive/90 hover:bg-destructive/10 hover:text-destructive",
-                                  )}
-                                  disabled={loading || Boolean(selectedId) || isChecking}
-                                  aria-label={
-                                    isUnavailable
-                                      ? `重新检测 ${server.name}`
-                                      : isChecking
-                                        ? `正在检测 ${server.name}`
-                                        : `进入 ${server.name}`
-                                  }
-                                  onClick={() =>
-                                    void (isUnavailable ? checkOne(server.id) : select(server.id))
-                                  }
-                                >
-                                  {isConnecting || isChecking ? (
-                                    <HugeiconsIcon
-                                      icon={Loading03Icon}
-                                      className="size-4 animate-spin"
-                                      aria-hidden
-                                    />
-                                  ) : isUnavailable ? (
-                                    <HugeiconsIcon
-                                      icon={AlertCircleIcon}
-                                      className="size-4"
-                                      aria-hidden
-                                    />
-                                  ) : (
-                                    <HugeiconsIcon
-                                      icon={ArrowRight01Icon}
-                                      className="size-4"
-                                      aria-hidden
-                                    />
-                                  )}
-                                  {isConnecting
-                                    ? "正在连接"
-                                    : isChecking
-                                      ? "加载"
-                                      : isUnavailable
-                                        ? "重试"
-                                        : "进入"}
-                                </BeButton>
-                              )
-                            })()}
-                          </ItemActions>
-                        </Item>
+                        <ServerListItem
+                          key={server.id}
+                          server={server}
+                          check={checks[server.id]}
+                          loading={loading}
+                          selectionPending={Boolean(selectedId)}
+                          isConnecting={selectedId === server.id}
+                          onCheck={checkOne}
+                          onSelect={select}
+                        />
                       ))}
                     </ItemGroup>
                   </div>
@@ -307,5 +248,74 @@ export function ServerSelectPage({
         <PoweredBy />
       </div>
     </main>
+  )
+}
+
+function ServerListItem({
+  server,
+  check,
+  loading,
+  selectionPending,
+  isConnecting,
+  onCheck,
+  onSelect,
+}: {
+  server: ServerProfile
+  check?: CheckState
+  loading: boolean
+  selectionPending: boolean
+  isConnecting: boolean
+  onCheck: (serverId: string) => Promise<void>
+  onSelect: (serverId: string) => Promise<void>
+}) {
+  const isChecking = !isConnecting && (!check || check === "checking")
+  const isUnavailable = !isConnecting && check !== "checking" && check?.status === "unavailable"
+
+  return (
+    <Item variant="outline">
+      <ItemContent className="min-w-0">
+        <ItemTitle className="max-w-full">
+          <span className="truncate">{server.name}</span>
+        </ItemTitle>
+        <ItemDescription className="block truncate text-left" title={server.url}>
+          {server.url}
+        </ItemDescription>
+      </ItemContent>
+      <ItemActions>
+        <BeButton
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(
+            "gap-2 text-sm",
+            (isConnecting || isChecking) && "border-border text-muted-foreground",
+            isUnavailable &&
+              "border-destructive/80 text-destructive/85 hover:border-destructive/90 hover:bg-destructive/10 hover:text-destructive",
+          )}
+          disabled={loading || selectionPending || isChecking}
+          aria-label={
+            isUnavailable
+              ? `重新检测 ${server.name}`
+              : isChecking
+                ? `正在检测 ${server.name}`
+                : `进入 ${server.name}`
+          }
+          onClick={() => void (isUnavailable ? onCheck(server.id) : onSelect(server.id))}
+        >
+          <HugeiconsIcon
+            icon={
+              isConnecting || isChecking
+                ? Loading03Icon
+                : isUnavailable
+                  ? AlertCircleIcon
+                  : ArrowRight01Icon
+            }
+            className={cn("size-4", (isConnecting || isChecking) && "animate-spin")}
+            aria-hidden
+          />
+          {isConnecting ? "正在连接" : isChecking ? "加载" : isUnavailable ? "重试" : "进入"}
+        </BeButton>
+      </ItemActions>
+    </Item>
   )
 }

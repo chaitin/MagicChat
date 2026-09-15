@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   ArrowLeftRightIcon,
@@ -15,16 +15,18 @@ import { PoweredBy } from "@/components/powered-by"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { ServerSelectPage } from "./server-select-page"
 import { SigningInPage } from "./signing-in-page"
+import { ChatPage } from "../chat/chat-page"
 import { useConnection } from "./use-connection"
+import type { ThemePreference } from "../../../shared/desktop"
 
 export function LoginPage({
   theme,
   resolvedTheme,
   onThemeChange,
 }: {
-  theme: "light" | "dark" | "system"
-  resolvedTheme: "light" | "dark"
-  onThemeChange: (theme: "light" | "dark" | "system") => void
+  theme: ThemePreference
+  resolvedTheme: Exclude<ThemePreference, "system">
+  onThemeChange: (theme: ThemePreference) => void
 }) {
   const { showToast } = useAnimatedToast()
   const {
@@ -39,15 +41,38 @@ export function LoginPage({
     clearError,
     retry,
   } = useConnection()
-  const [screen, setScreen] = useState<"servers" | "login" | "signing-in">("servers")
+  const [screen, setScreen] = useState<"servers" | "login" | "signing-in" | "chat">("servers")
   const shownConnectionError = useRef("")
   const [busy, setBusy] = useState(false)
+  const enterChat = useCallback(() => setScreen("chat"), [])
+  const handleInitializationFailure = useCallback(
+    (problem: { code: string; message: string }) => {
+      if (connection) accept({ ...connection, user: null })
+      setScreen("login")
+      showToast({ status: "error", title: "账号初始化失败", description: problem.message })
+    },
+    [accept, connection, showToast],
+  )
 
   useEffect(() => {
     if (screen !== "login" || !error || shownConnectionError.current === error.message) return
     shownConnectionError.current = error.message
     showToast({ status: "error", title: "无法连接服务器", description: error.message })
   }, [error, screen, showToast])
+
+  if (screen === "chat") {
+    return (
+      <ChatPage
+        targetId={connection?.targetId ?? ""}
+        userName={connection?.user?.name ?? "我"}
+        theme={theme}
+        catalog={catalog}
+        isPreview={isPreview}
+        onThemeChange={onThemeChange}
+        onCatalogChange={acceptCatalog}
+      />
+    )
+  }
 
   if (screen === "servers") {
     return (
@@ -70,10 +95,14 @@ export function LoginPage({
     )
   }
 
-  if (screen === "signing-in" || connection?.user) {
+  if (screen === "signing-in") {
     return (
       <AuthBackground theme={resolvedTheme}>
-        <SigningInPage />
+        <SigningInPage
+          targetId={connection?.targetId ?? ""}
+          onComplete={enterChat}
+          onFailure={handleInitializationFailure}
+        />
       </AuthBackground>
     )
   }
@@ -115,8 +144,8 @@ export function LoginPage({
                   connection={connection}
                   isPreview={isPreview}
                   onBusyChange={setBusy}
-                  onSignedIn={({ user }) => {
-                    accept({ ...connection, user, lastEmail: user.email })
+                  onSignedIn={({ user, savedLogin }) => {
+                    accept({ ...connection, user, savedLogin: savedLogin ?? connection.savedLogin })
                     setScreen("signing-in")
                   }}
                 />
@@ -165,7 +194,13 @@ export function LoginPage({
   )
 }
 
-function AuthBackground({ children, theme }: { children: ReactNode; theme: "light" | "dark" }) {
+function AuthBackground({
+  children,
+  theme,
+}: {
+  children: ReactNode
+  theme: Exclude<ThemePreference, "system">
+}) {
   return (
     <div className="relative isolate h-full overflow-hidden bg-background">
       <ShaderBackground

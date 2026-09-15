@@ -1,5 +1,16 @@
 import path from "node:path"
-import { app, BrowserWindow, ipcMain, session, shell, type IpcMainInvokeEvent } from "electron"
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  Menu,
+  nativeImage,
+  session,
+  shell,
+  Tray,
+  type IpcMainInvokeEvent,
+} from "electron"
+import { ACCOUNT_DATA_CHANNELS } from "../shared/account-data"
 import {
   AUTH_CHANNELS,
   AuthFailure,
@@ -12,6 +23,7 @@ import {
   EXTERNAL_LINKS,
   JIYING_HOMEPAGE,
   type SystemInfo,
+  type ThemePreference,
 } from "../shared/desktop"
 import { AuthController, authResult } from "./auth-controller"
 import { checkForUpdates, isTrustedReleaseUrl } from "./update-service"
@@ -25,9 +37,15 @@ if (!app.isPackaged && process.platform === "linux" && process.env.WSL_DISTRO_NA
 // 新客户端与旧版账号和配置隔离。
 app.setPath("userData", path.join(app.getPath("appData"), "jiying-desktop-next"))
 
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+if (!hasSingleInstanceLock) app.quit()
+
 let mainWindow: BrowserWindow | null = null
+let tray: Tray | null = null
+let isQuitting = false
 
 function createWindow() {
+  if (mainWindow) return
   const window = new BrowserWindow({
     width: 1280,
     height: 900,
@@ -47,6 +65,11 @@ function createWindow() {
   mainWindow = window
   window.removeMenu()
   window.once("ready-to-show", () => window.show())
+  window.on("close", (event) => {
+    if (isQuitting) return
+    event.preventDefault()
+    window.hide()
+  })
   window.on("closed", () => {
     mainWindow = null
   })
@@ -63,6 +86,41 @@ function createWindow() {
   }
 }
 
+function showMainWindow() {
+  if (!mainWindow) {
+    createWindow()
+    return
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+function createTray() {
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, "tray-icon.png")
+    : path.join(__dirname, "../../resources/icon.png")
+  const source = nativeImage.createFromPath(iconPath)
+  if (source.isEmpty()) throw new Error("无法加载托盘图标")
+  const size = process.platform === "darwin" ? 18 : 16
+  tray = new Tray(source.resize({ width: size, height: size }))
+  tray.setToolTip("即应")
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "显示窗口", click: showMainWindow },
+      { type: "separator" },
+      {
+        label: "退出即应",
+        click: () => {
+          isQuitting = true
+          app.quit()
+        },
+      },
+    ]),
+  )
+  tray.on("double-click", showMainWindow)
+}
+
 function assertTrustedSender(event: IpcMainInvokeEvent) {
   if (
     !mainWindow ||
@@ -73,7 +131,15 @@ function assertTrustedSender(event: IpcMainInvokeEvent) {
   }
 }
 
+if (hasSingleInstanceLock) {
+  app.on("second-instance", () => {
+    if (app.isReady()) showMainWindow()
+    else void app.whenReady().then(showMainWindow)
+  })
+}
+
 void app.whenReady().then(() => {
+  if (!hasSingleInstanceLock) return
   const auth = new AuthController(app.getPath("userData"))
   function handleIpc<T>(channel: string, operation: (input: unknown) => Promise<T>) {
     ipcMain.handle(channel, (event, input: unknown) =>
@@ -83,6 +149,17 @@ void app.whenReady().then(() => {
       }),
     )
   }
+  handleIpc(ACCOUNT_DATA_CHANNELS.initialize, (input) =>
+    auth.initializeAccountData(input as string),
+  )
+  handleIpc(ACCOUNT_DATA_CHANNELS.listConversations, (input) =>
+    auth.listConversations(input as string),
+  )
+  handleIpc(ACCOUNT_DATA_CHANNELS.listMessages, (input) => {
+    const value = input as { targetId?: string; conversationId?: string } | undefined
+    return auth.listMessages(value?.targetId ?? "", value?.conversationId ?? "")
+  })
+  handleIpc(ACCOUNT_DATA_CHANNELS.getContacts, (input) => auth.getContacts(input as string))
   handleIpc(AUTH_CHANNELS.getServer, () => auth.getServer())
   handleIpc(AUTH_CHANNELS.getServers, () => auth.getServers())
   handleIpc(AUTH_CHANNELS.saveServer, (input) => auth.saveServer(input as SaveServerInput))
@@ -115,6 +192,11 @@ void app.whenReady().then(() => {
   })
   handleIpc(DESKTOP_CHANNELS.checkForUpdates, () => checkForUpdates())
   handleIpc(DESKTOP_CHANNELS.getSystemInfo, async () => getSystemInfo())
+  handleIpc(DESKTOP_CHANNELS.getAppSettings, () => auth.getAppSettings())
+  handleIpc(DESKTOP_CHANNELS.setTheme, async (input) => {
+    await auth.setTheme(input as ThemePreference)
+    return null
+  })
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) =>
     callback(false),
   )
@@ -122,9 +204,9 @@ void app.whenReady().then(() => {
   session.defaultSession.on("will-download", (event) => event.preventDefault())
 
   createWindow()
-  app.on("activate", () => {
-    if (!mainWindow) createWindow()
-  })
+  createTray()
+  app.on("activate", showMainWindow)
+  app.once("before-quit", () => auth.close())
 })
 
 function getSystemInfo(): SystemInfo {
@@ -140,6 +222,8 @@ function getSystemInfo(): SystemInfo {
   return { type, version: process.getSystemVersion(), architecture: process.arch }
 }
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit()
+app.on("before-quit", () => {
+  isQuitting = true
+  tray?.destroy()
+  tray = null
 })
