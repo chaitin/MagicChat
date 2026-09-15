@@ -10,7 +10,7 @@
 .studio-network-agents { right: 0; width: max(29%, 156px); }
 .studio-network-agents .studio-network-node { padding-inline: 12px; gap: 8px; }
 .studio-network-side ul { position: absolute; top: 16.67%; right: 0; left: 0; display: flex; flex-direction: column; gap: var(--network-gap); list-style: none; margin: 0; padding: 0; }
-.studio-network-node { display: flex; flex-shrink: 0; align-items: center; gap: 12px; height: 44px; padding: 0 16px; border: 1px dashed var(--studio-line-hover); border-radius: 7px; color: var(--studio-muted); background: color-mix(in srgb, var(--studio-bg) 90%, transparent); font-size: var(--type-body); line-height: var(--leading-control); }
+.studio-network-node { display: flex; flex-shrink: 0; align-items: center; gap: 12px; height: 44px; padding: 0 16px; border: 1px dashed var(--studio-line-hover); border-radius: 7px; color: var(--studio-muted); background: color-mix(in srgb, var(--studio-bg) 90%, transparent); font-size: var(--type-caption); line-height: var(--leading-control); }
 .studio-network-node > span:last-child { white-space: nowrap; }
 .studio-network-node > svg { flex-shrink: 0; color: var(--green); }
 .studio-network-avatar { display: grid; flex-shrink: 0; place-items: center; width: 26px; height: 26px; border: 1px solid currentColor; border-radius: 50%; font-size: var(--type-caption); }
