@@ -1,0 +1,50 @@
+/* 让官方 login-03 block 填满 Electron 内容区，避免 body 背景露出。 */
+@layer components {
+  .login-page {
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    background: var(--color-neutral-400);
+  }
+
+  .auth-surface {
+    position: relative;
+    isolation: isolate;
+    background: var(--color-neutral-400);
+  }
+
+  .auth-surface::before {
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.5' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='.7'/%3E%3C/svg%3E");
+    background-size: 160px 160px;
+    content: "";
+    pointer-events: none;
+    opacity: 0.14;
+    mix-blend-mode: overlay;
+  }
+
+  .auth-surface > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .login-page--shader,
+  .auth-surface--shader {
+    background: transparent;
+  }
+
+  .auth-surface--shader::before {
+    display: none;
+  }
+
+  .settings-sidebar [data-slot="sidebar-menu-button"] {
+    background-color: transparent !important;
+  }
+
+  .settings-sidebar [data-slot="sidebar-menu-button"]:hover,
+  .settings-sidebar [data-slot="sidebar-menu-button"][data-active="true"] {
+    background-color: var(--sidebar-accent) !important;
+  }
+}
