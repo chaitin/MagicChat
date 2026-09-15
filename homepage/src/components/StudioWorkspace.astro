@@ -45,12 +45,12 @@ const views = [
           <div class="studio-capability-step"><span aria-hidden="true">01</span><h4>工作场景</h4></div>
           <blockquote>{view.prompt}</blockquote>
           <ul class="studio-capability-sources" aria-label="相关信息">{view.sources.map(source => <li>{source}</li>)}</ul>
-          <Icon class="studio-capability-arrow" name="tabler:arrow-right" size={22} aria-hidden="true" />
+          <Icon class="studio-capability-arrow" name="hugeicons:arrow-right-02" size={22} aria-hidden="true" />
         </li>
         <li class="studio-capability-process">
           <div class="studio-capability-step"><span aria-hidden="true">02</span><h4>{view.processLabel}</h4></div>
-          <ul class="studio-capability-steps">{view.steps.map(step => <li><Icon name="tabler:check" size={17} aria-hidden="true" /><span>{step}</span></li>)}</ul>
-          <Icon class="studio-capability-arrow" name="tabler:arrow-right" size={22} aria-hidden="true" />
+          <ul class="studio-capability-steps">{view.steps.map(step => <li><Icon name="hugeicons:tick-02" size={17} aria-hidden="true" /><span>{step}</span></li>)}</ul>
+          <Icon class="studio-capability-arrow" name="hugeicons:arrow-right-02" size={22} aria-hidden="true" />
         </li>
         <li class="studio-capability-result">
           <div class="studio-capability-step"><span aria-hidden="true">03</span><h4>工作结果</h4></div>
@@ -60,7 +60,7 @@ const views = [
           </div>
         </li>
       </ol>
-      <p class="studio-capability-note"><Icon name="tabler:shield-check" size={17} aria-hidden="true" /><span>{view.note}</span></p>
+      <p class="studio-capability-note"><Icon name="hugeicons:security-check" size={17} aria-hidden="true" /><span>{view.note}</span></p>
     </div>
   ))}
 </div>

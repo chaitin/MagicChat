@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react"
-import { ArrowLeft, ArrowUpRight, Download, Server, Monitor, MonitorPlay, Apple, Terminal, Smartphone, Code, BookOpen } from "lucide-react"
+import { ArrowLeft, ArrowUpRight, Download, Server, MonitorPlay, Code, BookOpen } from "lucide-react"
 import { ButtonLink } from "@/components/ui/button"
 
 const icons = {
@@ -10,10 +10,6 @@ const icons = {
   "monitor-play": MonitorPlay,
   code: Code,
   "book-open": BookOpen,
-  "tabler:brand-windows": Monitor,
-  "tabler:brand-apple": Apple,
-  "tabler:brand-ubuntu": Terminal,
-  "tabler:brand-android": Smartphone,
 }
 
 type Props = {

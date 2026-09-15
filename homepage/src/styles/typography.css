@@ -75,6 +75,7 @@ body.site-theme :is(
   .studio-comparison th,
   .studio-comparison td,
   .studio-faq-list details > p,
+  .studio-accordion-description p,
   .footer-slogan,
   .footer-intro,
   .community-qr figcaption,

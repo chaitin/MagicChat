@@ -303,11 +303,11 @@ body.page-legal .brand img { filter: saturate(.75) brightness(1.1); }
     transform: scale(1.22);
   }
 
-  .compare-table tbody td:hover svg[data-icon="tabler:check"] {
+  .compare-table tbody td:hover svg[data-icon="hugeicons:tick-02"] {
     color: #70ead8;
   }
 
-  .compare-table tbody td:hover svg[data-icon="tabler:x"] {
+  .compare-table tbody td:hover svg[data-icon="hugeicons:cancel-01"] {
     color: rgb(235 247 242 / 78%);
     filter: drop-shadow(0 0 6px rgb(235 247 242 / 20%));
   }

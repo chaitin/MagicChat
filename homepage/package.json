@@ -13,7 +13,8 @@
   },
   "dependencies": {
     "@astrojs/react": "6.0.5",
-    "@iconify-json/tabler": "^1.2.38",
+    "@iconify-json/hugeicons": "^1.2.34",
+    "@paper-design/shaders-react": "^0.0.80",
     "astro": "^7.1.6",
     "astro-icon": "^1.1.5",
     "class-variance-authority": "^0.7.1",

@@ -1,14 +1,10 @@
-beUI — https://beui.dev/components/motion/button
-Action Swap — https://beui.dev/components/motion/action-swap
-Text Animation — https://beui.dev/components/motion/text-animation
-Loader — https://beui.dev/components/motion/loader
-Bouncy Accordion — https://beui.dev/components/motion/bouncy-accordion
-Shader Background — https://beui.dev/components/motion/shader-background
-Source: https://github.com/starc007/ui-components
+Hugeicons — https://github.com/hugeicons/hugeicons
+Source: https://github.com/hugeicons/hugeicons/blob/main/LICENSE.md
+Icon data: @iconify-json/hugeicons
 
 MIT License
 
-Copyright (c) 2026 Saurabh Chauhan
+Copyright (c) 2025 Hugeicons
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

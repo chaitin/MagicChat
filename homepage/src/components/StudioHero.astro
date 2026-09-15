@@ -9,32 +9,39 @@ const members = [
   { name: '成员 D', color: 'rose' },
 ];
 const agents = [
-  ['tabler:code', '研发'],
-  ['tabler:chart-line', '运营'],
-  ['tabler:receipt', '财务'],
-  ['tabler:users', '人事'],
+  ['hugeicons:code', '研发'],
+  ['hugeicons:chart-line', '运营'],
+  ['hugeicons:invoice-01', '财务'],
+  ['hugeicons:user-group', '人事'],
 ];
 const sources = [
-  ['tabler:layout-kanban', '项目'],
-  ['tabler:checkbox', '任务'],
-  ['tabler:file-text', '文档'],
-  ['tabler:messages', '消息'],
-  ['tabler:database', '知识库'],
+  ['hugeicons:kanban', '项目'],
+  ['hugeicons:checkmark-square-02', '任务'],
+  ['hugeicons:file-02', '文档'],
+  ['hugeicons:message-multiple-01', '消息'],
+  ['hugeicons:database-01', '数据'],
 ];
-const memberPaths = [72, 132, 192, 252].map(y => `M 162 ${y} C 216 ${y}, 226 162, 280 162`);
-const agentPaths = [72, 132, 192, 252].map(y => `M 280 162 C 346 162, 344 ${y}, 398 ${y}`);
-const dataPath = 'M 280 162 L 280 350';
+const memberPaths = [72, 132, 192, 252].map(y => `M 162 ${y} C 216 ${y}, 226 216, 280 216`);
+const agentPaths = [72, 132, 192, 252].map(y => `M 280 216 C 346 216, 344 ${y}, 398 ${y}`);
+const sourcePaths = [76.48, 178.24, 280, 381.76, 483.52].map(x => `M 280 216 C 280 283, ${x} 283, ${x} 350`);
+const paths = [...memberPaths, ...agentPaths, ...sourcePaths];
+const particles = paths.flatMap((path, pathIndex) => [
+  { path, pathIndex, reverse: false },
+  { path, pathIndex, reverse: true },
+]);
 ---
 
-<figure class="studio-network" aria-label="即应连接团队成员、多个 AI Agent，以及项目、任务、文档、消息和知识库">
+<figure class="studio-network" aria-label="即应连接团队成员、多个 AI Agent，以及项目、任务、文档、消息和数据">
   <svg class="studio-network-links" viewBox="0 0 560 460" preserveAspectRatio="none" fill="none" aria-hidden="true">
     <g class="studio-network-traces">
-      {[...memberPaths, ...agentPaths, dataPath].map(path => <path d={path} />)}
+      {paths.map(path => <path d={path} />)}
     </g>
     <g class="studio-network-particles">
-      {[memberPaths[0], memberPaths[2], agentPaths[1], agentPaths[3], dataPath].map((path, index) => (
-        <circle r="2.5" class:list={[index === 1 && 'studio-network-particle-blue', index === 3 && 'studio-network-particle-violet']}>
-          <animateMotion path={path} dur={`${4 + index * .6}s`} begin={`${-index * 1.3}s`} repeatCount="indefinite" />
+      {particles.map(({ path, pathIndex, reverse }) => (
+        <circle r="2.5" visibility="hidden" class:list={[pathIndex % 5 === 2 && 'studio-network-particle-blue', pathIndex % 5 === 3 && 'studio-network-particle-violet']}>
+          <animateMotion data-path-index={pathIndex} data-direction={reverse ? 'reverse' : 'forward'} path={path}
+            keyPoints={reverse ? '1;0' : '0;1'} keyTimes="0;1" calcMode="linear"
+            dur={`${4 + (pathIndex % 5) * .6}s`} begin="indefinite" repeatCount="1" fill="freeze" />
         </circle>
       ))}
     </g>
@@ -42,12 +49,12 @@ const dataPath = 'M 280 162 L 280 350';
 
   <div class="studio-network-side studio-network-members">
     <ul>
-      {members.map(member => <li class="studio-network-node"><span class:list={['studio-network-avatar', `studio-network-avatar-${member.color}`]} aria-hidden="true"><Icon name="tabler:user" size={16} /></span><span>{member.name}</span></li>)}
+      {members.map(member => <li class="studio-network-node"><span class:list={['studio-network-avatar', `studio-network-avatar-${member.color}`]} aria-hidden="true"><Icon name="hugeicons:user" size={16} /></span><span>{member.name}</span></li>)}
     </ul>
   </div>
 
   <div class="studio-network-hub">
-    <div class="studio-network-core"><Icon name="tabler:bolt" size={38} aria-hidden="true" /></div>
+    <div class="studio-network-core"><Icon name="hugeicons:flash" size={38} aria-hidden="true" /></div>
   </div>
 
   <div class="studio-network-side studio-network-agents">
@@ -60,3 +67,106 @@ const dataPath = 'M 280 162 L 280 350';
     <ul>{sources.map(([icon, label]) => <li><span class="studio-network-data-icon"><Icon name={icon} size={20} aria-hidden="true" /></span><span>{label}</span></li>)}</ul>
   </div>
 </figure>
+
+<script>
+  document.querySelectorAll<HTMLElement>('.studio-network').forEach(network => {
+    const svg = network.querySelector<SVGSVGElement>('.studio-network-links');
+    const core = network.querySelector<HTMLElement>('.studio-network-core');
+    if (!svg || !core) return;
+    const traces = Array.from(svg.querySelectorAll<SVGPathElement>('.studio-network-traces path'));
+    const members = Array.from(network.querySelectorAll<HTMLElement>('.studio-network-members li'));
+    const agents = Array.from(network.querySelectorAll<HTMLElement>('.studio-network-agents li'));
+    const sources = Array.from(network.querySelectorAll<HTMLElement>('.studio-network-data li'));
+
+    // Fixed gaps and minimum card widths do not scale with the SVG viewBox.
+    // Measure the actual nodes so every connector stays attached at each breakpoint.
+    const updateLinks = () => {
+      const bounds = network.getBoundingClientRect();
+      if (!bounds.width || !bounds.height) return;
+      const center = core.getBoundingClientRect();
+      const x = center.left + center.width / 2 - bounds.left;
+      const y = center.top + center.height / 2 - bounds.top;
+      const paths = [...members, ...agents].map((node, index) => {
+        const rect = node.getBoundingClientRect();
+        const targetX = (index < members.length ? rect.right : rect.left) - bounds.left;
+        const targetY = rect.top + rect.height / 2 - bounds.top;
+        const bend = (x + targetX) / 2;
+        return index < members.length
+          ? `M ${targetX} ${targetY} C ${bend} ${targetY}, ${bend} ${y}, ${x} ${y}`
+          : `M ${x} ${y} C ${bend} ${y}, ${bend} ${targetY}, ${targetX} ${targetY}`;
+      });
+      sources.forEach(node => {
+        const rect = node.getBoundingClientRect();
+        const targetX = rect.left + rect.width / 2 - bounds.left;
+        const targetY = rect.top - bounds.top;
+        const bendY = (y + targetY) / 2;
+        paths.push(`M ${x} ${y} C ${x} ${bendY}, ${targetX} ${bendY}, ${targetX} ${targetY}`);
+      });
+      svg.setAttribute('viewBox', `0 0 ${bounds.width} ${bounds.height}`);
+      traces.forEach((trace, index) => trace.setAttribute('d', paths[index]));
+      svg.querySelectorAll<SVGElement>('animateMotion[data-path-index]').forEach(particle => {
+        particle.setAttribute('path', paths[Number(particle.dataset.pathIndex)]);
+      });
+    };
+
+    const observer = new ResizeObserver(updateLinks);
+    [network, core, ...members, ...agents, ...sources].forEach(node => observer.observe(node));
+    updateLinks();
+
+    const motions = Array.from(svg.querySelectorAll<SVGAnimationElement>('animateMotion[data-path-index]'));
+    const active = new Set<number>();
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let pending: number[] = [];
+    let timer: number | undefined;
+    let pageActive = true;
+
+    motions.forEach((motion, index) => {
+      motion.addEventListener('beginEvent', () => {
+        if (active.has(index)) motion.parentElement?.setAttribute('visibility', 'visible');
+      });
+      // Freeze the endpoint until hidden, avoiding a frame at the SVG origin.
+      motion.addEventListener('endEvent', () => {
+        motion.parentElement?.setAttribute('visibility', 'hidden');
+        active.delete(index);
+      });
+    });
+
+    const launchParticle = () => {
+      if (!pending.length) {
+        pending = motions.map((_, index) => index);
+        // Shuffle complete rounds so every path runs in both directions.
+        for (let index = pending.length - 1; index > 0; index--) {
+          const other = Math.floor(Math.random() * (index + 1));
+          [pending[index], pending[other]] = [pending[other], pending[index]];
+        }
+      }
+      // A direction near the end of the last round may still be playing.
+      const next = pending.findIndex(index => !active.has(index));
+      if (next === -1) return;
+      const [index] = pending.splice(next, 1);
+      const motion = motions[index];
+      active.add(index);
+      motion.beginElement();
+    };
+
+    const syncParticles = () => {
+      if (timer !== undefined) window.clearInterval(timer);
+      timer = undefined;
+      if (!pageActive || document.hidden || reducedMotion.matches) {
+        active.forEach(index => {
+          motions[index].parentElement?.setAttribute('visibility', 'hidden');
+          motions[index].endElement();
+        });
+        active.clear();
+        return;
+      }
+      timer = window.setInterval(launchParticle, 500);
+    };
+
+    document.addEventListener('visibilitychange', syncParticles);
+    reducedMotion.addEventListener('change', syncParticles);
+    window.addEventListener('pagehide', () => { pageActive = false; syncParticles(); });
+    window.addEventListener('pageshow', () => { pageActive = true; syncParticles(); });
+    syncParticles();
+  });
+</script>

@@ -1,5 +1,6 @@
 /* Shared theme, navigation and footer for every content page. */
 body.site-theme {
+  --container: 1080px;
   --green: var(--color-teal-500);
   --green-dark: var(--color-teal-600);
   --green-deep: var(--color-teal-950);
@@ -27,7 +28,7 @@ body.site-theme::before {
   z-index: -1;
   background-image: radial-gradient(circle at 11px 11px, #fffdfbb0 1.2px, transparent 1.3px);
   background-size: 22px 22px;
-  opacity: .20;
+  opacity: .10;
   -webkit-mask-image: radial-gradient(ellipse at 50% 50%, #000 0%, rgb(0 0 0 / 60%) 50%, rgb(0 0 0 / 30%) 100%);
   mask-image: radial-gradient(ellipse at 50% 50%, #000 0%, rgb(0 0 0 / 60%) 50%, rgb(0 0 0 / 30%) 100%);
   pointer-events: none;
@@ -35,14 +36,21 @@ body.site-theme::before {
 }
 .site-theme ::selection { color: #fff; background: var(--color-teal-800); }
 body.site-theme .site-header { position: sticky; inset: 0 0 auto; z-index: 50; border-bottom: 1px solid #ffffff0a; background: #050507ed; backdrop-filter: blur(12px); }
-body.site-theme .nav-shell { width: min(calc(100% - 64px), 1200px); min-height: 72px; padding: 0; gap: 28px; }
+body.site-theme .nav-shell { width: min(calc(100% - 64px), var(--container)); min-height: 72px; padding: 0; gap: 28px; }
 body.site-theme .brand { gap: 10px; color: var(--green); font-size: 21px; font-weight: 600; letter-spacing: .04em; }
 body.site-theme .brand img { width: 30px; height: 30px; border-radius: 50%; filter: none; }
 body.site-theme .site-header .brand { flex-shrink: 0; white-space: nowrap; }
+body.site-theme .header-brand-icon { width: 30px; height: 30px; flex-shrink: 0; padding: 4px; border: 2px solid currentColor; border-radius: 50%; }
+body.site-theme .header-brand-icon [stroke-width] { stroke-width: 2.5; }
 .site-section-nav { display: flex; gap: 28px; margin-right: auto; margin-left: 24px; color: var(--studio-muted); font-size: 13px; }
 .site-section-nav a { padding-block: 24px; transition: color 200ms; }
 .site-section-nav a:hover { color: var(--green); }
 body.site-theme .header-actions { gap: 16px; }
+body.site-theme .header-online[data-slot='button'],
+body.site-theme .studio-hero .studio-actions [data-slot='button'][data-variant='primary'],
+body.site-theme .studio-start .studio-actions [data-slot='button'][data-variant='primary'] {
+  --button-hover-shadow: 0 0 18px color-mix(in srgb, var(--green) 40%, transparent), 0 0 28px color-mix(in srgb, var(--green) 16%, transparent);
+}
 
 @property --github-neon-angle {
   syntax: '<angle>';
@@ -70,6 +78,7 @@ body.site-theme .site-header .header-github::before {
   animation: github-neon-orbit 4s linear infinite;
 }
 body.site-theme .site-header .header-github[data-slot='button']:not(:disabled):hover {
+  color: var(--green);
   border-color: var(--green);
   box-shadow: 0 0 18px color-mix(in srgb, var(--green) 28%, transparent), inset 0 0 10px color-mix(in srgb, var(--green) 6%, transparent);
 }
@@ -94,9 +103,9 @@ body.site-theme .download-option-action:hover { color: var(--studio-bg); backgro
 body.site-theme .site-footer { margin-top: 90px; border-top: 1px solid var(--studio-line); color: var(--footer-text); background: transparent; content-visibility: visible; }
 body.site-theme .footer-light-curtain { display: none; }
 body.site-theme .site-footer .brand { font-size: 24px; line-height: 32px; font-weight: 700; }
-body.site-theme .footer-grid { width: min(calc(100% - 64px), 1200px); grid-template-columns: 1.3fr .7fr .95fr 1.6fr; gap: 36px; padding: 56px 0 40px; }
+body.site-theme .footer-grid { width: min(calc(100% - 64px), var(--container)); grid-template-columns: minmax(0, 2fr) .7fr .95fr 204px; gap: 36px; padding: 56px 0 40px; }
 body.site-theme .footer-slogan { width: 100%; color: var(--footer-heading); font-size: 16px; line-height: 24px; font-weight: 400; letter-spacing: 0; }
-body.site-theme .footer-intro { max-width: 265px; margin-top: 15px; color: var(--footer-text); font-size: 14px; line-height: 1.8; }
+body.site-theme .footer-intro { max-width: 400px; margin-top: 15px; color: var(--footer-text); font-size: 14px; line-height: 1.8; }
 body.site-theme .footer-column h2, body.site-theme .footer-community h2 { margin-top: 5px; color: var(--footer-heading); font-size: 20px; line-height: 28px; font-weight: 500; letter-spacing: 0; }
 body.site-theme .footer-column a { color: var(--footer-text); font-size: 14px; line-height: 20px; font-weight: 500; }
 body.site-theme .site-footer a:hover { color: var(--green); }
@@ -105,7 +114,7 @@ body.site-theme .community-qr-list { width: 100%; gap: 12px; }
 body.site-theme .community-qr { width: auto; flex: 1; min-width: 0; max-width: 96px; }
 body.site-theme .community-qr img { padding: 5px; border-radius: 5px; }
 body.site-theme .community-qr figcaption { color: var(--footer-text); font-size: 14px; line-height: 20px; }
-body.site-theme .footer-bottom { width: min(calc(100% - 64px), 1200px); padding: 20px 0 28px; border-color: var(--studio-line); color: var(--footer-text); font-size: 12px; line-height: 24px; }
+body.site-theme .footer-bottom { width: min(calc(100% - 64px), var(--container)); padding: 20px 0 28px; border-color: var(--studio-line); color: var(--footer-text); font-size: 12px; line-height: 24px; }
 body.site-theme .footer-bottom a { color: var(--footer-text); }
 body.site-theme .footer-bottom a:hover { color: var(--green); }
 
@@ -136,7 +145,7 @@ body.site-theme .footer-bottom a:hover { color: var(--green); }
   body.site-theme .site-header .header-online[data-slot='button'] { padding-inline: 12px; }
   body.site-theme .header-online svg { display: none; }
   body.site-theme .brand { gap: 7px; }
-  body.site-theme .brand img { width: 24px; height: 24px; }
+  body.site-theme .brand img, body.site-theme .header-brand-icon { width: 24px; height: 24px; }
   body.site-theme .header-icon-download { width: 31px; min-height: 34px; padding: 6px; }
   body.site-theme .header-download-link-primary { min-height: 34px; padding-inline: 11px; font-size: 11px; }
   body.site-theme .header-download-menu .download-menu-panel { position: fixed; top: 62px; left: auto; right: 20px; width: min(300px, calc(100vw - 40px)); min-width: 0; transform: none; animation: none; }

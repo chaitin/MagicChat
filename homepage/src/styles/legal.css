@@ -1,6 +1,6 @@
 /* Document pages use the shared site theme, with a quiet reading surface. */
 .site-theme .legal-page { min-height: calc(100svh - 72px); padding: 64px 0 24px; color: var(--studio-text); background: transparent; }
-.site-theme .legal-content { width: min(calc(100% - 64px), 1200px); max-width: 1200px; padding: 0; }
+.site-theme .legal-content { width: min(calc(100% - 64px), var(--container)); max-width: var(--container); padding: 0; }
 .site-theme .legal-body { display: block; margin-top: 0; }
 .site-theme .legal-main { min-width: 0; padding: 36px; border: 1px solid var(--studio-line); border-radius: 8px; background: #0c0c0ef5; }
 .site-theme .legal-header { padding-bottom: 28px; margin-bottom: 30px; border-bottom: 1px solid var(--studio-line); }

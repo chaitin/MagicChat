@@ -1,11 +1,14 @@
 ---
+import hugeicons from '@iconify-json/hugeicons/icons.json';
 import { HeaderActions } from './HeaderActions';
 ---
 
 <header class="site-header">
   <div class="container nav-shell">
     <a class="brand" href={import.meta.env.BASE_URL} aria-label="即应 CHAT 官网首页">
-      <img src={`${import.meta.env.BASE_URL}favicon.webp`} width="36" height="36" alt="" />
+      <svg class="header-brand-icon" data-icon="hugeicons:flash" viewBox="0 0 24 24" width="30" height="30" aria-hidden="true">
+        <Fragment set:html={hugeicons.icons.flash.body} />
+      </svg>
       <span>即应 CHAT</span>
     </a>
     <nav class="site-section-nav" aria-label="网站导航"><a href="https://jiying.docs.baizhi.cloud/" target="_blank" rel="noopener noreferrer">帮助文档</a></nav>

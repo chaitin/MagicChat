@@ -7,7 +7,7 @@ import DeploymentSection from '../components/DeploymentSection.astro';
 import ClientsSection from '../components/ClientsSection.astro';
 import OpennessSection from '../components/OpennessSection.astro';
 import { ActionButton } from '../components/ActionButton';
-import { FaqQuestion } from '../components/FaqQuestion';
+import { FaqAccordion } from '../components/FaqQuestion';
 import { TextCascade } from '../components/motion/text-cascade';
 import SectionTitle from '../components/SectionTitle.astro';
 import '../styles/homepage.css';
@@ -22,10 +22,10 @@ const schema = [
   { '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: '即应', alternateName: 'MagicChat', applicationCategory: 'BusinessApplication', operatingSystem: 'Web, macOS, Windows, Linux, iOS, Android', description, url: pageUrl },
 ];
 const teamBenefits = [
-  ['tabler:messages', '上下文不再散落各处', '消息、文档与项目连在一起，让 AI 理解工作背景，减少翻找资料和反复解释。'],
-  ['tabler:brain', '从讨论中找到重点', '让 AI 整理群聊、归纳进展、提取待办，把人的精力留给判断与创造。'],
-  ['tabler:checkbox', '让每件事都有下一步', '将共识整理为任务，明确负责人和时间，确认后创建并持续跟进。'],
-  ['tabler:shield-check', '信息与操作自主可控', 'AI 遵循用户权限，重要操作由你确认；通过私有化部署，让数据留在自己的环境中。'],
+  ['hugeicons:message-multiple-01', '上下文不再散落各处', '消息、文档与项目连在一起，让 AI 理解工作背景，减少翻找资料和反复解释。'],
+  ['hugeicons:brain', '从讨论中找到重点', '让 AI 整理群聊、归纳进展、提取待办，把人的精力留给判断与创造。'],
+  ['hugeicons:checkmark-square-02', '让每件事都有下一步', '将共识整理为任务，明确负责人和时间，确认后创建并持续跟进。'],
+  ['hugeicons:security-check', '信息与操作自主可控', 'AI 遵循用户权限，重要操作由你确认；通过私有化部署，让数据留在自己的环境中。'],
 ];
 const comparisonRows = [
   ['企业即时通讯', true, true, true, true, true, true, true],
@@ -46,6 +46,10 @@ const faqs = [
   ['部署即应需要什么样的基础条件？', '即应提供 Docker / Compose 等容器化部署配置，支持 Web、桌面与移动客户端。可以先在线体验，再参考部署文档准备自己的服务器和相关服务。'],
   ['即应是免费开源的吗？', '即应的核心产品代码基于 AGPL-3.0 许可证开源，支持企业与个人免费安装、使用和私有化部署。使用、修改或分发时，请遵循许可证的具体要求。'],
   ['我们团队可以基于即应进行二次开发吗？', '可以。你可以根据业务需求定制界面、创建应用，并接入模型、MCP 工具或已有业务系统，扩展团队的工作方式。'],
+  ['即应支持哪些设备和客户端？', '即应提供 Web、Windows、macOS、Linux、Android 和 iOS 客户端。你可以直接通过浏览器在线体验，也可以在上方客户端区域选择对应平台下载，连接团队使用的即应服务器。'],
+  ['除了聊天，还能管理项目、任务和文档吗？', '可以。即应支持个人与团队项目、任务负责人和优先级设置，以及列表、看板、日历和甘特图等任务视图。项目可以关联群聊，并通过多人实时协作文档沉淀信息，让讨论与执行保持衔接。'],
+  ['可以接入我们自己的 AI 模型和工具吗？', '可以。内置 AI 助手支持 Anthropic Messages 兼容模型接口，并可接入 MCP 工具。团队可以根据需求配置模型服务与工具，在接入前确认接口兼容性、访问权限及数据流向。'],
+  ['能接入企业现有的登录体系吗？', '即应支持密码、邮箱验证码和第三方身份提供商登录，管理员可以在后台配置可用的登录方式。接入企业现有身份服务前，请根据当前版本支持的配置核对兼容性。'],
 ];
 ---
 
@@ -66,7 +70,7 @@ const faqs = [
 
     <div class="studio-foundation studio-container" aria-label="即应协作能力">
       <span>一个入口，连接所有工作</span>
-      <div><span><Icon name="tabler:message-circle" size={20} />即时沟通</span><span><Icon name="tabler:layout-kanban" size={20} />项目协作</span><span><Icon name="tabler:checkbox" size={20} />任务管理</span><span><Icon name="tabler:file-text" size={20} />协作文档</span><span><Icon name="tabler:robot" size={20} />AI 助理</span></div>
+      <div><span><Icon name="hugeicons:bubble-chat" size={20} />即时沟通</span><span><Icon name="hugeicons:kanban" size={20} />项目协作</span><span><Icon name="hugeicons:checkmark-square-02" size={20} />任务管理</span><span><Icon name="hugeicons:file-02" size={20} />协作文档</span><span><Icon name="hugeicons:robot-01" size={20} />AI 助理</span></div>
     </div>
 
     <DeploymentSection />
@@ -84,13 +88,13 @@ const faqs = [
     <section class="studio-section-band" id="capabilities" aria-labelledby="capability-title">
       <div class="studio-container">
       <div class="studio-section-heading"><span class="studio-eyebrow"><i></i>产品对比 <span>THE DIFFERENCE</span></span><SectionTitle id="capability-title">飞书、钉钉、企微的<span>开源平替</span></SectionTitle><p>从团队协作到部署方式，找到适合你的工作空间。</p></div>
-      <div class="studio-comparison" role="region" aria-label="产品能力对比，可横向滚动" tabindex="0"><table><thead><tr><th scope="col">比较维度</th><th scope="col" class="studio-highlight">即应</th>{['飞书', '钉钉', '企业微信', 'Slack', 'Mattermost', 'Rocket.Chat'].map((product) => <th scope="col">{product}</th>)}</tr></thead><tbody>{comparisonRows.map(([dimension, ...support]) => <tr><th scope="row">{dimension}</th>{support.map((supported, index) => <td class:list={[index === 0 && 'studio-highlight', !supported && 'studio-unsupported']}><span class="sr-only">{supported ? '支持' : '不支持'}</span><Icon name={supported ? 'tabler:check' : 'tabler:x'} size={17} aria-hidden="true" /></td>)}</tr>)}</tbody></table></div>
+      <div class="studio-comparison" role="region" aria-label="产品能力对比，可横向滚动" tabindex="0"><table><thead><tr><th scope="col">比较维度</th><th scope="col" class="studio-highlight">即应</th>{['飞书', '钉钉', '企业微信', 'Slack', 'Mattermost', 'Rocket.Chat'].map((product) => <th scope="col">{product}</th>)}</tr></thead><tbody>{comparisonRows.map(([dimension, ...support]) => <tr><th scope="row">{dimension}</th>{support.map((supported, index) => <td class:list={[index === 0 && 'studio-highlight', !supported && 'studio-unsupported']}><span class="sr-only">{supported ? '支持' : '不支持'}</span><Icon name={supported ? 'hugeicons:tick-02' : 'hugeicons:cancel-01'} size={17} aria-hidden="true" /></td>)}</tr>)}</tbody></table></div>
       </div>
     </section>
 
     <section class="studio-section studio-container studio-faq" id="faq" aria-labelledby="faq-title">
-      <div class="studio-section-heading"><span class="studio-eyebrow"><i></i>常见问题 <span>FAQ</span></span><SectionTitle id="faq-title">你可能还想了解</SectionTitle><p>关于产品、部署和 AI 协作。</p><a class="studio-resource-link studio-text-action" href="https://jiying.docs.baizhi.cloud/" target="_blank" rel="noopener noreferrer"><span>查看产品文档</span><Icon name="tabler:arrow-up-right" size={20} aria-hidden="true" /></a></div>
-      <div class="studio-faq-list">{faqs.map(([question, answer], index) => <details name="homepage-faq" open={index === 0}><FaqQuestion question={question} /><p>{answer}</p></details>)}</div>
+      <div class="studio-section-heading"><span class="studio-eyebrow"><i></i>常见问题 <span>FAQ</span></span><SectionTitle id="faq-title">你可能还想了解</SectionTitle><p>关于产品、部署和 AI 协作。</p><a class="studio-resource-link studio-text-action" href="https://jiying.docs.baizhi.cloud/" target="_blank" rel="noopener noreferrer"><span>查看产品文档</span><Icon name="hugeicons:arrow-up-right-01" size={20} aria-hidden="true" /></a></div>
+      <FaqAccordion client:visible items={faqs.map(([question, answer], index) => ({ id: `faq-${index}`, question, answer }))} />
     </section>
 
     <section class="studio-start studio-container" id="get-started" aria-labelledby="start-title">

@@ -11,6 +11,8 @@ npm ci
 npm run dev
 ```
 
+`astro.config.mjs` 按 Astro 命令将 Vite 缓存隔离到 `node_modules/.vite/astro-*`。开发服务运行期间执行检查（`sync`）或构建不会覆盖其预打包依赖，避免 Water 等延迟加载组件请求失效并返回 504。
+
 ## 生产构建
 
 ```bash
@@ -33,13 +35,19 @@ SITE_URL=https://example.com PUBLIC_BASE_PATH=/ npm run build
 
 全站最终字号由 `src/styles/typography.css` 统一管理，通过语义分组覆盖组件中的旧字号。主标题 48px、分区标题 32px、小标题 18px、正文 14px、辅助文字 12px；800px 及以下仅将主标题和分区标题改为 32px、24px。品牌固定 24px，正文行高 1.8，按钮和导航行高 1.4。新增文案按这些角色归类，避免增加零散字号。
 
+静态区块与七个平台按钮使用 `@iconify-json/hugeicons`，通过 `astro-icon` 的显式图标白名单及构建时提取 SVG 数据渲染，不在浏览器加载整个图标集。Linux 两个入口使用终端图标，仍以 AMD / ARM 文字区分；React 交互组件原有的 Lucide 图标保持不变。Hugeicons 的 MIT 许可证位于 `public/licenses/hugeicons.txt`。
+
 shadcn/ui 配置位于 `components.json`，组件源码保存在 `src/components/ui/`，`@/` 指向 `src/`。`ui/button.tsx` 按源码接入 [beUI Button](https://beui.dev/components/motion/button)，保留官方胶囊尺寸、悬停缩放、弹簧按压及可选 ripple；本地适配补充主题选择器、图标尺寸、禁用保护和共享样式函数；悬停保留官方 `1.02` 倍缩放，不上浮，并通过 CSS 增加主题色边框光晕（不依赖 React hydration）。`Button` 用于实际操作，`ButtonLink` 保留原生链接语义；默认变体为 `primary`、尺寸为 `md`。源码版权声明随站点发布在 `public/licenses/beui.txt`。
 
-`HeaderActions.tsx`、`ActionButton.tsx`、`ClientPlatforms`、`CopyCommandButton.tsx` 和 `WorkspaceTabs` 使用 `client:load` 激活 React / Motion。复制按钮使用 `components/motion/action-swap-cascade.tsx` 中按需接入的 beUI Action Swap Cascade 文本/图标原语，在真实复制结果返回后逐字滚动切换状态；保留失败时手动选择命令和重试，减少动态效果时直接更新内容，并保持 SSR 首次渲染一致。复制状态和标签页键盘交互由 React 管理，下载清单在客户端列表完成 hydration 后只请求一次，避免旧 DOM 脚本与 hydration 冲突。系统开启减少动态效果时关闭缩放与 ripple，触屏不启用悬停缩放。`FaqQuestion.tsx` 使用服务端渲染的原生 `summary`，不套用按钮边框与 hover 样式，保留列表分隔线、展开收起及键盘焦点提示，不将其包进 island 或嵌套按钮；无 JavaScript 时 FAQ、链接和所有场景正文仍可使用。普通导航和正文链接继续使用语义化链接，产品示意图里的控件仅作展示。
+`HeaderActions.tsx`、`ActionButton.tsx`、`ClientPlatforms`、`CopyCommandButton.tsx` 和 `WorkspaceTabs` 使用 `client:load` 激活 React / Motion。复制按钮使用 `components/motion/action-swap-cascade.tsx` 中按需接入的 beUI Action Swap Cascade 文本/图标原语，在真实复制结果返回后逐字滚动切换状态；保留失败时手动选择命令和重试，减少动态效果时直接更新内容，并保持 SSR 首次渲染一致。复制状态和标签页键盘交互由 React 管理，下载清单在客户端列表完成 hydration 后只请求一次，避免旧 DOM 脚本与 hydration 冲突。系统开启减少动态效果时关闭缩放与 ripple，触屏不启用悬停缩放。`FaqQuestion.tsx` 的 `FaqAccordion` 通过 `client:visible` 接入 beUI Bouncy Accordion，使用图标行、单项展开、分组圆角及弹簧高度/位置过渡，问题文字不截断，仍不套用全站按钮边框或 hover 光晕。保留键盘 Enter/Space、方向键及 Home/End 导航；关闭内容设置 `aria-hidden` 和 `inert`，减少动态效果时立即切换。SSR 和 hydration 前保留可操作的原生 `details/summary`，避免无 JavaScript 时丢失答案；无 JavaScript 时 FAQ、链接和所有场景正文仍可使用。普通导航和正文链接继续使用语义化链接，产品示意图里的控件仅作展示。
 
 Hero 标语通过 `components/motion/text-cascade.tsx` 使用 beUI Text Cascade（复用 Action Swap 的逐字滚动原语）。固定文案在 hydration 后播放，并以原始速度每 5 秒重播一次；SSR 保留完整可见文字，减少动态效果时静态显示，沿用原来的容器自适应字号与配色。
 
+Hero 关系图的 13 条曲线各有正反两向 SVG 光点，共 26 个可复用节点；每 500ms 启动一个单次动画，到达终点后隐藏。调度按完整轮次打乱顺序，覆盖所有方向且不会重启仍在运行的节点。页面隐藏或减少动态效果时暂停，恢复时不补发积压动画；连线和光点路径随节点尺寸变化同步更新。
+
 首页正文的 7 个区块主标题共用 `SectionTitle.astro`，标题统一正体，保留后半句主题色。标题前的 `loader-dither.tsx` 按需接入 beUI Loader 的 Dither 变体（4×4 Bayer 点阵），通过 `client:visible` 启动，使用 24px 主题色装饰，不播报加载状态；减少动态效果时改为较柔和的透明度脉动。
+
+开放能力区域使用四张 Shader Background 卡片，统一使用 beUI 的 Water 水波变体及接近页面底色的低速黑灰背景，底层依赖 `@paper-design/shaders-react`。背景通过 `client:visible` 加载，卡片文案始终由 Astro 输出；遮罩保证阅读对比度，无 WebGL2 或 JavaScript 时保留静态底色。渲染像素上限为每张 350,000，离开视口或页面隐藏时由 Paper Shaders 暂停渲染，减少动态效果时将速度置零。相关 Apache-2.0 许可证及 NOTICE 随站点保存在 `public/licenses/`。
 
 `src/styles/shadcn.css` 提供 Tailwind utilities、深色变体和映射到 Tailwind teal 主题的语义颜色。保留现有 CSS reset，不重复引入 Tailwind Preflight；utilities 使用非分层输出，以便覆盖现有非分层基础样式。新增交互组件时，在完整的 React 组件边界上按需使用 `client:load` 或 `client:visible`。
 
