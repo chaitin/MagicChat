@@ -29,7 +29,7 @@ export function App() {
   return (
     <AnimatedToastProvider>
       <div className="app-shell">
-        <LoginPage theme={theme} onThemeChange={setTheme} />
+        <LoginPage theme={theme} resolvedTheme={resolvedTheme} onThemeChange={setTheme} />
       </div>
     </AnimatedToastProvider>
   )

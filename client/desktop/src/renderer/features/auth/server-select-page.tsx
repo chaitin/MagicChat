@@ -6,8 +6,10 @@ import {
   EnergyIcon,
   Loading03Icon,
 } from "@hugeicons/core-free-icons"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import { Button as BeButton } from "@/components/motion/button/base"
+import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PoweredBy } from "@/components/powered-by"
 import { SettingsDialog } from "@/components/settings-dialog"
@@ -65,11 +67,18 @@ export function ServerSelectPage({
   onCatalogChange: (catalog: ServerCatalog) => void
   onSelect: (serverId: string) => Promise<AuthResult<Connection>>
 }) {
+  const { showToast } = useAnimatedToast()
+  const shownInitialError = useRef("")
   const [selectedId, setSelectedId] = useState("")
-  const [problem, setProblem] = useState("")
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [checks, setChecks] = useState<Record<string, CheckState>>({})
   const serverKey = catalog.servers.map((server) => `${server.id}:${server.url}`).join("|")
+
+  useEffect(() => {
+    if (!initialError || shownInitialError.current === initialError) return
+    shownInitialError.current = initialError
+    showToast({ status: "error", title: "无法加载服务器", description: initialError })
+  }, [initialError, showToast])
 
   useEffect(() => {
     if (loading || !serverKey) return
@@ -135,29 +144,34 @@ export function ServerSelectPage({
         ...value,
         [serverId]: result.ok ? result.data : unavailableCheck(serverId, result.error.message),
       }))
+      if (!result.ok) {
+        showToast({ status: "error", title: "服务器检测失败", description: result.error.message })
+      }
     } catch {
       setChecks((value) => ({
         ...value,
         [serverId]: unavailableCheck(serverId, "无法检测服务器"),
       }))
+      showToast({ status: "error", title: "无法检测服务器" })
     }
   }
 
   async function select(serverId: string) {
     if (loading || selectedId) return
     setSelectedId(serverId)
-    setProblem("")
     const result = await onSelect(serverId)
-    if (!result.ok) setProblem(result.error.message)
+    if (!result.ok) {
+      showToast({ status: "error", title: "无法进入服务器", description: result.error.message })
+    }
     setSelectedId("")
   }
 
   return (
     <main className="login-page login-page--shader">
-      <div className="auth-surface auth-surface--shader grid min-h-full grid-rows-[1fr_auto] gap-4 p-6 text-neutral-800 md:p-10">
+      <div className="auth-surface auth-surface--shader grid min-h-full grid-rows-[1fr_auto] gap-4 p-6 text-foreground md:p-10">
         <div className="flex items-center justify-center">
           <div className="flex w-full max-w-sm flex-col gap-3">
-            <div className="flex h-8 items-center justify-between text-sm">
+            <div className="flex h-8 items-center justify-between text-sm text-muted-foreground">
               <span
                 className="flex select-none items-center gap-2 font-medium"
                 data-slot="page-brand"
@@ -180,14 +194,6 @@ export function ServerSelectPage({
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {(problem || initialError) && (
-                  <p
-                    role="alert"
-                    className="rounded-md border border-destructive/30 p-3 text-sm text-destructive"
-                  >
-                    {problem || initialError}
-                  </p>
-                )}
                 <div className="space-y-3">
                   <div className="max-h-72 overflow-y-auto pr-1">
                     <ItemGroup className="gap-3" aria-label="可选服务器">
@@ -216,9 +222,15 @@ export function ServerSelectPage({
                               return (
                                 <BeButton
                                   type="button"
-                                  variant={isUnavailable ? "destructive" : "primary"}
+                                  variant="outline"
                                   size="sm"
-                                  className="gap-2 rounded-md text-sm"
+                                  className={cn(
+                                    "gap-2 text-sm",
+                                    (isConnecting || isChecking) &&
+                                      "border-border text-muted-foreground",
+                                    isUnavailable &&
+                                      "border-destructive/80 text-destructive/85 hover:border-destructive/90 hover:bg-destructive/10 hover:text-destructive",
+                                  )}
                                   disabled={loading || Boolean(selectedId) || isChecking}
                                   aria-label={
                                     isUnavailable
@@ -255,7 +267,7 @@ export function ServerSelectPage({
                                     : isChecking
                                       ? "加载"
                                       : isUnavailable
-                                        ? "错误"
+                                        ? "重试"
                                         : "进入"}
                                 </BeButton>
                               )
@@ -269,7 +281,7 @@ export function ServerSelectPage({
                     type="button"
                     variant="outline"
                     size="md"
-                    className="w-full rounded-md"
+                    className="w-full"
                     disabled={loading || Boolean(selectedId)}
                     onClick={() => setSettingsOpen(true)}
                   >

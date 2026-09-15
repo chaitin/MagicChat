@@ -6,7 +6,7 @@ import { PoweredBy } from "@/components/powered-by"
 export function SigningInPage() {
   return (
     <main className="login-page login-page--shader">
-      <div className="auth-surface auth-surface--shader grid min-h-full grid-rows-[1fr_auto] gap-4 p-6 text-neutral-800 md:p-10">
+      <div className="auth-surface auth-surface--shader grid min-h-full grid-rows-[1fr_auto] gap-4 p-6 text-foreground md:p-10">
         <div className="flex items-center justify-center">
           <Card className="w-full max-w-sm">
             <CardContent className="flex min-h-64 flex-col items-center justify-center gap-4 text-center">

@@ -11,7 +11,7 @@ export function PoweredBy({ className, ...props }: ComponentProps<"footer">) {
 
   return (
     <footer
-      className={cn("text-center text-xs text-neutral-600", className)}
+      className={cn("text-center text-xs text-black/40 dark:text-white/40", className)}
       data-slot="powered-by"
       {...props}
     >

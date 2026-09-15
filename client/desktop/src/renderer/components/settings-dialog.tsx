@@ -103,12 +103,17 @@ export function SettingsDialog({
     if (section !== "about" || systemInfo || !window.desktop) return
     let cancelled = false
     void window.desktop.getSystemInfo().then((result) => {
-      if (!cancelled && result.ok) setSystemInfo(result.data)
+      if (cancelled) return
+      if (result.ok) {
+        setSystemInfo(result.data)
+      } else {
+        showToast({ status: "error", title: "无法获取系统信息", description: result.error.message })
+      }
     })
     return () => {
       cancelled = true
     }
-  }, [section, systemInfo])
+  }, [section, showToast, systemInfo])
 
   function handleOpenChange(nextOpen: boolean) {
     if (open === undefined) setInternalOpen(nextOpen)
@@ -368,12 +373,17 @@ function AboutItem({
   href: string
   action: string
 }) {
-  function openLink() {
-    if (window.desktop) {
-      void window.desktop.openExternalLink(href)
+  const { showToast } = useAnimatedToast()
+
+  async function openLink() {
+    if (!window.desktop) {
+      window.open(href, "_blank", "noopener,noreferrer")
       return
     }
-    window.open(href, "_blank", "noopener,noreferrer")
+    const result = await window.desktop.openExternalLink(href)
+    if (!result.ok) {
+      showToast({ status: "error", title: "无法打开链接", description: result.error.message })
+    }
   }
 
   return (

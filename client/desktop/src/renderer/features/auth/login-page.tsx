@@ -1,17 +1,15 @@
-import { useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   ArrowLeftRightIcon,
-  CheckmarkCircle02Icon,
-  Layers01Icon,
   Loading03Icon,
-  Logout01Icon,
   RefreshIcon,
   WifiDisconnected01Icon,
 } from "@hugeicons/core-free-icons"
+import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import { Button as BeButton } from "@/components/motion/button/base"
 import { ShaderBackground } from "@/components/motion/shader-background"
-import { FieldDescription, FieldGroup } from "@/components/ui/field"
+import { FieldGroup } from "@/components/ui/field"
 import { LoginForm, LoginFrame } from "@/components/login-form"
 import { PoweredBy } from "@/components/powered-by"
 import { SettingsDialog } from "@/components/settings-dialog"
@@ -21,11 +19,14 @@ import { useConnection } from "./use-connection"
 
 export function LoginPage({
   theme,
+  resolvedTheme,
   onThemeChange,
 }: {
   theme: "light" | "dark" | "system"
+  resolvedTheme: "light" | "dark"
   onThemeChange: (theme: "light" | "dark" | "system") => void
 }) {
+  const { showToast } = useAnimatedToast()
   const {
     catalog,
     connection,
@@ -39,32 +40,18 @@ export function LoginPage({
     retry,
   } = useConnection()
   const [screen, setScreen] = useState<"servers" | "login" | "signing-in">("servers")
+  const shownConnectionError = useRef("")
   const [busy, setBusy] = useState(false)
-  const [notice, setNotice] = useState("")
-  const [logoutPending, setLogoutPending] = useState(false)
 
-  async function logout() {
-    if (!window.desktop || !connection || logoutPending) return
-    setLogoutPending(true)
-    setNotice("")
-    try {
-      const result = await window.desktop.auth.signOut(connection.targetId)
-      if (!result.ok) {
-        setNotice(result.error.message)
-        return
-      }
-      accept({ ...connection, user: null })
-      if (result.data.localOnly) setNotice("已清除本机登录状态，但未能确认服务器撤销会话。")
-    } catch {
-      setNotice("退出登录未完成，请重试。")
-    } finally {
-      setLogoutPending(false)
-    }
-  }
+  useEffect(() => {
+    if (screen !== "login" || !error || shownConnectionError.current === error.message) return
+    shownConnectionError.current = error.message
+    showToast({ status: "error", title: "无法连接服务器", description: error.message })
+  }, [error, screen, showToast])
 
   if (screen === "servers") {
     return (
-      <AuthBackground>
+      <AuthBackground theme={resolvedTheme}>
         <ServerSelectPage
           catalog={catalog}
           loading={loading}
@@ -75,7 +62,7 @@ export function LoginPage({
           onCatalogChange={acceptCatalog}
           onSelect={async (serverId) => {
             const result = await connect(serverId)
-            if (result.ok) setScreen("login")
+            if (result.ok) setScreen(result.data.user ? "signing-in" : "login")
             return result
           }}
         />
@@ -83,31 +70,30 @@ export function LoginPage({
     )
   }
 
-  if (screen === "signing-in") {
+  if (screen === "signing-in" || connection?.user) {
     return (
-      <AuthBackground>
+      <AuthBackground theme={resolvedTheme}>
         <SigningInPage />
       </AuthBackground>
     )
   }
 
   return (
-    <AuthBackground>
+    <AuthBackground theme={resolvedTheme}>
       <main className="login-page login-page--shader">
-        <div className="auth-surface auth-surface--shader grid min-h-full grid-rows-[1fr_auto] gap-4 p-6 text-neutral-800 md:p-10">
+        <div className="auth-surface auth-surface--shader grid min-h-full grid-rows-[1fr_auto] gap-4 p-6 text-foreground md:p-10">
           <div className="flex items-center justify-center">
             <div className="flex w-full max-w-sm flex-col gap-3">
-              <div className="flex h-8 items-center justify-between gap-2 text-sm">
+              <div className="flex h-8 items-center justify-between gap-2 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <BeButton
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="gap-2 rounded-md px-2.5 text-sm text-neutral-800"
-                    disabled={busy || logoutPending}
+                    className="gap-2 rounded-md px-2.5 text-sm text-muted-foreground hover:text-foreground"
+                    disabled={busy}
                     onClick={() => {
                       clearError()
-                      setNotice("")
                       setScreen("servers")
                     }}
                   >
@@ -118,40 +104,24 @@ export function LoginPage({
                 <SettingsDialog
                   theme={theme}
                   catalog={catalog}
-                  disabled={busy || logoutPending || isPreview}
+                  disabled={busy || isPreview}
                   onThemeChange={onThemeChange}
                   onCatalogChange={acceptCatalog}
                 />
               </div>
-              {notice && (
-                <p
-                  role="status"
-                  className="rounded-md border bg-background p-3 text-sm text-muted-foreground"
-                >
-                  {notice}
-                </p>
-              )}
-              {!loading && !error && connection && !connection.user ? (
+              {!loading && !error && connection ? (
                 <LoginForm
                   key={connection.targetId}
                   connection={connection}
                   isPreview={isPreview}
                   onBusyChange={setBusy}
-                  onSignedIn={({ user, warning }) => {
-                    setNotice(warning ?? "")
+                  onSignedIn={({ user }) => {
                     accept({ ...connection, user, lastEmail: user.email })
                     setScreen("signing-in")
                   }}
                 />
               ) : (
-                <LoginFrame
-                  heading={`登录到 ${connection?.info.organizationName ?? "服务器"}`}
-                  footer={
-                    <FieldDescription className="px-6 text-center text-neutral-900">
-                      会话由桌面端管理，不保存密码。
-                    </FieldDescription>
-                  }
-                >
+                <LoginFrame heading={`登录到 ${connection?.info.organizationName ?? "服务器"}`}>
                   <section aria-label="账号登录">
                     <FieldGroup>
                       {loading ? (
@@ -165,7 +135,6 @@ export function LoginPage({
                             aria-hidden
                           />
                           <h2 className="font-medium">正在连接服务器</h2>
-                          <FieldDescription>获取登录方式，并检查已有会话。</FieldDescription>
                         </div>
                       ) : error ? (
                         <div
@@ -177,62 +146,12 @@ export function LoginPage({
                             className="size-6 text-muted-foreground"
                             aria-hidden
                           />
-                          <h2 className="font-medium">暂时无法连接</h2>
-                          <FieldDescription>{error.message}</FieldDescription>
                           <BeButton type="button" variant="outline" onClick={() => void retry()}>
                             <HugeiconsIcon icon={RefreshIcon} aria-hidden />
                             重新连接
                           </BeButton>
                         </div>
-                      ) : (
-                        connection?.user && (
-                          <div className="flex flex-col items-center gap-4 text-center">
-                            <div className="flex size-14 items-center justify-center rounded-full bg-muted text-xl font-medium">
-                              {Array.from(connection.user.name)[0]}
-                            </div>
-                            <div className="space-y-1">
-                              <h2 className="text-lg font-medium">{connection.user.name}</h2>
-                              <FieldDescription>{connection.user.email}</FieldDescription>
-                            </div>
-                            <p className="flex items-center gap-2 text-sm">
-                              <HugeiconsIcon
-                                icon={CheckmarkCircle02Icon}
-                                className="size-4"
-                                aria-hidden
-                              />
-                              登录成功，会话已建立
-                            </p>
-                            <div className="w-full space-y-3 rounded-lg border p-4">
-                              <HugeiconsIcon
-                                icon={Layers01Icon}
-                                className="mx-auto size-5 text-muted-foreground"
-                                aria-hidden
-                              />
-                              <h3 className="text-sm font-medium">工作空间正在构建中</h3>
-                              <FieldDescription>
-                                登录已经就绪，接下来完善会话列表和聊天体验。
-                              </FieldDescription>
-                            </div>
-                            <BeButton
-                              type="button"
-                              variant="outline"
-                              onClick={() => void logout()}
-                              disabled={logoutPending}
-                            >
-                              {logoutPending ? (
-                                <HugeiconsIcon
-                                  icon={Loading03Icon}
-                                  className="animate-spin"
-                                  aria-hidden
-                                />
-                              ) : (
-                                <HugeiconsIcon icon={Logout01Icon} aria-hidden />
-                              )}
-                              {logoutPending ? "正在退出" : "退出登录"}
-                            </BeButton>
-                          </div>
-                        )
-                      )}
+                      ) : null}
                     </FieldGroup>
                   </section>
                 </LoginFrame>
@@ -246,12 +165,14 @@ export function LoginPage({
   )
 }
 
-function AuthBackground({ children }: { children: ReactNode }) {
+function AuthBackground({ children, theme }: { children: ReactNode; theme: "light" | "dark" }) {
   return (
-    <div className="relative isolate h-full overflow-hidden bg-neutral-400">
+    <div className="relative isolate h-full overflow-hidden bg-background">
       <ShaderBackground
         variant="water"
         speed={1}
+        colorBack={theme === "dark" ? "#111111" : "#ededed"}
+        colorHighlight={theme === "dark" ? "#2c2c2c" : "#ffffff"}
         className="pointer-events-none fixed inset-0 z-0"
         aria-hidden
       />

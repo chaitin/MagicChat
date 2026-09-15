@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
+import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import {
   normalizeEmail,
   resolveLoginMethod,
@@ -8,6 +9,8 @@ import {
   type SignInResult,
 } from "../../../shared/auth"
 
+const CODE_COUNTDOWN_SECONDS = 30
+
 export type LoginFormProps = {
   connection: Connection
   isPreview: boolean
@@ -16,6 +19,7 @@ export type LoginFormProps = {
 }
 
 export function useLoginForm({ connection, onSignedIn, onBusyChange }: LoginFormProps) {
+  const { showToast } = useAnimatedToast()
   const [preferred, setPreferred] = useState<LoginMethod>("email-code")
   const [email, setEmail] = useState(connection.lastEmail)
   const [secret, setSecret] = useState("")
@@ -23,7 +27,6 @@ export function useLoginForm({ connection, onSignedIn, onBusyChange }: LoginForm
   const [pending, setPending] = useState<"login" | "code" | "third-party" | null>(null)
   const [pendingProvider, setPendingProvider] = useState("")
   const [problem, setProblem] = useState<AuthProblem | null>(null)
-  const [notice, setNotice] = useState("")
   const [retry, setRetry] = useState({ email: "", until: 0 })
   const [now, setNow] = useState(Date.now)
   const flight = useRef(false)
@@ -48,6 +51,7 @@ export function useLoginForm({ connection, onSignedIn, onBusyChange }: LoginForm
 
   function fail(error: AuthProblem) {
     setProblem(error)
+    showToast({ status: "error", title: error.message })
     if (error.retryAfterSeconds) {
       const time = Date.now()
       setNow(time)
@@ -58,7 +62,6 @@ export function useLoginForm({ connection, onSignedIn, onBusyChange }: LoginForm
   async function operate(kind: "login" | "code") {
     if (flight.current || !window.desktop || !method) return
     setProblem(null)
-    setNotice("")
     let account: string
     try {
       account = normalizeEmail(email)
@@ -91,11 +94,9 @@ export function useLoginForm({ connection, onSignedIn, onBusyChange }: LoginForm
         setNow(time)
         setRetry({
           email: account.toLowerCase(),
-          until: time + result.data.retryAfterSeconds * 1000,
+          until: time + CODE_COUNTDOWN_SECONDS * 1000,
         })
-        setNotice(
-          `验证码已发送，请查收邮箱（${Math.ceil(result.data.expiresInSeconds / 60)} 分钟内有效）。`,
-        )
+        showToast({ status: "success", title: "验证码已发送" })
       } else {
         const result = await window.desktop.auth.signIn({
           targetId: connection.targetId,
@@ -130,7 +131,6 @@ export function useLoginForm({ connection, onSignedIn, onBusyChange }: LoginForm
     setPending("third-party")
     setPendingProvider(providerKey)
     setProblem(null)
-    setNotice("")
     onBusyChange(true)
     try {
       const result = await window.desktop.auth.signInThirdParty({
@@ -162,14 +162,12 @@ export function useLoginForm({ connection, onSignedIn, onBusyChange }: LoginForm
     setSecret("")
     setVisible(false)
     setProblem(null)
-    setNotice("")
   }
 
   function changeEmail(value: string) {
     setEmail(value)
     setSecret("")
     setProblem(null)
-    setNotice("")
   }
 
   function changeSecret(value: string) {
@@ -185,7 +183,6 @@ export function useLoginForm({ connection, onSignedIn, onBusyChange }: LoginForm
     pending,
     pendingProvider,
     problem,
-    notice,
     method,
     password,
     remaining,

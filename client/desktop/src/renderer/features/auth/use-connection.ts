@@ -13,7 +13,6 @@ const official: ServerProfile = {
   id: OFFICIAL_SERVER_ID,
   name: "演示服务器",
   url: OFFICIAL_SERVER_URL,
-  allowInsecureHttp: false,
   builtin: true,
 }
 const previewCatalog: ServerCatalog = { activeServerId: OFFICIAL_SERVER_ID, servers: [official] }

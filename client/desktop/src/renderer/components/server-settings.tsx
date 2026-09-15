@@ -9,6 +9,7 @@ import {
   Radar03Icon,
 } from "@hugeicons/core-free-icons"
 import { useEffect, useState, type FormEvent } from "react"
+import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import { Button as BeButton } from "@/components/motion/button/base"
 import { Input as BeInput } from "@/components/motion/input"
 import {
@@ -22,7 +23,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   normalizeServer,
@@ -49,9 +50,9 @@ export function ServerSettings({
   disabled: boolean
   onCatalogChange: (catalog: ServerCatalog) => void
 }) {
+  const { showToast } = useAnimatedToast()
   const [checks, setChecks] = useState<Record<string, CheckState>>({})
   const [editor, setEditor] = useState<Editor | null>(null)
-  const [problem, setProblem] = useState("")
   const [checkingAll, setCheckingAll] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState("")
@@ -65,28 +66,43 @@ export function ServerSettings({
     if (checkingAll) return
     if (!window.desktop) {
       setChecks((value) => failedChecks(value, targetCatalog.servers, "桌面服务暂不可用"))
+      showToast({ status: "error", title: "桌面服务暂不可用" })
       return
     }
-    setProblem("")
     setCheckingAll(true)
     setChecks((value) => ({
       ...value,
       ...Object.fromEntries(targetCatalog.servers.map((item) => [item.id, "checking" as const])),
     }))
     try {
-      const result = await window.desktop.auth.checkServers()
-      if (!result.ok) {
-        setProblem(result.error.message)
-        setChecks((value) => failedChecks(value, targetCatalog.servers, result.error.message))
-        return
+      const failures = await Promise.all(
+        targetCatalog.servers.map(async (server) => {
+          let check: ServerCheck
+          let failure = ""
+          try {
+            const result = await window.desktop!.auth.checkServer(server.id)
+            if (result.ok) {
+              check = result.data
+            } else {
+              failure = result.error.message
+              check = unavailableCheck(server.id, failure)
+            }
+          } catch {
+            failure = "无法检测服务器"
+            check = unavailableCheck(server.id, failure)
+          }
+          setChecks((value) => ({ ...value, [server.id]: check }))
+          return failure
+        }),
+      )
+      const failed = failures.filter(Boolean)
+      if (failed.length > 0) {
+        showToast({
+          status: "error",
+          title: `${failed.length} 个服务器检测失败`,
+          description: failed[0],
+        })
       }
-      setChecks((value) => ({
-        ...value,
-        ...Object.fromEntries(result.data.map((item) => [item.serverId, item])),
-      }))
-    } catch {
-      setProblem("无法检测服务器，请稍后重试")
-      setChecks((value) => failedChecks(value, targetCatalog.servers, "无法检测服务器，请稍后重试"))
     } finally {
       setCheckingAll(false)
     }
@@ -99,7 +115,13 @@ export function ServerSettings({
   }, [])
 
   function beginEdit(profile?: ServerProfile) {
-    setProblem("")
+    if (profile?.id === catalog.activeServerId) {
+      showToast({
+        status: "info",
+        title: "当前服务器地址不可修改",
+        description: "切换到其他服务器后再修改地址",
+      })
+    }
     setEditor(
       profile
         ? {
@@ -114,28 +136,30 @@ export function ServerSettings({
   async function save(event: FormEvent) {
     event.preventDefault()
     if (!editor || !window.desktop || saving) return
-    setProblem("")
     let name: string
-    let server: { url: string; allowInsecureHttp: boolean }
+    let server: { url: string }
     try {
       name = normalizeServerName(editor.name)
-      server = normalizeServer({ url: editor.address, allowInsecureHttp: false })
+      server = normalizeServer({ url: editor.address })
     } catch (error) {
-      setProblem(error instanceof Error ? error.message : "请检查服务器配置")
+      showToast({
+        status: "error",
+        title: error instanceof Error ? error.message : "请检查服务器配置",
+      })
       return
     }
     setSaving(true)
     try {
       const result = await window.desktop.auth.saveServer({ id: editor.id, name, ...server })
       if (!result.ok) {
-        setProblem(result.error.message)
+        showToast({ status: "error", title: "无法保存服务器", description: result.error.message })
         return
       }
       onCatalogChange(result.data.catalog)
       setEditor(null)
       void checkAll(result.data.catalog)
     } catch {
-      setProblem("无法保存服务器，请稍后重试")
+      showToast({ status: "error", title: "无法保存服务器，请稍后重试" })
     } finally {
       setSaving(false)
     }
@@ -143,12 +167,11 @@ export function ServerSettings({
 
   async function remove(id: string) {
     if (!window.desktop || deleting) return
-    setProblem("")
     setDeleting(id)
     try {
       const result = await window.desktop.auth.deleteServer(id)
       if (!result.ok) {
-        setProblem(result.error.message)
+        showToast({ status: "error", title: "无法删除服务器", description: result.error.message })
         return
       }
       onCatalogChange(result.data)
@@ -160,7 +183,7 @@ export function ServerSettings({
       if (editor?.id === id) setEditor(null)
       setDeleteTarget(null)
     } catch {
-      setProblem("无法删除服务器，请稍后重试")
+      showToast({ status: "error", title: "无法删除服务器，请稍后重试" })
     } finally {
       setDeleting("")
     }
@@ -191,8 +214,6 @@ export function ServerSettings({
           </BeButton>
         </div>
       </div>
-
-      {problem && <FieldError role="alert">{problem}</FieldError>}
 
       <Dialog
         open={Boolean(editor)}
@@ -235,11 +256,6 @@ export function ServerSettings({
                     maxLength={2048}
                     disabled={saving || activeAddressLocked}
                   />
-                  {activeAddressLocked && (
-                    <FieldDescription>
-                      当前服务器只能修改名称；如需修改地址，请先返回服务器选择页并切换。
-                    </FieldDescription>
-                  )}
                 </Field>
               </FieldGroup>
               <div className="flex justify-end gap-2">

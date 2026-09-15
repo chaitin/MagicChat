@@ -2,17 +2,11 @@
 import type { ComponentProps, ReactNode } from "react"
 import { cn } from "cn"
 import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  Login03Icon,
-  Loading03Icon,
-  Tick02Icon,
-  ViewIcon,
-  ViewOffSlashIcon,
-} from "@hugeicons/core-free-icons"
+import { Login03Icon, Loading03Icon, ViewIcon, ViewOffSlashIcon } from "@hugeicons/core-free-icons"
 import { Button as BeButton } from "@/components/motion/button/base"
 import { Input as BeInput } from "@/components/motion/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Marker, MarkerContent } from "@/components/ui/marker"
 import { ActionSwapText } from "@/components/motion/action-swap"
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs"
@@ -63,13 +57,11 @@ export function LoginForm(props: LoginFormProps) {
                 <>
                   <Tabs
                     value={method}
+                    variant="underline"
+                    className="mx-auto"
                     onValueChange={(value) => form.changeMethod(value as "email-code" | "password")}
-                    className="w-full"
                   >
-                    <TabsList
-                      className="w-full bg-muted [&>div]:flex-1 [&_[role=tab]]:w-full"
-                      aria-label="登录方式"
-                    >
+                    <TabsList aria-label="登录方式">
                       <TabsTrigger value="email-code" disabled={Boolean(pending)}>
                         验证码登录
                       </TabsTrigger>
@@ -157,27 +149,12 @@ export function LoginForm(props: LoginFormProps) {
                   )}
                 </div>
               </Field>
-              {(problem || form.notice) && (
-                <div aria-live="polite" className="space-y-2">
-                  {problem && <FieldError id="login-problem">{problem.message}</FieldError>}
-                  {form.notice && (
-                    <FieldDescription className="flex items-start gap-2">
-                      <HugeiconsIcon
-                        icon={Tick02Icon}
-                        className="mt-0.5 size-4 shrink-0"
-                        aria-hidden
-                      />
-                      {form.notice}
-                    </FieldDescription>
-                  )}
-                </div>
-              )}
               <Field>
                 <BeButton
                   type="submit"
                   variant="primary"
                   size="md"
-                  className="w-full rounded-md"
+                  className="w-full bg-xgui-brand text-xgui-text-on-color hover:bg-xgui-brand-5 hover:text-xgui-text-on-color"
                   disabled={isPreview || Boolean(pending)}
                   aria-label={pending === "login" ? "正在登录" : "登录"}
                 >
@@ -190,12 +167,6 @@ export function LoginForm(props: LoginFormProps) {
                 </BeButton>
               </Field>
             </>
-          )}
-          {!method && (problem || form.notice) && (
-            <div aria-live="polite" className="space-y-2">
-              {problem && <FieldError id="login-problem">{problem.message}</FieldError>}
-              {form.notice && <FieldDescription>{form.notice}</FieldDescription>}
-            </div>
           )}
           {connection.info.thirdPartyProviders.length > 0 && (
             <div className="flex flex-col gap-4">
@@ -211,7 +182,7 @@ export function LoginForm(props: LoginFormProps) {
                       type="button"
                       variant="outline"
                       size="md"
-                      className="w-full rounded-md"
+                      className="w-full"
                       disabled={isPreview || Boolean(pending)}
                       onClick={() => void form.signInWithThirdParty(provider.key)}
                     >

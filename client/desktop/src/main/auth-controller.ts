@@ -54,7 +54,6 @@ const officialServer: ServerProfile = {
   id: OFFICIAL_SERVER_ID,
   name: "演示服务器",
   url: OFFICIAL_SERVER_URL,
-  allowInsecureHttp: false,
   builtin: true,
 }
 
@@ -287,10 +286,10 @@ export class AuthController {
       try {
         await this.savePreferences(preferences)
         this.preferences = preferences
-        return { user }
       } catch {
-        return { user, warning: "登录成功，但未能保存邮箱，下次需要重新输入。" }
+        // 邮箱记忆失败不影响已建立的认证会话。
       }
+      return { user }
     })
   }
 
@@ -328,10 +327,9 @@ export class AuthController {
     })
   }
 
-  signOut(targetId: string): Promise<{ localOnly: boolean }> {
+  signOut(targetId: string): Promise<null> {
     return this.exclusive(async () => {
       const active = this.requireTarget(targetId)
-      let localOnly = false
       try {
         await request(active.session, active.server.url, "/api/client/auth/logout", {}, 15_000, {
           headers: active.credential
@@ -340,14 +338,14 @@ export class AuthController {
           omitOrigin: Boolean(active.credential),
           credentials: active.credential ? "omit" : "include",
         })
-      } catch (error) {
-        localOnly = !(error instanceof AuthFailure && error.code === "unauthorized")
+      } catch {
+        // 无论服务端是否响应，都清理本地认证状态。
       }
       await active.session.clearStorageData({ storages: ["cookies"] })
       await active.session.cookies.flushStore()
       active.user = null
       active.credential = null
-      return { localOnly }
+      return null
     })
   }
 

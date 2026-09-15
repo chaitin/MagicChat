@@ -15,7 +15,7 @@ export const AUTH_CHANNELS = {
 } as const
 
 export type LoginMethod = "email-code" | "password"
-export type ServerPreference = { url: string; allowInsecureHttp: boolean }
+export type ServerPreference = { url: string }
 export type ServerProfile = ServerPreference & {
   id: string
   name: string
@@ -26,7 +26,6 @@ export type SaveServerInput = {
   id?: string
   name: string
   url: string
-  allowInsecureHttp: boolean
 }
 export type ServerCheck = {
   serverId: string
@@ -60,7 +59,7 @@ export type SignInInput = {
   secret: string
 }
 export type CodeResult = { expiresInSeconds: number; retryAfterSeconds: number }
-export type SignInResult = { user: AuthUser; warning?: string }
+export type SignInResult = { user: AuthUser }
 export type ThirdPartySignInInput = { targetId: string; providerKey: string }
 
 export interface AuthBridge {
@@ -76,7 +75,7 @@ export interface AuthBridge {
   signIn(input: SignInInput): Promise<AuthResult<SignInResult>>
   signInThirdParty(input: ThirdPartySignInInput): Promise<AuthResult<SignInResult>>
   sendCode(input: { targetId: string; email: string }): Promise<AuthResult<CodeResult>>
-  signOut(targetId: string): Promise<AuthResult<{ localOnly: boolean }>>
+  signOut(targetId: string): Promise<AuthResult<null>>
 }
 
 export class AuthFailure extends Error {
@@ -117,19 +116,10 @@ export function normalizeServer(input: ServerPreference): ServerPreference {
     url.search ||
     url.hash
   ) {
-    throw new AuthFailure(
-      "invalid_server",
-      "请填写 HTTP(S) 服务器地址，不要包含账号、查询参数或锚点",
-    )
-  }
-  if (url.protocol === "http:" && input.allowInsecureHttp !== true) {
-    throw new AuthFailure(
-      "insecure_server",
-      "HTTP 会明文传输登录信息，请优先使用 HTTPS；继续前需确认风险",
-    )
+    throw new AuthFailure("invalid_server", "服务器地址格式不正确")
   }
   url.pathname = url.pathname.replace(/\/+$/, "") || "/"
-  return { url: url.toString().replace(/\/$/, ""), allowInsecureHttp: url.protocol === "http:" }
+  return { url: url.toString().replace(/\/$/, "") }
 }
 
 export function resolveLoginMethod(info: AppInfo, preferred: LoginMethod): LoginMethod | null {
