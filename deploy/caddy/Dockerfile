@@ -11,19 +11,19 @@ COPY client/web/package.json client/web/pnpm-lock.yaml client/web/pnpm-workspace
 RUN pnpm install --frozen-lockfile
 
 COPY client/web/ ./
-COPY admin-web/public/assets/avatars/builtin /src/admin-web/public/assets/avatars/builtin
+COPY client/admin/public/assets/avatars/builtin /src/client/admin/public/assets/avatars/builtin
 RUN pnpm build
 
 FROM node:24-bookworm-slim AS admin-build
 
-WORKDIR /src/admin-web
+WORKDIR /src/client/admin
 
 RUN corepack enable && corepack prepare pnpm@10.32.1 --activate
 
-COPY admin-web/package.json admin-web/pnpm-lock.yaml ./
+COPY client/admin/package.json client/admin/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
-COPY admin-web/ ./
+COPY client/admin/ ./
 RUN pnpm build
 
 FROM alpine:3.22 AS bootstrap-certificate
@@ -43,7 +43,7 @@ FROM caddy:2-alpine
 COPY deploy/caddy/Caddyfile /etc/caddy/Caddyfile
 COPY --from=bootstrap-certificate /out /etc/caddy/bootstrap
 COPY --from=client-build /src/client/web/dist /srv/client
-COPY --from=admin-build /src/admin-web/dist /srv/admin
+COPY --from=admin-build /src/client/admin/dist /srv/admin
 
 RUN caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 

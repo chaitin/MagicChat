@@ -1,6 +1,6 @@
 # Push Gateway Web
 
-即应公共 Push Gateway 的管理前端源码，沿用 `admin-web` 的主题、字体、布局和 UI 组件体系。生产构建会嵌入 `push-gateway` 二进制，不单独发布或运行前端容器。
+即应公共 Push Gateway 的管理前端源码，沿用 `client/admin` 的主题、字体、布局和 UI 组件体系。生产构建会嵌入 `push-gateway` 二进制，不单独发布或运行前端容器。
 
 管理端通过同源 `/api/admin/v1` 接口完成登录、服务器管理、额度管理和 Server Key 操作。认证使用服务端 HttpOnly Session Cookie；页面不在 LocalStorage 中保存会话或 Server Key。
 

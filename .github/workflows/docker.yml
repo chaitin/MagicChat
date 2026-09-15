@@ -72,7 +72,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: |
             client/web/pnpm-lock.yaml
-            admin-web/pnpm-lock.yaml
+            client/admin/pnpm-lock.yaml
             push-gateway-web/pnpm-lock.yaml
             document-server/pnpm-lock.yaml
 
@@ -86,7 +86,7 @@ jobs:
           pnpm build
 
       - name: Verify admin web
-        working-directory: admin-web
+        working-directory: client/admin
         run: |
           pnpm install --frozen-lockfile
           pnpm test
