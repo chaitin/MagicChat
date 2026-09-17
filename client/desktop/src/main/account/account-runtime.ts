@@ -4,6 +4,9 @@ import path from "node:path"
 import type { Session } from "electron"
 import type {
   AvatarRequest,
+  AccountDataChangedEvent,
+  AccountDataDomain,
+  AccountDataSyncEvent,
   AvatarResult,
   DesktopContactDirectory,
   DesktopConversation,
@@ -17,6 +20,7 @@ import { AuthenticatedClient } from "./authenticated-client"
 import { ContactManager } from "./contact-manager"
 import { ConversationManager } from "./conversation-manager"
 import { ProjectManager } from "./project-manager"
+import { RealtimeManager, type RealtimeEvent } from "./realtime-manager"
 
 export class AccountRuntime {
   private database?: AccountDatabase
@@ -24,24 +28,30 @@ export class AccountRuntime {
   private contactManager?: ContactManager
   private projectManager?: ProjectManager
   private avatarManager?: AvatarManager
+  private realtimeManager?: RealtimeManager
   private initialization?: Promise<void>
+  private revision = 0
   private initialized = false
   private closed = false
 
   constructor(
     private readonly input: {
       userDataPath: string
+      targetId: string
       serverUrl: string
       userId: string
       userName: string
       userAvatar: string
       session: Session
       token: string
+      onSyncStateChange: (event: AccountDataSyncEvent) => void
+      onDataChanged: (event: AccountDataChangedEvent) => void
     },
   ) {}
 
   initialize(): Promise<void> {
     if (this.closed) return Promise.reject(new AuthFailure("account_closed", "账号数据已关闭"))
+    if (this.initialized) return this.realtimeManager!.waitUntilReady()
     this.initialization ??= this.initializeOnce()
     return this.initialization
   }
@@ -80,6 +90,8 @@ export class AccountRuntime {
     if (this.closed) return
     this.closed = true
     this.initialized = false
+    this.realtimeManager?.close()
+    this.realtimeManager = undefined
     this.conversationManager = undefined
     this.contactManager = undefined
     this.projectManager = undefined
@@ -122,12 +134,15 @@ export class AccountRuntime {
         this.projectManager,
         currentUserAvatar,
       )
-      const results = await Promise.allSettled([
-        this.conversationManager.initialize(),
-        this.contactManager.initialize(),
-      ])
-      const failure = results.find((result) => result.status === "rejected")
-      if (failure?.status === "rejected") throw failure.reason
+      this.realtimeManager = new RealtimeManager({
+        serverUrl: this.input.serverUrl,
+        token: this.input.token,
+        synchronize: () => this.synchronize(),
+        applyEvent: (event) => this.applyRealtimeEvent(event),
+        onStateChange: (state) =>
+          this.input.onSyncStateChange({ targetId: this.input.targetId, state }),
+      })
+      await this.realtimeManager.start()
       if (this.closed) throw new AuthFailure("account_closed", "账号数据已关闭")
       this.initialized = true
     } catch (error) {
@@ -135,6 +150,45 @@ export class AccountRuntime {
       if (error instanceof AuthFailure) throw error
       throw new AuthFailure("account_initialization", "无法初始化本地账号数据")
     }
+  }
+
+  private async synchronize() {
+    const results = await Promise.allSettled([
+      this.conversationManager!.refresh(),
+      this.contactManager!.refresh(),
+    ])
+    const failure = results.find((result) => result.status === "rejected")
+    if (failure?.status === "rejected") throw failure.reason
+    if (this.closed) throw new AuthFailure("account_closed", "账号数据已关闭")
+    this.notifyChanged(["conversations", "messages", "contacts"], [])
+  }
+
+  private async applyRealtimeEvent(event: RealtimeEvent) {
+    const conversationChange = await this.conversationManager!.applyRealtimeEvent(
+      event.name,
+      event.payload,
+    )
+    if (this.closed) return
+    if (conversationChange) {
+      const domains: AccountDataDomain[] = ["conversations"]
+      if (conversationChange.messages) domains.push("messages")
+      this.notifyChanged(domains, conversationChange.conversationIds)
+      return
+    }
+    if (await this.contactManager!.applyRealtimeEvent(event.name, event.payload)) {
+      if (this.closed) return
+      this.notifyChanged(["contacts"], [])
+    }
+  }
+
+  private notifyChanged(domains: AccountDataDomain[], conversationIds: string[]) {
+    this.revision += 1
+    this.input.onDataChanged({
+      targetId: this.input.targetId,
+      revision: this.revision,
+      domains,
+      conversationIds,
+    })
   }
 
   private assertInitialized() {

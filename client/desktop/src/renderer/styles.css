@@ -40,6 +40,7 @@
   --color-xgui-background-3: var(--xgui-background-3);
   --color-xgui-background-4: var(--xgui-background-4);
   --color-xgui-background-5: var(--xgui-background-5);
+  --color-xgui-background-6: var(--xgui-background-6);
   --color-xgui-blue: var(--xgui-blue);
   --color-xgui-brand: var(--xgui-brand);
   --color-xgui-brand-1: var(--xgui-brand-1);
@@ -53,6 +54,7 @@
   --color-xgui-foreground-5: var(--xgui-foreground-5);
   --color-xgui-footer-text: var(--xgui-footer-text);
   --color-xgui-green: var(--xgui-green);
+  --color-xgui-glyph-2: var(--xgui-glyph-2);
   --color-xgui-information-bar-tips-strong-background: var(
     --xgui-information-bar-tips-strong-background
   );
@@ -95,6 +97,7 @@
   --xgui-background-3: #f7f7f7;
   --xgui-background-4: #4c4c4c;
   --xgui-background-5: #ffffff;
+  --xgui-background-6: #e3e3e3;
   --xgui-blue: #10aeff;
   --xgui-brand: #07c160;
   --xgui-brand-1: #b4ecce;
@@ -108,6 +111,7 @@
   --xgui-foreground-5: rgba(0, 0, 0, 0.05);
   --xgui-footer-text: rgba(0, 0, 0, 0.2);
   --xgui-green: #91d300;
+  --xgui-glyph-2: rgba(0, 0, 0, 0.3);
   --xgui-information-bar-tips-strong-background: #fa9d3b;
   --xgui-information-bar-warn-weak-background: rgba(250, 81, 81, 0.1);
   --xgui-indigo: #1485ee;
@@ -164,6 +168,7 @@
   --xgui-background-3: #202020;
   --xgui-background-4: #404040;
   --xgui-background-5: #2c2c2c;
+  --xgui-background-6: #2d2d2d;
   --xgui-blue: #10aeff;
   --xgui-brand: #07c160;
   --xgui-brand-1: #023a1c;
@@ -177,6 +182,7 @@
   --xgui-foreground-5: rgba(255, 255, 255, 0.1);
   --xgui-footer-text: rgba(255, 255, 255, 0.2);
   --xgui-green: #74a800;
+  --xgui-glyph-2: rgba(255, 255, 255, 0.3);
   --xgui-information-bar-tips-strong-background: #c87d2f;
   --xgui-information-bar-warn-weak-background: rgba(250, 81, 81, 0.1);
   --xgui-indigo: #1196ff;
@@ -242,8 +248,8 @@
 }
 
 .app-shell {
-  height: 100dvh;
-  min-height: 420px;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 @media (prefers-reduced-motion: reduce) {

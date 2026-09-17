@@ -42,9 +42,12 @@ export class AccountDatabase {
         avatar TEXT NOT NULL,
         avatar_type TEXT NOT NULL DEFAULT 'group',
         avatar_id TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT '',
         last_message_at TEXT,
         last_message_summary TEXT NOT NULL,
         pinned INTEGER NOT NULL,
+        notification_muted INTEGER NOT NULL DEFAULT 0,
+        is_builtin_assistant INTEGER NOT NULL DEFAULT 0,
         unread_count INTEGER NOT NULL,
         current INTEGER NOT NULL DEFAULT 0,
         payload_json TEXT NOT NULL
@@ -111,29 +114,36 @@ export class AccountDatabase {
     `)
     this.ensureColumn("conversations", "avatar_type", "TEXT NOT NULL DEFAULT 'group'")
     this.ensureColumn("conversations", "avatar_id", "TEXT NOT NULL DEFAULT ''")
+    this.ensureColumn("conversations", "created_at", "TEXT NOT NULL DEFAULT ''")
+    this.ensureColumn("conversations", "notification_muted", "INTEGER NOT NULL DEFAULT 0")
+    this.ensureColumn("conversations", "is_builtin_assistant", "INTEGER NOT NULL DEFAULT 0")
+    this.migrateConversationVisibility()
   }
 
-  replaceCurrentConversations(conversations: StoredConversation[]) {
+  upsertCurrentConversations(conversations: StoredConversation[]) {
     const statement = this.database.prepare(`
       INSERT INTO conversations (
-        id, type, name, avatar, avatar_type, avatar_id, last_message_at,
-        last_message_summary, pinned, unread_count, current, payload_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        id, type, name, avatar, avatar_type, avatar_id, created_at, last_message_at,
+        last_message_summary, pinned, notification_muted, is_builtin_assistant,
+        unread_count, current, payload_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
       ON CONFLICT(id) DO UPDATE SET
         type = excluded.type,
         name = excluded.name,
         avatar = excluded.avatar,
         avatar_type = excluded.avatar_type,
         avatar_id = excluded.avatar_id,
+        created_at = excluded.created_at,
         last_message_at = excluded.last_message_at,
         last_message_summary = excluded.last_message_summary,
         pinned = excluded.pinned,
+        notification_muted = excluded.notification_muted,
+        is_builtin_assistant = excluded.is_builtin_assistant,
         unread_count = excluded.unread_count,
         current = 1,
         payload_json = excluded.payload_json
     `)
     this.transaction(() => {
-      this.database.exec("UPDATE conversations SET current = 0")
       for (const conversation of conversations) {
         statement.run(
           conversation.id,
@@ -142,9 +152,12 @@ export class AccountDatabase {
           conversation.avatar,
           conversation.avatarType,
           conversation.avatarId,
+          conversation.createdAt,
           conversation.lastMessageAt,
           conversation.lastMessageSummary,
           Number(conversation.pinned),
+          Number(conversation.notificationMuted),
+          Number(conversation.isBuiltinAssistant),
           conversation.unreadCount,
           JSON.stringify(conversation.payload),
         )
@@ -184,14 +197,66 @@ export class AccountDatabase {
     })
   }
 
+  hasCurrentConversation(conversationId: string) {
+    const row = this.database
+      .prepare("SELECT 1 AS found FROM conversations WHERE id = ? AND current = 1")
+      .get(conversationId) as Record<string, unknown> | undefined
+    return row?.found === 1
+  }
+
+  touchConversationActivity(conversationId: string, createdAt: string) {
+    this.database
+      .prepare(
+        `UPDATE conversations
+         SET last_message_at = CASE
+           WHEN last_message_at IS NULL OR last_message_at < ? THEN ?
+           ELSE last_message_at
+         END
+         WHERE id = ? AND current = 1`,
+      )
+      .run(createdAt, createdAt, conversationId)
+  }
+
+  setConversationPinned(conversationId: string, pinned: boolean) {
+    return (
+      this.database
+        .prepare("UPDATE conversations SET pinned = ? WHERE id = ? AND current = 1")
+        .run(Number(pinned), conversationId).changes > 0
+    )
+  }
+
+  setConversationMuted(conversationId: string, muted: boolean) {
+    return (
+      this.database
+        .prepare("UPDATE conversations SET notification_muted = ? WHERE id = ? AND current = 1")
+        .run(Number(muted), conversationId).changes > 0
+    )
+  }
+
+  removeCurrentConversation(conversationId: string) {
+    this.database.prepare("UPDATE conversations SET current = 0 WHERE id = ?").run(conversationId)
+  }
+
   listConversations(): DesktopConversation[] {
     const rows = this.database
       .prepare(
-        `SELECT id, type, name, avatar_type, avatar_id,
-                last_message_at, last_message_summary, pinned, unread_count
+        `SELECT conversations.id, conversations.type, conversations.name,
+                conversations.avatar_type, conversations.avatar_id,
+                conversations.created_at, conversations.last_message_at,
+                COALESCE((
+                  SELECT messages.content
+                  FROM messages
+                  WHERE messages.conversation_id = conversations.id
+                  ORDER BY messages.seq DESC
+                  LIMIT 1
+                ), '') AS last_message_summary,
+                conversations.pinned, conversations.notification_muted,
+                conversations.is_builtin_assistant, conversations.unread_count
          FROM conversations
-         WHERE current = 1
-         ORDER BY pinned DESC, COALESCE(last_message_at, '') DESC, name ASC`,
+         WHERE conversations.current = 1
+         ORDER BY conversations.is_builtin_assistant DESC, conversations.pinned DESC,
+                  COALESCE(conversations.last_message_at, conversations.created_at, '') DESC,
+                  conversations.name ASC`,
       )
       .all() as Array<Record<string, unknown>>
     return rows.map((row) => ({
@@ -200,9 +265,12 @@ export class AccountDatabase {
       name: String(row.name),
       avatarType: String(row.avatar_type) as DesktopConversation["avatarType"],
       avatarId: String(row.avatar_id),
+      createdAt: String(row.created_at),
       lastMessageAt: typeof row.last_message_at === "string" ? row.last_message_at : null,
       lastMessageSummary: String(row.last_message_summary),
       pinned: row.pinned === 1,
+      notificationMuted: row.notification_muted === 1,
+      isBuiltinAssistant: row.is_builtin_assistant === 1,
       unreadCount: Number(row.unread_count),
     }))
   }
@@ -295,6 +363,14 @@ export class AccountDatabase {
         )
       }
     })
+  }
+
+  setContactUserPresence(userId: string, online: boolean) {
+    return (
+      this.database
+        .prepare("UPDATE contact_users SET online = ? WHERE id = ?")
+        .run(Number(online), userId).changes > 0
+    )
   }
 
   getContacts(): DesktopContactDirectory {
@@ -441,6 +517,18 @@ export class AccountDatabase {
     if (this.closed) return
     this.closed = true
     this.database.close()
+  }
+
+  private migrateConversationVisibility() {
+    const migrationKey = "conversation_visibility_v2"
+    const migrated = this.database
+      .prepare("SELECT 1 AS found FROM metadata WHERE key = ?")
+      .get(migrationKey) as Record<string, unknown> | undefined
+    if (migrated?.found === 1) return
+    this.transaction(() => {
+      this.database.exec("UPDATE conversations SET current = 1")
+      this.database.prepare("INSERT INTO metadata(key, value) VALUES (?, '1')").run(migrationKey)
+    })
   }
 
   private ensureColumn(table: string, column: string, definition: string) {

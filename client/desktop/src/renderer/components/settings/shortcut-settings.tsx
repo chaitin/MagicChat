@@ -1,6 +1,4 @@
 import { useEffect, useState } from "react"
-import { Scissor01Icon, ScreenAddToHomeIcon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon, type HugeiconsIconProps } from "@/components/icons/hugeicons-icon"
 import { Button as BeButton } from "@/components/motion/button/base"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import {
@@ -102,7 +100,6 @@ export function ShortcutSettingsPage({ disabled }: { disabled: boolean }) {
         <ShortcutItem
           title="唤出即应窗口"
           description="窗口关闭时打开，已打开时移至最前面"
-          icon={ScreenAddToHomeIcon}
           shortcut={settings.showWindow}
           recording={recording === "showWindow"}
           disabled={disabled || saving}
@@ -111,7 +108,6 @@ export function ShortcutSettingsPage({ disabled }: { disabled: boolean }) {
         <ShortcutItem
           title="截图"
           description="选择屏幕区域并复制到剪贴板"
-          icon={Scissor01Icon}
           shortcut={settings.screenshot}
           recording={recording === "screenshot"}
           disabled={disabled || saving}
@@ -125,7 +121,6 @@ export function ShortcutSettingsPage({ disabled }: { disabled: boolean }) {
 function ShortcutItem({
   title,
   description,
-  icon,
   shortcut,
   recording,
   disabled,
@@ -133,7 +128,6 @@ function ShortcutItem({
 }: {
   title: string
   description: string
-  icon: HugeiconsIconProps["icon"]
   shortcut: string
   recording: boolean
   disabled: boolean
@@ -141,7 +135,6 @@ function ShortcutItem({
 }) {
   return (
     <Item variant="outline" size="sm">
-      <HugeiconsIcon icon={icon} className="size-5 text-muted-foreground" aria-hidden />
       <ItemContent className="min-w-0">
         <ItemTitle>{title}</ItemTitle>
         <ItemDescription>{description}</ItemDescription>

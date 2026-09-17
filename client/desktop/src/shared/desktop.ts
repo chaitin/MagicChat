@@ -2,6 +2,7 @@ import type { AccountDataBridge } from "./account-data"
 import type { AuthBridge, AuthResult } from "./auth"
 
 export type ThemePreference = "light" | "dark" | "system"
+export type DesktopPlatform = "windows" | "macos" | "linux"
 export type ShortcutSettings = {
   showWindow: string
   screenshot: string
@@ -66,6 +67,12 @@ export const DESKTOP_CHANNELS = {
   setNotificationSettings: "desktop-next:v1:set-notification-settings",
   setShortcutSettings: "desktop-next:v1:set-shortcut-settings",
   setShortcutRecording: "desktop-next:v1:set-shortcut-recording",
+  openSettings: "desktop-next:v1:open-settings",
+  windowGetState: "desktop-next:v1:window-get-state",
+  windowMinimize: "desktop-next:v1:window-minimize",
+  windowToggleMaximize: "desktop-next:v1:window-toggle-maximize",
+  windowClose: "desktop-next:v1:window-close",
+  windowMaximizedChanged: "desktop-next:v1:window-maximized-changed",
 } as const
 
 export interface DesktopBridge {
@@ -83,4 +90,13 @@ export interface DesktopBridge {
   setNotificationSettings(settings: NotificationSettings): Promise<AuthResult<null>>
   setShortcutSettings(settings: ShortcutSettings): Promise<AuthResult<null>>
   setShortcutRecording(recording: boolean): Promise<AuthResult<null>>
+  onOpenSettings(callback: () => void): () => void
+  readonly windowControls: {
+    readonly platform: DesktopPlatform
+    getMaximized(): Promise<boolean>
+    minimize(): Promise<void>
+    toggleMaximize(): Promise<void>
+    close(): Promise<void>
+    onMaximizedChange(callback: (maximized: boolean) => void): () => void
+  }
 }

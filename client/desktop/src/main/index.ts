@@ -68,6 +68,12 @@ function createWindow() {
     minWidth: 760,
     minHeight: 560,
     title: "即应",
+    ...(process.platform === "darwin"
+      ? {
+          titleBarStyle: "hiddenInset" as const,
+          trafficLightPosition: { x: 8, y: 9 },
+        }
+      : { frame: false }),
     backgroundColor: "#f8f9fb",
     show: false,
     webPreferences: {
@@ -89,6 +95,13 @@ function createWindow() {
   window.on("closed", () => {
     mainWindow = null
   })
+  const sendMaximizedState = () => {
+    if (!window.isDestroyed()) {
+      window.webContents.send(DESKTOP_CHANNELS.windowMaximizedChanged, window.isMaximized())
+    }
+  }
+  window.on("maximize", sendMaximizedState)
+  window.on("unmaximize", sendMaximizedState)
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }))
   window.webContents.on("will-navigate", (event) => event.preventDefault())
 
@@ -113,6 +126,11 @@ function showMainWindow() {
   mainWindow.focus()
 }
 
+function openSettings() {
+  showMainWindow()
+  mainWindow?.webContents.send(DESKTOP_CHANNELS.openSettings)
+}
+
 function createTray() {
   const iconPath = app.isPackaged
     ? path.join(process.resourcesPath, "tray-icon.png")
@@ -124,10 +142,20 @@ function createTray() {
   tray.setToolTip("即应")
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: "显示窗口", click: showMainWindow },
+      {
+        label: "打开即应",
+        icon: createTrayMenuIcon("open"),
+        click: showMainWindow,
+      },
+      {
+        label: "设置",
+        icon: createTrayMenuIcon("settings"),
+        click: openSettings,
+      },
       { type: "separator" },
       {
         label: "退出即应",
+        icon: createTrayMenuIcon("quit"),
         click: () => {
           isQuitting = true
           app.quit()
@@ -136,6 +164,20 @@ function createTray() {
     ]),
   )
   tray.on("double-click", showMainWindow)
+}
+
+function createTrayMenuIcon(type: "open" | "settings" | "quit") {
+  const color = type === "quit" ? "#fa5151" : "#7d7d7d"
+  const graphic =
+    type === "open"
+      ? `<rect x="2.5" y="3" width="11" height="10" rx="2"/><path d="M5 7.5h6M8 5v5"/>`
+      : type === "settings"
+        ? `<circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v1.4M8 12.8v1.4M1.8 8h1.4M12.8 8h1.4M3.6 3.6l1 1M11.4 11.4l1 1M12.4 3.6l-1 1M4.6 11.4l-1 1"/>`
+        : `<path d="M8 2v6M4.5 3.8a6 6 0 1 0 7 0"/>`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="${color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${graphic}</svg>`
+  return nativeImage.createFromDataURL(
+    `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`,
+  )
 }
 
 function assertTrustedSender(event: IpcMainInvokeEvent) {
@@ -157,7 +199,11 @@ if (hasSingleInstanceLock) {
 
 void app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return
-  const auth = new AuthController(app.getPath("userData"))
+  const auth = new AuthController(app.getPath("userData"), {
+    onSyncStateChange: (event) =>
+      mainWindow?.webContents.send(ACCOUNT_DATA_CHANNELS.syncStateChanged, event),
+    onDataChanged: (event) => mainWindow?.webContents.send(ACCOUNT_DATA_CHANNELS.changed, event),
+  })
   const screenshot = new ScreenshotManager(
     path.join(__dirname, "../preload/screenshot.cjs"),
     path.join(__dirname, "../renderer/index.html"),
@@ -197,6 +243,24 @@ void app.whenReady().then(async () => {
       }),
     )
   }
+  ipcMain.handle(DESKTOP_CHANNELS.windowGetState, (event) => {
+    assertTrustedSender(event)
+    return mainWindow?.isMaximized() ?? false
+  })
+  ipcMain.handle(DESKTOP_CHANNELS.windowMinimize, (event) => {
+    assertTrustedSender(event)
+    mainWindow?.minimize()
+  })
+  ipcMain.handle(DESKTOP_CHANNELS.windowToggleMaximize, (event) => {
+    assertTrustedSender(event)
+    if (!mainWindow) return
+    if (mainWindow.isMaximized()) mainWindow.unmaximize()
+    else mainWindow.maximize()
+  })
+  ipcMain.handle(DESKTOP_CHANNELS.windowClose, (event) => {
+    assertTrustedSender(event)
+    mainWindow?.close()
+  })
   ipcMain.handle(SCREENSHOT_CHANNELS.initialize, (event) => {
     if (!screenshot.ownsSender(event.sender)) {
       throw new AuthFailure("untrusted_sender", "截图请求来源不受信任")

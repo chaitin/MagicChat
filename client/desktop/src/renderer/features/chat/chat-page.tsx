@@ -1,13 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
-  Briefcase01Icon,
-  BubbleChatIcon,
-  Github01Icon,
+  AppleReminderIcon,
+  CirclePlusIcon,
+  ContentWritingIcon,
+  CrosshairIcon,
+  FolderClosedIcon,
   Home07Icon,
   Contact01Icon,
+  FlashIcon,
+  FloppyDiskIcon,
+  UserSquareIcon,
+  ChatIcon,
   Loading03Icon,
   Logout03Icon,
-  MoreHorizontalIcon,
+  NotificationOff01Icon,
+  Search01Icon,
   SentIcon,
   Settings02Icon,
   UserIcon,
@@ -15,6 +22,7 @@ import {
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
 import { Button as BeButton } from "@/components/motion/button/base"
+import { Input as BeInput } from "@/components/motion/input"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import { SettingsDialog } from "@/components/settings-dialog"
 import {
@@ -34,17 +42,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Item, ItemContent, ItemGroup } from "@/components/ui/item"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import type { DesktopConversation, DesktopMessage } from "../../../shared/account-data"
 import type { ServerCatalog } from "../../../shared/auth"
-import {
-  JIYING_HOMEPAGE,
-  MAGICCHAT_REPOSITORY,
-  type ThemePreference,
-} from "../../../shared/desktop"
+import { JIYING_HOMEPAGE, type ThemePreference } from "../../../shared/desktop"
 
-type AppSection = "chat" | "contacts" | "projects"
+type AppSection = "chat" | "contacts" | "projects" | "goals" | "documents" | "tasks" | "drive"
 
 export function ChatPage({
   targetId,
@@ -78,11 +84,43 @@ export function ChatPage({
   const [activeSection, setActiveSection] = useState<AppSection>("chat")
   const [loadingConversations, setLoadingConversations] = useState(true)
   const [loadingMessages, setLoadingMessages] = useState(false)
+  const [conversationRevision, setConversationRevision] = useState(0)
+  const [messageRevision, setMessageRevision] = useState(0)
+  const realtimeRevisionRef = useRef(0)
   const historyRef = useRef<HTMLDivElement>(null)
   const selected = useMemo(
     () => conversations.find((conversation) => conversation.id === selectedId) ?? null,
     [conversations, selectedId],
   )
+  const { pinnedConversations, regularConversations } = useMemo(
+    () => ({
+      pinnedConversations: conversations
+        .filter((conversation) => conversation.pinned || conversation.isBuiltinAssistant)
+        .sort(compareConversationActivity),
+      regularConversations: conversations
+        .filter((conversation) => !conversation.pinned && !conversation.isBuiltinAssistant)
+        .sort(compareConversationActivity),
+    }),
+    [conversations],
+  )
+
+  useEffect(() => {
+    if (!window.desktop) return
+    return window.desktop.accountData.onChanged((event) => {
+      if (event.targetId !== targetId || event.revision <= realtimeRevisionRef.current) return
+      realtimeRevisionRef.current = event.revision
+      if (event.domains.includes("conversations")) {
+        setConversationRevision((revision) => revision + 1)
+      }
+      if (
+        event.domains.includes("messages") &&
+        selectedId &&
+        (event.conversationIds.length === 0 || event.conversationIds.includes(selectedId))
+      ) {
+        setMessageRevision((revision) => revision + 1)
+      }
+    })
+  }, [selectedId, targetId])
 
   useEffect(() => {
     let cancelled = false
@@ -104,7 +142,7 @@ export function ChatPage({
     return () => {
       cancelled = true
     }
-  }, [showToast, targetId])
+  }, [conversationRevision, showToast, targetId])
 
   useEffect(() => {
     if (!selectedId || !window.desktop) {
@@ -139,7 +177,7 @@ export function ChatPage({
     return () => {
       cancelled = true
     }
-  }, [selectedId, showToast, targetId])
+  }, [messageRevision, selectedId, showToast, targetId])
 
   useEffect(() => {
     if (!selected || loadingMessages) return
@@ -147,7 +185,7 @@ export function ChatPage({
   }, [loadingMessages, messages, selected])
 
   return (
-    <main className="flex h-dvh min-h-0 overflow-hidden bg-background text-foreground">
+    <main className="flex h-full min-h-0 overflow-hidden bg-background text-foreground">
       <AppRail
         targetId={targetId}
         userId={userId}
@@ -165,73 +203,78 @@ export function ChatPage({
       />
       {activeSection === "chat" ? (
         <div className="grid min-w-0 flex-1 grid-cols-[19rem_minmax(0,1fr)]">
-          <aside className="flex min-h-0 flex-col border-r bg-sidebar">
-            <header className="flex h-16 shrink-0 items-center justify-between border-b px-5">
-              <div>
-                <h1 className="font-semibold">消息</h1>
-                <p className="text-xs text-muted-foreground">即应 Chat</p>
-              </div>
-              <BeButton type="button" variant="ghost" size="icon" aria-label="更多操作">
-                <HugeiconsIcon icon={MoreHorizontalIcon} aria-hidden />
+          <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-sidebar">
+            <header className="flex h-14 shrink-0 items-center gap-2 bg-xgui-background-0 pr-2 pl-3">
+              <BeInput
+                type="search"
+                placeholder="搜索"
+                aria-label="搜索会话"
+                leftIcon={<HugeiconsIcon icon={Search01Icon} aria-hidden />}
+                classNames={{
+                  root: "min-w-0 flex-1",
+                  field: "h-8 rounded-full border-transparent bg-background",
+                  input: "pl-9 text-sm",
+                }}
+              />
+              <BeButton
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="shrink-0 rounded-lg hover:bg-foreground/10 [&_svg]:size-5"
+                aria-label="新建会话"
+                title="新建会话"
+              >
+                <HugeiconsIcon icon={CirclePlusIcon} aria-hidden />
               </BeButton>
             </header>
 
-            <nav className="min-h-0 flex-1 overflow-y-auto p-2" aria-label="对话列表">
-              {loadingConversations ? (
-                <div className="flex h-full items-center justify-center text-muted-foreground">
-                  <HugeiconsIcon
-                    icon={Loading03Icon}
-                    className="size-5 animate-spin"
-                    aria-label="正在读取对话"
-                  />
-                </div>
-              ) : conversations.length === 0 ? (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  暂无对话
-                </div>
-              ) : (
-                <ul className="space-y-1">
-                  {conversations.map((conversation) => {
-                    const active = conversation.id === selectedId
-                    return (
-                      <li key={conversation.id}>
-                        <BeButton
-                          type="button"
-                          variant="ghost"
-                          size="md"
-                          className={cn(
-                            "h-auto w-full justify-start rounded-lg p-3 text-left hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                            active && "bg-sidebar-accent text-sidebar-accent-foreground",
-                          )}
-                          aria-current={active ? "page" : undefined}
-                          onClick={() => setSelectedId(conversation.id)}
-                        >
-                          <EntityAvatar
-                            targetId={targetId}
-                            type={conversation.avatarType}
-                            id={conversation.avatarId}
-                            theme={resolvedTheme}
-                            size={40}
-                            label={`${conversation.name}头像`}
-                          />
-                          <span className="min-w-0 flex-1 space-y-1">
-                            <span className="flex items-center justify-between gap-2">
-                              <span className="truncate font-medium">{conversation.name}</span>
-                              <span className="shrink-0 text-xs font-normal text-muted-foreground">
-                                {formatConversationTime(conversation.lastMessageAt)}
-                              </span>
-                            </span>
-                            <span className="block truncate text-xs font-normal text-muted-foreground">
-                              {conversation.lastMessageSummary || "暂无消息"}
-                            </span>
-                          </span>
-                        </BeButton>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </nav>
+            <ScrollArea
+              type="hover"
+              scrollHideDelay={200}
+              className="min-h-0 min-w-0 flex-1 overflow-hidden bg-xgui-background-1"
+              viewportClassName="overflow-x-hidden [&>div]:block! [&>div]:w-full! [&>div]:min-w-0!"
+            >
+              <nav className="min-h-full" aria-label="对话列表">
+                {loadingConversations ? (
+                  <div className="flex h-full items-center justify-center text-muted-foreground">
+                    <HugeiconsIcon
+                      icon={Loading03Icon}
+                      className="size-5 animate-spin"
+                      aria-label="正在读取对话"
+                    />
+                  </div>
+                ) : conversations.length === 0 ? (
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                    暂无对话
+                  </div>
+                ) : (
+                  <>
+                    {pinnedConversations.length > 0 ? (
+                      <div className="bg-xgui-background-0 px-2 py-1">
+                        <ConversationGroup
+                          conversations={pinnedConversations}
+                          selectedId={selectedId}
+                          targetId={targetId}
+                          resolvedTheme={resolvedTheme}
+                          onSelect={setSelectedId}
+                        />
+                      </div>
+                    ) : null}
+                    {regularConversations.length > 0 ? (
+                      <div className="px-2 py-1">
+                        <ConversationGroup
+                          conversations={regularConversations}
+                          selectedId={selectedId}
+                          targetId={targetId}
+                          resolvedTheme={resolvedTheme}
+                          onSelect={setSelectedId}
+                        />
+                      </div>
+                    ) : null}
+                  </>
+                )}
+              </nav>
+            </ScrollArea>
           </aside>
 
           <section className="flex min-h-0 min-w-0 flex-col bg-card" aria-label="聊天区域">
@@ -335,14 +378,10 @@ export function ChatPage({
                 </footer>
               </>
             ) : (
-              <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-muted-foreground">
-                <span className="flex size-14 items-center justify-center rounded-full bg-muted">
-                  <HugeiconsIcon icon={BubbleChatIcon} className="size-6" aria-hidden />
+              <div className="flex flex-1 items-center justify-center text-xgui-background-2">
+                <span className="flex size-32 items-center justify-center rounded-full bg-xgui-background-1">
+                  <HugeiconsIcon icon={FlashIcon} className="size-16" aria-hidden />
                 </span>
-                <div className="space-y-1">
-                  <h2 className="font-medium text-foreground">选择一个对话</h2>
-                  <p className="text-sm">从左侧选择对话后开始聊天</p>
-                </div>
               </div>
             )}
           </section>
@@ -354,11 +393,102 @@ export function ChatPage({
   )
 }
 
+function ConversationGroup({
+  conversations,
+  selectedId,
+  targetId,
+  resolvedTheme,
+  onSelect,
+}: {
+  conversations: DesktopConversation[]
+  selectedId: string | null
+  targetId: string
+  resolvedTheme: "light" | "dark"
+  onSelect: (id: string) => void
+}) {
+  return (
+    <ItemGroup className="has-data-[size=sm]:gap-1">
+      {conversations.map((conversation) => {
+        const active = conversation.id === selectedId
+        return (
+          <Item
+            key={conversation.id}
+            asChild
+            variant="default"
+            size="sm"
+            className={cn(
+              "flex-nowrap border-transparent text-left hover:bg-foreground/5 hover:text-foreground",
+              active &&
+                "bg-xgui-brand-1 text-sidebar-accent-foreground hover:bg-xgui-brand-1 hover:text-sidebar-accent-foreground",
+            )}
+          >
+            <button
+              type="button"
+              aria-current={active ? "page" : undefined}
+              onClick={() => onSelect(conversation.id)}
+            >
+              <EntityAvatar
+                targetId={targetId}
+                type={conversation.avatarType}
+                id={conversation.avatarId}
+                theme={resolvedTheme}
+                size={40}
+                label={`${conversation.name}头像`}
+              />
+              <ItemContent className="w-0 min-w-0">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="min-w-0 flex-1 truncate text-sm leading-snug font-medium">
+                    {conversation.name}
+                  </div>
+                  <span className="shrink-0 text-xs font-normal text-muted-foreground">
+                    {formatConversationTime(conversation.lastMessageAt ?? conversation.createdAt)}
+                  </span>
+                </div>
+                <p className="flex min-w-0 items-center gap-0.5 text-left text-sm leading-normal font-normal text-muted-foreground">
+                  <span className="min-w-0 flex-1 truncate">
+                    {conversation.lastMessageSummary || "暂无消息"}
+                  </span>
+                  {conversation.notificationMuted && (
+                    <HugeiconsIcon
+                      icon={NotificationOff01Icon}
+                      className="size-3 shrink-0"
+                      aria-label="消息免打扰"
+                    />
+                  )}
+                </p>
+              </ItemContent>
+            </button>
+          </Item>
+        )
+      })}
+    </ItemGroup>
+  )
+}
+
+function compareConversationActivity(left: DesktopConversation, right: DesktopConversation) {
+  if (left.isBuiltinAssistant !== right.isBuiltinAssistant) {
+    return left.isBuiltinAssistant ? -1 : 1
+  }
+  const leftTime = parseConversationActivity(left.lastMessageAt ?? left.createdAt)
+  const rightTime = parseConversationActivity(right.lastMessageAt ?? right.createdAt)
+  return rightTime - leftTime || left.name.localeCompare(right.name, "zh-CN")
+}
+
+function parseConversationActivity(value: string | null) {
+  if (!value) return Number.NEGATIVE_INFINITY
+  const timestamp = Date.parse(value)
+  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp
+}
+
 function SectionPlaceholder({ section }: { section: Exclude<AppSection, "chat"> }) {
-  const content =
-    section === "contacts"
-      ? { label: "通讯录", icon: Contact01Icon }
-      : { label: "项目", icon: Briefcase01Icon }
+  const content = {
+    contacts: { label: "通讯录", icon: Contact01Icon },
+    projects: { label: "项目管理", icon: FolderClosedIcon },
+    goals: { label: "目标管理", icon: CrosshairIcon },
+    documents: { label: "文档", icon: ContentWritingIcon },
+    tasks: { label: "任务", icon: AppleReminderIcon },
+    drive: { label: "云网盘", icon: FloppyDiskIcon },
+  }[section]
   return (
     <section className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3 bg-card text-center text-muted-foreground">
       <span className="flex size-14 items-center justify-center rounded-full bg-xgui-background-1 text-xgui-brand">
@@ -405,7 +535,7 @@ function AccountMenu({
             type="button"
             aria-label="用户菜单"
             title={userName}
-            className="group/avatar-trigger mb-6 flex size-10 shrink-0 items-center justify-center rounded-lg bg-xgui-background-1/10 outline-none transition-colors hover:bg-xgui-background-1/20 focus-visible:ring-3 focus-visible:ring-ring/50 data-[state=open]:bg-xgui-background-1/20 dark:bg-xgui-background-1/20 dark:hover:bg-xgui-background-1/30 dark:data-[state=open]:bg-xgui-background-1/30"
+            className="mb-6 flex size-10 shrink-0 items-center justify-center rounded-sm bg-xgui-background-1 outline-none transition-colors hover:bg-foreground/10 focus-visible:ring-3 focus-visible:ring-ring/50 data-[state=open]:bg-foreground/10"
           >
             <EntityAvatar
               targetId={targetId}
@@ -414,7 +544,7 @@ function AccountMenu({
               theme={resolvedTheme}
               size={36}
               label={`${userName}头像`}
-              className="rounded-lg"
+              className="rounded-sm"
               imageBackgroundClassName="bg-transparent"
             />
           </button>
@@ -432,7 +562,7 @@ function AccountMenu({
               theme={resolvedTheme}
               size={48}
               label={`${userName}头像`}
-              className="row-span-2 rounded-lg"
+              className="row-span-2 rounded-sm"
             />
             <span className="min-w-0 truncate text-sm font-semibold">{userName}</span>
             <span className="min-w-0 truncate text-xs text-muted-foreground">
@@ -519,22 +649,22 @@ function AppRail({
 }) {
   const { showToast } = useAnimatedToast()
   const navigationItems = [
-    { id: "chat", label: "聊天", icon: BubbleChatIcon },
-    { id: "contacts", label: "通讯录", icon: Contact01Icon },
-    { id: "projects", label: "项目", icon: Briefcase01Icon },
+    { id: "chat", label: "聊天", icon: ChatIcon },
+    { id: "contacts", label: "通讯录", icon: UserSquareIcon },
+    { id: "projects", label: "项目管理", icon: FolderClosedIcon },
+    { id: "goals", label: "目标管理", icon: CrosshairIcon },
+    { id: "documents", label: "文档", icon: ContentWritingIcon },
+    { id: "tasks", label: "任务", icon: AppleReminderIcon },
+    { id: "drive", label: "云网盘", icon: FloppyDiskIcon },
   ] as const
 
-  async function openExternal(destination: "homepage" | "repository") {
-    const url = destination === "homepage" ? JIYING_HOMEPAGE : MAGICCHAT_REPOSITORY
+  async function openHomepage() {
     if (!window.desktop) {
-      window.open(url, "_blank", "noopener,noreferrer")
+      window.open(JIYING_HOMEPAGE, "_blank", "noopener,noreferrer")
       return
     }
     try {
-      const result =
-        destination === "homepage"
-          ? await window.desktop.openHomepage()
-          : await window.desktop.openExternalLink(url)
+      const result = await window.desktop.openHomepage()
       if (!result.ok) {
         showToast({ status: "error", title: "无法打开链接", description: result.error.message })
       }
@@ -544,7 +674,7 @@ function AppRail({
   }
 
   return (
-    <aside className="flex w-14 shrink-0 flex-col items-center bg-xgui-background-4 py-3">
+    <aside className="flex w-14 shrink-0 flex-col items-center bg-xgui-background-6 py-3">
       <AccountMenu
         targetId={targetId}
         userId={userId}
@@ -564,8 +694,8 @@ function AppRail({
               variant="ghost"
               size="icon"
               className={cn(
-                "rounded-full text-white hover:bg-white/10 hover:text-white",
-                active && "bg-xgui-brand hover:bg-xgui-brand",
+                "rounded-full hover:bg-foreground/10",
+                active && "bg-xgui-brand text-background hover:bg-xgui-brand hover:text-background",
               )}
               aria-label={item.label}
               aria-current={active ? "page" : undefined}
@@ -578,30 +708,17 @@ function AppRail({
         })}
       </nav>
 
-      <div className="mb-2 flex flex-col gap-2">
-        <BeButton
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="rounded-lg text-white hover:bg-white/10 hover:text-white"
-          aria-label="即应官网"
-          title="即应官网"
-          onClick={() => void openExternal("homepage")}
-        >
-          <HugeiconsIcon icon={Home07Icon} aria-hidden />
-        </BeButton>
-        <BeButton
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="rounded-lg text-white hover:bg-white/10 hover:text-white"
-          aria-label="GitHub 开源仓库"
-          title="GitHub 开源仓库"
-          onClick={() => void openExternal("repository")}
-        >
-          <HugeiconsIcon icon={Github01Icon} aria-hidden />
-        </BeButton>
-      </div>
+      <BeButton
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="mb-2 rounded-lg hover:bg-foreground/10"
+        aria-label="即应官网"
+        title="即应官网"
+        onClick={() => void openHomepage()}
+      >
+        <HugeiconsIcon icon={Home07Icon} aria-hidden />
+      </BeButton>
 
       <SettingsDialog
         theme={theme}
@@ -614,11 +731,11 @@ function AppRail({
             type="button"
             variant="ghost"
             size="icon"
-            className="rounded-lg text-white hover:bg-white/10 hover:text-white"
+            className="rounded-lg hover:bg-foreground/10"
             aria-label="设置"
             title="设置"
           >
-            <HugeiconsIcon icon={Settings02Icon} strokeWidth={2} aria-hidden />
+            <HugeiconsIcon icon={Settings02Icon} aria-hidden />
           </BeButton>
         }
       />

@@ -25,7 +25,11 @@ export class ContactManager {
     private readonly client: AuthenticatedClient,
   ) {}
 
-  async initialize() {
+  initialize() {
+    return this.refresh()
+  }
+
+  async refresh() {
     const snapshot = await retryNetworkAction(() => this.fetchDirectory())
     const batches = chunk(snapshot.userIds, 100)
     const users = (
@@ -39,6 +43,32 @@ export class ContactManager {
       groups: snapshot.groups,
       apps: snapshot.apps,
     })
+  }
+
+  async applyRealtimeEvent(name: string, payload: unknown): Promise<boolean> {
+    if (name === "user.presence.updated") {
+      if (!isRecord(payload) || typeof payload.online !== "boolean") {
+        throw new AuthFailure("invalid_realtime_event", "用户在线状态推送格式不正确")
+      }
+      const userId = requiredString(payload.user_id, 128, "event.user_id")
+      if (!this.database.setContactUserPresence(userId, payload.online)) {
+        await this.refresh()
+      }
+      return true
+    }
+    if (
+      name === "user.profile.updated" ||
+      name === "user.nickname.policy.updated" ||
+      name === "friend.request.created" ||
+      name === "friend.request.updated" ||
+      name === "friendship.created" ||
+      name === "friendship.deleted" ||
+      name === "contact.directory.mode.updated"
+    ) {
+      await this.refresh()
+      return true
+    }
+    return false
   }
 
   getDirectory(): DesktopContactDirectory {

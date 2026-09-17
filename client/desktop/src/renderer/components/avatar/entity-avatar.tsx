@@ -97,7 +97,7 @@ export function EntityAvatar({
       role="img"
       aria-label={label ?? `${fallbackType} 头像`}
       className={cn(
-        "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-lg text-white",
+        "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-sm text-white",
         showsFallback ? fallbackStyles[fallbackType] : imageBackgroundClassName,
         className,
       )}

@@ -7,7 +7,21 @@ export const ACCOUNT_DATA_CHANNELS = {
   getContacts: "desktop-next:v1:contacts-get",
   getAvatar: "desktop-next:v1:avatar-get",
   invalidateAvatar: "desktop-next:v1:avatar-invalidate",
+  syncStateChanged: "desktop-next:v1:account-data-sync-state-changed",
+  changed: "desktop-next:v1:account-data-changed",
 } as const
+
+export type AccountDataDomain = "conversations" | "messages" | "contacts"
+export type AccountDataSyncEvent = {
+  targetId: string
+  state: "loading" | "ready"
+}
+export type AccountDataChangedEvent = {
+  targetId: string
+  revision: number
+  domains: AccountDataDomain[]
+  conversationIds: string[]
+}
 
 export type AvatarType = "user" | "group" | "topic" | "app" | "project"
 export type AvatarRequest = {
@@ -28,9 +42,12 @@ export type DesktopConversation = {
   name: string
   avatarType: Exclude<AvatarType, "topic">
   avatarId: string
+  createdAt: string
   lastMessageAt: string | null
   lastMessageSummary: string
   pinned: boolean
+  notificationMuted: boolean
+  isBuiltinAssistant: boolean
   unreadCount: number
 }
 
@@ -93,4 +110,6 @@ export interface AccountDataBridge {
   getContacts(targetId: string): Promise<AuthResult<DesktopContactDirectory>>
   getAvatar(input: AvatarRequest): Promise<AuthResult<AvatarResult>>
   invalidateAvatar(input: Omit<AvatarRequest, "theme">): Promise<AuthResult<null>>
+  onSyncStateChange(callback: (event: AccountDataSyncEvent) => void): () => void
+  onChanged(callback: (event: AccountDataChangedEvent) => void): () => void
 }

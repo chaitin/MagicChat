@@ -59,10 +59,11 @@ export class AuthenticatedClient {
         throw new AuthFailure("invalid_avatar", "头像文件格式不受支持")
       }
       const bytes = await readBytes(response, MAX_AVATAR_BYTES)
-      if (!isValidAvatar(bytes, contentType)) {
+      const detectedContentType = detectAvatarContentType(bytes)
+      if (!detectedContentType) {
         throw new AuthFailure("invalid_avatar", "头像文件内容不正确")
       }
-      return { bytes, contentType }
+      return { bytes, contentType: detectedContentType }
     } catch (error) {
       if (error instanceof AuthFailure) throw error
       throw new AuthFailure("avatar_download", "头像下载失败")
@@ -123,36 +124,27 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
-function isValidAvatar(bytes: Uint8Array, contentType: string): boolean {
-  if (bytes.byteLength === 0) return false
-  if (contentType === "image/png") {
-    return [137, 80, 78, 71, 13, 10, 26, 10].every((value, index) => bytes[index] === value)
+function detectAvatarContentType(bytes: Uint8Array): string | undefined {
+  if (bytes.byteLength === 0) return undefined
+  if ([137, 80, 78, 71, 13, 10, 26, 10].every((value, index) => bytes[index] === value)) {
+    return "image/png"
   }
-  if (contentType === "image/jpeg") {
-    return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg"
+  const decoder = new TextDecoder()
+  const signature = decoder.decode(bytes.subarray(0, 12))
+  if (signature.startsWith("GIF87a") || signature.startsWith("GIF89a")) return "image/gif"
+  if (signature.startsWith("RIFF") && signature.slice(8, 12) === "WEBP") return "image/webp"
+  const source = decoder.decode(bytes.subarray(0, 32 * 1_024))
+  if (
+    /<svg(?:\s|>)/i.test(source) &&
+    !/<script(?:\s|>)/i.test(source) &&
+    !/<foreignObject(?:\s|>)/i.test(source) &&
+    !/\son[a-z]+\s*=/i.test(source) &&
+    !/(?:href|src)\s*=\s*["'](?:https?:|\/\/)/i.test(source)
+  ) {
+    return "image/svg+xml"
   }
-  if (contentType === "image/gif") {
-    const signature = new TextDecoder().decode(bytes.subarray(0, 6))
-    return signature === "GIF87a" || signature === "GIF89a"
-  }
-  if (contentType === "image/webp") {
-    const decoder = new TextDecoder()
-    return (
-      decoder.decode(bytes.subarray(0, 4)) === "RIFF" &&
-      decoder.decode(bytes.subarray(8, 12)) === "WEBP"
-    )
-  }
-  if (contentType === "image/svg+xml") {
-    const source = new TextDecoder().decode(bytes.subarray(0, 32 * 1_024))
-    return (
-      /<svg(?:\s|>)/i.test(source) &&
-      !/<script(?:\s|>)/i.test(source) &&
-      !/<foreignObject(?:\s|>)/i.test(source) &&
-      !/\son[a-z]+\s*=/i.test(source) &&
-      !/(?:href|src)\s*=\s*["'](?:https?:|\/\/)/i.test(source)
-    )
-  }
-  return false
+  return undefined
 }
 
 async function readBytes(response: Response, maximum: number): Promise<Uint8Array> {

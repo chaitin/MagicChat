@@ -5,6 +5,8 @@ import { AuthenticatedClient } from "./authenticated-client"
 import { retryNetworkAction } from "./retry"
 import type { AvatarDescriptor, AvatarMemberDescriptor } from "./avatar-types"
 
+const builtinAssistantAppId = "00000000-0000-0000-0000-000000000001"
+
 export class ConversationManager {
   constructor(
     private readonly database: AccountDatabase,
@@ -12,13 +14,86 @@ export class ConversationManager {
     private readonly currentUserId: string,
   ) {}
 
-  async initialize() {
+  initialize() {
+    return this.refresh()
+  }
+
+  async refresh() {
     const conversations = await retryNetworkAction(() => this.fetchConversations())
-    this.database.replaceCurrentConversations(conversations)
+    this.database.upsertCurrentConversations(conversations)
     await mapConcurrent(conversations, 4, async (conversation) => {
       const messages = await retryNetworkAction(() => this.fetchMessages(conversation.id))
       this.database.upsertMessages(messages)
     })
+  }
+
+  async applyRealtimeEvent(
+    name: string,
+    payload: unknown,
+  ): Promise<{ conversationIds: string[]; messages: boolean } | null> {
+    if (name === "message.created" || name === "message.updated") {
+      if (!isRecord(payload) || !isRecord(payload.message)) {
+        throw new AuthFailure("invalid_realtime_event", "消息推送格式不正确")
+      }
+      const conversationId = requiredString(
+        payload.message.conversation_id,
+        128,
+        "message.conversation_id",
+      )
+      if (!this.database.hasCurrentConversation(conversationId)) {
+        await this.refresh()
+        return { conversationIds: [], messages: true }
+      }
+      const message = parseMessage(payload.message, conversationId)
+      this.database.upsertMessages([message])
+      this.database.touchConversationActivity(conversationId, message.createdAt)
+      return { conversationIds: [conversationId], messages: true }
+    }
+    if (name === "conversation.pin_updated") {
+      const event = parseConversationBooleanEvent(payload, "pinned")
+      if (!this.database.setConversationPinned(event.conversationId, event.value)) {
+        await this.refresh()
+      }
+      return { conversationIds: [], messages: false }
+    }
+    if (name === "conversation.mute_updated") {
+      const event = parseConversationBooleanEvent(payload, "muted")
+      if (!this.database.setConversationMuted(event.conversationId, event.value)) {
+        await this.refresh()
+      }
+      return { conversationIds: [], messages: false }
+    }
+    if (name === "conversation.removed") {
+      const conversationId = conversationIdFromEvent(payload)
+      this.database.removeCurrentConversation(conversationId)
+      return { conversationIds: [conversationId], messages: false }
+    }
+    if (
+      name === "message.reactions_updated" ||
+      name === "message.choice_updated" ||
+      name === "conversation.member_mentioned" ||
+      name === "conversation.member_choice_received"
+    ) {
+      const conversationId = conversationIdFromEvent(payload)
+      if (!this.database.hasCurrentConversation(conversationId)) {
+        await this.refresh()
+        return { conversationIds: [], messages: true }
+      }
+      const messages = await retryNetworkAction(() => this.fetchMessages(conversationId))
+      this.database.upsertMessages(messages)
+      return { conversationIds: [conversationId], messages: true }
+    }
+    if (
+      name === "conversation.restored" ||
+      name === "topic.created" ||
+      name === "topic.participated" ||
+      name === "topic.archived" ||
+      name === "topic.closed"
+    ) {
+      await this.refresh()
+      return { conversationIds: [], messages: true }
+    }
+    return null
   }
 
   listConversations(): DesktopConversation[] {
@@ -82,6 +157,23 @@ export class ConversationManager {
   }
 }
 
+function parseConversationBooleanEvent(payload: unknown, field: "pinned" | "muted") {
+  if (!isRecord(payload) || typeof payload[field] !== "boolean") {
+    throw new AuthFailure("invalid_realtime_event", "会话状态推送格式不正确")
+  }
+  return {
+    conversationId: conversationIdFromEvent(payload),
+    value: payload[field],
+  }
+}
+
+function conversationIdFromEvent(payload: unknown) {
+  if (!isRecord(payload)) {
+    throw new AuthFailure("invalid_realtime_event", "会话推送格式不正确")
+  }
+  return requiredString(payload.conversation_id, 128, "event.conversation_id")
+}
+
 function parseConversation(value: unknown, currentUserId: string): StoredConversation {
   if (!isRecord(value)) throw new AuthFailure("invalid_response", "会话列表响应格式不正确")
   const id = requiredString(value.id, 128, "conversation.id")
@@ -95,9 +187,18 @@ function parseConversation(value: unknown, currentUserId: string): StoredConvers
     avatar: optionalString(value.avatar, 4_096),
     avatarType: avatarIdentity.type,
     avatarId: avatarIdentity.id,
+    createdAt: requiredString(value.created_at, 64, "conversation.created_at"),
     lastMessageAt: nullableString(value.last_message_at, 64),
-    lastMessageSummary: optionalString(value.last_message_summary, 4_096),
+    lastMessageSummary: "",
     pinned: value.pinned === true,
+    notificationMuted: value.notification_muted === true,
+    isBuiltinAssistant:
+      type === "app" &&
+      Array.isArray(value.members) &&
+      value.members.some(
+        (member) =>
+          isRecord(member) && member.type === "app" && member.id === builtinAssistantAppId,
+      ),
     unreadCount: nonNegativeInteger(value.unread_count),
     payload: value,
   }

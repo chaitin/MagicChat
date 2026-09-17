@@ -28,6 +28,8 @@ import {
   type ThirdPartySignInInput,
 } from "../shared/auth"
 import type {
+  AccountDataChangedEvent,
+  AccountDataSyncEvent,
   AvatarRequest,
   AvatarResult,
   DesktopContactDirectory,
@@ -110,11 +112,16 @@ export class AuthController {
   }
   private active?: ActiveConnection
   private accountRuntime?: AccountRuntime
-  private accountInitialization?: Promise<null>
   private busy = false
   private readonly cooldowns = new Map<string, number>()
 
-  constructor(private readonly userDataPath: string) {
+  constructor(
+    private readonly userDataPath: string,
+    private readonly accountEvents: {
+      onSyncStateChange: (event: AccountDataSyncEvent) => void
+      onDataChanged: (event: AccountDataChangedEvent) => void
+    } = { onSyncStateChange: () => undefined, onDataChanged: () => undefined },
+  ) {
     this.filePath = path.join(userDataPath, "app-config.json")
     this.initialized = this.loadConfig()
   }
@@ -216,8 +223,7 @@ export class AuthController {
     if (!active.user || !active.credential || !runtime) {
       throw new AuthFailure("not_authenticated", "请重新登录账号")
     }
-    this.accountInitialization ??= this.initializeAccountRuntime(active, runtime)
-    return this.accountInitialization
+    return this.initializeAccountRuntime(active, runtime)
   }
 
   async listConversations(targetId: string): Promise<DesktopConversation[]> {
@@ -838,12 +844,15 @@ export class AuthController {
     this.destroyAccountRuntime()
     this.accountRuntime = new AccountRuntime({
       userDataPath: this.userDataPath,
+      targetId: active.targetId,
       serverUrl: active.server.url,
       userId: active.user.id,
       userName: active.user.name,
       userAvatar: active.user.avatar,
       session: active.session,
       token: active.credential.token,
+      onSyncStateChange: this.accountEvents.onSyncStateChange,
+      onDataChanged: this.accountEvents.onDataChanged,
     })
   }
 
@@ -857,7 +866,6 @@ export class AuthController {
   private destroyAccountRuntime() {
     this.accountRuntime?.close()
     this.accountRuntime = undefined
-    this.accountInitialization = undefined
   }
 
   private requireTarget(targetId: unknown): ActiveConnection {

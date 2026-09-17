@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { AnimatedToastProvider } from "@/components/motion/animated-toast-provider"
+import { WindowTitleBar } from "@/components/window-title-bar"
 import { LoginPage } from "@/features/auth/login-page"
 import type { ThemePreference } from "../shared/desktop"
 
@@ -53,8 +54,13 @@ export function App() {
 
   return (
     <AnimatedToastProvider>
-      <div className="app-shell">
-        <LoginPage theme={theme} resolvedTheme={resolvedTheme} onThemeChange={changeTheme} />
+      <div className="flex h-dvh flex-col overflow-hidden">
+        <WindowTitleBar />
+        <div className="min-h-0 flex-1">
+          <div className="app-shell">
+            <LoginPage theme={theme} resolvedTheme={resolvedTheme} onThemeChange={changeTheme} />
+          </div>
+        </div>
       </div>
     </AnimatedToastProvider>
   )
