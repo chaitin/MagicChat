@@ -34,13 +34,17 @@ export class AuthenticatedClient {
   async postFile(
     endpoint: string,
     fields: Record<string, string>,
-    file: { path: string; name: string },
+    file: { path: string; name: string; fieldName?: string; contentType?: string },
   ): Promise<unknown> {
     this.assertEndpoint(endpoint)
     try {
       const formData = new FormData()
       for (const [name, value] of Object.entries(fields)) formData.set(name, value)
-      formData.set("file", await openAsBlob(file.path), file.name)
+      formData.set(
+        file.fieldName ?? "file",
+        await openAsBlob(file.path, file.contentType ? { type: file.contentType } : undefined),
+        file.name,
+      )
       const response = await this.serverSession.fetch(`${this.serverUrl}${endpoint}`, {
         method: "POST",
         headers: {

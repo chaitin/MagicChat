@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { lstat, readdir, stat } from "node:fs/promises"
+import { lstat, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import {
   app,
@@ -20,8 +20,11 @@ import {
   type MessageReactionUsersInput,
   type RetryMessageInput,
   type SendFileMessageInput,
+  type SendImageMessageInput,
   type SendTextMessageInput,
+  type SendVideoMessageInput,
   type SelectedMessageFile,
+  type SelectedMessageMedia,
   type SetMessageReactionInput,
 } from "../shared/account-data"
 import {
@@ -45,6 +48,7 @@ import {
 import { MEDIA_CHANNELS, type MediaCacheRequest, type MediaPreviewRequest } from "../shared/media"
 import { SCREENSHOT_CHANNELS, type ScreenshotSelection } from "../shared/screenshot"
 import { AuthController, authResult } from "./auth-controller"
+import { createLocalFileResponse } from "./local-file-response"
 import { MediaPreviewWindow } from "./media-preview-window"
 import { ScreenshotManager } from "./screenshot-manager"
 import { ShortcutManager } from "./shortcut-manager"
@@ -63,7 +67,13 @@ protocol.registerSchemesAsPrivileged([
   },
   {
     scheme: "jiying-media",
-    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+      corsEnabled: true,
+    },
   },
 ])
 
@@ -233,10 +243,14 @@ void app.whenReady().then(async () => {
     path.join(__dirname, "../renderer/index.html"),
     !app.isPackaged ? process.env.ELECTRON_RENDERER_URL : undefined,
   )
-  const selectedMessageFiles = new Map<
-    string,
-    SelectedMessageFile & { targetId: string; path: string; selectedAt: number }
-  >()
+  type SelectedLocalMessageFile = SelectedMessageFile & {
+    targetId: string
+    path: string
+    selectedAt: number
+    category?: "image" | "video"
+    contentType?: string
+  }
+  const selectedMessageFiles = new Map<string, SelectedLocalMessageFile>()
   const shortcuts = new ShortcutManager(showMainWindow, () => screenshot.capture())
   try {
     shortcuts.update((await auth.getAppSettings()).shortcuts)
@@ -268,6 +282,25 @@ void app.whenReady().then(async () => {
       const url = new URL(request.url)
       const [targetId, resourceId] = url.pathname.slice(1).split("/", 2).map(decodeURIComponent)
       if (!targetId || !resourceId) return new Response(null, { status: 404 })
+      if (url.hostname === "selection") {
+        const selected = selectedMessageFiles.get(resourceId)
+        if (!selected || selected.targetId !== targetId || !selected.contentType) {
+          return new Response(null, { status: 404 })
+        }
+        return createLocalFileResponse(
+          selected.path,
+          selected.sizeBytes,
+          selected.contentType,
+          request.headers.get("range") ?? undefined,
+        )
+      }
+      if (url.hostname === "outgoing") {
+        return await auth.readOutgoingMedia(
+          targetId,
+          resourceId,
+          request.headers.get("range") ?? undefined,
+        )
+      }
       if (url.hostname === "cache") {
         return await auth.readCachedMedia(
           targetId,
@@ -357,7 +390,18 @@ void app.whenReady().then(async () => {
     ) {
       throw new AuthFailure("invalid_media_preview", "媒体预览请求不正确")
     }
-    const cached = await auth.getCachedMedia(value.targetId, value.cacheKey)
+    const cached = value.cacheKey.startsWith("outgoing:")
+      ? await auth
+          .getOutgoingMedia(value.targetId, value.cacheKey.slice("outgoing:".length))
+          .then((media) => ({
+            cacheKey: value.cacheKey,
+            category: media.category,
+            contentType: media.contentType,
+            originalName: media.name,
+            resourceUrl: `jiying-media://outgoing/${encodeURIComponent(value.targetId)}/${encodeURIComponent(value.cacheKey.slice("outgoing:".length))}`,
+            sizeBytes: media.sizeBytes,
+          }))
+      : await auth.getCachedMedia(value.targetId, value.cacheKey)
     if (cached.category === "attachment") {
       throw new AuthFailure("unsupported_media_preview", "该文件类型不支持预览")
     }
@@ -416,6 +460,76 @@ void app.whenReady().then(async () => {
     selectedMessageFiles.set(token, file)
     return { token: file.token, name: file.name, sizeBytes: file.sizeBytes }
   })
+  handleIpc(ACCOUNT_DATA_CHANNELS.selectMessageMedia, async (input) => {
+    const value = input as { targetId?: string; category?: "image" | "video" } | undefined
+    const targetId = value?.targetId ?? ""
+    const category = value?.category
+    if (!targetId || (category !== "image" && category !== "video")) {
+      throw new AuthFailure("invalid_media_selection", "媒体选择请求不正确")
+    }
+    for (const [token, file] of selectedMessageFiles) {
+      if (Date.now() - file.selectedAt > 10 * 60_000) selectedMessageFiles.delete(token)
+    }
+    if (!mainWindow) throw new AuthFailure("window_unavailable", "主窗口不可用")
+    const selection = await dialog.showOpenDialog(mainWindow, {
+      title: category === "image" ? "选择要发送的图片" : "选择要发送的视频",
+      properties: ["openFile"],
+      filters:
+        category === "image"
+          ? [{ name: "图片", extensions: ["png", "jpg", "jpeg", "webp"] }]
+          : [{ name: "视频", extensions: ["mp4", "webm"] }],
+    })
+    const filePath = selection.canceled ? undefined : selection.filePaths[0]
+    if (!filePath) return null
+    const fileStat = await stat(filePath)
+    if (!fileStat.isFile() || fileStat.size <= 0) {
+      throw new AuthFailure("invalid_media", category === "image" ? "图片不能为空" : "视频不能为空")
+    }
+    if (category === "video" && fileStat.size > 100 * 1024 * 1024) {
+      throw new AuthFailure("video_too_large", "视频大于 100MiB，无法上传")
+    }
+    const extension = path.extname(filePath).toLowerCase()
+    const contentType =
+      category === "image"
+        ? extension === ".png"
+          ? "image/png"
+          : extension === ".webp"
+            ? "image/webp"
+            : extension === ".jpg" || extension === ".jpeg"
+              ? "image/jpeg"
+              : ""
+        : extension === ".webm"
+          ? "video/webm"
+          : extension === ".mp4"
+            ? "video/mp4"
+            : ""
+    if (!contentType) {
+      throw new AuthFailure(
+        "invalid_media_type",
+        category === "image" ? "请选择 PNG、JPG 或 WebP 图片" : "视频必须是 MP4 或 WebM 格式",
+      )
+    }
+    const token = randomUUID()
+    const file: SelectedLocalMessageFile = {
+      token,
+      name: path.basename(filePath),
+      sizeBytes: fileStat.size,
+      targetId,
+      path: filePath,
+      selectedAt: Date.now(),
+      category,
+      contentType,
+    }
+    selectedMessageFiles.set(token, file)
+    return {
+      token,
+      name: file.name,
+      sizeBytes: file.sizeBytes,
+      category,
+      contentType,
+      resourceUrl: `jiying-media://selection/${encodeURIComponent(targetId)}/${encodeURIComponent(token)}`,
+    } satisfies SelectedMessageMedia
+  })
   handleIpc(ACCOUNT_DATA_CHANNELS.sendFileMessage, async (input) => {
     const value = input as SendFileMessageInput | undefined
     const selected = value?.selectionToken
@@ -435,6 +549,74 @@ void app.whenReady().then(async () => {
       throw new AuthFailure("file_changed", "所选文件已发生变化，请重新选择")
     }
     return auth.sendFileMessage(value, selected)
+  })
+  handleIpc(ACCOUNT_DATA_CHANNELS.sendImageMessage, async (input) => {
+    const value = input as SendImageMessageInput | undefined
+    const selected = value?.selectionToken
+      ? selectedMessageFiles.get(value.selectionToken)
+      : undefined
+    if (
+      !value ||
+      !selected ||
+      selected.targetId !== value.targetId ||
+      selected.category !== "image" ||
+      Date.now() - selected.selectedAt > 10 * 60_000 ||
+      !(value.bytes instanceof ArrayBuffer)
+    ) {
+      throw new AuthFailure("invalid_image_selection", "所选图片已失效，请重新选择")
+    }
+    const bytes = new Uint8Array(value.bytes)
+    if (bytes.byteLength <= 0 || bytes.byteLength > 2 * 1024 * 1024) {
+      throw new AuthFailure("invalid_image", "图片大于 2MB，无法上传")
+    }
+    const contentType = detectOutgoingImageContentType(bytes)
+    if (!contentType || contentType !== value.contentType) {
+      throw new AuthFailure("invalid_image", "图片内容格式不正确")
+    }
+    const uploadsDirectory = path.join(app.getPath("userData"), "pending-uploads")
+    await mkdir(uploadsDirectory, { recursive: true })
+    const extension = contentType === "image/webp" ? ".webp" : ".png"
+    const stagedPath = path.join(uploadsDirectory, `${randomUUID()}${extension}`)
+    await writeFile(stagedPath, bytes, { flag: "wx" })
+    try {
+      const messages = await auth.sendImageMessage(value, {
+        path: stagedPath,
+        sizeBytes: bytes.byteLength,
+      })
+      selectedMessageFiles.delete(value.selectionToken)
+      return messages
+    } catch (error) {
+      await rm(stagedPath, { force: true })
+      throw error
+    }
+  })
+  handleIpc(ACCOUNT_DATA_CHANNELS.sendVideoMessage, async (input) => {
+    const value = input as SendVideoMessageInput | undefined
+    const selected = value?.selectionToken
+      ? selectedMessageFiles.get(value.selectionToken)
+      : undefined
+    if (
+      !value ||
+      !selected ||
+      selected.targetId !== value.targetId ||
+      selected.category !== "video" ||
+      (selected.contentType !== "video/mp4" && selected.contentType !== "video/webm") ||
+      Date.now() - selected.selectedAt > 10 * 60_000
+    ) {
+      throw new AuthFailure("invalid_video_selection", "所选视频已失效，请重新选择")
+    }
+    const fileStat = await stat(selected.path)
+    if (!fileStat.isFile() || fileStat.size !== selected.sizeBytes) {
+      throw new AuthFailure("video_changed", "所选视频已发生变化，请重新选择")
+    }
+    const messages = await auth.sendVideoMessage(value, {
+      path: selected.path,
+      name: selected.name,
+      sizeBytes: selected.sizeBytes,
+      contentType: selected.contentType,
+    })
+    selectedMessageFiles.delete(value.selectionToken)
+    return messages
   })
   handleIpc(ACCOUNT_DATA_CHANNELS.sendTextMessage, (input) =>
     auth.sendTextMessage(input as SendTextMessageInput),
@@ -547,6 +729,17 @@ void app.whenReady().then(async () => {
     auth.close()
   })
 })
+
+function detectOutgoingImageContentType(bytes: Uint8Array) {
+  if ([137, 80, 78, 71, 13, 10, 26, 10].every((value, index) => bytes[index] === value)) {
+    return "image/png" as const
+  }
+  const signature = new TextDecoder().decode(bytes.subarray(0, 12))
+  if (signature.startsWith("RIFF") && signature.slice(8, 12) === "WEBP") {
+    return "image/webp" as const
+  }
+  return undefined
+}
 
 function getStorageInfo(): StorageInfo {
   return { directoryPath: app.getPath("userData") }

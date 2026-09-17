@@ -61,7 +61,11 @@ const bridge: DesktopBridge = {
     sendTextMessage: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.sendTextMessage, input),
     selectMessageFile: (targetId) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.selectMessageFile, targetId),
+    selectMessageMedia: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.selectMessageMedia, input),
     sendFileMessage: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.sendFileMessage, input),
+    sendImageMessage: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.sendImageMessage, input),
+    sendVideoMessage: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.sendVideoMessage, input),
     retryMessage: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.retryMessage, input),
     setMessageReaction: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.setMessageReaction, input),

@@ -21,12 +21,31 @@ export function useCachedMedia(input: MediaCacheRequest, automatic: boolean) {
       input.expectedSizeBytes,
     ],
   )
+  const outgoingId = request.fileId.startsWith("outgoing:")
+    ? request.fileId.slice("outgoing:".length)
+    : ""
+  const outgoing = useMemo<CachedMedia | undefined>(
+    () =>
+      outgoingId
+        ? {
+            cacheKey: request.fileId,
+            category: request.category,
+            contentType: request.contentType || "application/octet-stream",
+            originalName:
+              request.originalName || (request.category === "image" ? "image" : "video"),
+            resourceUrl: `jiying-media://outgoing/${encodeURIComponent(request.targetId)}/${encodeURIComponent(outgoingId)}`,
+            sizeBytes: request.expectedSizeBytes ?? 0,
+          }
+        : undefined,
+    [outgoingId, request],
+  )
   const [state, setState] = useState<CachedMediaState>({
     status: "idle",
     downloadedBytes: 0,
   })
 
   const ensureCached = useCallback(async () => {
+    if (outgoing) return outgoing
     const media = window.desktop?.media
     if (!media) return undefined
     setState((current) => ({ ...current, status: "downloading", error: undefined }))
@@ -42,7 +61,7 @@ export function useCachedMedia(input: MediaCacheRequest, automatic: boolean) {
       totalBytes: result.data.sizeBytes,
     })
     return result.data
-  }, [request])
+  }, [outgoing, request])
 
   useEffect(() => {
     const media = window.desktop?.media
@@ -66,9 +85,17 @@ export function useCachedMedia(input: MediaCacheRequest, automatic: boolean) {
   }, [request])
 
   useEffect(() => {
-    if (!automatic) return
+    if (!automatic || outgoing) return
     void ensureCached()
-  }, [automatic, ensureCached])
+  }, [automatic, ensureCached, outgoing])
 
-  return { ...state, ensureCached }
+  return outgoing
+    ? {
+        cached: outgoing,
+        downloadedBytes: outgoing.sizeBytes,
+        status: "ready" as const,
+        totalBytes: outgoing.sizeBytes,
+        ensureCached,
+      }
+    : { ...state, ensureCached }
 }

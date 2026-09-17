@@ -25,7 +25,7 @@ export function MessageReactionChips({
   onSetReaction: (text: string, reacted: boolean) => Promise<void>
 }) {
   return (
-    <div className="mt-2 flex flex-wrap gap-1">
+    <div className="mt-2 flex w-full min-w-0 flex-wrap gap-1 [contain:inline-size]">
       {reactions.map((reaction) => {
         const pending = pendingKeys.has(`${messageId}\0${reaction.text}`)
         return (

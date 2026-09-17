@@ -9,7 +9,10 @@ export const ACCOUNT_DATA_CHANNELS = {
   listMessageReactionUsers: "desktop-next:v1:conversation-message-reaction-users-list",
   sendTextMessage: "desktop-next:v1:conversation-message-text-send",
   selectMessageFile: "desktop-next:v1:conversation-message-file-select",
+  selectMessageMedia: "desktop-next:v1:conversation-message-media-select",
   sendFileMessage: "desktop-next:v1:conversation-message-file-send",
+  sendImageMessage: "desktop-next:v1:conversation-message-image-send",
+  sendVideoMessage: "desktop-next:v1:conversation-message-video-send",
   retryMessage: "desktop-next:v1:conversation-message-retry",
   getContacts: "desktop-next:v1:contacts-get",
   getAvatar: "desktop-next:v1:avatar-get",
@@ -201,6 +204,31 @@ export type SendFileMessageInput = {
   selectionToken: string
 }
 
+export type SelectedMessageMedia = SelectedMessageFile & {
+  category: "image" | "video"
+  contentType: string
+  resourceUrl: string
+}
+
+export type SendImageMessageInput = {
+  targetId: string
+  conversationId: string
+  selectionToken: string
+  bytes: ArrayBuffer
+  name: string
+  contentType: "image/webp" | "image/png"
+  width: number
+  height: number
+  caption: string
+}
+
+export type SendVideoMessageInput = {
+  targetId: string
+  conversationId: string
+  selectionToken: string
+  caption: string
+}
+
 export type RetryMessageInput = {
   targetId: string
   conversationId: string
@@ -236,7 +264,13 @@ export interface AccountDataBridge {
   }): Promise<AuthResult<DesktopMessagePage>>
   sendTextMessage(input: SendTextMessageInput): Promise<AuthResult<DesktopMessage[]>>
   selectMessageFile(targetId: string): Promise<AuthResult<SelectedMessageFile | null>>
+  selectMessageMedia(input: {
+    targetId: string
+    category: "image" | "video"
+  }): Promise<AuthResult<SelectedMessageMedia | null>>
   sendFileMessage(input: SendFileMessageInput): Promise<AuthResult<DesktopMessage[]>>
+  sendImageMessage(input: SendImageMessageInput): Promise<AuthResult<DesktopMessage[]>>
+  sendVideoMessage(input: SendVideoMessageInput): Promise<AuthResult<DesktopMessage[]>>
   retryMessage(input: RetryMessageInput): Promise<AuthResult<DesktopMessage[]>>
   setMessageReaction(input: SetMessageReactionInput): Promise<AuthResult<DesktopMessage[]>>
   listMessageReactionUsers(

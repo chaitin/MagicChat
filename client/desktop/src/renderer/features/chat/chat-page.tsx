@@ -46,10 +46,12 @@ import { Button as BeButton } from "@/components/motion/button/base"
 import { Input as BeInput } from "@/components/motion/input"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import { ExpressionPickerPanel } from "./expression-picker-panel"
+import { prepareImageMessage, type PreparedImageMessage } from "./image-message"
 import { MessageBodyRenderer } from "./message-body-renderer"
 import { MessageReactionChips } from "./message-reaction-chips"
 import { MessageReactionPicker } from "./message-reaction-picker"
 import { SendFileMessageDialog } from "./send-file-message-dialog"
+import { SendMediaMessageDialog } from "./send-media-message-dialog"
 import { SettingsDialog } from "@/components/settings-dialog"
 import {
   AlertDialog,
@@ -84,6 +86,7 @@ import type {
   DesktopConversation,
   DesktopMessage,
   SelectedMessageFile,
+  SelectedMessageMedia,
 } from "../../../shared/account-data"
 import type { ServerCatalog } from "../../../shared/auth"
 import { JIYING_HOMEPAGE, type ThemePreference } from "../../../shared/desktop"
@@ -136,6 +139,20 @@ export function ChatPage({
   const [fileDialogOpen, setFileDialogOpen] = useState(false)
   const [pendingFile, setPendingFile] = useState<{
     file: SelectedMessageFile
+    conversationId: string
+    conversationName: string
+  } | null>(null)
+  const [selectingMedia, setSelectingMedia] = useState<"image" | "video" | null>(null)
+  const [sendingMedia, setSendingMedia] = useState<"image" | "video" | null>(null)
+  const [mediaCaption, setMediaCaption] = useState("")
+  const [pendingImage, setPendingImage] = useState<{
+    selected: SelectedMessageMedia
+    prepared: PreparedImageMessage
+    conversationId: string
+    conversationName: string
+  } | null>(null)
+  const [pendingVideo, setPendingVideo] = useState<{
+    selected: SelectedMessageMedia
     conversationId: string
     conversationName: string
   } | null>(null)
@@ -370,6 +387,147 @@ export function ChatPage({
       setSendingFile(false)
     }
   }, [focusComposer, pendingFile, sendingFile, showToast, targetId])
+
+  const clearPendingImage = useCallback(() => {
+    setPendingImage(null)
+    setMediaCaption("")
+  }, [])
+
+  const selectMedia = useCallback(
+    async (category: "image" | "video") => {
+      if (!window.desktop || !selected || selectingMedia || sendingMedia) return
+      setSelectingMedia(category)
+      try {
+        const result = await window.desktop.accountData.selectMessageMedia({ targetId, category })
+        if (!result.ok) {
+          showToast({
+            status: "error",
+            title: `选择${category === "image" ? "图片" : "视频"}失败`,
+            description: result.error.message,
+          })
+          return
+        }
+        if (!result.data) return
+        setMediaCaption("")
+        if (category === "image") {
+          const prepared = await prepareImageMessage(result.data)
+          clearPendingImage()
+          setPendingImage({
+            selected: result.data,
+            prepared,
+            conversationId: selected.id,
+            conversationName: selected.name,
+          })
+        } else {
+          setPendingVideo({
+            selected: result.data,
+            conversationId: selected.id,
+            conversationName: selected.name,
+          })
+        }
+      } catch (error) {
+        showToast({
+          status: "error",
+          title: `${category === "image" ? "读取图片" : "选择视频"}失败`,
+          description: error instanceof Error ? error.message : undefined,
+        })
+      } finally {
+        setSelectingMedia(null)
+      }
+    },
+    [clearPendingImage, selected, selectingMedia, sendingMedia, showToast, targetId],
+  )
+
+  const sendPendingImage = useCallback(async () => {
+    if (!window.desktop || !pendingImage || sendingMedia) return
+    setSendingMedia("image")
+    try {
+      const contentType = pendingImage.prepared.blob.type
+      if (contentType !== "image/webp" && contentType !== "image/png") {
+        throw new Error("图片内容格式不正确")
+      }
+      const result = await window.desktop.accountData.sendImageMessage({
+        targetId,
+        conversationId: pendingImage.conversationId,
+        selectionToken: pendingImage.selected.token,
+        bytes: await pendingImage.prepared.blob.arrayBuffer(),
+        name: pendingImage.prepared.name,
+        contentType,
+        width: pendingImage.prepared.width,
+        height: pendingImage.prepared.height,
+        caption: mediaCaption,
+      })
+      if (!result.ok) {
+        showToast({
+          status: "error",
+          title: "发送图片失败",
+          description: result.error.message,
+        })
+        return
+      }
+      if (selectedIdRef.current === pendingImage.conversationId) {
+        scrollToBottomRef.current = true
+        setMessages(result.data)
+      }
+      clearPendingImage()
+      focusComposer()
+    } catch (error) {
+      showToast({
+        status: "error",
+        title: "发送图片失败",
+        description: error instanceof Error ? error.message : undefined,
+      })
+    } finally {
+      setSendingMedia(null)
+    }
+  }, [
+    clearPendingImage,
+    focusComposer,
+    mediaCaption,
+    pendingImage,
+    sendingMedia,
+    showToast,
+    targetId,
+  ])
+
+  const sendPendingVideo = useCallback(async () => {
+    if (!window.desktop || !pendingVideo || sendingMedia) return
+    setSendingMedia("video")
+    try {
+      const result = await window.desktop.accountData.sendVideoMessage({
+        targetId,
+        conversationId: pendingVideo.conversationId,
+        selectionToken: pendingVideo.selected.token,
+        caption: mediaCaption,
+      })
+      if (!result.ok) {
+        showToast({
+          status: "error",
+          title: "发送视频失败",
+          description: result.error.message,
+        })
+        return
+      }
+      if (selectedIdRef.current === pendingVideo.conversationId) {
+        scrollToBottomRef.current = true
+        setMessages(result.data)
+      }
+      setPendingVideo(null)
+      setMediaCaption("")
+      focusComposer()
+    } catch {
+      showToast({ status: "error", title: "发送视频失败" })
+    } finally {
+      setSendingMedia(null)
+    }
+  }, [focusComposer, mediaCaption, pendingVideo, sendingMedia, showToast, targetId])
+
+  useEffect(() => {
+    const resourceUrl = pendingImage?.prepared.resourceUrl
+    return () => {
+      if (resourceUrl) URL.revokeObjectURL(resourceUrl)
+    }
+  }, [pendingImage?.prepared.resourceUrl])
 
   const retryMessage = useCallback(
     (message: DesktopMessage) => {
@@ -823,7 +981,12 @@ export function ChatPage({
                                             flushMedia={flushMediaBubble}
                                           />
                                           {message.reactions.length > 0 && (
-                                            <div className={cn(flushMediaBubble && "mx-2 mb-2")}>
+                                            <div
+                                              className={cn(
+                                                "max-w-full min-w-0",
+                                                flushMediaBubble && "mx-2 mb-2",
+                                              )}
+                                            >
                                               <MessageReactionChips
                                                 targetId={targetId}
                                                 conversationId={message.conversationId}
@@ -954,8 +1117,20 @@ export function ChatPage({
                             loading={selectingFile}
                             onClick={selectFile}
                           />
-                          <ComposerButton label="插入图片" icon={Image01Icon} />
-                          <ComposerButton label="插入视频" icon={Video01Icon} />
+                          <ComposerButton
+                            label={selectingMedia === "image" ? "正在读取图片" : "插入图片"}
+                            icon={selectingMedia === "image" ? Loading03Icon : Image01Icon}
+                            disabled={Boolean(selectingMedia || sendingMedia)}
+                            loading={selectingMedia === "image"}
+                            onClick={() => void selectMedia("image")}
+                          />
+                          <ComposerButton
+                            label={selectingMedia === "video" ? "正在选择视频" : "插入视频"}
+                            icon={selectingMedia === "video" ? Loading03Icon : Video01Icon}
+                            disabled={Boolean(selectingMedia || sendingMedia)}
+                            loading={selectingMedia === "video"}
+                            onClick={() => void selectMedia("video")}
+                          />
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
                           <ComposerButton label="语音输入" icon={Mic01Icon} />
@@ -989,6 +1164,41 @@ export function ChatPage({
       ) : (
         <SectionPlaceholder section={activeSection} />
       )}
+      <SendMediaMessageDialog
+        category="image"
+        caption={mediaCaption}
+        conversationName={pendingImage?.conversationName ?? ""}
+        open={Boolean(pendingImage)}
+        resourceUrl={pendingImage?.prepared.resourceUrl ?? ""}
+        sending={sendingMedia === "image"}
+        onCaptionChange={setMediaCaption}
+        onConfirm={sendPendingImage}
+        onOpenChange={(open) => {
+          if (sendingMedia) return
+          if (!open) {
+            clearPendingImage()
+            focusComposer()
+          }
+        }}
+      />
+      <SendMediaMessageDialog
+        category="video"
+        caption={mediaCaption}
+        conversationName={pendingVideo?.conversationName ?? ""}
+        open={Boolean(pendingVideo)}
+        resourceUrl={pendingVideo?.selected.resourceUrl ?? ""}
+        sending={sendingMedia === "video"}
+        onCaptionChange={setMediaCaption}
+        onConfirm={sendPendingVideo}
+        onOpenChange={(open) => {
+          if (sendingMedia) return
+          if (!open) {
+            setPendingVideo(null)
+            setMediaCaption("")
+            focusComposer()
+          }
+        }}
+      />
       <SendFileMessageDialog
         conversationName={pendingFile?.conversationName ?? ""}
         file={pendingFile?.file ?? null}

@@ -39,7 +39,9 @@ import type {
   DesktopMessageReactionUser,
   MessageReactionUsersInput,
   RetryMessageInput,
+  SendImageMessageInput,
   SendTextMessageInput,
+  SendVideoMessageInput,
   SetMessageReactionInput,
 } from "../shared/account-data"
 import {
@@ -279,6 +281,40 @@ export class AuthController {
     return this.requireAccountRuntime().sendFileMessage(input.conversationId, file)
   }
 
+  async sendImageMessage(
+    input: SendImageMessageInput,
+    image: { path: string; sizeBytes: number },
+  ): Promise<DesktopMessage[]> {
+    await this.initialized
+    this.requireTarget(input?.targetId)
+    return this.requireAccountRuntime().sendImageMessage(input.conversationId, {
+      path: image.path,
+      name: input.name,
+      sizeBytes: image.sizeBytes,
+      contentType: input.contentType,
+      width: input.width,
+      height: input.height,
+      caption: input.caption,
+    })
+  }
+
+  async sendVideoMessage(
+    input: SendVideoMessageInput,
+    video: {
+      path: string
+      name: string
+      sizeBytes: number
+      contentType: "video/mp4" | "video/webm"
+    },
+  ): Promise<DesktopMessage[]> {
+    await this.initialized
+    this.requireTarget(input?.targetId)
+    return this.requireAccountRuntime().sendVideoMessage(input.conversationId, {
+      ...video,
+      caption: input.caption,
+    })
+  }
+
   async retryMessage(input: RetryMessageInput): Promise<DesktopMessage[]> {
     await this.initialized
     this.requireTarget(input?.targetId)
@@ -303,6 +339,18 @@ export class AuthController {
     await this.initialized
     this.requireTarget(request?.targetId)
     return this.requireAccountRuntime().ensureMediaCached(request)
+  }
+
+  async getOutgoingMedia(targetId: string, clientMessageId: string) {
+    await this.initialized
+    this.requireTarget(targetId)
+    return this.requireAccountRuntime().getOutgoingMedia(clientMessageId)
+  }
+
+  async readOutgoingMedia(targetId: string, clientMessageId: string, range?: string) {
+    await this.initialized
+    this.requireTarget(targetId)
+    return this.requireAccountRuntime().readOutgoingMedia(clientMessageId, range)
   }
 
   async getCachedMedia(targetId: string, cacheKey: string): Promise<CachedMedia> {

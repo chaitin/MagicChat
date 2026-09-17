@@ -89,6 +89,46 @@ export class AccountRuntime {
     return this.conversationManager!.sendFileMessage(conversationId, file)
   }
 
+  sendImageMessage(
+    conversationId: string,
+    image: {
+      path: string
+      name: string
+      sizeBytes: number
+      contentType: "image/webp" | "image/png"
+      width: number
+      height: number
+      caption: string
+    },
+  ) {
+    this.assertInitialized()
+    return this.conversationManager!.sendImageMessage(conversationId, image)
+  }
+
+  sendVideoMessage(
+    conversationId: string,
+    video: {
+      path: string
+      name: string
+      sizeBytes: number
+      contentType: "video/mp4" | "video/webm"
+      caption: string
+    },
+  ) {
+    this.assertInitialized()
+    return this.conversationManager!.sendVideoMessage(conversationId, video)
+  }
+
+  readOutgoingMedia(clientMessageId: string, range?: string) {
+    this.assertInitialized()
+    return this.conversationManager!.readOutgoingMedia(clientMessageId, range)
+  }
+
+  getOutgoingMedia(clientMessageId: string) {
+    this.assertInitialized()
+    return this.conversationManager!.getOutgoingMedia(clientMessageId)
+  }
+
   retryMessage(conversationId: string, clientMessageId: string) {
     this.assertInitialized()
     return this.conversationManager!.retryMessage(conversationId, clientMessageId)
