@@ -1,8 +1,10 @@
-import { lstat, readdir } from "node:fs/promises"
+import { randomUUID } from "node:crypto"
+import { lstat, readdir, stat } from "node:fs/promises"
 import path from "node:path"
 import {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   Menu,
   nativeImage,
@@ -12,7 +14,16 @@ import {
   Tray,
   type IpcMainInvokeEvent,
 } from "electron"
-import { ACCOUNT_DATA_CHANNELS, type AvatarRequest } from "../shared/account-data"
+import {
+  ACCOUNT_DATA_CHANNELS,
+  type AvatarRequest,
+  type MessageReactionUsersInput,
+  type RetryMessageInput,
+  type SendFileMessageInput,
+  type SendTextMessageInput,
+  type SelectedMessageFile,
+  type SetMessageReactionInput,
+} from "../shared/account-data"
 import {
   AUTH_CHANNELS,
   AuthFailure,
@@ -31,8 +42,10 @@ import {
   type SystemInfo,
   type ThemePreference,
 } from "../shared/desktop"
+import { MEDIA_CHANNELS, type MediaCacheRequest, type MediaPreviewRequest } from "../shared/media"
 import { SCREENSHOT_CHANNELS, type ScreenshotSelection } from "../shared/screenshot"
 import { AuthController, authResult } from "./auth-controller"
+import { MediaPreviewWindow } from "./media-preview-window"
 import { ScreenshotManager } from "./screenshot-manager"
 import { ShortcutManager } from "./shortcut-manager"
 import { checkForUpdates, isTrustedReleaseUrl } from "./update-service"
@@ -46,6 +59,10 @@ if (!app.isPackaged && process.platform === "linux" && process.env.WSL_DISTRO_NA
 protocol.registerSchemesAsPrivileged([
   {
     scheme: "jiying-avatar",
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+  },
+  {
+    scheme: "jiying-media",
     privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
   },
 ])
@@ -63,8 +80,8 @@ let isQuitting = false
 function createWindow() {
   if (mainWindow) return
   const window = new BrowserWindow({
-    width: 1280,
-    height: 900,
+    width: 1080,
+    height: 760,
     minWidth: 760,
     minHeight: 560,
     title: "即应",
@@ -203,12 +220,23 @@ void app.whenReady().then(async () => {
     onSyncStateChange: (event) =>
       mainWindow?.webContents.send(ACCOUNT_DATA_CHANNELS.syncStateChanged, event),
     onDataChanged: (event) => mainWindow?.webContents.send(ACCOUNT_DATA_CHANNELS.changed, event),
+    onMediaProgress: (event) =>
+      mainWindow?.webContents.send(MEDIA_CHANNELS.downloadProgress, event),
   })
+  const mediaPreview = new MediaPreviewWindow(
+    path.join(__dirname, "../preload/mediaPreview.cjs"),
+    path.join(__dirname, "../renderer/index.html"),
+    !app.isPackaged ? process.env.ELECTRON_RENDERER_URL : undefined,
+  )
   const screenshot = new ScreenshotManager(
     path.join(__dirname, "../preload/screenshot.cjs"),
     path.join(__dirname, "../renderer/index.html"),
     !app.isPackaged ? process.env.ELECTRON_RENDERER_URL : undefined,
   )
+  const selectedMessageFiles = new Map<
+    string,
+    SelectedMessageFile & { targetId: string; path: string; selectedAt: number }
+  >()
   const shortcuts = new ShortcutManager(showMainWindow, () => screenshot.capture())
   try {
     shortcuts.update((await auth.getAppSettings()).shortcuts)
@@ -235,6 +263,30 @@ void app.whenReady().then(async () => {
       return new Response(null, { status: 404 })
     }
   })
+  protocol.handle("jiying-media", async (request) => {
+    try {
+      const url = new URL(request.url)
+      const [targetId, resourceId] = url.pathname.slice(1).split("/", 2).map(decodeURIComponent)
+      if (!targetId || !resourceId) return new Response(null, { status: 404 })
+      if (url.hostname === "cache") {
+        return await auth.readCachedMedia(
+          targetId,
+          resourceId,
+          request.headers.get("range") ?? undefined,
+        )
+      }
+      if (url.hostname === "file") {
+        return await auth.fetchTemporaryFile(
+          targetId,
+          resourceId,
+          request.headers.get("range") ?? undefined,
+        )
+      }
+      return new Response(null, { status: 404 })
+    } catch {
+      return new Response(null, { status: 404 })
+    }
+  })
   function handleIpc<T>(channel: string, operation: (input: unknown) => Promise<T>) {
     ipcMain.handle(channel, (event, input: unknown) =>
       authResult(async () => {
@@ -243,23 +295,34 @@ void app.whenReady().then(async () => {
       }),
     )
   }
-  ipcMain.handle(DESKTOP_CHANNELS.windowGetState, (event) => {
-    assertTrustedSender(event)
-    return mainWindow?.isMaximized() ?? false
-  })
+  function windowForControl(event: IpcMainInvokeEvent) {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (
+      !window ||
+      event.senderFrame !== event.sender.mainFrame ||
+      (window !== mainWindow && !mediaPreview.ownsSender(event.sender))
+    ) {
+      throw new AuthFailure("untrusted_sender", "窗口请求来源不受信任")
+    }
+    return window
+  }
+  ipcMain.handle(DESKTOP_CHANNELS.windowGetState, (event) => windowForControl(event).isMaximized())
   ipcMain.handle(DESKTOP_CHANNELS.windowMinimize, (event) => {
-    assertTrustedSender(event)
-    mainWindow?.minimize()
+    windowForControl(event).minimize()
   })
   ipcMain.handle(DESKTOP_CHANNELS.windowToggleMaximize, (event) => {
-    assertTrustedSender(event)
-    if (!mainWindow) return
-    if (mainWindow.isMaximized()) mainWindow.unmaximize()
-    else mainWindow.maximize()
+    const window = windowForControl(event)
+    if (window.isMaximized()) window.unmaximize()
+    else window.maximize()
   })
   ipcMain.handle(DESKTOP_CHANNELS.windowClose, (event) => {
-    assertTrustedSender(event)
-    mainWindow?.close()
+    windowForControl(event).close()
+  })
+  ipcMain.handle(MEDIA_CHANNELS.previewInitialize, (event) => {
+    if (event.senderFrame !== event.sender.mainFrame || !mediaPreview.ownsSender(event.sender)) {
+      throw new AuthFailure("untrusted_sender", "窗口请求来源不受信任")
+    }
+    return mediaPreview.getPayload(event.sender)
   })
   ipcMain.handle(SCREENSHOT_CHANNELS.initialize, (event) => {
     if (!screenshot.ownsSender(event.sender)) {
@@ -279,6 +342,34 @@ void app.whenReady().then(async () => {
     }
     screenshot.cancel()
   })
+  handleIpc(MEDIA_CHANNELS.ensureCached, (input) =>
+    auth.ensureMediaCached(input as MediaCacheRequest),
+  )
+  handleIpc(MEDIA_CHANNELS.openPreview, async (input) => {
+    const value = input as MediaPreviewRequest | undefined
+    if (
+      !value ||
+      typeof value.targetId !== "string" ||
+      typeof value.cacheKey !== "string" ||
+      typeof value.conversationName !== "string" ||
+      !value.conversationName.trim() ||
+      value.conversationName.length > 200
+    ) {
+      throw new AuthFailure("invalid_media_preview", "媒体预览请求不正确")
+    }
+    const cached = await auth.getCachedMedia(value.targetId, value.cacheKey)
+    if (cached.category === "attachment") {
+      throw new AuthFailure("unsupported_media_preview", "该文件类型不支持预览")
+    }
+    mediaPreview.open({
+      title: value.conversationName.trim(),
+      category: cached.category,
+      contentType: cached.contentType,
+      originalName: cached.originalName,
+      resourceUrl: cached.resourceUrl,
+    })
+    return null
+  })
   handleIpc(ACCOUNT_DATA_CHANNELS.initialize, (input) =>
     auth.initializeAccountData(input as string),
   )
@@ -288,6 +379,84 @@ void app.whenReady().then(async () => {
   handleIpc(ACCOUNT_DATA_CHANNELS.listMessages, (input) => {
     const value = input as { targetId?: string; conversationId?: string } | undefined
     return auth.listMessages(value?.targetId ?? "", value?.conversationId ?? "")
+  })
+  handleIpc(ACCOUNT_DATA_CHANNELS.selectMessageFile, async (input) => {
+    const targetId = typeof input === "string" ? input : ""
+    if (!targetId) throw new AuthFailure("invalid_target", "账号不存在")
+    for (const [token, file] of selectedMessageFiles) {
+      if (Date.now() - file.selectedAt > 10 * 60_000) selectedMessageFiles.delete(token)
+    }
+    if (!mainWindow) throw new AuthFailure("window_unavailable", "主窗口不可用")
+    const selection = await dialog.showOpenDialog(mainWindow, {
+      title: "选择要发送的文件",
+      properties: ["openFile"],
+    })
+    const filePath = selection.canceled ? undefined : selection.filePaths[0]
+    if (!filePath) return null
+    const fileStat = await stat(filePath)
+    if (!fileStat.isFile() || fileStat.size <= 0) {
+      throw new AuthFailure("invalid_file", "文件不能为空")
+    }
+    if (fileStat.size > 500 * 1024 * 1024) {
+      throw new AuthFailure("file_too_large", "文件不能超过 500MiB")
+    }
+    const token = randomUUID()
+    const file: SelectedMessageFile & {
+      targetId: string
+      path: string
+      selectedAt: number
+    } = {
+      token,
+      name: path.basename(filePath),
+      sizeBytes: fileStat.size,
+      targetId,
+      path: filePath,
+      selectedAt: Date.now(),
+    }
+    selectedMessageFiles.set(token, file)
+    return { token: file.token, name: file.name, sizeBytes: file.sizeBytes }
+  })
+  handleIpc(ACCOUNT_DATA_CHANNELS.sendFileMessage, async (input) => {
+    const value = input as SendFileMessageInput | undefined
+    const selected = value?.selectionToken
+      ? selectedMessageFiles.get(value.selectionToken)
+      : undefined
+    if (
+      !value ||
+      !selected ||
+      selected.targetId !== value.targetId ||
+      Date.now() - selected.selectedAt > 10 * 60_000
+    ) {
+      throw new AuthFailure("invalid_file_selection", "所选文件已失效，请重新选择")
+    }
+    selectedMessageFiles.delete(value.selectionToken)
+    const fileStat = await stat(selected.path)
+    if (!fileStat.isFile() || fileStat.size !== selected.sizeBytes) {
+      throw new AuthFailure("file_changed", "所选文件已发生变化，请重新选择")
+    }
+    return auth.sendFileMessage(value, selected)
+  })
+  handleIpc(ACCOUNT_DATA_CHANNELS.sendTextMessage, (input) =>
+    auth.sendTextMessage(input as SendTextMessageInput),
+  )
+  handleIpc(ACCOUNT_DATA_CHANNELS.retryMessage, (input) =>
+    auth.retryMessage(input as RetryMessageInput),
+  )
+  handleIpc(ACCOUNT_DATA_CHANNELS.setMessageReaction, (input) =>
+    auth.setMessageReaction(input as SetMessageReactionInput),
+  )
+  handleIpc(ACCOUNT_DATA_CHANNELS.listMessageReactionUsers, (input) =>
+    auth.listMessageReactionUsers(input as MessageReactionUsersInput),
+  )
+  handleIpc(ACCOUNT_DATA_CHANNELS.loadBeforeMessages, (input) => {
+    const value = input as
+      | { targetId?: string; conversationId?: string; beforeSeq?: number }
+      | undefined
+    return auth.loadBeforeMessages(
+      value?.targetId ?? "",
+      value?.conversationId ?? "",
+      value?.beforeSeq ?? 0,
+    )
   })
   handleIpc(ACCOUNT_DATA_CHANNELS.getContacts, (input) => auth.getContacts(input as string))
   handleIpc(ACCOUNT_DATA_CHANNELS.getAvatar, (input) => auth.getAvatar(input as AvatarRequest))
@@ -374,6 +543,7 @@ void app.whenReady().then(async () => {
   app.once("before-quit", () => {
     shortcuts.close()
     screenshot.close()
+    mediaPreview.close()
     auth.close()
   })
 })

@@ -1,5 +1,6 @@
 import type { AccountDataBridge } from "./account-data"
 import type { AuthBridge, AuthResult } from "./auth"
+import type { MediaBridge } from "./media"
 
 export type ThemePreference = "light" | "dark" | "system"
 export type DesktopPlatform = "windows" | "macos" | "linux"
@@ -78,6 +79,7 @@ export const DESKTOP_CHANNELS = {
 export interface DesktopBridge {
   readonly auth: AuthBridge
   readonly accountData: AccountDataBridge
+  readonly media: MediaBridge
   openHomepage(): Promise<AuthResult<null>>
   openExternalLink(url: string): Promise<AuthResult<null>>
   checkForUpdates(): Promise<AuthResult<UpdateInfo>>

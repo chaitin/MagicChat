@@ -11,23 +11,30 @@ import type {
   DesktopContactDirectory,
   DesktopConversation,
   DesktopMessage,
+  DesktopMessagePage,
+  MessageReactionUsersInput,
+  SetMessageReactionInput,
 } from "../../shared/account-data"
 import { AuthFailure } from "../../shared/auth"
+import type { CachedMedia, MediaCacheRequest, MediaDownloadProgress } from "../../shared/media"
 import { AccountDatabase } from "./account-database"
 import { AvatarManager } from "./avatar-manager"
 import type { AvatarResource } from "./avatar-types"
 import { AuthenticatedClient } from "./authenticated-client"
 import { ContactManager } from "./contact-manager"
 import { ConversationManager } from "./conversation-manager"
+import { MediaManager } from "./media-manager"
 import { ProjectManager } from "./project-manager"
 import { RealtimeManager, type RealtimeEvent } from "./realtime-manager"
 
 export class AccountRuntime {
   private database?: AccountDatabase
+  private client?: AuthenticatedClient
   private conversationManager?: ConversationManager
   private contactManager?: ContactManager
   private projectManager?: ProjectManager
   private avatarManager?: AvatarManager
+  private mediaManager?: MediaManager
   private realtimeManager?: RealtimeManager
   private initialization?: Promise<void>
   private revision = 0
@@ -46,6 +53,7 @@ export class AccountRuntime {
       token: string
       onSyncStateChange: (event: AccountDataSyncEvent) => void
       onDataChanged: (event: AccountDataChangedEvent) => void
+      onMediaProgress: (event: MediaDownloadProgress) => void
     },
   ) {}
 
@@ -64,6 +72,87 @@ export class AccountRuntime {
   listMessages(conversationId: string): DesktopMessage[] {
     this.assertInitialized()
     return this.conversationManager!.listMessages(conversationId)
+  }
+
+  loadBeforeMessages(conversationId: string, beforeSeq: number): Promise<DesktopMessagePage> {
+    this.assertInitialized()
+    return this.conversationManager!.loadBeforeMessages(conversationId, beforeSeq)
+  }
+
+  sendTextMessage(conversationId: string, content: string, bodyType: "text" | "markdown") {
+    this.assertInitialized()
+    return this.conversationManager!.sendTextMessage(conversationId, content, bodyType)
+  }
+
+  sendFileMessage(conversationId: string, file: { path: string; name: string; sizeBytes: number }) {
+    this.assertInitialized()
+    return this.conversationManager!.sendFileMessage(conversationId, file)
+  }
+
+  retryMessage(conversationId: string, clientMessageId: string) {
+    this.assertInitialized()
+    return this.conversationManager!.retryMessage(conversationId, clientMessageId)
+  }
+
+  listMessageReactionUsers(input: Omit<MessageReactionUsersInput, "targetId">) {
+    this.assertInitialized()
+    return this.conversationManager!.listMessageReactionUsers(input)
+  }
+
+  async setMessageReaction(input: Omit<SetMessageReactionInput, "targetId">) {
+    this.assertInitialized()
+    const messages = await this.conversationManager!.setMessageReaction(input)
+    this.notifyChanged(["messages"], [input.conversationId])
+    return messages
+  }
+
+  async ensureMediaCached(request: MediaCacheRequest): Promise<CachedMedia> {
+    this.assertInitialized()
+    return this.mediaManager!.ensureCached(request)
+  }
+
+  async getCachedMedia(cacheKey: string): Promise<CachedMedia> {
+    this.assertInitialized()
+    return this.mediaManager!.getCached(cacheKey)
+  }
+
+  async readCachedMedia(cacheKey: string, range?: string): Promise<Response> {
+    this.assertInitialized()
+    return this.mediaManager!.createResourceResponse(cacheKey, range)
+  }
+
+  async fetchTemporaryFile(
+    fileId: string,
+    range?: string,
+    signal?: AbortSignal,
+  ): Promise<Response> {
+    this.assertInitialized()
+    if (!fileId || fileId.length > 128) {
+      throw new AuthFailure("invalid_file_id", "文件标识不正确")
+    }
+    const data = await this.client!.post("/api/client/temporary-files/read-urls", {
+      file_ids: [fileId],
+    })
+    if (!data || typeof data !== "object" || !Array.isArray((data as { urls?: unknown }).urls)) {
+      throw new AuthFailure("invalid_response", "文件访问地址响应格式不正确")
+    }
+    const value = (data as { urls: unknown[] }).urls[0]
+    if (
+      !value ||
+      typeof value !== "object" ||
+      typeof (value as { url?: unknown }).url !== "string"
+    ) {
+      throw new AuthFailure("invalid_response", "文件访问地址响应格式不正确")
+    }
+    const url = new URL((value as { url: string }).url, `${this.input.serverUrl}/`)
+    if (url.protocol !== "https:" && url.protocol !== "http:") {
+      throw new AuthFailure("invalid_response", "文件访问地址格式不正确")
+    }
+    return this.input.session.fetch(url.toString(), {
+      headers: range ? { Range: range } : undefined,
+      credentials: "omit",
+      signal,
+    })
   }
 
   getContacts(): DesktopContactDirectory {
@@ -92,12 +181,16 @@ export class AccountRuntime {
     this.initialized = false
     this.realtimeManager?.close()
     this.realtimeManager = undefined
+    this.mediaManager?.close()
+    this.mediaManager = undefined
+    this.conversationManager?.close()
     this.conversationManager = undefined
     this.contactManager = undefined
     this.projectManager = undefined
     this.avatarManager = undefined
     this.database?.close()
     this.database = undefined
+    this.client = undefined
   }
 
   private async initializeOnce() {
@@ -115,7 +208,14 @@ export class AccountRuntime {
         this.input.session,
         this.input.token,
       )
-      this.conversationManager = new ConversationManager(this.database, client, this.input.userId)
+      this.client = client
+      this.conversationManager = new ConversationManager(
+        this.database,
+        client,
+        this.input.userId,
+        this.input.userName,
+        (conversationId) => this.notifyChanged(["conversations", "messages"], [conversationId]),
+      )
       this.contactManager = new ContactManager(this.database, client)
       const currentUserAvatar = {
         type: "user" as const,
@@ -124,6 +224,14 @@ export class AccountRuntime {
         avatarUrl: this.input.userAvatar,
       }
       this.projectManager = new ProjectManager(client, this.contactManager, currentUserAvatar)
+      this.mediaManager = new MediaManager(
+        accountDirectory,
+        `${this.input.serverUrl}\0${this.input.userId}`,
+        this.database,
+        (fileId, signal) => this.fetchTemporaryFile(fileId, undefined, signal),
+        this.input.onMediaProgress,
+      )
+      await this.mediaManager.initialize()
       this.avatarManager = new AvatarManager(
         accountDirectory,
         this.input.serverUrl,

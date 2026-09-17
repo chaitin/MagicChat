@@ -12,6 +12,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: path.join(directory, "src/preload/index.ts"),
+          mediaPreview: path.join(directory, "src/preload/media-preview.ts"),
           screenshot: path.join(directory, "src/preload/screenshot.ts"),
         },
         output: { format: "cjs", entryFileNames: "[name].cjs" },

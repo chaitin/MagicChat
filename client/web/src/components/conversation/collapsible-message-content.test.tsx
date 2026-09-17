@@ -20,13 +20,13 @@ describe("CollapsibleMessageContent", () => {
         .closest<HTMLElement>("[id]")
       const expandButton = screen.getByRole("button", { name: "展开全文" })
 
-      expect(viewport).toHaveStyle({ maxHeight: "360px" })
+      expect(viewport).toHaveStyle({ maxHeight: "240px" })
       expect(expandButton).toHaveAttribute("aria-expanded", "false")
       expect(expandButton).toHaveClass("absolute", "h-[calc(3rem+1.75rem)]")
       expect(expandButton.parentElement).toHaveClass("pb-7")
 
       await user.click(expandButton)
-      expect(viewport).not.toHaveStyle({ maxHeight: "360px" })
+      expect(viewport).not.toHaveStyle({ maxHeight: "240px" })
       expect(
         screen.queryByRole("button", { name: "展开全文" })
       ).not.toBeInTheDocument()

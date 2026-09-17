@@ -35,6 +35,12 @@ import type {
   DesktopContactDirectory,
   DesktopConversation,
   DesktopMessage,
+  DesktopMessagePage,
+  DesktopMessageReactionUser,
+  MessageReactionUsersInput,
+  RetryMessageInput,
+  SendTextMessageInput,
+  SetMessageReactionInput,
 } from "../shared/account-data"
 import {
   DEFAULT_SHORTCUTS,
@@ -44,6 +50,7 @@ import {
   type ThemePreference,
 } from "../shared/desktop"
 import { AccountRuntime } from "./account/account-runtime"
+import type { CachedMedia, MediaCacheRequest, MediaDownloadProgress } from "../shared/media"
 import type { AvatarResource } from "./account/avatar-types"
 
 type StoredLogin = {
@@ -120,7 +127,12 @@ export class AuthController {
     private readonly accountEvents: {
       onSyncStateChange: (event: AccountDataSyncEvent) => void
       onDataChanged: (event: AccountDataChangedEvent) => void
-    } = { onSyncStateChange: () => undefined, onDataChanged: () => undefined },
+      onMediaProgress: (event: MediaDownloadProgress) => void
+    } = {
+      onSyncStateChange: () => undefined,
+      onDataChanged: () => undefined,
+      onMediaProgress: () => undefined,
+    },
   ) {
     this.filePath = path.join(userDataPath, "app-config.json")
     this.initialized = this.loadConfig()
@@ -236,6 +248,79 @@ export class AuthController {
     await this.initialized
     this.requireTarget(targetId)
     return this.requireAccountRuntime().listMessages(conversationId)
+  }
+
+  async loadBeforeMessages(
+    targetId: string,
+    conversationId: string,
+    beforeSeq: number,
+  ): Promise<DesktopMessagePage> {
+    await this.initialized
+    this.requireTarget(targetId)
+    return this.requireAccountRuntime().loadBeforeMessages(conversationId, beforeSeq)
+  }
+
+  async sendTextMessage(input: SendTextMessageInput): Promise<DesktopMessage[]> {
+    await this.initialized
+    this.requireTarget(input?.targetId)
+    return this.requireAccountRuntime().sendTextMessage(
+      input.conversationId,
+      input.content,
+      input.bodyType,
+    )
+  }
+
+  async sendFileMessage(
+    input: { targetId: string; conversationId: string },
+    file: { path: string; name: string; sizeBytes: number },
+  ): Promise<DesktopMessage[]> {
+    await this.initialized
+    this.requireTarget(input?.targetId)
+    return this.requireAccountRuntime().sendFileMessage(input.conversationId, file)
+  }
+
+  async retryMessage(input: RetryMessageInput): Promise<DesktopMessage[]> {
+    await this.initialized
+    this.requireTarget(input?.targetId)
+    return this.requireAccountRuntime().retryMessage(input.conversationId, input.clientMessageId)
+  }
+
+  async listMessageReactionUsers(
+    input: MessageReactionUsersInput,
+  ): Promise<DesktopMessageReactionUser[]> {
+    await this.initialized
+    this.requireTarget(input?.targetId)
+    return this.requireAccountRuntime().listMessageReactionUsers(input)
+  }
+
+  async setMessageReaction(input: SetMessageReactionInput): Promise<DesktopMessage[]> {
+    await this.initialized
+    this.requireTarget(input?.targetId)
+    return this.requireAccountRuntime().setMessageReaction(input)
+  }
+
+  async ensureMediaCached(request: MediaCacheRequest): Promise<CachedMedia> {
+    await this.initialized
+    this.requireTarget(request?.targetId)
+    return this.requireAccountRuntime().ensureMediaCached(request)
+  }
+
+  async getCachedMedia(targetId: string, cacheKey: string): Promise<CachedMedia> {
+    await this.initialized
+    this.requireTarget(targetId)
+    return this.requireAccountRuntime().getCachedMedia(cacheKey)
+  }
+
+  async readCachedMedia(targetId: string, cacheKey: string, range?: string): Promise<Response> {
+    await this.initialized
+    this.requireTarget(targetId)
+    return this.requireAccountRuntime().readCachedMedia(cacheKey, range)
+  }
+
+  async fetchTemporaryFile(targetId: string, fileId: string, range?: string): Promise<Response> {
+    await this.initialized
+    this.requireTarget(targetId)
+    return this.requireAccountRuntime().fetchTemporaryFile(fileId, range)
   }
 
   async getContacts(targetId: string): Promise<DesktopContactDirectory> {
@@ -853,6 +938,7 @@ export class AuthController {
       token: active.credential.token,
       onSyncStateChange: this.accountEvents.onSyncStateChange,
       onDataChanged: this.accountEvents.onDataChanged,
+      onMediaProgress: this.accountEvents.onMediaProgress,
     })
   }
 

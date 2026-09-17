@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron"
 import { ACCOUNT_DATA_CHANNELS } from "../shared/account-data"
 import { DESKTOP_CHANNELS, type DesktopBridge } from "../shared/desktop"
 import { AUTH_CHANNELS } from "../shared/auth"
+import { MEDIA_CHANNELS, type MediaDownloadProgress } from "../shared/media"
 
 const platform =
   process.platform === "darwin" ? "macos" : process.platform === "win32" ? "windows" : "linux"
@@ -40,11 +41,32 @@ const bridge: DesktopBridge = {
       return () => ipcRenderer.removeListener(DESKTOP_CHANNELS.windowMaximizedChanged, listener)
     },
   },
+  media: {
+    ensureCached: (input) => ipcRenderer.invoke(MEDIA_CHANNELS.ensureCached, input),
+    openPreview: (input) => ipcRenderer.invoke(MEDIA_CHANNELS.openPreview, input),
+    onDownloadProgress: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, value: MediaDownloadProgress) =>
+        callback(value)
+      ipcRenderer.on(MEDIA_CHANNELS.downloadProgress, listener)
+      return () => ipcRenderer.removeListener(MEDIA_CHANNELS.downloadProgress, listener)
+    },
+  },
   accountData: {
     initialize: (targetId) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.initialize, targetId),
     listConversations: (targetId) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listConversations, targetId),
     listMessages: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listMessages, input),
+    loadBeforeMessages: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.loadBeforeMessages, input),
+    sendTextMessage: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.sendTextMessage, input),
+    selectMessageFile: (targetId) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.selectMessageFile, targetId),
+    sendFileMessage: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.sendFileMessage, input),
+    retryMessage: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.retryMessage, input),
+    setMessageReaction: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.setMessageReaction, input),
+    listMessageReactionUsers: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listMessageReactionUsers, input),
     getContacts: (targetId) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getContacts, targetId),
     getAvatar: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getAvatar, input),
     invalidateAvatar: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.invalidateAvatar, input),

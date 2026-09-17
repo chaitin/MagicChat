@@ -1,3 +1,4 @@
+import { openAsBlob } from "node:fs"
 import { type Session } from "electron"
 import { AuthFailure, isRecord } from "../../shared/auth"
 
@@ -24,6 +25,51 @@ export class AuthenticatedClient {
 
   post(path: string, body: Record<string, unknown>): Promise<unknown> {
     return this.request(path, "POST", body)
+  }
+
+  put(path: string, body: Record<string, unknown>): Promise<unknown> {
+    return this.request(path, "PUT", body)
+  }
+
+  async postFile(
+    endpoint: string,
+    fields: Record<string, string>,
+    file: { path: string; name: string },
+  ): Promise<unknown> {
+    this.assertEndpoint(endpoint)
+    try {
+      const formData = new FormData()
+      for (const [name, value] of Object.entries(fields)) formData.set(name, value)
+      formData.set("file", await openAsBlob(file.path), file.name)
+      const response = await this.serverSession.fetch(`${this.serverUrl}${endpoint}`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: formData,
+        credentials: "omit",
+        signal: AbortSignal.timeout(10 * 60_000),
+      })
+      const payload = await readJson(response)
+      if (!response.ok || (isRecord(payload) && payload.success === false)) {
+        const error = isRecord(payload) && isRecord(payload.error) ? payload.error : undefined
+        throw new AuthFailure(
+          typeof error?.code === "string" ? error.code : `http_${response.status}`,
+          typeof error?.message === "string" ? error.message : "发送文件失败",
+        )
+      }
+      if (!isRecord(payload) || !("data" in payload)) {
+        throw new AuthFailure("invalid_response", "发送文件响应格式不正确")
+      }
+      return payload.data
+    } catch (error) {
+      if (error instanceof AuthFailure) throw error
+      throw new AuthFailure(
+        "network",
+        error instanceof Error && error.name === "TimeoutError" ? "发送文件超时" : "发送文件失败",
+      )
+    }
   }
 
   async downloadAvatar(sourceUrl: string): Promise<{ bytes: Uint8Array; contentType: string }> {
@@ -72,12 +118,10 @@ export class AuthenticatedClient {
 
   private async request(
     endpoint: string,
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "PUT",
     body?: Record<string, unknown>,
   ): Promise<unknown> {
-    if (!endpoint.startsWith("/api/client/") || endpoint.includes("\\")) {
-      throw new AuthFailure("invalid_endpoint", "数据请求地址不受支持")
-    }
+    this.assertEndpoint(endpoint)
     try {
       const response = await this.serverSession.fetch(`${this.serverUrl}${endpoint}`, {
         method,
@@ -110,6 +154,12 @@ export class AuthenticatedClient {
           ? "账号数据请求超时"
           : "无法连接账号数据服务",
       )
+    }
+  }
+
+  private assertEndpoint(endpoint: string) {
+    if (!endpoint.startsWith("/api/client/") || endpoint.includes("\\")) {
+      throw new AuthFailure("invalid_endpoint", "数据请求地址不受支持")
     }
   }
 }

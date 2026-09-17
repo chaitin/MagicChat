@@ -23,10 +23,12 @@ export function LoginPage({
   theme,
   resolvedTheme,
   onThemeChange,
+  onOrganizationNameChange,
 }: {
   theme: ThemePreference
   resolvedTheme: Exclude<ThemePreference, "system">
   onThemeChange: (theme: ThemePreference) => void
+  onOrganizationNameChange: (name: string) => void
 }) {
   const { showToast } = useAnimatedToast()
   const {
@@ -74,6 +76,10 @@ export function LoginPage({
   }, [accept, connection, showToast])
 
   useEffect(() => window.desktop?.onOpenSettings(() => setSettingsOpen(true)), [])
+
+  useEffect(() => {
+    onOrganizationNameChange(connection?.user ? connection.info.organizationName : "")
+  }, [connection?.info.organizationName, connection?.user, onOrganizationNameChange])
 
   useEffect(() => {
     if (!connection?.targetId || !window.desktop) return

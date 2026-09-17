@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 const COLLAPSED_HEIGHTS = {
-  markdown: 360,
-  text: 273,
+  markdown: 240,
+  text: 240,
 } as const
 
 const collapsedContentMask: React.CSSProperties = {
@@ -86,7 +86,7 @@ export function CollapsibleMessageContent({
         <Button
           aria-controls={contentId}
           aria-expanded="false"
-          className="absolute inset-x-0 bottom-0 h-[calc(3rem+1.75rem)] w-full items-end px-2 pb-1 text-xs text-muted-foreground hover:bg-transparent dark:hover:bg-transparent"
+          className="absolute inset-x-0 bottom-0 h-[calc(3rem+1.75rem)] w-full items-end px-2 pb-1 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent dark:hover:text-foreground"
           onClick={(event) => {
             event.stopPropagation()
             setExpanded(true)

@@ -7,7 +7,9 @@ import type {
   DesktopConversation,
   DesktopMessage,
 } from "../../shared/account-data"
+import type { MediaCacheStatus, MediaCategory } from "../../shared/media"
 import type { AvatarCacheRecord } from "./avatar-types"
+import { normalizeDesktopMessageDetails } from "./message-normalizer"
 
 export type StoredConversation = DesktopConversation & { avatar: string; payload: unknown }
 export type StoredMessage = DesktopMessage & { payload: unknown }
@@ -18,6 +20,22 @@ export type StoredContactUser = DesktopContactUser & {
 }
 export type StoredContactGroup = DesktopContactGroup & { avatar: string; payload: unknown }
 export type StoredContactApp = DesktopContactApp & { avatar: string; payload: unknown }
+export type StoredMediaCache = {
+  cacheKey: string
+  category: MediaCategory
+  targetId: string
+  fileId: string
+  status: MediaCacheStatus
+  relativePath: string
+  originalName: string
+  contentType: string
+  extension: string
+  sizeBytes: number
+  sha256: string
+  modifiedAtMs: number
+  createdAt: number
+  lastAccessedAt: number
+}
 
 export class AccountDatabase {
   private readonly database: DatabaseSync
@@ -60,8 +78,11 @@ export class AccountDatabase {
         created_at TEXT NOT NULL,
         sender_id TEXT NOT NULL,
         sender_type TEXT NOT NULL,
+        sender_name TEXT NOT NULL DEFAULT '',
         body_type TEXT NOT NULL,
         content TEXT NOT NULL,
+        client_message_id TEXT NOT NULL DEFAULT '',
+        delivery_status TEXT NOT NULL DEFAULT '',
         payload_json TEXT NOT NULL,
         PRIMARY KEY (conversation_id, id),
         FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
@@ -111,12 +132,41 @@ export class AccountDatabase {
         checked_at INTEGER NOT NULL,
         PRIMARY KEY (type, entity_id)
       );
+
+      CREATE TABLE IF NOT EXISTS media_cache (
+        cache_key TEXT PRIMARY KEY,
+        category TEXT NOT NULL,
+        target_id TEXT NOT NULL,
+        file_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        relative_path TEXT NOT NULL,
+        original_name TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        extension TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        sha256 TEXT NOT NULL,
+        modified_at_ms INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        last_accessed_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS media_cache_lookup
+        ON media_cache(target_id, category, file_id);
+      CREATE INDEX IF NOT EXISTS media_cache_last_accessed
+        ON media_cache(last_accessed_at);
     `)
     this.ensureColumn("conversations", "avatar_type", "TEXT NOT NULL DEFAULT 'group'")
     this.ensureColumn("conversations", "avatar_id", "TEXT NOT NULL DEFAULT ''")
     this.ensureColumn("conversations", "created_at", "TEXT NOT NULL DEFAULT ''")
     this.ensureColumn("conversations", "notification_muted", "INTEGER NOT NULL DEFAULT 0")
     this.ensureColumn("conversations", "is_builtin_assistant", "INTEGER NOT NULL DEFAULT 0")
+    this.ensureColumn("messages", "sender_name", "TEXT NOT NULL DEFAULT ''")
+    this.ensureColumn("messages", "client_message_id", "TEXT NOT NULL DEFAULT ''")
+    this.ensureColumn("messages", "delivery_status", "TEXT NOT NULL DEFAULT ''")
+    this.database.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS messages_client_message_id
+        ON messages(conversation_id, client_message_id)
+        WHERE client_message_id <> '';
+    `)
     this.migrateConversationVisibility()
   }
 
@@ -168,20 +218,31 @@ export class AccountDatabase {
   upsertMessages(messages: StoredMessage[]) {
     const statement = this.database.prepare(`
       INSERT INTO messages (
-        conversation_id, id, seq, created_at, sender_id, sender_type,
-        body_type, content, payload_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        conversation_id, id, seq, created_at, sender_id, sender_type, sender_name,
+        body_type, content, client_message_id, delivery_status, payload_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(conversation_id, id) DO UPDATE SET
         seq = excluded.seq,
         created_at = excluded.created_at,
         sender_id = excluded.sender_id,
         sender_type = excluded.sender_type,
+        sender_name = excluded.sender_name,
         body_type = excluded.body_type,
         content = excluded.content,
+        client_message_id = excluded.client_message_id,
+        delivery_status = excluded.delivery_status,
         payload_json = excluded.payload_json
     `)
     this.transaction(() => {
       for (const message of messages) {
+        if (message.clientMessageId && !message.deliveryStatus) {
+          this.database
+            .prepare(
+              `DELETE FROM messages
+               WHERE conversation_id = ? AND client_message_id = ? AND id <> ?`,
+            )
+            .run(message.conversationId, message.clientMessageId, message.id)
+        }
         statement.run(
           message.conversationId,
           message.id,
@@ -189,8 +250,11 @@ export class AccountDatabase {
           message.createdAt,
           message.senderId,
           message.senderType,
+          message.senderName,
           message.bodyType,
           message.content,
+          message.clientMessageId,
+          message.deliveryStatus ?? "",
           JSON.stringify(message.payload),
         )
       }
@@ -275,26 +339,249 @@ export class AccountDatabase {
     }))
   }
 
+  createOptimisticMessage(input: {
+    conversationId: string
+    clientMessageId: string
+    content: string
+    bodyType: "text" | "markdown"
+    senderId: string
+    senderName: string
+  }) {
+    const seqRow = this.database
+      .prepare("SELECT COALESCE(MAX(seq), 0) AS seq FROM messages WHERE conversation_id = ?")
+      .get(input.conversationId) as Record<string, unknown>
+    const seq = Number(seqRow.seq) + 1
+    const createdAt = new Date().toISOString()
+    const id = `optimistic:${input.clientMessageId}`
+    const payload = {
+      id,
+      client_message_id: input.clientMessageId,
+      conversation_id: input.conversationId,
+      created_at: createdAt,
+      sender: { id: input.senderId, type: "user", name: input.senderName },
+      seq,
+      body: { type: input.bodyType, content: input.content },
+      reactions: [],
+    }
+    this.upsertMessages([
+      {
+        id,
+        conversationId: input.conversationId,
+        seq,
+        createdAt,
+        senderId: input.senderId,
+        senderType: "user",
+        senderName: input.senderName,
+        isMine: true,
+        bodyType: input.bodyType,
+        content: input.content,
+        clientMessageId: input.clientMessageId,
+        deliveryStatus: "sending",
+        body: { type: input.bodyType, content: input.content },
+        reactions: [],
+        payload,
+      },
+    ])
+    this.database
+      .prepare(
+        `UPDATE conversations
+         SET last_message_at = ?, last_message_summary = ?
+         WHERE id = ?`,
+      )
+      .run(createdAt, input.content, input.conversationId)
+  }
+
+  createOptimisticFileMessage(input: {
+    conversationId: string
+    clientMessageId: string
+    filePath: string
+    name: string
+    sizeBytes: number
+    senderId: string
+    senderName: string
+  }) {
+    const seqRow = this.database
+      .prepare("SELECT COALESCE(MAX(seq), 0) AS seq FROM messages WHERE conversation_id = ?")
+      .get(input.conversationId) as Record<string, unknown>
+    const seq = Number(seqRow.seq) + 1
+    const createdAt = new Date().toISOString()
+    const id = `optimistic:${input.clientMessageId}`
+    const body = {
+      type: "file" as const,
+      fileId: input.clientMessageId,
+      name: input.name,
+      sizeBytes: input.sizeBytes,
+    }
+    const payload = {
+      id,
+      client_message_id: input.clientMessageId,
+      conversation_id: input.conversationId,
+      created_at: createdAt,
+      sender: { id: input.senderId, type: "user", name: input.senderName },
+      seq,
+      body: {
+        type: "file",
+        file_id: input.clientMessageId,
+        name: input.name,
+        size_bytes: input.sizeBytes,
+      },
+      reactions: [],
+      local_file_path: input.filePath,
+    }
+    this.upsertMessages([
+      {
+        id,
+        conversationId: input.conversationId,
+        seq,
+        createdAt,
+        senderId: input.senderId,
+        senderType: "user",
+        senderName: input.senderName,
+        isMine: true,
+        bodyType: "file",
+        content: input.name,
+        clientMessageId: input.clientMessageId,
+        deliveryStatus: "sending",
+        body,
+        reactions: [],
+        payload,
+      },
+    ])
+    this.database
+      .prepare(
+        `UPDATE conversations
+         SET last_message_at = ?, last_message_summary = ?
+         WHERE id = ?`,
+      )
+      .run(createdAt, `[文件] ${input.name}`, input.conversationId)
+  }
+
+  setOutgoingMessageStatus(
+    conversationId: string,
+    clientMessageId: string,
+    status: "sending" | "failed",
+  ) {
+    return (
+      this.database
+        .prepare(
+          `UPDATE messages SET delivery_status = ?
+           WHERE conversation_id = ? AND client_message_id = ?`,
+        )
+        .run(status, conversationId, clientMessageId).changes === 1
+    )
+  }
+
+  getOutgoingMessage(conversationId: string, clientMessageId: string) {
+    const row = this.database
+      .prepare(
+        `SELECT content, body_type, delivery_status, payload_json
+         FROM messages
+         WHERE conversation_id = ? AND client_message_id = ?
+           AND body_type IN ('text', 'markdown', 'file')`,
+      )
+      .get(conversationId, clientMessageId) as Record<string, unknown> | undefined
+    if (!row) return undefined
+    if (row.body_type === "file") {
+      const parsedPayload = parsePayload(row)
+      const payload =
+        parsedPayload && typeof parsedPayload === "object" && !Array.isArray(parsedPayload)
+          ? (parsedPayload as Record<string, unknown>)
+          : undefined
+      const filePath = typeof payload?.local_file_path === "string" ? payload.local_file_path : ""
+      const body =
+        payload?.body && typeof payload.body === "object" && !Array.isArray(payload.body)
+          ? (payload.body as Record<string, unknown>)
+          : undefined
+      const sizeBytes = Number(body?.size_bytes)
+      if (!filePath || !Number.isSafeInteger(sizeBytes) || sizeBytes <= 0) return undefined
+      return {
+        bodyType: "file" as const,
+        filePath,
+        name: String(row.content),
+        sizeBytes,
+        status: String(row.delivery_status),
+      }
+    }
+    return {
+      content: String(row.content),
+      bodyType: row.body_type === "markdown" ? ("markdown" as const) : ("text" as const),
+      status: String(row.delivery_status),
+    }
+  }
+
+  failPendingMessages() {
+    this.database
+      .prepare("UPDATE messages SET delivery_status = 'failed' WHERE delivery_status = 'sending'")
+      .run()
+  }
+
+  updateMessageReactions(
+    conversationId: string,
+    messageId: string,
+    reactionVersion: number,
+    reactions: unknown[],
+  ) {
+    const row = this.database
+      .prepare("SELECT payload_json FROM messages WHERE conversation_id = ? AND id = ?")
+      .get(conversationId, messageId) as Record<string, unknown> | undefined
+    const payload = parsePayload(row)
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false
+    const updated = {
+      ...(payload as Record<string, unknown>),
+      reaction_version: reactionVersion,
+      reactions,
+    }
+    return (
+      this.database
+        .prepare("UPDATE messages SET payload_json = ? WHERE conversation_id = ? AND id = ?")
+        .run(JSON.stringify(updated), conversationId, messageId).changes === 1
+    )
+  }
+
   listMessages(conversationId: string, currentUserId: string): DesktopMessage[] {
     const rows = this.database
       .prepare(
-        `SELECT id, conversation_id, seq, created_at, sender_id, sender_type, body_type, content
+        `SELECT messages.id, messages.conversation_id, messages.seq, messages.created_at,
+                messages.sender_id, messages.sender_type,
+                COALESCE(
+                  NULLIF(messages.sender_name, ''),
+                  NULLIF(contact_users.nickname, ''),
+                  contact_users.name,
+                  contact_apps.name,
+                  ''
+                ) AS sender_name,
+                messages.body_type, messages.content, messages.client_message_id,
+                messages.delivery_status, messages.payload_json
          FROM messages
-         WHERE conversation_id = ?
-         ORDER BY seq ASC`,
+         LEFT JOIN contact_users
+           ON messages.sender_type = 'user' AND contact_users.id = messages.sender_id
+         LEFT JOIN contact_apps
+           ON messages.sender_type = 'app' AND contact_apps.id = messages.sender_id
+         WHERE messages.conversation_id = ?
+         ORDER BY messages.seq ASC`,
       )
       .all(conversationId) as Array<Record<string, unknown>>
-    return rows.map((row) => ({
-      id: String(row.id),
-      conversationId: String(row.conversation_id),
-      seq: Number(row.seq),
-      createdAt: String(row.created_at),
-      senderId: String(row.sender_id),
-      senderType: String(row.sender_type),
-      isMine: row.sender_id === currentUserId && row.sender_type === "user",
-      bodyType: String(row.body_type),
-      content: String(row.content),
-    }))
+    return rows.map((row) => {
+      const details = normalizeDesktopMessageDetails(parsePayload(row))
+      return {
+        id: String(row.id),
+        conversationId: String(row.conversation_id),
+        seq: Number(row.seq),
+        createdAt: String(row.created_at),
+        senderId: String(row.sender_id),
+        senderType: String(row.sender_type),
+        senderName: String(row.sender_name) || messageSenderNameFromPayload(row.payload_json),
+        isMine: row.sender_id === currentUserId && row.sender_type === "user",
+        bodyType: details.body.type,
+        content: String(row.content),
+        clientMessageId: String(row.client_message_id),
+        deliveryStatus:
+          row.delivery_status === "sending" || row.delivery_status === "failed"
+            ? row.delivery_status
+            : undefined,
+        ...details,
+      }
+    })
   }
 
   replaceContacts(input: {
@@ -513,6 +800,81 @@ export class AccountDatabase {
     })
   }
 
+  getMediaCache(cacheKey: string): StoredMediaCache | undefined {
+    const row = this.database
+      .prepare(
+        `SELECT cache_key, category, target_id, file_id, status, relative_path,
+                original_name, content_type, extension, size_bytes, sha256,
+                modified_at_ms, created_at, last_accessed_at
+         FROM media_cache WHERE cache_key = ?`,
+      )
+      .get(cacheKey) as Record<string, unknown> | undefined
+    return row ? mediaCacheRecord(row) : undefined
+  }
+
+  listIncompleteMediaCaches(): StoredMediaCache[] {
+    return (
+      this.database
+        .prepare(
+          `SELECT cache_key, category, target_id, file_id, status, relative_path,
+                  original_name, content_type, extension, size_bytes, sha256,
+                  modified_at_ms, created_at, last_accessed_at
+           FROM media_cache WHERE status <> 'ready'`,
+        )
+        .all() as Array<Record<string, unknown>>
+    ).map(mediaCacheRecord)
+  }
+
+  upsertMediaCache(record: StoredMediaCache) {
+    this.database
+      .prepare(
+        `INSERT INTO media_cache (
+           cache_key, category, target_id, file_id, status, relative_path,
+           original_name, content_type, extension, size_bytes, sha256,
+           modified_at_ms, created_at, last_accessed_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(cache_key) DO UPDATE SET
+           category = excluded.category,
+           target_id = excluded.target_id,
+           file_id = excluded.file_id,
+           status = excluded.status,
+           relative_path = excluded.relative_path,
+           original_name = excluded.original_name,
+           content_type = excluded.content_type,
+           extension = excluded.extension,
+           size_bytes = excluded.size_bytes,
+           sha256 = excluded.sha256,
+           modified_at_ms = excluded.modified_at_ms,
+           last_accessed_at = excluded.last_accessed_at`,
+      )
+      .run(
+        record.cacheKey,
+        record.category,
+        record.targetId,
+        record.fileId,
+        record.status,
+        record.relativePath,
+        record.originalName,
+        record.contentType,
+        record.extension,
+        record.sizeBytes,
+        record.sha256,
+        record.modifiedAtMs,
+        record.createdAt,
+        record.lastAccessedAt,
+      )
+  }
+
+  touchMediaCache(cacheKey: string, lastAccessedAt: number) {
+    this.database
+      .prepare("UPDATE media_cache SET last_accessed_at = ? WHERE cache_key = ?")
+      .run(lastAccessedAt, cacheKey)
+  }
+
+  deleteMediaCache(cacheKey: string) {
+    this.database.prepare("DELETE FROM media_cache WHERE cache_key = ?").run(cacheKey)
+  }
+
   close() {
     if (this.closed) return
     this.closed = true
@@ -552,12 +914,46 @@ export class AccountDatabase {
   }
 }
 
+function mediaCacheRecord(row: Record<string, unknown>): StoredMediaCache {
+  return {
+    cacheKey: String(row.cache_key),
+    category: String(row.category) as MediaCategory,
+    targetId: String(row.target_id),
+    fileId: String(row.file_id),
+    status: String(row.status) as MediaCacheStatus,
+    relativePath: String(row.relative_path),
+    originalName: String(row.original_name),
+    contentType: String(row.content_type),
+    extension: String(row.extension),
+    sizeBytes: Number(row.size_bytes),
+    sha256: String(row.sha256),
+    modifiedAtMs: Number(row.modified_at_ms),
+    createdAt: Number(row.created_at),
+    lastAccessedAt: Number(row.last_accessed_at),
+  }
+}
+
 function parsePayload(row: Record<string, unknown> | undefined): unknown {
   if (typeof row?.payload_json !== "string") return undefined
   try {
     return JSON.parse(row.payload_json)
   } catch {
     return undefined
+  }
+}
+
+function messageSenderNameFromPayload(value: unknown) {
+  if (typeof value !== "string") return ""
+  try {
+    const payload: unknown = JSON.parse(value)
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return ""
+    const sender = (payload as Record<string, unknown>).sender
+    if (!sender || typeof sender !== "object" || Array.isArray(sender)) return ""
+    const record = sender as Record<string, unknown>
+    if (typeof record.nickname === "string" && record.nickname) return record.nickname
+    return typeof record.name === "string" ? record.name : ""
+  } catch {
+    return ""
   }
 }
 

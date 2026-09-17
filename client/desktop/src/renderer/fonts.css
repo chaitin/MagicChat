@@ -1,3 +1,9 @@
+@import "@infolektuell/noto-color-emoji/index.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/600.css";
+@import "@fontsource/jetbrains-mono/700.css";
+
 /* 官方原始 TTF，未做裁剪或格式转换。许可见 public/licenses/harmonyos-sans.txt。 */
 @font-face {
   font-family: "HarmonyOS Sans SC";

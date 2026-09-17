@@ -1,18 +1,34 @@
-import type { DesktopConversation, DesktopMessage } from "../../shared/account-data"
+import { randomUUID } from "node:crypto"
+import type {
+  DesktopConversation,
+  DesktopMessage,
+  DesktopMessagePage,
+  DesktopMessageReactionUser,
+  MessageReactionUsersInput,
+  SetMessageReactionInput,
+} from "../../shared/account-data"
 import { AuthFailure, isRecord } from "../../shared/auth"
 import { AccountDatabase, type StoredConversation, type StoredMessage } from "./account-database"
 import { AuthenticatedClient } from "./authenticated-client"
 import { retryNetworkAction } from "./retry"
 import type { AvatarDescriptor, AvatarMemberDescriptor } from "./avatar-types"
+import { normalizeDesktopMessageDetails, summarizeDesktopMessageBody } from "./message-normalizer"
 
 const builtinAssistantAppId = "00000000-0000-0000-0000-000000000001"
 
 export class ConversationManager {
+  private readonly sending = new Set<string>()
+  private closed = false
+
   constructor(
     private readonly database: AccountDatabase,
     private readonly client: AuthenticatedClient,
     private readonly currentUserId: string,
-  ) {}
+    private readonly currentUserName: string,
+    private readonly onMessagesChanged: (conversationId: string) => void,
+  ) {
+    this.database.failPendingMessages()
+  }
 
   initialize() {
     return this.refresh()
@@ -130,10 +146,258 @@ export class ConversationManager {
   }
 
   listMessages(conversationId: string): DesktopMessage[] {
+    this.assertConversationId(conversationId)
+    return this.database.listMessages(conversationId, this.currentUserId)
+  }
+
+  sendTextMessage(
+    conversationId: string,
+    content: string,
+    bodyType: "text" | "markdown",
+  ): DesktopMessage[] {
+    this.assertConversationId(conversationId)
+    const normalized = content.trim()
+    if (!normalized || normalized.length > 100_000) {
+      throw new AuthFailure("invalid_message_content", "消息内容不正确")
+    }
+    if (bodyType !== "text" && bodyType !== "markdown") {
+      throw new AuthFailure("invalid_message_type", "消息类型不正确")
+    }
+    const clientMessageId = randomUUID()
+    this.database.createOptimisticMessage({
+      conversationId,
+      clientMessageId,
+      content: normalized,
+      bodyType,
+      senderId: this.currentUserId,
+      senderName: this.currentUserName,
+    })
+    this.onMessagesChanged(conversationId)
+    this.deliverMessage(conversationId, clientMessageId, normalized, bodyType)
+    return this.database.listMessages(conversationId, this.currentUserId)
+  }
+
+  sendFileMessage(
+    conversationId: string,
+    file: { path: string; name: string; sizeBytes: number },
+  ): DesktopMessage[] {
+    this.assertConversationId(conversationId)
+    if (
+      !file.path ||
+      !file.name ||
+      file.name.length > 255 ||
+      !Number.isSafeInteger(file.sizeBytes) ||
+      file.sizeBytes <= 0 ||
+      file.sizeBytes > 500 * 1024 * 1024
+    ) {
+      throw new AuthFailure("invalid_file", "文件不符合发送要求")
+    }
+    const clientMessageId = randomUUID()
+    this.database.createOptimisticFileMessage({
+      conversationId,
+      clientMessageId,
+      filePath: file.path,
+      name: file.name,
+      sizeBytes: file.sizeBytes,
+      senderId: this.currentUserId,
+      senderName: this.currentUserName,
+    })
+    this.onMessagesChanged(conversationId)
+    this.deliverFileMessage(conversationId, clientMessageId, file)
+    return this.database.listMessages(conversationId, this.currentUserId)
+  }
+
+  retryMessage(conversationId: string, clientMessageId: string): DesktopMessage[] {
+    this.assertConversationId(conversationId)
+    if (!clientMessageId || clientMessageId.length > 128) {
+      throw new AuthFailure("invalid_client_message", "待发送消息不存在")
+    }
+    const message = this.database.getOutgoingMessage(conversationId, clientMessageId)
+    if (!message) throw new AuthFailure("message_not_found", "待发送消息不存在")
+    if (!this.database.setOutgoingMessageStatus(conversationId, clientMessageId, "sending")) {
+      throw new AuthFailure("message_not_found", "待发送消息不存在")
+    }
+    this.onMessagesChanged(conversationId)
+    if (message.bodyType === "file") {
+      this.deliverFileMessage(conversationId, clientMessageId, {
+        path: message.filePath,
+        name: message.name,
+        sizeBytes: message.sizeBytes,
+      })
+    } else {
+      this.deliverMessage(conversationId, clientMessageId, message.content, message.bodyType)
+    }
+    return this.database.listMessages(conversationId, this.currentUserId)
+  }
+
+  close() {
+    this.closed = true
+    this.sending.clear()
+  }
+
+  async listMessageReactionUsers(
+    input: Omit<MessageReactionUsersInput, "targetId">,
+  ): Promise<DesktopMessageReactionUser[]> {
+    this.assertConversationId(input.conversationId)
+    if (!input.messageId || input.messageId.length > 128) {
+      throw new AuthFailure("invalid_message", "消息不存在")
+    }
+    if (!input.text.trim() || input.text.length > 64) {
+      throw new AuthFailure("invalid_reaction", "消息表情不正确")
+    }
+    const search = new URLSearchParams({ text: input.text })
+    const data = await this.client.get(
+      `/api/client/conversations/${encodeURIComponent(input.conversationId)}/messages/${encodeURIComponent(input.messageId)}/reactions/users?${search.toString()}`,
+    )
+    if (
+      !isRecord(data) ||
+      data.conversation_id !== input.conversationId ||
+      data.message_id !== input.messageId ||
+      data.text !== input.text ||
+      !Array.isArray(data.users)
+    ) {
+      throw new AuthFailure("invalid_response", "消息表情参与者响应格式不正确")
+    }
+    return data.users.map((value) => {
+      if (!isRecord(value) || typeof value.id !== "string" || !value.id.trim()) {
+        throw new AuthFailure("invalid_response", "消息表情参与者响应格式不正确")
+      }
+      return {
+        id: value.id,
+        name: typeof value.name === "string" ? value.name : "",
+      }
+    })
+  }
+
+  async setMessageReaction(
+    input: Omit<SetMessageReactionInput, "targetId">,
+  ): Promise<DesktopMessage[]> {
+    this.assertConversationId(input.conversationId)
+    if (!input.messageId || input.messageId.length > 128) {
+      throw new AuthFailure("invalid_message", "消息不存在")
+    }
+    if (!input.text.trim() || input.text.length > 64 || typeof input.reacted !== "boolean") {
+      throw new AuthFailure("invalid_reaction", "消息表情不正确")
+    }
+    const data = await this.client.put(
+      `/api/client/conversations/${encodeURIComponent(input.conversationId)}/messages/${encodeURIComponent(input.messageId)}/reactions`,
+      { reacted: input.reacted, text: input.text },
+    )
+    if (
+      !isRecord(data) ||
+      data.conversation_id !== input.conversationId ||
+      data.message_id !== input.messageId ||
+      !Number.isSafeInteger(data.reaction_version) ||
+      Number(data.reaction_version) < 0 ||
+      !Array.isArray(data.reactions) ||
+      data.reactions.some(
+        (reaction) =>
+          !isRecord(reaction) ||
+          typeof reaction.text !== "string" ||
+          !reaction.text ||
+          !Number.isSafeInteger(reaction.count) ||
+          Number(reaction.count) <= 0 ||
+          (reaction.reacted_by_me !== undefined && typeof reaction.reacted_by_me !== "boolean"),
+      )
+    ) {
+      throw new AuthFailure("invalid_response", "消息表情响应格式不正确")
+    }
+    if (
+      !this.database.updateMessageReactions(
+        input.conversationId,
+        input.messageId,
+        Number(data.reaction_version),
+        data.reactions,
+      )
+    ) {
+      throw new AuthFailure("message_not_found", "消息不存在")
+    }
+    return this.database.listMessages(input.conversationId, this.currentUserId)
+  }
+
+  async loadBeforeMessages(conversationId: string, beforeSeq: number): Promise<DesktopMessagePage> {
+    this.assertConversationId(conversationId)
+    if (!Number.isSafeInteger(beforeSeq) || beforeSeq < 1) {
+      throw new AuthFailure("invalid_message_cursor", "消息游标不正确")
+    }
+    const page = await retryNetworkAction(() => this.fetchMessagePage(conversationId, beforeSeq))
+    this.database.upsertMessages(page.messages)
+    return {
+      messages: this.database.listMessages(conversationId, this.currentUserId),
+      hasMoreBefore: page.hasMoreBefore,
+    }
+  }
+
+  private assertConversationId(conversationId: string) {
     if (!conversationId || conversationId.length > 128) {
       throw new AuthFailure("invalid_conversation", "会话不存在")
     }
-    return this.database.listMessages(conversationId, this.currentUserId)
+  }
+
+  private deliverMessage(
+    conversationId: string,
+    clientMessageId: string,
+    content: string,
+    bodyType: "text" | "markdown",
+  ) {
+    if (this.closed || this.sending.has(clientMessageId)) return
+    this.sending.add(clientMessageId)
+    void this.client
+      .post(`/api/client/conversations/${encodeURIComponent(conversationId)}/messages`, {
+        client_message_id: clientMessageId,
+        body: { type: bodyType, content },
+      })
+      .then((data) => {
+        if (this.closed || !isRecord(data) || !isRecord(data.message)) {
+          if (!this.closed) throw new AuthFailure("invalid_response", "发送消息响应格式不正确")
+          return
+        }
+        this.database.upsertMessages([parseMessage(data.message, conversationId)])
+        this.onMessagesChanged(conversationId)
+      })
+      .catch(() => {
+        this.sending.delete(clientMessageId)
+        if (this.closed) return
+        if (this.database.setOutgoingMessageStatus(conversationId, clientMessageId, "failed")) {
+          this.onMessagesChanged(conversationId)
+        }
+      })
+      .finally(() => {
+        this.sending.delete(clientMessageId)
+      })
+  }
+
+  private deliverFileMessage(
+    conversationId: string,
+    clientMessageId: string,
+    file: { path: string; name: string; sizeBytes: number },
+  ) {
+    if (this.closed || this.sending.has(clientMessageId)) return
+    this.sending.add(clientMessageId)
+    void this.client
+      .postFile(
+        `/api/client/conversations/${encodeURIComponent(conversationId)}/messages/files`,
+        { client_message_id: clientMessageId },
+        file,
+      )
+      .then((data) => {
+        if (this.closed || !isRecord(data) || !isRecord(data.message)) {
+          if (!this.closed) throw new AuthFailure("invalid_response", "发送文件响应格式不正确")
+          return
+        }
+        this.database.upsertMessages([parseMessage(data.message, conversationId)])
+        this.onMessagesChanged(conversationId)
+      })
+      .catch(() => {
+        this.sending.delete(clientMessageId)
+        if (this.closed) return
+        if (this.database.setOutgoingMessageStatus(conversationId, clientMessageId, "failed")) {
+          this.onMessagesChanged(conversationId)
+        }
+      })
+      .finally(() => {
+        this.sending.delete(clientMessageId)
+      })
   }
 
   private async fetchConversations(): Promise<StoredConversation[]> {
@@ -147,13 +411,25 @@ export class ConversationManager {
   }
 
   private async fetchMessages(conversationId: string): Promise<StoredMessage[]> {
+    return (await this.fetchMessagePage(conversationId)).messages
+  }
+
+  private async fetchMessagePage(conversationId: string, beforeSeq?: number) {
+    const search = new URLSearchParams({ limit: "20" })
+    if (beforeSeq !== undefined) search.set("before_seq", String(beforeSeq))
     const data = await this.client.get(
-      `/api/client/conversations/${encodeURIComponent(conversationId)}/messages?limit=100`,
+      `/api/client/conversations/${encodeURIComponent(conversationId)}/messages?${search}`,
     )
     if (!isRecord(data) || !Array.isArray(data.messages) || !isRecord(data.page)) {
       throw new AuthFailure("invalid_response", "聊天记录响应格式不正确")
     }
-    return data.messages.map((message) => parseMessage(message, conversationId))
+    if (typeof data.page.has_more_before !== "boolean") {
+      throw new AuthFailure("invalid_response", "聊天记录分页信息格式不正确")
+    }
+    return {
+      messages: data.messages.map((message) => parseMessage(message, conversationId)),
+      hasMoreBefore: data.page.has_more_before,
+    }
   }
 }
 
@@ -213,7 +489,7 @@ function parseMessage(value: unknown, expectedConversationId: string): StoredMes
   if (!isRecord(value.sender)) {
     throw new AuthFailure("invalid_response", "聊天记录发送者格式不正确")
   }
-  const body = isRecord(value.body) ? value.body : {}
+  const details = normalizeDesktopMessageDetails(value)
   const senderType = requiredString(value.sender.type, 32, "message.sender.type")
   const senderId =
     senderType === "system"
@@ -226,9 +502,16 @@ function parseMessage(value: unknown, expectedConversationId: string): StoredMes
     createdAt: requiredString(value.created_at, 64, "message.created_at"),
     senderId,
     senderType,
+    senderName:
+      optionalString(value.sender.nickname, 256) ||
+      optionalString(value.sender.name, 256) ||
+      (senderType === "system" ? "系统" : ""),
     isMine: false,
-    bodyType: optionalString(body.type, 64) || "unknown",
-    content: messageContent(body),
+    bodyType: details.body.type,
+    content: summarizeDesktopMessageBody(details.body),
+    clientMessageId: optionalString(value.client_message_id, 128),
+    deliveryStatus: undefined,
+    ...details,
     payload: value,
   }
 }
@@ -279,23 +562,6 @@ function parseAvatarMembers(value: unknown): AvatarMemberDescriptor[] {
       } satisfies AvatarMemberDescriptor,
     ]
   })
-}
-
-function messageContent(body: Record<string, unknown>): string {
-  for (const key of ["content", "caption", "title", "name", "summary"]) {
-    const value = body[key]
-    if (typeof value === "string" && value.trim()) return value
-  }
-  const type = typeof body.type === "string" ? body.type : "unknown"
-  const labels: Record<string, string> = {
-    image: "[图片]",
-    file: "[文件]",
-    voice: "[语音]",
-    chart: "[图表]",
-    location: "[位置]",
-    unknown: "[消息]",
-  }
-  return labels[type] ?? "[系统消息]"
 }
 
 function requiredString(value: unknown, maximum: number, field: string): string {

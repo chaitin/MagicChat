@@ -7,9 +7,13 @@
 @custom-variant hover (&:hover);
 
 @theme inline {
-  --font-sans: "HarmonyOS Sans SC", sans-serif;
+  --font-sans:
+    "HarmonyOS Sans SC", "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  --font-emoji: "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
   --font-serif: "HarmonyOS Sans SC", sans-serif;
-  --font-mono: "HarmonyOS Sans SC", sans-serif;
+  --font-mono:
+    "JetBrains Mono", "HarmonyOS Sans SC", "HarmonyOS Sans", "PingFang SC", "Microsoft YaHei",
+    monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -45,6 +49,7 @@
   --color-xgui-brand: var(--xgui-brand);
   --color-xgui-brand-1: var(--xgui-brand-1);
   --color-xgui-brand-2: var(--xgui-brand-2);
+  --color-xgui-brand-4: var(--xgui-brand-4);
   --color-xgui-brand-5: var(--xgui-brand-5);
   --color-xgui-destructive: var(--xgui-destructive);
   --color-xgui-foreground-0-half: var(--xgui-foreground-0-half);
@@ -102,6 +107,7 @@
   --xgui-brand: #07c160;
   --xgui-brand-1: #b4ecce;
   --xgui-brand-2: #38cd7f;
+  --xgui-brand-4: #06ae56;
   --xgui-brand-5: #059a4c;
   --xgui-destructive: #fa5151;
   --xgui-foreground-0-half: rgba(0, 0, 0, 0.9);
@@ -173,6 +179,7 @@
   --xgui-brand: #07c160;
   --xgui-brand-1: #023a1c;
   --xgui-brand-2: #059a4c;
+  --xgui-brand-4: #20c770;
   --xgui-brand-5: #38cd7f;
   --xgui-destructive: #fa5151;
   --xgui-foreground-0-half: rgba(255, 255, 255, 0.6);
@@ -236,8 +243,14 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background font-sans text-foreground;
+    @apply bg-background font-sans text-foreground select-none;
     -webkit-font-smoothing: antialiased;
+  }
+  input,
+  textarea,
+  [contenteditable="true"],
+  [data-chat-history] {
+    @apply select-text;
   }
   code,
   kbd,
@@ -245,6 +258,25 @@
   pre {
     @apply font-mono;
   }
+}
+
+.markdown-code-highlight .shiki {
+  min-width: max-content;
+  padding: calc(var(--spacing) * 3);
+  background-color: transparent !important;
+  font-family: var(--font-mono) !important;
+}
+
+.markdown-code-highlight .shiki * {
+  font-family: var(--font-mono) !important;
+}
+
+.dark .markdown-code-highlight .shiki,
+.dark .markdown-code-highlight .shiki span {
+  color: var(--shiki-dark) !important;
+  font-style: var(--shiki-dark-font-style) !important;
+  font-weight: var(--shiki-dark-font-weight) !important;
+  text-decoration: var(--shiki-dark-text-decoration) !important;
 }
 
 .app-shell {

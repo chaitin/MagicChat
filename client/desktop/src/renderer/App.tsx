@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { AnimatedToastProvider } from "@/components/motion/animated-toast-provider"
 import { WindowTitleBar } from "@/components/window-title-bar"
 import { LoginPage } from "@/features/auth/login-page"
@@ -10,6 +10,7 @@ type ResolvedTheme = Exclude<Theme, "system">
 
 export function App() {
   const [theme, setTheme] = useState<Theme>("system")
+  const [organizationName, setOrganizationName] = useState("")
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(() =>
     window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
   )
@@ -46,19 +47,30 @@ export function App() {
   }
 
   const resolvedTheme = theme === "system" ? systemTheme : theme
+  const windowTitle = organizationName ? `即应 Chat - ${organizationName}` : "即应 Chat"
+  const changeOrganizationName = useCallback((name: string) => setOrganizationName(name), [])
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", resolvedTheme === "dark")
     document.documentElement.style.colorScheme = resolvedTheme
   }, [resolvedTheme])
 
+  useEffect(() => {
+    document.title = windowTitle
+  }, [windowTitle])
+
   return (
     <AnimatedToastProvider>
       <div className="flex h-dvh flex-col overflow-hidden">
-        <WindowTitleBar />
+        <WindowTitleBar brandTitle={windowTitle} />
         <div className="min-h-0 flex-1">
           <div className="app-shell">
-            <LoginPage theme={theme} resolvedTheme={resolvedTheme} onThemeChange={changeTheme} />
+            <LoginPage
+              theme={theme}
+              resolvedTheme={resolvedTheme}
+              onThemeChange={changeTheme}
+              onOrganizationNameChange={changeOrganizationName}
+            />
           </div>
         </div>
       </div>

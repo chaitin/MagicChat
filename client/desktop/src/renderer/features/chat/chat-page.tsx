@@ -1,11 +1,25 @@
-import { useEffect, useMemo, useRef, useState } from "react"
 import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react"
+import {
+  AlertCircleIcon,
   AppleReminderIcon,
+  ArrowUp02Icon,
+  Attachment01Icon,
   CirclePlusIcon,
   ContentWritingIcon,
   CrosshairIcon,
+  FolderAttachmentIcon,
   FolderClosedIcon,
   Home07Icon,
+  Image01Icon,
   Contact01Icon,
   FlashIcon,
   FloppyDiskIcon,
@@ -13,17 +27,29 @@ import {
   ChatIcon,
   Loading03Icon,
   Logout03Icon,
+  MessageMultiple02Icon,
+  MoreHorizontalIcon,
   NotificationOff01Icon,
   Search01Icon,
-  SentIcon,
+  UploadCircle01Icon,
   Settings02Icon,
+  SmileIcon,
+  SquareMIcon,
+  UserAdd01Icon,
   UserIcon,
+  Video01Icon,
+  Mic01Icon,
 } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
+import { HugeiconsIcon, type HugeiconsIconProps } from "@/components/icons/hugeicons-icon"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
 import { Button as BeButton } from "@/components/motion/button/base"
 import { Input as BeInput } from "@/components/motion/input"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
+import { ExpressionPickerPanel } from "./expression-picker-panel"
+import { MessageBodyRenderer } from "./message-body-renderer"
+import { MessageReactionChips } from "./message-reaction-chips"
+import { MessageReactionPicker } from "./message-reaction-picker"
+import { SendFileMessageDialog } from "./send-file-message-dialog"
 import { SettingsDialog } from "@/components/settings-dialog"
 import {
   AlertDialog,
@@ -35,6 +61,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,11 +69,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { InputGroup, InputGroupAddon, InputGroupTextarea } from "@/components/ui/input-group"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Textarea } from "@/components/ui/textarea"
+import { Toggle } from "@/components/ui/toggle"
+import {
+  parseMentionTemplate,
+  type MentionLabelResolver,
+  type MentionTarget,
+} from "@/lib/message-mentions"
 import { cn } from "@/lib/utils"
-import type { DesktopConversation, DesktopMessage } from "../../../shared/account-data"
+import type {
+  DesktopConversation,
+  DesktopMessage,
+  SelectedMessageFile,
+} from "../../../shared/account-data"
 import type { ServerCatalog } from "../../../shared/auth"
 import { JIYING_HOMEPAGE, type ThemePreference } from "../../../shared/desktop"
 
@@ -84,10 +122,33 @@ export function ChatPage({
   const [activeSection, setActiveSection] = useState<AppSection>("chat")
   const [loadingConversations, setLoadingConversations] = useState(true)
   const [loadingMessages, setLoadingMessages] = useState(false)
+  const [loadingBeforeMessages, setLoadingBeforeMessages] = useState(false)
+  const [hasMoreBeforeMessages, setHasMoreBeforeMessages] = useState(false)
   const [conversationRevision, setConversationRevision] = useState(0)
   const [messageRevision, setMessageRevision] = useState(0)
+  const [contactRevision, setContactRevision] = useState(0)
+  const [mentionLabels, setMentionLabels] = useState<Map<string, string>>(new Map())
+  const [pendingReactionKeys, setPendingReactionKeys] = useState<Set<string>>(new Set())
+  const [draft, setDraft] = useState("")
+  const [markdownMode, setMarkdownMode] = useState(false)
+  const [selectingFile, setSelectingFile] = useState(false)
+  const [sendingFile, setSendingFile] = useState(false)
+  const [fileDialogOpen, setFileDialogOpen] = useState(false)
+  const [pendingFile, setPendingFile] = useState<{
+    file: SelectedMessageFile
+    conversationId: string
+    conversationName: string
+  } | null>(null)
   const realtimeRevisionRef = useRef(0)
+  const loadingBeforeRef = useRef(false)
+  const prependSnapshotRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null)
+  const scrollToBottomRef = useRef(true)
+  const selectedIdRef = useRef(selectedId)
+  const loadedConversationIdRef = useRef<string | null>(null)
   const historyRef = useRef<HTMLDivElement>(null)
+  const composerRef = useRef<HTMLTextAreaElement>(null)
+  const pendingComposerCursorRef = useRef<number | null>(null)
+  selectedIdRef.current = selectedId
   const selected = useMemo(
     () => conversations.find((conversation) => conversation.id === selectedId) ?? null,
     [conversations, selectedId],
@@ -111,6 +172,9 @@ export function ChatPage({
       realtimeRevisionRef.current = event.revision
       if (event.domains.includes("conversations")) {
         setConversationRevision((revision) => revision + 1)
+      }
+      if (event.domains.includes("contacts")) {
+        setContactRevision((revision) => revision + 1)
       }
       if (
         event.domains.includes("messages") &&
@@ -145,18 +209,258 @@ export function ChatPage({
   }, [conversationRevision, showToast, targetId])
 
   useEffect(() => {
+    if (!window.desktop || !targetId) return
+    let cancelled = false
+    void window.desktop.accountData.getContacts(targetId).then((result) => {
+      if (cancelled || !result.ok) return
+      const labels = new Map<string, string>([[`user:${userId.toLowerCase()}`, userName]])
+      for (const user of result.data.users) {
+        labels.set(`user:${user.id.toLowerCase()}`, user.nickname || user.name)
+      }
+      for (const app of result.data.apps) {
+        labels.set(`app:${app.id.toLowerCase()}`, app.name)
+      }
+      setMentionLabels(labels)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [contactRevision, targetId, userId, userName])
+
+  const resolveMentionLabel = useCallback(
+    (target: MentionTarget) =>
+      target.type === "all"
+        ? undefined
+        : mentionLabels.get(`${target.type}:${target.id.toLowerCase()}`),
+    [mentionLabels],
+  )
+
+  const setMessageReaction = useCallback(
+    async (message: DesktopMessage, text: string, reacted: boolean) => {
+      const key = `${message.id}\0${text}`
+      if (pendingReactionKeys.has(key) || !window.desktop) return
+      setPendingReactionKeys((current) => new Set(current).add(key))
+      try {
+        const result = await window.desktop.accountData.setMessageReaction({
+          targetId,
+          conversationId: message.conversationId,
+          messageId: message.id,
+          text,
+          reacted,
+        })
+        if (!result.ok) {
+          showToast({
+            status: "error",
+            title: "更新表情失败",
+            description: result.error.message,
+          })
+          return
+        }
+        setMessages(result.data)
+      } catch {
+        showToast({ status: "error", title: "更新表情失败" })
+      } finally {
+        setPendingReactionKeys((current) => {
+          const next = new Set(current)
+          next.delete(key)
+          return next
+        })
+      }
+    },
+    [pendingReactionKeys, showToast, targetId],
+  )
+
+  const focusComposer = useCallback(() => {
+    requestAnimationFrame(() => {
+      const composer = composerRef.current
+      if (!composer) return
+      composer.focus()
+      const cursor = pendingComposerCursorRef.current
+      if (cursor !== null) {
+        composer.setSelectionRange(cursor, cursor)
+        pendingComposerCursorRef.current = null
+      }
+    })
+  }, [])
+
+  const sendDraft = useCallback(() => {
+    if (!selectedId || !window.desktop) return
+    const content = draft.trim()
+    if (!content) return
+    const conversationId = selectedId
+    const bodyType = markdownMode ? "markdown" : "text"
+    setDraft("")
+    scrollToBottomRef.current = true
+    focusComposer()
+    void window.desktop.accountData
+      .sendTextMessage({ targetId, conversationId, content, bodyType })
+      .then((result) => {
+        if (selectedIdRef.current !== conversationId) return
+        if (result.ok) {
+          setMessages(result.data)
+          return
+        }
+        showToast({
+          status: "error",
+          title: "发送消息失败",
+          description: result.error.message,
+        })
+      })
+      .catch(() => {
+        if (selectedIdRef.current === conversationId) {
+          showToast({ status: "error", title: "发送消息失败" })
+        }
+      })
+  }, [draft, focusComposer, markdownMode, selectedId, showToast, targetId])
+
+  const selectFile = useCallback(async () => {
+    if (!window.desktop || !selected || selectingFile || sendingFile) return
+    setSelectingFile(true)
+    try {
+      const result = await window.desktop.accountData.selectMessageFile(targetId)
+      if (!result.ok) {
+        showToast({
+          status: "error",
+          title: "选择文件失败",
+          description: result.error.message,
+        })
+        return
+      }
+      if (!result.data) return
+      setPendingFile({
+        file: result.data,
+        conversationId: selected.id,
+        conversationName: selected.name,
+      })
+      setFileDialogOpen(true)
+    } catch {
+      showToast({ status: "error", title: "选择文件失败" })
+    } finally {
+      setSelectingFile(false)
+    }
+  }, [selected, selectingFile, sendingFile, showToast, targetId])
+
+  const sendPendingFile = useCallback(async () => {
+    if (!window.desktop || !pendingFile || sendingFile) return
+    setSendingFile(true)
+    try {
+      const result = await window.desktop.accountData.sendFileMessage({
+        targetId,
+        conversationId: pendingFile.conversationId,
+        selectionToken: pendingFile.file.token,
+      })
+      if (!result.ok) {
+        showToast({
+          status: "error",
+          title: "发送文件失败",
+          description: result.error.message,
+        })
+        return
+      }
+      if (selectedIdRef.current === pendingFile.conversationId) {
+        scrollToBottomRef.current = true
+        setMessages(result.data)
+      }
+      setFileDialogOpen(false)
+      setPendingFile(null)
+      focusComposer()
+    } catch {
+      showToast({ status: "error", title: "发送文件失败" })
+    } finally {
+      setSendingFile(false)
+    }
+  }, [focusComposer, pendingFile, sendingFile, showToast, targetId])
+
+  const retryMessage = useCallback(
+    (message: DesktopMessage) => {
+      if (!window.desktop || !message.clientMessageId) return
+      const conversationId = message.conversationId
+      void window.desktop.accountData
+        .retryMessage({
+          targetId,
+          conversationId,
+          clientMessageId: message.clientMessageId,
+        })
+        .then((result) => {
+          if (selectedIdRef.current !== conversationId) return
+          if (result.ok) {
+            setMessages(result.data)
+            return
+          }
+          showToast({
+            status: "error",
+            title: "重试发送失败",
+            description: result.error.message,
+          })
+        })
+        .catch(() => {
+          if (selectedIdRef.current === conversationId) {
+            showToast({ status: "error", title: "重试发送失败" })
+          }
+        })
+    },
+    [showToast, targetId],
+  )
+
+  const handleComposerKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (
+        event.key !== "Enter" ||
+        event.shiftKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        event.nativeEvent.isComposing
+      ) {
+        return
+      }
+      event.preventDefault()
+      sendDraft()
+    },
+    [sendDraft],
+  )
+
+  const insertExpression = useCallback(
+    (value: string) => {
+      const composer = composerRef.current
+      const selectionStart = composer?.selectionStart ?? draft.length
+      const selectionEnd = composer?.selectionEnd ?? selectionStart
+      const nextDraft = `${draft.slice(0, selectionStart)}${value}${draft.slice(selectionEnd)}`
+      pendingComposerCursorRef.current = selectionStart + value.length
+      setDraft(nextDraft)
+    },
+    [draft],
+  )
+
+  useEffect(() => {
+    setDraft("")
+    pendingComposerCursorRef.current = null
+    if (selectedId) focusComposer()
+  }, [focusComposer, selectedId])
+
+  useEffect(() => {
     if (!selectedId || !window.desktop) {
+      loadedConversationIdRef.current = null
       setMessages([])
       return
     }
     let cancelled = false
-    setLoadingMessages(true)
+    const switchingConversation = loadedConversationIdRef.current !== selectedId
+    loadedConversationIdRef.current = selectedId
+    if (switchingConversation) {
+      scrollToBottomRef.current = true
+      prependSnapshotRef.current = null
+      setHasMoreBeforeMessages(false)
+      setLoadingMessages(true)
+    }
     void window.desktop.accountData
       .listMessages({ targetId, conversationId: selectedId })
       .then((result) => {
         if (cancelled) return
-        if (result.ok) setMessages(result.data)
-        else {
+        if (result.ok) {
+          setMessages(result.data)
+          setHasMoreBeforeMessages(result.data.length > 0 && result.data[0].seq > 1)
+        } else {
           setMessages([])
           showToast({
             status: "error",
@@ -179,10 +483,69 @@ export function ChatPage({
     }
   }, [messageRevision, selectedId, showToast, targetId])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!selected || loadingMessages) return
-    historyRef.current?.scrollTo({ top: historyRef.current.scrollHeight })
+    const viewport = historyRef.current
+    if (!viewport) return
+    const snapshot = prependSnapshotRef.current
+    if (snapshot) {
+      viewport.scrollTop = snapshot.scrollTop + viewport.scrollHeight - snapshot.scrollHeight
+      prependSnapshotRef.current = null
+      return
+    }
+    if (scrollToBottomRef.current) {
+      viewport.scrollTop = viewport.scrollHeight
+      scrollToBottomRef.current = false
+    }
   }, [loadingMessages, messages, selected])
+
+  async function loadBeforeMessages() {
+    if (
+      !window.desktop ||
+      !selectedId ||
+      messages.length === 0 ||
+      !hasMoreBeforeMessages ||
+      loadingBeforeRef.current
+    ) {
+      return
+    }
+    const viewport = historyRef.current
+    if (!viewport) return
+    const conversationId = selectedId
+    loadingBeforeRef.current = true
+    setLoadingBeforeMessages(true)
+    prependSnapshotRef.current = {
+      scrollHeight: viewport.scrollHeight,
+      scrollTop: viewport.scrollTop,
+    }
+    try {
+      const result = await window.desktop.accountData.loadBeforeMessages({
+        targetId,
+        conversationId,
+        beforeSeq: messages[0].seq,
+      })
+      if (selectedIdRef.current !== conversationId) return
+      if (!result.ok) {
+        prependSnapshotRef.current = null
+        showToast({
+          status: "error",
+          title: "无法加载更早消息",
+          description: result.error.message,
+        })
+        return
+      }
+      setMessages(result.data.messages)
+      setHasMoreBeforeMessages(result.data.hasMoreBefore)
+    } catch {
+      if (selectedIdRef.current === conversationId) {
+        prependSnapshotRef.current = null
+        showToast({ status: "error", title: "无法加载更早消息" })
+      }
+    } finally {
+      loadingBeforeRef.current = false
+      if (selectedIdRef.current === conversationId) setLoadingBeforeMessages(false)
+    }
+  }
 
   return (
     <main className="flex h-full min-h-0 overflow-hidden bg-background text-foreground">
@@ -256,6 +619,7 @@ export function ChatPage({
                           selectedId={selectedId}
                           targetId={targetId}
                           resolvedTheme={resolvedTheme}
+                          mentionLabelResolver={resolveMentionLabel}
                           onSelect={setSelectedId}
                         />
                       </div>
@@ -267,6 +631,7 @@ export function ChatPage({
                           selectedId={selectedId}
                           targetId={targetId}
                           resolvedTheme={resolvedTheme}
+                          mentionLabelResolver={resolveMentionLabel}
                           onSelect={setSelectedId}
                         />
                       </div>
@@ -280,7 +645,7 @@ export function ChatPage({
           <section className="flex min-h-0 min-w-0 flex-col bg-card" aria-label="聊天区域">
             {selected ? (
               <>
-                <header className="flex h-16 shrink-0 items-center gap-3 border-b px-6">
+                <header className="flex h-14 shrink-0 items-center gap-3 border-b border-xgui-background-1 px-6">
                   <EntityAvatar
                     targetId={targetId}
                     type={selected.avatarType}
@@ -290,90 +655,325 @@ export function ChatPage({
                     label={`${selected.name}头像`}
                   />
                   <div className="min-w-0">
-                    <h2 className="truncate font-semibold">{selected.name}</h2>
-                    <p className="text-xs text-muted-foreground">
+                    <h2 className="truncate text-sm">{selected.name}</h2>
+                    <p className="text-sm text-muted-foreground">
                       {conversationTypeLabel(selected.type)}
                     </p>
                   </div>
+                  <div className="ml-auto flex shrink-0 items-center gap-1">
+                    {selected.type !== "topic" && (
+                      <HeaderActionButton
+                        label="话题列表"
+                        icon={MessageMultiple02Icon}
+                        onClick={() => showPendingFeature(showToast, "话题列表")}
+                      />
+                    )}
+                    {selected.type === "group" && (
+                      <HeaderActionButton
+                        label="添加成员"
+                        icon={UserAdd01Icon}
+                        onClick={() => showPendingFeature(showToast, "添加成员")}
+                      />
+                    )}
+                    {selected.type !== "topic" && (
+                      <HeaderActionButton
+                        label="附件列表"
+                        icon={FolderAttachmentIcon}
+                        onClick={() => showPendingFeature(showToast, "附件列表")}
+                      />
+                    )}
+                    {selected.type !== "topic" && (
+                      <HeaderActionButton
+                        label="对话设置"
+                        icon={Settings02Icon}
+                        onClick={() => showPendingFeature(showToast, "对话设置")}
+                      />
+                    )}
+                  </div>
                 </header>
 
-                <div ref={historyRef} className="min-h-0 flex-1 overflow-y-auto bg-background p-6">
-                  {loadingMessages ? (
-                    <div className="flex h-full items-center justify-center text-muted-foreground">
-                      <HugeiconsIcon
-                        icon={Loading03Icon}
-                        className="size-5 animate-spin"
-                        aria-label="正在读取聊天记录"
-                      />
-                    </div>
-                  ) : messages.length === 0 ? (
-                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                      暂无聊天记录
-                    </div>
-                  ) : (
-                    <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
-                      {messages.map((message) => (
-                        <article
-                          key={message.id}
-                          className={cn(
-                            "flex items-start gap-2",
-                            message.isMine ? "justify-end" : "justify-start",
-                          )}
-                        >
-                          {!message.isMine &&
-                            message.senderId &&
-                            (message.senderType === "user" || message.senderType === "app") && (
-                              <EntityAvatar
-                                targetId={targetId}
-                                type={message.senderType}
-                                id={message.senderId}
-                                theme={resolvedTheme}
-                                size={32}
-                              />
-                            )}
-                          <div className="max-w-[75%] space-y-1">
-                            <div
-                              className={cn(
-                                "whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-6",
-                                message.isMine
-                                  ? "rounded-br-md bg-xgui-brand-1"
-                                  : "rounded-bl-md bg-muted",
-                              )}
-                            >
-                              {message.content}
-                            </div>
-                            <p
-                              className={cn(
-                                "px-1 text-xs text-muted-foreground",
-                                message.isMine && "text-right",
-                              )}
-                            >
-                              {formatMessageTime(message.createdAt)}
-                            </p>
+                <ScrollArea
+                  data-chat-history
+                  type="hover"
+                  scrollHideDelay={200}
+                  viewportRef={historyRef}
+                  onViewportScroll={(event) => {
+                    if (event.currentTarget.scrollTop <= 80) void loadBeforeMessages()
+                  }}
+                  className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
+                  viewportClassName="overflow-x-hidden [&>div]:block! [&>div]:w-full! [&>div]:min-w-0!"
+                >
+                  <div className="min-h-full p-6">
+                    {loadingMessages ? (
+                      <div className="flex min-h-[inherit] items-center justify-center text-muted-foreground">
+                        <HugeiconsIcon
+                          icon={Loading03Icon}
+                          className="size-5 animate-spin"
+                          aria-label="正在读取聊天记录"
+                        />
+                      </div>
+                    ) : messages.length === 0 ? (
+                      <div className="flex min-h-[inherit] items-center justify-center text-sm text-muted-foreground">
+                        暂无聊天记录
+                      </div>
+                    ) : (
+                      <>
+                        {loadingBeforeMessages && (
+                          <div className="flex justify-center pb-4 text-muted-foreground">
+                            <HugeiconsIcon
+                              icon={Loading03Icon}
+                              className="size-4 animate-spin"
+                              aria-label="正在加载更早消息"
+                            />
                           </div>
-                        </article>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                        )}
+                        <div className="flex w-full flex-col gap-5">
+                          {messages.map((message, index) => {
+                            const flushMediaBubble = shouldFlushMediaBubble(message)
+                            return (
+                              <Fragment key={message.id}>
+                                {shouldShowMessageTimeMarker(messages[index - 1], message) && (
+                                  <div className="text-center text-xs text-muted-foreground">
+                                    {formatMessageTime(message.createdAt)}
+                                  </div>
+                                )}
+                                {message.body.type === "system_event" ? (
+                                  <article className="flex justify-center">
+                                    <Badge variant="secondary">
+                                      <MessageBodyRenderer
+                                        body={message.body}
+                                        targetId={targetId}
+                                        currentUserId={userId}
+                                        mentionLabelResolver={resolveMentionLabel}
+                                        conversationName={selected.name}
+                                      />
+                                    </Badge>
+                                  </article>
+                                ) : (
+                                  <article
+                                    className={cn(
+                                      "group/message-row flex items-start gap-2",
+                                      message.isMine ? "justify-end" : "justify-start",
+                                    )}
+                                  >
+                                    {!message.isMine &&
+                                      message.senderId &&
+                                      (message.senderType === "user" ||
+                                        message.senderType === "app") && (
+                                        <EntityAvatar
+                                          targetId={targetId}
+                                          type={message.senderType}
+                                          id={message.senderId}
+                                          theme={resolvedTheme}
+                                          size={32}
+                                        />
+                                      )}
+                                    <div
+                                      className={cn(
+                                        "flex max-w-[75%] min-w-0 flex-col gap-1",
+                                        message.isMine ? "items-end" : "items-start",
+                                      )}
+                                    >
+                                      <div className="flex max-w-full min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                                        <span className="max-w-32 truncate">
+                                          {message.senderName ||
+                                            (message.senderType === "system"
+                                              ? "系统"
+                                              : message.isMine
+                                                ? userName
+                                                : selected.name)}
+                                        </span>
+                                        <span className="shrink-0">
+                                          {formatMessageTime(message.createdAt)}
+                                        </span>
+                                      </div>
+                                      <div
+                                        className={cn(
+                                          "flex max-w-full items-end gap-1.5",
+                                          message.isMine && "flex-row-reverse",
+                                        )}
+                                      >
+                                        <div
+                                          className={cn(
+                                            "max-w-full rounded-xl text-sm leading-6",
+                                            flushMediaBubble
+                                              ? "overflow-hidden p-0"
+                                              : "px-4 py-2.5",
+                                            message.isMine
+                                              ? "rounded-tr-sm bg-xgui-brand-1 hover:bg-xgui-brand-1"
+                                              : "rounded-tl-sm bg-muted hover:bg-zinc-200/60 dark:hover:bg-zinc-700/60",
+                                          )}
+                                        >
+                                          {message.replyTo && (
+                                            <div className="mb-2 border-l-2 border-foreground/20 pl-2 text-xs">
+                                              <div className="truncate font-medium text-foreground/80">
+                                                {message.replyTo.author}
+                                              </div>
+                                              <div className="line-clamp-2 text-muted-foreground">
+                                                {message.replyTo.summary}
+                                              </div>
+                                            </div>
+                                          )}
+                                          <MessageBodyRenderer
+                                            body={message.body}
+                                            targetId={targetId}
+                                            currentUserId={userId}
+                                            mentionLabelResolver={resolveMentionLabel}
+                                            conversationName={selected.name}
+                                            flushMedia={flushMediaBubble}
+                                          />
+                                          {message.reactions.length > 0 && (
+                                            <div className={cn(flushMediaBubble && "mx-2 mb-2")}>
+                                              <MessageReactionChips
+                                                targetId={targetId}
+                                                conversationId={message.conversationId}
+                                                messageId={message.id}
+                                                reactions={message.reactions}
+                                                pendingKeys={pendingReactionKeys}
+                                                resolveLabel={resolveMentionLabel}
+                                                onSetReaction={(text, reacted) =>
+                                                  setMessageReaction(message, text, reacted)
+                                                }
+                                              />
+                                            </div>
+                                          )}
+                                          {message.topic && (
+                                            <div className="mt-2 border-t border-foreground/10 pt-2 text-xs text-muted-foreground">
+                                              {message.topic.archived
+                                                ? "话题已归档"
+                                                : "查看话题回复"}
+                                            </div>
+                                          )}
+                                        </div>
+                                        {message.deliveryStatus === "sending" && (
+                                          <span className="mb-2 flex size-7 shrink-0 items-center justify-center text-muted-foreground">
+                                            <HugeiconsIcon
+                                              icon={Loading03Icon}
+                                              className="size-5 animate-spin"
+                                              aria-label="消息发送中"
+                                            />
+                                          </span>
+                                        )}
+                                        {message.deliveryStatus === "failed" && (
+                                          <button
+                                            type="button"
+                                            className="group/status mb-2 flex size-7 shrink-0 items-center justify-center rounded-full text-destructive transition-colors hover:bg-destructive/10"
+                                            aria-label="重试发送消息"
+                                            title="发送失败，点击重试"
+                                            onClick={() => retryMessage(message)}
+                                          >
+                                            <HugeiconsIcon
+                                              icon={AlertCircleIcon}
+                                              className="size-5 group-hover/status:hidden"
+                                              aria-hidden
+                                            />
+                                            <HugeiconsIcon
+                                              icon={UploadCircle01Icon}
+                                              className="hidden size-5 group-hover/status:block"
+                                              aria-hidden
+                                            />
+                                          </button>
+                                        )}
+                                        {!message.deliveryStatus &&
+                                          message.body.type !== "revoked" &&
+                                          message.body.type !== "unsupported" && (
+                                            <div className="mb-2 flex h-7 shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/message-row:opacity-100 focus-within:opacity-100 has-[[data-state=open]]:opacity-100">
+                                              <MessageReactionPicker
+                                                align={message.isMine ? "end" : "start"}
+                                                onSelect={(text) =>
+                                                  setMessageReaction(message, text, true)
+                                                }
+                                              />
+                                              <MessageHoverActionButton
+                                                label="更多操作"
+                                                icon={MoreHorizontalIcon}
+                                                onClick={() =>
+                                                  showPendingFeature(showToast, "消息更多操作")
+                                                }
+                                              />
+                                            </div>
+                                          )}
+                                      </div>
+                                    </div>
+                                    {message.isMine && (
+                                      <EntityAvatar
+                                        targetId={targetId}
+                                        type="user"
+                                        id={userId}
+                                        theme={resolvedTheme}
+                                        size={32}
+                                        label={`${userName}头像`}
+                                      />
+                                    )}
+                                  </article>
+                                )}
+                              </Fragment>
+                            )
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </ScrollArea>
 
-                <footer className="shrink-0 border-t bg-card p-4">
-                  <div className="mx-auto flex w-full max-w-3xl items-end gap-3">
-                    <Textarea
-                      disabled
-                      placeholder="消息发送将在下一阶段接入"
-                      className="max-h-32 min-h-11 resize-none rounded-2xl"
-                      rows={1}
-                    />
-                    <BeButton
-                      type="button"
-                      variant="primary"
-                      size="icon"
-                      aria-label="发送消息"
-                      disabled
-                    >
-                      <HugeiconsIcon icon={SentIcon} aria-hidden />
-                    </BeButton>
+                <footer className="shrink-0 bg-card p-4">
+                  <div className="w-full">
+                    <InputGroup className="bg-background">
+                      <InputGroupTextarea
+                        ref={composerRef}
+                        value={draft}
+                        placeholder={markdownMode ? "输入 Markdown 消息" : "输入消息"}
+                        className="max-h-48 min-h-24"
+                        onChange={(event) => setDraft(event.target.value)}
+                        onKeyDown={handleComposerKeyDown}
+                      />
+                      <InputGroupAddon align="block-end" className="justify-between gap-2">
+                        <div className="flex items-center gap-1">
+                          <ComposerExpressionPicker
+                            onSelect={insertExpression}
+                            onRestoreFocus={focusComposer}
+                          />
+                          <Toggle
+                            type="button"
+                            size="sm"
+                            className="size-8 p-0 aria-pressed:text-xgui-brand"
+                            pressed={markdownMode}
+                            aria-label="支持 Markdown"
+                            title="支持 Markdown"
+                            onPressedChange={(pressed) => {
+                              setMarkdownMode(pressed)
+                              focusComposer()
+                            }}
+                          >
+                            <HugeiconsIcon icon={SquareMIcon} className="size-4" aria-hidden />
+                          </Toggle>
+                          <ComposerButton
+                            label={selectingFile ? "正在选择文件" : "上传文件"}
+                            icon={selectingFile ? Loading03Icon : Attachment01Icon}
+                            disabled={selectingFile || sendingFile}
+                            loading={selectingFile}
+                            onClick={selectFile}
+                          />
+                          <ComposerButton label="插入图片" icon={Image01Icon} />
+                          <ComposerButton label="插入视频" icon={Video01Icon} />
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <ComposerButton label="语音输入" icon={Mic01Icon} />
+                          <BeButton
+                            type="button"
+                            aria-label="发送消息"
+                            className="gap-1 bg-xgui-brand pr-4 pl-3 text-background hover:bg-xgui-brand-4 hover:text-background active:bg-xgui-brand-5"
+                            size="sm"
+                            variant="primary"
+                            disabled={!draft.trim()}
+                            onClick={sendDraft}
+                          >
+                            <HugeiconsIcon icon={ArrowUp02Icon} className="size-4" aria-hidden />
+                            发送
+                          </BeButton>
+                        </div>
+                      </InputGroupAddon>
+                    </InputGroup>
                   </div>
                 </footer>
               </>
@@ -389,7 +989,139 @@ export function ChatPage({
       ) : (
         <SectionPlaceholder section={activeSection} />
       )}
+      <SendFileMessageDialog
+        conversationName={pendingFile?.conversationName ?? ""}
+        file={pendingFile?.file ?? null}
+        open={fileDialogOpen}
+        sending={sendingFile}
+        onConfirm={sendPendingFile}
+        onOpenChange={(open) => {
+          if (sendingFile) return
+          setFileDialogOpen(open)
+          if (!open) {
+            setPendingFile(null)
+            focusComposer()
+          }
+        }}
+      />
     </main>
+  )
+}
+
+function MessageHoverActionButton({
+  label,
+  icon,
+  onClick,
+}: {
+  label: string
+  icon: HugeiconsIconProps["icon"]
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-xs outline-none transition-colors hover:text-xgui-brand focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+    >
+      <HugeiconsIcon icon={icon} className="size-3.5" aria-hidden />
+    </button>
+  )
+}
+
+function HeaderActionButton({
+  label,
+  icon,
+  onClick,
+}: {
+  label: string
+  icon: HugeiconsIconProps["icon"]
+  onClick: () => void
+}) {
+  return (
+    <BeButton
+      type="button"
+      variant="ghost"
+      size="icon"
+      className="shrink-0 rounded-lg hover:bg-foreground/10 [&_svg]:size-4"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+    >
+      <HugeiconsIcon icon={icon} aria-hidden />
+    </BeButton>
+  )
+}
+
+function showPendingFeature(
+  showToast: ReturnType<typeof useAnimatedToast>["showToast"],
+  label: string,
+) {
+  showToast({ status: "info", title: `${label}功能将在下一阶段接入` })
+}
+
+function ComposerExpressionPicker({
+  onSelect,
+  onRestoreFocus,
+}: {
+  onSelect: (value: string) => void
+  onRestoreFocus: () => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  function select(value: string) {
+    setOpen(false)
+    onSelect(value)
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <BeButton aria-label="选择表情" title="选择表情" size="icon" variant="ghost">
+          <HugeiconsIcon icon={SmileIcon} aria-hidden />
+        </BeButton>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="center"
+        className="w-auto p-3"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          onRestoreFocus()
+        }}
+      >
+        <ExpressionPickerPanel onSelect={select} />
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function ComposerButton({
+  label,
+  icon,
+  disabled,
+  loading = false,
+  onClick,
+}: {
+  label: string
+  icon: HugeiconsIconProps["icon"]
+  disabled?: boolean
+  loading?: boolean
+  onClick?: () => void
+}) {
+  return (
+    <BeButton
+      type="button"
+      aria-label={label}
+      title={label}
+      size="icon"
+      variant="ghost"
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <HugeiconsIcon icon={icon} className={cn(loading && "animate-spin")} aria-hidden />
+    </BeButton>
   )
 }
 
@@ -398,12 +1130,14 @@ function ConversationGroup({
   selectedId,
   targetId,
   resolvedTheme,
+  mentionLabelResolver,
   onSelect,
 }: {
   conversations: DesktopConversation[]
   selectedId: string | null
   targetId: string
   resolvedTheme: "light" | "dark"
+  mentionLabelResolver: MentionLabelResolver
   onSelect: (id: string) => void
 }) {
   return (
@@ -446,7 +1180,10 @@ function ConversationGroup({
                 </div>
                 <p className="flex min-w-0 items-center gap-0.5 text-left text-sm leading-normal font-normal text-muted-foreground">
                   <span className="min-w-0 flex-1 truncate">
-                    {conversation.lastMessageSummary || "暂无消息"}
+                    {formatConversationSummary(
+                      conversation.lastMessageSummary,
+                      mentionLabelResolver,
+                    )}
                   </span>
                   {conversation.notificationMuted && (
                     <HugeiconsIcon
@@ -463,6 +1200,13 @@ function ConversationGroup({
       })}
     </ItemGroup>
   )
+}
+
+function formatConversationSummary(summary: string, mentionLabelResolver: MentionLabelResolver) {
+  if (!summary) return "暂无消息"
+  return parseMentionTemplate(summary, mentionLabelResolver)
+    .map((part) => (part.type === "text" ? part.text : part.label))
+    .join("")
 }
 
 function compareConversationActivity(left: DesktopConversation, right: DesktopConversation) {
@@ -756,13 +1500,37 @@ function formatConversationTime(value: string | null): string {
 function formatMessageTime(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ""
-  return date.toLocaleString("zh-CN", {
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  })
+  const now = new Date()
+  if (date.toDateString() === now.toDateString()) {
+    return `${twoDigits(date.getHours())}:${twoDigits(date.getMinutes())}`
+  }
+  return `${twoDigits(date.getMonth() + 1)}/${twoDigits(date.getDate())}`
+}
+
+function shouldFlushMediaBubble(message: DesktopMessage) {
+  return (
+    (message.body.type === "image" || message.body.type === "video") &&
+    !message.replyTo &&
+    !message.topic
+  )
+}
+
+function shouldShowMessageTimeMarker(
+  previous: DesktopMessage | undefined,
+  message: DesktopMessage,
+) {
+  if (!previous) return false
+  const previousTime = new Date(previous.createdAt).getTime()
+  const currentTime = new Date(message.createdAt).getTime()
+  return (
+    Number.isFinite(previousTime) &&
+    Number.isFinite(currentTime) &&
+    currentTime - previousTime > 60 * 60 * 1_000
+  )
+}
+
+function twoDigits(value: number) {
+  return String(value).padStart(2, "0")
 }
 
 function conversationTypeLabel(type: string): string {
