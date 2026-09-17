@@ -58,6 +58,7 @@ export class AccountDatabase {
         id TEXT PRIMARY KEY,
         type TEXT NOT NULL,
         name TEXT NOT NULL,
+        member_count INTEGER NOT NULL DEFAULT 0,
         avatar TEXT NOT NULL,
         avatar_type TEXT NOT NULL DEFAULT 'group',
         avatar_id TEXT NOT NULL DEFAULT '',
@@ -161,6 +162,7 @@ export class AccountDatabase {
     this.ensureColumn("conversations", "notification_muted", "INTEGER NOT NULL DEFAULT 0")
     this.ensureColumn("conversations", "is_builtin_assistant", "INTEGER NOT NULL DEFAULT 0")
     this.ensureColumn("messages", "sender_name", "TEXT NOT NULL DEFAULT ''")
+    this.ensureColumn("conversations", "member_count", "INTEGER NOT NULL DEFAULT 0")
     this.ensureColumn("messages", "client_message_id", "TEXT NOT NULL DEFAULT ''")
     this.ensureColumn("messages", "delivery_status", "TEXT NOT NULL DEFAULT ''")
     this.database.exec(`
@@ -174,13 +176,14 @@ export class AccountDatabase {
   upsertCurrentConversations(conversations: StoredConversation[]) {
     const statement = this.database.prepare(`
       INSERT INTO conversations (
-        id, type, name, avatar, avatar_type, avatar_id, created_at, last_message_at,
+        id, type, name, member_count, avatar, avatar_type, avatar_id, created_at, last_message_at,
         last_message_summary, pinned, notification_muted, is_builtin_assistant,
         unread_count, current, payload_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
       ON CONFLICT(id) DO UPDATE SET
         type = excluded.type,
         name = excluded.name,
+        member_count = excluded.member_count,
         avatar = excluded.avatar,
         avatar_type = excluded.avatar_type,
         avatar_id = excluded.avatar_id,
@@ -200,6 +203,7 @@ export class AccountDatabase {
           conversation.id,
           conversation.type,
           conversation.name,
+          conversation.memberCount,
           conversation.avatar,
           conversation.avatarType,
           conversation.avatarId,
@@ -306,7 +310,7 @@ export class AccountDatabase {
     const rows = this.database
       .prepare(
         `SELECT conversations.id, conversations.type, conversations.name,
-                conversations.avatar_type, conversations.avatar_id,
+                conversations.member_count, conversations.avatar_type, conversations.avatar_id,
                 conversations.created_at, conversations.last_message_at,
                 COALESCE((
                   SELECT messages.content
@@ -328,6 +332,7 @@ export class AccountDatabase {
       id: String(row.id),
       type: String(row.type),
       name: String(row.name),
+      memberCount: Number(row.member_count),
       avatarType: String(row.avatar_type) as DesktopConversation["avatarType"],
       avatarId: String(row.avatar_id),
       createdAt: String(row.created_at),

@@ -54,8 +54,9 @@ import { ScreenshotManager } from "./screenshot-manager"
 import { ShortcutManager } from "./shortcut-manager"
 import { checkForUpdates, isTrustedReleaseUrl } from "./update-service"
 
-// WSLg 的 Chromium GPU 黑名单会禁用 Shader Background 所需的 WebGL。
+// WSLg 不会稳定继承 Windows 的 DPI，且 Chromium GPU 黑名单会禁用 WebGL。
 if (!app.isPackaged && process.platform === "linux" && process.env.WSL_DISTRO_NAME) {
+  app.commandLine.appendSwitch("force-device-scale-factor", "1.5")
   app.commandLine.appendSwitch("ignore-gpu-blocklist")
   app.commandLine.appendSwitch("enable-unsafe-swiftshader")
 }

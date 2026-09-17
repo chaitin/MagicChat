@@ -188,10 +188,7 @@ function ImageBody({
     <div className="max-w-[65vw] min-w-0" style={{ width: frame.width }}>
       <button
         type="button"
-        className={cn(
-          "relative block max-w-[65vw] overflow-hidden bg-muted text-left",
-          flush ? (body.caption ? "rounded-t-xl" : "rounded-xl") : "rounded-md",
-        )}
+        className="relative block max-w-[65vw] overflow-hidden bg-muted text-left"
         style={frame}
         aria-label="预览图片"
         disabled={!media.cached || failed}
@@ -266,10 +263,7 @@ function VideoBody({
     <div className="w-64 max-w-[65vw] min-w-0">
       <button
         type="button"
-        className={cn(
-          "group relative flex aspect-video w-64 max-w-full items-center justify-center overflow-hidden bg-foreground",
-          flush ? (body.caption ? "rounded-t-xl" : "rounded-xl") : "rounded-md",
-        )}
+        className="group relative flex aspect-video w-64 max-w-full items-center justify-center overflow-hidden bg-foreground"
         aria-label={media.cached ? "播放视频" : "下载并播放视频"}
         disabled={downloading}
         onClick={() => void downloadAndOpen()}

@@ -51,6 +51,7 @@
   --color-xgui-brand-2: var(--xgui-brand-2);
   --color-xgui-brand-4: var(--xgui-brand-4);
   --color-xgui-brand-5: var(--xgui-brand-5);
+  --color-xgui-brand-6: var(--xgui-brand-6);
   --color-xgui-destructive: var(--xgui-destructive);
   --color-xgui-foreground-0-half: var(--xgui-foreground-0-half);
   --color-xgui-foreground-2: var(--xgui-foreground-2);
@@ -105,10 +106,11 @@
   --xgui-background-6: #e3e3e3;
   --xgui-blue: #10aeff;
   --xgui-brand: #07c160;
-  --xgui-brand-1: #b4ecce;
+  --xgui-brand-1: #a8e8c5;
   --xgui-brand-2: #38cd7f;
   --xgui-brand-4: #06ae56;
   --xgui-brand-5: #059a4c;
+  --xgui-brand-6: #95ddb5;
   --xgui-destructive: #fa5151;
   --xgui-foreground-0-half: rgba(0, 0, 0, 0.9);
   --xgui-foreground-2: rgba(0, 0, 0, 0.3);
@@ -168,19 +170,20 @@
 
 .dark {
   --xgui-active-mask: rgba(255, 255, 255, 0.2);
-  --xgui-background-0: #111111;
+  --xgui-background-0: #262626;
   --xgui-background-1: #1e1e1e;
   --xgui-background-2: #191919;
   --xgui-background-3: #202020;
   --xgui-background-4: #404040;
   --xgui-background-5: #2c2c2c;
-  --xgui-background-6: #2d2d2d;
+  --xgui-background-6: #2a2a2a;
   --xgui-blue: #10aeff;
   --xgui-brand: #07c160;
-  --xgui-brand-1: #023a1c;
+  --xgui-brand-1: #02351a;
   --xgui-brand-2: #059a4c;
   --xgui-brand-4: #20c770;
   --xgui-brand-5: #38cd7f;
+  --xgui-brand-6: #03421f;
   --xgui-destructive: #fa5151;
   --xgui-foreground-0-half: rgba(255, 255, 255, 0.6);
   --xgui-foreground-2: rgba(255, 255, 255, 0.3);

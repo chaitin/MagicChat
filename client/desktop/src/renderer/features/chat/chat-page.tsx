@@ -814,8 +814,8 @@ export function ChatPage({
                   />
                   <div className="min-w-0">
                     <h2 className="truncate text-sm">{selected.name}</h2>
-                    <p className="text-sm text-muted-foreground">
-                      {conversationTypeLabel(selected.type)}
+                    <p className="text-xs text-muted-foreground">
+                      {conversationDescription(selected)}
                     </p>
                   </div>
                   <div className="ml-auto flex shrink-0 items-center gap-1">
@@ -956,10 +956,10 @@ export function ChatPage({
                                             "max-w-full rounded-xl text-sm leading-6",
                                             flushMediaBubble
                                               ? "overflow-hidden p-0"
-                                              : "px-4 py-2.5",
+                                              : "px-3 py-2.5",
                                             message.isMine
-                                              ? "rounded-tr-sm bg-xgui-brand-1 hover:bg-xgui-brand-1"
-                                              : "rounded-tl-sm bg-muted hover:bg-zinc-200/60 dark:hover:bg-zinc-700/60",
+                                              ? "rounded-tr-sm bg-xgui-brand-1 hover:bg-xgui-brand-6"
+                                              : "rounded-tl-sm bg-muted hover:bg-xgui-background-6",
                                           )}
                                         >
                                           {message.replyTo && (
@@ -1092,10 +1092,6 @@ export function ChatPage({
                       />
                       <InputGroupAddon align="block-end" className="justify-between gap-2">
                         <div className="flex items-center gap-1">
-                          <ComposerExpressionPicker
-                            onSelect={insertExpression}
-                            onRestoreFocus={focusComposer}
-                          />
                           <Toggle
                             type="button"
                             size="sm"
@@ -1110,6 +1106,10 @@ export function ChatPage({
                           >
                             <HugeiconsIcon icon={SquareMIcon} className="size-4" aria-hidden />
                           </Toggle>
+                          <ComposerExpressionPicker
+                            onSelect={insertExpression}
+                            onRestoreFocus={focusComposer}
+                          />
                           <ComposerButton
                             label={selectingFile ? "正在选择文件" : "上传文件"}
                             icon={selectingFile ? Loading03Icon : Attachment01Icon}
@@ -1388,7 +1388,7 @@ function ConversationGroup({
                     {formatConversationTime(conversation.lastMessageAt ?? conversation.createdAt)}
                   </span>
                 </div>
-                <p className="flex min-w-0 items-center gap-0.5 text-left text-sm leading-normal font-normal text-muted-foreground">
+                <p className="flex min-w-0 items-center gap-0.5 text-left text-xs leading-normal font-normal text-muted-foreground">
                   <span className="min-w-0 flex-1 truncate">
                     {formatConversationSummary(
                       conversation.lastMessageSummary,
@@ -1398,7 +1398,7 @@ function ConversationGroup({
                   {conversation.notificationMuted && (
                     <HugeiconsIcon
                       icon={NotificationOff01Icon}
-                      className="size-3 shrink-0"
+                      className="size-2.5 shrink-0"
                       aria-label="消息免打扰"
                     />
                   )}
@@ -1743,9 +1743,9 @@ function twoDigits(value: number) {
   return String(value).padStart(2, "0")
 }
 
-function conversationTypeLabel(type: string): string {
-  if (type === "group") return "群聊"
-  if (type === "app") return "应用会话"
-  if (type === "topic") return "话题"
+function conversationDescription(conversation: DesktopConversation): string {
+  if (conversation.type === "group") return `群聊 - ${conversation.memberCount} 人`
+  if (conversation.type === "app") return "应用会话"
+  if (conversation.type === "topic") return "话题"
   return "单聊"
 }

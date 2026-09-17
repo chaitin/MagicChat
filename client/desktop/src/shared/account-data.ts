@@ -50,6 +50,7 @@ export type DesktopConversation = {
   id: string
   type: string
   name: string
+  memberCount: number
   avatarType: Exclude<AvatarType, "topic">
   avatarId: string
   createdAt: string

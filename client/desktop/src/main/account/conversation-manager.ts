@@ -634,6 +634,7 @@ function parseConversation(value: unknown, currentUserId: string): StoredConvers
     id,
     type,
     name,
+    memberCount: type === "group" ? nonNegativeInteger(value.member_count) : 0,
     avatar: optionalString(value.avatar, 4_096),
     avatarType: avatarIdentity.type,
     avatarId: avatarIdentity.id,
