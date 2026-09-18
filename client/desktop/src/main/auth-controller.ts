@@ -1,21 +1,14 @@
-import { createHash, randomUUID } from "node:crypto"
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
-import path from "node:path"
-import { BrowserWindow, safeStorage, session, type Session } from "electron"
+import { randomUUID } from "node:crypto"
+import { BrowserWindow, type Session } from "electron"
 import {
   AuthFailure,
-  OFFICIAL_SERVER_ID,
-  OFFICIAL_SERVER_URL,
   isRecord,
   normalizeEmail,
   normalizeServer,
-  normalizeServerName,
-  type AppInfo,
   type AuthResult,
   type AuthUser,
   type CodeResult,
   type Connection,
-  type ServerPreference,
   type ServerCatalog,
   type ServerCheck,
   type ServerProfile,
@@ -23,104 +16,55 @@ import {
   type RestoredSession,
   type SignInInput,
   type SignInResult,
-  type SavedLogin,
-  type ThirdPartyProvider,
   type ThirdPartySignInInput,
 } from "../shared/auth"
-import type {
-  AccountDataChangedEvent,
-  AccountDataSyncEvent,
-  AvatarRequest,
-  AvatarResult,
-  DesktopContactDirectory,
-  DesktopConversation,
-  DesktopMessage,
-  DesktopMessagePage,
-  DesktopMessageReactionUser,
-  MessageReactionUsersInput,
-  RetryMessageInput,
-  SendImageMessageInput,
-  SendTextMessageInput,
-  SendVideoMessageInput,
-  SetMessageReactionInput,
-} from "../shared/account-data"
+import type { AccountDataChangedEvent, AccountDataSyncEvent } from "../shared/account-data"
 import {
-  DEFAULT_SHORTCUTS,
   type AppSettings,
   type NotificationSettings,
   type ShortcutSettings,
   type ThemePreference,
 } from "../shared/desktop"
 import { AccountRuntime } from "./account/account-runtime"
-import type { CachedMedia, MediaCacheRequest, MediaDownloadProgress } from "../shared/media"
-import type { AvatarResource } from "./account/avatar-types"
+import type { MediaDownloadProgress } from "../shared/media"
+import { AccountDataFacade } from "./auth/account-data-facade"
+import { AppSettingsManager } from "./auth/app-settings-manager"
+import {
+  accountKey as createAccountKey,
+  AppConfigStore,
+  createDefaultAppConfig,
+  type AppConfig,
+  type StoredLogin,
+} from "./auth/app-config-store"
+import {
+  invalidResponse,
+  parseAppInfo,
+  parseNativeSession,
+  parseUser,
+  request,
+  validSeconds,
+  type NativeSessionCredential,
+} from "./auth/auth-api"
+import { clearServerAuthCookies, openThirdPartyLoginWindow } from "./auth/third-party-auth"
+import { encryptPassword, readSavedLogin } from "./auth/login-credential"
+import { ServerManager } from "./auth/server-manager"
 
-type StoredLogin = {
-  method: "password" | "email-code"
-  email: string
-  encryptedPassword?: string
-}
-type StoredAccountSession = {
-  serverId: string
-  userId: string
-  userEmail: string
-  userName: string
-  token: string
-  expiresAt: string
-  lastUsedAt: number
-}
-type AppConfig = {
-  version: 1
-  theme: ThemePreference
-  shortcuts: ShortcutSettings
-  notifications: NotificationSettings
-  activeServerId: string
-  servers: ServerProfile[]
-  serverLogins: Record<string, StoredLogin>
-  accountSessions: Record<string, StoredAccountSession>
-  lastAccountKey: string | null
-}
-type NativeSessionCredential = { token: string; expiresAt: string }
 type ActiveConnection = Connection & {
   session: Session
   credential: NativeSessionCredential | null
 }
-type RequestOptions = {
-  headers?: Record<string, string>
-  omitOrigin?: boolean
-  credentials?: "include" | "omit"
-}
 const NATIVE_SESSION_HEADER = "X-Dianbao-Mobile-Session"
 const NATIVE_SESSION_VERSION = "1"
-const USER_SESSION_COOKIE = "user_session"
-const THIRD_PARTY_STATE_COOKIE = "third_party_login_state"
-const THIRD_PARTY_REDIRECT_PATH = "/init"
-const THIRD_PARTY_TIMEOUT_MS = 5 * 60_000
-const MAX_RESPONSE_BYTES = 128 * 1024
-const MAX_SERVERS = 20
-const officialServer: ServerProfile = {
-  id: OFFICIAL_SERVER_ID,
-  name: "演示服务器",
-  url: OFFICIAL_SERVER_URL,
-  builtin: true,
-}
 
 export class AuthController {
-  private readonly filePath: string
+  private readonly configStore: AppConfigStore
   private readonly initialized: Promise<void>
-  private config: AppConfig = {
-    version: 1,
-    theme: "system",
-    shortcuts: { ...DEFAULT_SHORTCUTS },
-    notifications: { soundEnabled: true, desktopEnabled: true },
-    activeServerId: OFFICIAL_SERVER_ID,
-    servers: [officialServer],
-    serverLogins: {},
-    accountSessions: {},
-    lastAccountKey: null,
-  }
+  private config: AppConfig = createDefaultAppConfig()
   private active?: ActiveConnection
   private accountRuntime?: AccountRuntime
+  private readonly accountData: AccountDataFacade
+  private readonly servers: ServerManager
+  private readonly settings: AppSettingsManager
   private busy = false
   private readonly cooldowns = new Map<string, number>()
 
@@ -136,34 +80,58 @@ export class AuthController {
       onMediaProgress: () => undefined,
     },
   ) {
-    this.filePath = path.join(userDataPath, "app-config.json")
-    this.initialized = this.loadConfig()
+    this.configStore = new AppConfigStore(userDataPath)
+    this.servers = new ServerManager(
+      this.configStore,
+      () => this.config,
+      (config) => {
+        this.config = config
+      },
+      (profile) => {
+        if (this.active?.server.id === profile.id) this.active.server = { ...profile }
+      },
+    )
+    this.settings = new AppSettingsManager(
+      this.configStore,
+      () => this.config,
+      (config) => {
+        this.config = config
+      },
+    )
+    this.initialized = this.configStore.load().then((config) => {
+      this.config = config
+    })
+    this.accountData = new AccountDataFacade(
+      () => this.initialized,
+      (targetId) => void this.requireTarget(targetId),
+      () => this.requireAccountRuntime(),
+    )
   }
 
   async getServer(): Promise<ServerProfile> {
     await this.initialized
-    return { ...this.getProfile(this.config.activeServerId) }
+    return this.servers.activeProfile()
   }
 
   async getServers(): Promise<ServerCatalog> {
     await this.initialized
-    return this.catalog()
+    return this.servers.catalog()
   }
 
   restoreLastSession(): Promise<RestoredSession> {
     return this.exclusive(async () => {
       const accountKey = this.config.lastAccountKey
       const stored = accountKey ? this.config.accountSessions[accountKey] : undefined
-      if (!accountKey || !stored) return { catalog: this.catalog(), connection: null }
+      if (!accountKey || !stored) return { catalog: this.servers.catalog(), connection: null }
 
       const profile = this.config.servers.find((server) => server.id === stored.serverId)
       const token = stored.token
       if (!profile || !token || Date.parse(stored.expiresAt) <= Date.now()) {
         await this.forgetStoredAccount(accountKey)
-        return { catalog: this.catalog(), connection: null }
+        return { catalog: this.servers.catalog(), connection: null }
       }
 
-      const serverSession = this.serverSession(profile.url)
+      const serverSession = this.servers.createSession(profile.url)
       try {
         const [infoData, accountData] = await Promise.all([
           request(serverSession, profile.url, "/api/client/info", undefined, 3_000, {
@@ -184,7 +152,7 @@ export class AuthController {
           server: { ...profile },
           info,
           user,
-          savedLogin: this.readSavedLogin(profile.id),
+          savedLogin: readSavedLogin(this.config.serverLogins[profile.id]),
         }
         this.destroyAccountRuntime()
         this.active = {
@@ -208,13 +176,13 @@ export class AuthController {
           accountSessions,
           lastAccountKey: accountKey,
         }
-        await this.saveConfig(config)
+        await this.configStore.save(config)
         this.config = config
-        return { catalog: this.catalog(), connection }
+        return { catalog: this.servers.catalog(), connection }
       } catch (error) {
         if (error instanceof AuthFailure && error.code === "unauthorized") {
           await this.forgetStoredAccount(accountKey)
-          return { catalog: this.catalog(), connection: null }
+          return { catalog: this.servers.catalog(), connection: null }
         }
         throw error
       }
@@ -223,11 +191,7 @@ export class AuthController {
 
   async getAppSettings(): Promise<AppSettings> {
     await this.initialized
-    return {
-      theme: this.config.theme,
-      shortcuts: { ...this.config.shortcuts },
-      notifications: { ...this.config.notifications },
-    }
+    return this.settings.get()
   }
 
   async initializeAccountData(targetId: string): Promise<null> {
@@ -240,163 +204,84 @@ export class AuthController {
     return this.initializeAccountRuntime(active, runtime)
   }
 
-  async listConversations(targetId: string): Promise<DesktopConversation[]> {
-    await this.initialized
-    this.requireTarget(targetId)
-    return this.requireAccountRuntime().listConversations()
+  listConversations(...args: Parameters<AccountDataFacade["listConversations"]>) {
+    return this.accountData.listConversations(...args)
   }
 
-  async listMessages(targetId: string, conversationId: string): Promise<DesktopMessage[]> {
-    await this.initialized
-    this.requireTarget(targetId)
-    return this.requireAccountRuntime().listMessages(conversationId)
+  listMessages(...args: Parameters<AccountDataFacade["listMessages"]>) {
+    return this.accountData.listMessages(...args)
   }
 
-  async loadBeforeMessages(
-    targetId: string,
-    conversationId: string,
-    beforeSeq: number,
-  ): Promise<DesktopMessagePage> {
-    await this.initialized
-    this.requireTarget(targetId)
-    return this.requireAccountRuntime().loadBeforeMessages(conversationId, beforeSeq)
+  loadBeforeMessages(...args: Parameters<AccountDataFacade["loadBeforeMessages"]>) {
+    return this.accountData.loadBeforeMessages(...args)
   }
 
-  async sendTextMessage(input: SendTextMessageInput): Promise<DesktopMessage[]> {
-    await this.initialized
-    this.requireTarget(input?.targetId)
-    return this.requireAccountRuntime().sendTextMessage(
-      input.conversationId,
-      input.content,
-      input.bodyType,
-    )
+  sendTextMessage(...args: Parameters<AccountDataFacade["sendTextMessage"]>) {
+    return this.accountData.sendTextMessage(...args)
   }
 
-  async sendFileMessage(
-    input: { targetId: string; conversationId: string },
-    file: { path: string; name: string; sizeBytes: number },
-  ): Promise<DesktopMessage[]> {
-    await this.initialized
-    this.requireTarget(input?.targetId)
-    return this.requireAccountRuntime().sendFileMessage(input.conversationId, file)
+  sendFileMessage(...args: Parameters<AccountDataFacade["sendFileMessage"]>) {
+    return this.accountData.sendFileMessage(...args)
   }
 
-  async sendImageMessage(
-    input: SendImageMessageInput,
-    image: { path: string; sizeBytes: number },
-  ): Promise<DesktopMessage[]> {
-    await this.initialized
-    this.requireTarget(input?.targetId)
-    return this.requireAccountRuntime().sendImageMessage(input.conversationId, {
-      path: image.path,
-      name: input.name,
-      sizeBytes: image.sizeBytes,
-      contentType: input.contentType,
-      width: input.width,
-      height: input.height,
-      caption: input.caption,
-    })
+  sendImageMessage(...args: Parameters<AccountDataFacade["sendImageMessage"]>) {
+    return this.accountData.sendImageMessage(...args)
   }
 
-  async sendVideoMessage(
-    input: SendVideoMessageInput,
-    video: {
-      path: string
-      name: string
-      sizeBytes: number
-      contentType: "video/mp4" | "video/webm"
-    },
-  ): Promise<DesktopMessage[]> {
-    await this.initialized
-    this.requireTarget(input?.targetId)
-    return this.requireAccountRuntime().sendVideoMessage(input.conversationId, {
-      ...video,
-      caption: input.caption,
-    })
+  sendVideoMessage(...args: Parameters<AccountDataFacade["sendVideoMessage"]>) {
+    return this.accountData.sendVideoMessage(...args)
   }
 
-  async retryMessage(input: RetryMessageInput): Promise<DesktopMessage[]> {
-    await this.initialized
-    this.requireTarget(input?.targetId)
-    return this.requireAccountRuntime().retryMessage(input.conversationId, input.clientMessageId)
+  retryMessage(...args: Parameters<AccountDataFacade["retryMessage"]>) {
+    return this.accountData.retryMessage(...args)
   }
 
-  async listMessageReactionUsers(
-    input: MessageReactionUsersInput,
-  ): Promise<DesktopMessageReactionUser[]> {
-    await this.initialized
-    this.requireTarget(input?.targetId)
-    return this.requireAccountRuntime().listMessageReactionUsers(input)
+  listMessageReactionUsers(...args: Parameters<AccountDataFacade["listMessageReactionUsers"]>) {
+    return this.accountData.listMessageReactionUsers(...args)
   }
 
-  async setMessageReaction(input: SetMessageReactionInput): Promise<DesktopMessage[]> {
-    await this.initialized
-    this.requireTarget(input?.targetId)
-    return this.requireAccountRuntime().setMessageReaction(input)
+  setMessageReaction(...args: Parameters<AccountDataFacade["setMessageReaction"]>) {
+    return this.accountData.setMessageReaction(...args)
   }
 
-  async ensureMediaCached(request: MediaCacheRequest): Promise<CachedMedia> {
-    await this.initialized
-    this.requireTarget(request?.targetId)
-    return this.requireAccountRuntime().ensureMediaCached(request)
+  ensureMediaCached(...args: Parameters<AccountDataFacade["ensureMediaCached"]>) {
+    return this.accountData.ensureMediaCached(...args)
   }
 
-  async getOutgoingMedia(targetId: string, clientMessageId: string) {
-    await this.initialized
-    this.requireTarget(targetId)
-    return this.requireAccountRuntime().getOutgoingMedia(clientMessageId)
+  getOutgoingMedia(...args: Parameters<AccountDataFacade["getOutgoingMedia"]>) {
+    return this.accountData.getOutgoingMedia(...args)
   }
 
-  async readOutgoingMedia(targetId: string, clientMessageId: string, range?: string) {
-    await this.initialized
-    this.requireTarget(targetId)
-    return this.requireAccountRuntime().readOutgoingMedia(clientMessageId, range)
+  readOutgoingMedia(...args: Parameters<AccountDataFacade["readOutgoingMedia"]>) {
+    return this.accountData.readOutgoingMedia(...args)
   }
 
-  async getCachedMedia(targetId: string, cacheKey: string): Promise<CachedMedia> {
-    await this.initialized
-    this.requireTarget(targetId)
-    return this.requireAccountRuntime().getCachedMedia(cacheKey)
+  getCachedMedia(...args: Parameters<AccountDataFacade["getCachedMedia"]>) {
+    return this.accountData.getCachedMedia(...args)
   }
 
-  async readCachedMedia(targetId: string, cacheKey: string, range?: string): Promise<Response> {
-    await this.initialized
-    this.requireTarget(targetId)
-    return this.requireAccountRuntime().readCachedMedia(cacheKey, range)
+  readCachedMedia(...args: Parameters<AccountDataFacade["readCachedMedia"]>) {
+    return this.accountData.readCachedMedia(...args)
   }
 
-  async fetchTemporaryFile(targetId: string, fileId: string, range?: string): Promise<Response> {
-    await this.initialized
-    this.requireTarget(targetId)
-    return this.requireAccountRuntime().fetchTemporaryFile(fileId, range)
+  fetchTemporaryFile(...args: Parameters<AccountDataFacade["fetchTemporaryFile"]>) {
+    return this.accountData.fetchTemporaryFile(...args)
   }
 
-  async getContacts(targetId: string): Promise<DesktopContactDirectory> {
-    await this.initialized
-    this.requireTarget(targetId)
-    return this.requireAccountRuntime().getContacts()
+  getContacts(...args: Parameters<AccountDataFacade["getContacts"]>) {
+    return this.accountData.getContacts(...args)
   }
 
-  async getAvatar(request: AvatarRequest): Promise<AvatarResult> {
-    await this.initialized
-    this.requireTarget(request?.targetId)
-    return this.requireAccountRuntime().getAvatar({
-      type: request.type,
-      id: request.id,
-      theme: request.theme,
-    })
+  getAvatar(...args: Parameters<AccountDataFacade["getAvatar"]>) {
+    return this.accountData.getAvatar(...args)
   }
 
-  async invalidateAvatar(request: Omit<AvatarRequest, "theme">): Promise<null> {
-    await this.initialized
-    this.requireTarget(request?.targetId)
-    await this.requireAccountRuntime().invalidateAvatar(request.type, request.id)
-    return null
+  invalidateAvatar(...args: Parameters<AccountDataFacade["invalidateAvatar"]>) {
+    return this.accountData.invalidateAvatar(...args)
   }
 
-  async readAvatarResource(resourceKey: string): Promise<AvatarResource> {
-    await this.initialized
-    return this.requireAccountRuntime().readAvatarResource(resourceKey)
+  readAvatarResource(...args: Parameters<AccountDataFacade["readAvatarResource"]>) {
+    return this.accountData.readAvatarResource(...args)
   }
 
   close() {
@@ -404,155 +289,41 @@ export class AuthController {
   }
 
   setTheme(theme: ThemePreference): Promise<null> {
-    return this.exclusive(async () => {
-      if (!["light", "dark", "system"].includes(theme)) {
-        throw new AuthFailure("invalid_theme", "主题设置不受支持")
-      }
-      if (theme === this.config.theme) return null
-      const config = { ...this.config, theme }
-      await this.saveConfig(config)
-      this.config = config
-      return null
-    })
+    return this.exclusive(() => this.settings.setTheme(theme))
   }
 
   setNotificationSettings(settings: NotificationSettings): Promise<null> {
-    return this.exclusive(async () => {
-      if (
-        !isRecord(settings) ||
-        typeof settings.soundEnabled !== "boolean" ||
-        typeof settings.desktopEnabled !== "boolean"
-      ) {
-        throw new AuthFailure("invalid_notification_settings", "通知设置不正确")
-      }
-      const config = {
-        ...this.config,
-        notifications: {
-          soundEnabled: settings.soundEnabled,
-          desktopEnabled: settings.desktopEnabled,
-        },
-      }
-      await this.saveConfig(config)
-      this.config = config
-      return null
-    })
+    return this.exclusive(() => this.settings.setNotifications(settings))
   }
 
   setShortcutSettings(shortcuts: ShortcutSettings): Promise<null> {
-    return this.exclusive(async () => {
-      if (
-        !isRecord(shortcuts) ||
-        typeof shortcuts.showWindow !== "string" ||
-        typeof shortcuts.screenshot !== "string" ||
-        shortcuts.showWindow.length > 64 ||
-        shortcuts.screenshot.length > 64
-      ) {
-        throw new AuthFailure("invalid_shortcut", "快捷键设置不正确")
-      }
-      const config = { ...this.config, shortcuts: { ...shortcuts } }
-      await this.saveConfig(config)
-      this.config = config
-      return null
-    })
+    return this.exclusive(() => this.settings.setShortcuts(shortcuts))
   }
 
   saveServer(input: SaveServerInput): Promise<{ catalog: ServerCatalog; check: ServerCheck }> {
-    return this.exclusive(async () => {
-      const name = normalizeServerName(input?.name)
-      const server = normalizeServer(input)
-      const existing = input.id ? this.getProfile(input.id) : undefined
-      if (existing?.builtin) throw new AuthFailure("builtin_server", "官方服务器不能修改")
-      if (!existing && this.config.servers.length >= MAX_SERVERS)
-        throw new AuthFailure("server_limit", `最多保存 ${MAX_SERVERS} 个服务器`)
-      if (
-        this.config.servers.some(
-          (item) => item.url === server.url && (!existing || item.id !== existing.id),
-        )
-      ) {
-        throw new AuthFailure("duplicate_server", "该服务器地址已存在")
-      }
-      if (existing && existing.id === this.config.activeServerId && existing.url !== server.url) {
-        throw new AuthFailure(
-          "active_server",
-          "请先返回服务器选择页并切换服务器，再修改当前服务器地址",
-        )
-      }
-      const profile: ServerProfile = {
-        id: existing?.id ?? randomUUID(),
-        name,
-        ...server,
-        builtin: false,
-      }
-      const servers = existing
-        ? this.config.servers.map((item) => (item.id === existing.id ? profile : item))
-        : [...this.config.servers, profile]
-      const serverLogins = { ...this.config.serverLogins }
-      const accountSessions = { ...this.config.accountSessions }
-      if (existing && existing.url !== profile.url) {
-        delete serverLogins[existing.id]
-        for (const [key, account] of Object.entries(accountSessions)) {
-          if (account.serverId === existing.id) delete accountSessions[key]
-        }
-      }
-      const lastAccountKey =
-        this.config.lastAccountKey && accountSessions[this.config.lastAccountKey]
-          ? this.config.lastAccountKey
-          : null
-      const config = { ...this.config, servers, serverLogins, accountSessions, lastAccountKey }
-      await this.saveConfig(config)
-      this.config = config
-      if (this.active?.server.id === profile.id) this.active.server = { ...profile }
-      return { catalog: this.catalog(), check: await this.inspect(profile) }
-    })
+    return this.exclusive(() => this.servers.save(input))
   }
 
   deleteServer(id: string): Promise<ServerCatalog> {
-    return this.exclusive(async () => {
-      const profile = this.getProfile(id)
-      if (profile.builtin) throw new AuthFailure("builtin_server", "官方服务器不能删除")
-      if (profile.id === this.config.activeServerId)
-        throw new AuthFailure("active_server", "请先返回服务器选择页并切换服务器，再删除当前服务器")
-      const serverLogins = { ...this.config.serverLogins }
-      delete serverLogins[profile.id]
-      const accountSessions = Object.fromEntries(
-        Object.entries(this.config.accountSessions).filter(
-          ([, account]) => account.serverId !== profile.id,
-        ),
-      )
-      const lastAccountKey =
-        this.config.lastAccountKey && accountSessions[this.config.lastAccountKey]
-          ? this.config.lastAccountKey
-          : null
-      const config = {
-        ...this.config,
-        servers: this.config.servers.filter((item) => item.id !== profile.id),
-        serverLogins,
-        accountSessions,
-        lastAccountKey,
-      }
-      await this.saveConfig(config)
-      this.config = config
-      return this.catalog()
-    })
+    return this.exclusive(() => this.servers.delete(id))
   }
 
   async checkServer(id: string): Promise<ServerCheck> {
     await this.initialized
-    return this.inspect(this.getProfile(id))
+    return this.servers.inspect(this.servers.getProfile(id))
   }
 
   async checkServers(): Promise<ServerCheck[]> {
     await this.initialized
-    const servers = [...this.config.servers]
-    return Promise.all(servers.map((item) => this.inspect(item)))
+    return Promise.all(this.config.servers.map((item) => this.servers.inspect(item)))
   }
 
   connect(serverId: string): Promise<Connection> {
     return this.exclusive(async () => {
-      const profile = this.getProfile(serverId)
+      const profile = this.servers.getProfile(serverId)
       const server = normalizeServer(profile)
       // 即使地址只差端口或部署路径，也使用独立网络会话隔离服务器状态。
-      const serverSession = this.serverSession(server.url)
+      const serverSession = this.servers.createSession(server.url)
       const data = await request(serverSession, server.url, "/api/client/info", undefined, 3_000, {
         omitOrigin: true,
         credentials: "omit",
@@ -563,10 +334,10 @@ export class AuthController {
         server: { ...profile, ...server },
         info,
         user: null,
-        savedLogin: this.readSavedLogin(profile.id),
+        savedLogin: readSavedLogin(this.config.serverLogins[profile.id]),
       }
       const config = { ...this.config, activeServerId: profile.id }
-      await this.saveConfig(config)
+      await this.configStore.save(config)
       this.config = config
       this.destroyAccountRuntime()
       this.active = { ...connection, session: serverSession, credential: null }
@@ -675,7 +446,7 @@ export class AuthController {
       active.user = user
       const savedLogin: StoredLogin = { method: input.method, email }
       if (password) {
-        const encryptedPassword = this.encryptPassword(input.secret)
+        const encryptedPassword = encryptPassword(input.secret)
         if (encryptedPassword) savedLogin.encryptedPassword = encryptedPassword
       }
       const config = this.withRememberedAccount(
@@ -686,9 +457,9 @@ export class AuthController {
         active,
       )
       try {
-        await this.saveConfig(config)
+        await this.configStore.save(config)
         this.config = config
-        active.savedLogin = this.readSavedLogin(active.server.id)
+        active.savedLogin = readSavedLogin(this.config.serverLogins[active.server.id])
       } catch {
         // 登录信息记忆失败不影响已建立的认证会话。
       }
@@ -707,10 +478,15 @@ export class AuthController {
       )
       if (!provider) throw new AuthFailure("invalid_provider", "第三方登录方式不存在或已停用")
 
-      await this.clearServerAuthCookies(active.session, active.server.url)
+      await clearServerAuthCookies(active.session, active.server.url)
       let credential: NativeSessionCredential | null = null
       try {
-        credential = await this.openThirdPartyWindow(active, provider, parent)
+        credential = await openThirdPartyLoginWindow({
+          serverSession: active.session,
+          serverUrl: active.server.url,
+          provider,
+          parent,
+        })
         const user = parseUser(
           await request(active.session, active.server.url, "/api/client/me", undefined, 15_000, {
             headers: { Authorization: `Bearer ${credential.token}` },
@@ -720,10 +496,10 @@ export class AuthController {
         )
         active.credential = credential
         active.user = user
-        await this.clearServerAuthCookies(active.session, active.server.url)
+        await clearServerAuthCookies(active.session, active.server.url)
         try {
           const config = this.withRememberedAccount(this.config, active)
-          await this.saveConfig(config)
+          await this.configStore.save(config)
           this.config = config
         } catch {
           // Token 记忆失败不影响已建立的认证会话。
@@ -733,7 +509,7 @@ export class AuthController {
       } catch (error) {
         active.credential = null
         if (credential) await this.revokeCredential(active, credential)
-        await this.clearServerAuthCookies(active.session, active.server.url)
+        await clearServerAuthCookies(active.session, active.server.url)
         throw error
       }
     })
@@ -742,7 +518,7 @@ export class AuthController {
   signOut(targetId: string): Promise<null> {
     return this.exclusive(async () => {
       const active = this.requireTarget(targetId)
-      const accountKey = active.user ? this.accountKey(active.server.url, active.user.id) : null
+      const accountKey = active.user ? createAccountKey(active.server.url, active.user.id) : null
       this.destroyAccountRuntime()
       try {
         await request(active.session, active.server.url, "/api/client/auth/logout", {}, 15_000, {
@@ -764,187 +540,12 @@ export class AuthController {
     })
   }
 
-  private openThirdPartyWindow(
-    active: ActiveConnection,
-    provider: ThirdPartyProvider,
-    parent: BrowserWindow,
-  ): Promise<NativeSessionCredential> {
-    const serverOrigin = new URL(active.server.url).origin
-    const redirectPath = `${THIRD_PARTY_REDIRECT_PATH}?desktop-auth=complete`
-    const startUrl = new URL(
-      `${active.server.url}/api/client/auth/third-party/${encodeURIComponent(provider.key)}/start`,
-    )
-    startUrl.searchParams.set("redirect", redirectPath)
-
-    return new Promise((resolve, reject) => {
-      const authWindow = new BrowserWindow({
-        parent,
-        modal: true,
-        width: 520,
-        height: 720,
-        minWidth: 420,
-        minHeight: 560,
-        title: `使用 ${provider.name} 登录`,
-        show: false,
-        webPreferences: {
-          session: active.session,
-          contextIsolation: true,
-          sandbox: true,
-          nodeIntegration: false,
-          webSecurity: true,
-        },
-      })
-      authWindow.removeMenu()
-      authWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }))
-      authWindow.webContents.on("will-navigate", (event, targetUrl) => {
-        try {
-          if (!/^https?:$/.test(new URL(targetUrl).protocol)) event.preventDefault()
-        } catch {
-          event.preventDefault()
-        }
-      })
-
-      let settled = false
-      const timer = setTimeout(
-        () =>
-          finish(() => reject(new AuthFailure("third_party_timeout", "第三方登录超时，请重试"))),
-        THIRD_PARTY_TIMEOUT_MS,
-      )
-      const finish = (complete: () => void) => {
-        if (settled) return
-        settled = true
-        clearTimeout(timer)
-        if (!authWindow.isDestroyed()) authWindow.destroy()
-        complete()
-      }
-      const completeFromNavigation = async (targetUrl: string) => {
-        if (settled) return
-        let url: URL
-        try {
-          url = new URL(targetUrl)
-        } catch {
-          return
-        }
-        if (
-          url.origin !== serverOrigin ||
-          url.pathname !== THIRD_PARTY_REDIRECT_PATH ||
-          url.searchParams.get("desktop-auth") !== "complete"
-        ) {
-          return
-        }
-        try {
-          const cookies = await active.session.cookies.get({
-            url: `${serverOrigin}/`,
-            name: USER_SESSION_COOKIE,
-          })
-          const cookie = cookies.find(
-            (item) =>
-              Boolean(item.value) &&
-              typeof item.expirationDate === "number" &&
-              item.expirationDate * 1_000 > Date.now(),
-          )
-          if (!cookie?.value || cookie.value.length > 8_192 || !cookie.expirationDate) {
-            throw new AuthFailure("invalid_session", "第三方登录未返回有效凭据")
-          }
-          finish(() =>
-            resolve({
-              token: cookie.value,
-              expiresAt: new Date(cookie.expirationDate! * 1_000).toISOString(),
-            }),
-          )
-        } catch (error) {
-          finish(() => reject(error))
-        }
-      }
-
-      authWindow.once("ready-to-show", () => authWindow.show())
-      authWindow.once("closed", () => {
-        if (!settled)
-          finish(() => reject(new AuthFailure("third_party_cancelled", "已取消第三方登录")))
-      })
-      authWindow.webContents.on("did-navigate", (_event, targetUrl) => {
-        void completeFromNavigation(targetUrl)
-      })
-      void authWindow.loadURL(startUrl.toString()).catch((error) => {
-        finish(() =>
-          reject(
-            new AuthFailure(
-              "third_party_unavailable",
-              error instanceof Error ? "无法打开第三方登录页面，请重试" : "第三方登录不可用",
-            ),
-          ),
-        )
-      })
-    })
-  }
-
-  private async clearServerAuthCookies(serverSession: Session, serverUrl: string) {
-    const origin = new URL(serverUrl).origin
-    await Promise.allSettled([
-      serverSession.cookies.remove(`${origin}/`, USER_SESSION_COOKIE),
-      serverSession.cookies.remove(
-        `${origin}/api/client/auth/third-party/`,
-        THIRD_PARTY_STATE_COOKIE,
-      ),
-    ])
-    await serverSession.cookies.flushStore()
-  }
-
   private async revokeCredential(active: ActiveConnection, credential: NativeSessionCredential) {
     await request(active.session, active.server.url, "/api/client/auth/logout", {}, 15_000, {
       headers: { Authorization: `Bearer ${credential.token}` },
       omitOrigin: true,
       credentials: "omit",
     }).catch(() => undefined)
-  }
-
-  private catalog(): ServerCatalog {
-    return {
-      activeServerId: this.config.activeServerId,
-      servers: this.config.servers.map((item) => ({ ...item })),
-    }
-  }
-
-  private getProfile(id: unknown): ServerProfile {
-    if (typeof id !== "string") throw new AuthFailure("invalid_server", "服务器不存在")
-    const profile = this.config.servers.find((item) => item.id === id)
-    if (!profile) throw new AuthFailure("invalid_server", "服务器不存在或已被删除")
-    return profile
-  }
-
-  private serverSession(serverUrl: string): Session {
-    const partition = `persist:jiying-auth-${createHash("sha256").update(serverUrl).digest("hex")}`
-    const serverSession = session.fromPartition(partition)
-    serverSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
-    serverSession.setPermissionCheckHandler(() => false)
-    return serverSession
-  }
-
-  private async inspect(profile: ServerProfile): Promise<ServerCheck> {
-    const checkedAt = Date.now()
-    try {
-      const data = await request(
-        this.serverSession(profile.url),
-        profile.url,
-        "/api/client/info",
-        undefined,
-        3_000,
-      )
-      const info = parseAppInfo(data)
-      return {
-        serverId: profile.id,
-        status: "available",
-        checkedAt,
-        organizationName: info.organizationName,
-      }
-    } catch (error) {
-      return {
-        serverId: profile.id,
-        status: "unavailable",
-        checkedAt,
-        message: error instanceof AuthFailure ? error.message : "检测失败，请稍后重试",
-      }
-    }
   }
 
   private async initializeAccountRuntime(active: ActiveConnection, runtime: AccountRuntime) {
@@ -954,14 +555,14 @@ export class AuthController {
     } catch (error) {
       if (this.accountRuntime === runtime) {
         const credential = active.credential
-        const accountKey = active.user ? this.accountKey(active.server.url, active.user.id) : null
+        const accountKey = active.user ? createAccountKey(active.server.url, active.user.id) : null
         this.destroyAccountRuntime()
         active.user = null
         active.credential = null
         if (credential) {
           await Promise.allSettled([
             this.revokeCredential(active, credential),
-            this.clearServerAuthCookies(active.session, active.server.url),
+            clearServerAuthCookies(active.session, active.server.url),
             ...(accountKey ? [this.forgetStoredAccount(accountKey)] : []),
           ])
         }
@@ -1020,13 +621,9 @@ export class AuthController {
     }
   }
 
-  private accountKey(serverUrl: string, userId: string): string {
-    return createHash("sha256").update(serverUrl).update("\0").update(userId).digest("hex")
-  }
-
   private withRememberedAccount(config: AppConfig, active: ActiveConnection): AppConfig {
     if (!active.user || !active.credential) return config
-    const key = this.accountKey(active.server.url, active.user.id)
+    const key = createAccountKey(active.server.url, active.user.id)
     return {
       ...config,
       activeServerId: active.server.id,
@@ -1056,190 +653,8 @@ export class AuthController {
       accountSessions,
       lastAccountKey: this.config.lastAccountKey === accountKey ? null : this.config.lastAccountKey,
     }
-    await this.saveConfig(config)
+    await this.configStore.save(config)
     this.config = config
-  }
-
-  private readSavedLogin(serverId: string): SavedLogin | undefined {
-    const stored = this.config.serverLogins[serverId]
-    if (!stored) return undefined
-    if (stored.method !== "password" || !stored.encryptedPassword) {
-      return { method: stored.method, email: stored.email }
-    }
-    if (!this.canProtectPassword()) return { method: stored.method, email: stored.email }
-    try {
-      return {
-        method: stored.method,
-        email: stored.email,
-        password: safeStorage.decryptString(Buffer.from(stored.encryptedPassword, "base64")),
-      }
-    } catch {
-      return { method: stored.method, email: stored.email }
-    }
-  }
-
-  private encryptPassword(password: string): string | undefined {
-    if (!this.canProtectPassword()) return undefined
-    try {
-      return safeStorage.encryptString(password).toString("base64")
-    } catch {
-      return undefined
-    }
-  }
-
-  private canProtectPassword(): boolean {
-    if (!safeStorage.isEncryptionAvailable()) return false
-    return process.platform !== "linux" || safeStorage.getSelectedStorageBackend() !== "basic_text"
-  }
-
-  private async loadConfig() {
-    try {
-      const stored: unknown = JSON.parse(await readFile(this.filePath, "utf8"))
-      if (!isRecord(stored) || stored.version !== 1 || !Array.isArray(stored.servers)) return
-
-      const servers: ServerProfile[] = [officialServer]
-      const ids = new Set([OFFICIAL_SERVER_ID])
-      const urls = new Set([OFFICIAL_SERVER_URL])
-      for (const value of stored.servers.slice(0, MAX_SERVERS)) {
-        if (!isRecord(value) || value.builtin === true || typeof value.id !== "string") continue
-        if (!value.id || value.id.length > 128 || ids.has(value.id)) continue
-        try {
-          const name = normalizeServerName(value.name)
-          const server = normalizeServer(value as ServerPreference)
-          if (urls.has(server.url)) continue
-          servers.push({ id: value.id, name, ...server, builtin: false })
-          ids.add(value.id)
-          urls.add(server.url)
-        } catch {
-          // 单条损坏配置不影响其余服务器和官方入口。
-        }
-      }
-
-      const serverLogins: Record<string, StoredLogin> = {}
-      if (isRecord(stored.serverLogins)) {
-        for (const [serverId, value] of Object.entries(stored.serverLogins).slice(0, MAX_SERVERS)) {
-          if (!ids.has(serverId) || !isRecord(value)) continue
-          if (value.method !== "password" && value.method !== "email-code") continue
-          try {
-            const email = normalizeEmail(value.email)
-            const encryptedPassword =
-              typeof value.encryptedPassword === "string" &&
-              value.encryptedPassword.length <= 16_384
-                ? value.encryptedPassword
-                : undefined
-            serverLogins[serverId] = {
-              method: value.method,
-              email,
-              ...(value.method === "password" && encryptedPassword ? { encryptedPassword } : {}),
-            }
-          } catch {
-            // 单条损坏的登录信息不影响服务器和其他配置。
-          }
-        }
-      }
-
-      const accountSessions: Record<string, StoredAccountSession> = {}
-      if (isRecord(stored.accountSessions)) {
-        for (const [key, value] of Object.entries(stored.accountSessions).slice(0, 100)) {
-          if (!/^[a-f0-9]{64}$/.test(key) || !isRecord(value)) continue
-          if (
-            typeof value.serverId !== "string" ||
-            !ids.has(value.serverId) ||
-            typeof value.userId !== "string" ||
-            !value.userId ||
-            value.userId.length > 128 ||
-            typeof value.token !== "string" ||
-            !value.token ||
-            value.token.length > 8_192 ||
-            typeof value.expiresAt !== "string" ||
-            !Number.isFinite(Date.parse(value.expiresAt)) ||
-            typeof value.lastUsedAt !== "number" ||
-            !Number.isFinite(value.lastUsedAt)
-          ) {
-            continue
-          }
-          const accountServer = servers.find((server) => server.id === value.serverId)
-          if (!accountServer || this.accountKey(accountServer.url, value.userId) !== key) continue
-          accountSessions[key] = {
-            serverId: value.serverId,
-            userId: value.userId,
-            userEmail:
-              typeof value.userEmail === "string" && value.userEmail.length <= 254
-                ? value.userEmail
-                : "",
-            userName:
-              typeof value.userName === "string" && value.userName.length <= 300
-                ? value.userName
-                : "",
-            token: value.token,
-            expiresAt: value.expiresAt,
-            lastUsedAt: value.lastUsedAt,
-          }
-        }
-      }
-      const lastAccountKey =
-        typeof stored.lastAccountKey === "string" && accountSessions[stored.lastAccountKey]
-          ? stored.lastAccountKey
-          : null
-
-      const shortcuts: ShortcutSettings = {
-        showWindow:
-          isRecord(stored.shortcuts) &&
-          typeof stored.shortcuts.showWindow === "string" &&
-          stored.shortcuts.showWindow.length <= 64
-            ? stored.shortcuts.showWindow
-            : DEFAULT_SHORTCUTS.showWindow,
-        screenshot:
-          isRecord(stored.shortcuts) &&
-          typeof stored.shortcuts.screenshot === "string" &&
-          stored.shortcuts.screenshot.length <= 64
-            ? stored.shortcuts.screenshot
-            : DEFAULT_SHORTCUTS.screenshot,
-      }
-      const theme =
-        stored.theme === "light" || stored.theme === "dark" || stored.theme === "system"
-          ? stored.theme
-          : "system"
-      const activeServerId =
-        typeof stored.activeServerId === "string" && ids.has(stored.activeServerId)
-          ? stored.activeServerId
-          : OFFICIAL_SERVER_ID
-      const notifications = isRecord(stored.notifications)
-        ? {
-            soundEnabled:
-              typeof stored.notifications.soundEnabled === "boolean"
-                ? stored.notifications.soundEnabled
-                : true,
-            desktopEnabled:
-              typeof stored.notifications.desktopEnabled === "boolean"
-                ? stored.notifications.desktopEnabled
-                : true,
-          }
-        : { soundEnabled: true, desktopEnabled: true }
-      this.config = {
-        version: 1,
-        theme,
-        shortcuts,
-        notifications,
-        activeServerId,
-        servers,
-        serverLogins,
-        accountSessions,
-        lastAccountKey,
-      }
-    } catch {
-      // 缺失或损坏的配置不阻断应用启动。
-    }
-  }
-
-  private async saveConfig(config: AppConfig) {
-    try {
-      await mkdir(path.dirname(this.filePath), { recursive: true })
-      await writeFile(`${this.filePath}.tmp`, JSON.stringify(config, null, 2), { mode: 0o600 })
-      await rename(`${this.filePath}.tmp`, this.filePath)
-    } catch {
-      throw new AuthFailure("storage", "无法保存登录配置，请检查用户数据目录的写入权限")
-    }
   }
 }
 
@@ -1255,168 +670,4 @@ export async function authResult<T>(operation: () => Promise<T>): Promise<AuthRe
           : { code: "internal", message: "操作未完成，请重试" },
     }
   }
-}
-
-async function request(
-  serverSession: Session,
-  serverUrl: string,
-  endpoint: string,
-  body?: Record<string, string>,
-  timeoutMs = 15_000,
-  options: RequestOptions = {},
-): Promise<unknown> {
-  const signal = AbortSignal.timeout(timeoutMs)
-  try {
-    const response = await serverSession.fetch(`${serverUrl}${endpoint}`, {
-      method: body ? "POST" : "GET",
-      headers: {
-        Accept: "application/json",
-        ...(options.omitOrigin ? {} : { Origin: new URL(serverUrl).origin }),
-        ...(body ? { "Content-Type": "application/json" } : {}),
-        ...options.headers,
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      credentials: options.credentials ?? "include",
-      redirect: "error",
-      signal,
-    })
-    if (response.status === 401)
-      throw new AuthFailure(
-        "unauthorized",
-        endpoint === "/api/client/auth/login"
-          ? "账号或密码错误"
-          : endpoint.endsWith("email-code/login")
-            ? "验证码无效或已过期"
-            : "登录已失效，请重新登录",
-      )
-    const reader = response.body?.getReader()
-    if (!reader) throw invalidResponse()
-    const chunks: Uint8Array[] = []
-    let size = 0
-    try {
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-        size += value.byteLength
-        if (size > MAX_RESPONSE_BYTES) throw invalidResponse()
-        chunks.push(value)
-      }
-    } finally {
-      await reader.cancel().catch(() => undefined)
-    }
-    let envelope: unknown
-    try {
-      envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"))
-    } catch {
-      throw invalidResponse()
-    }
-    if (!response.ok || !isRecord(envelope) || envelope.success !== true) {
-      const error = isRecord(envelope) && isRecord(envelope.error) ? envelope.error : null
-      const message =
-        typeof error?.message === "string" && error.message.trim()
-          ? error.message.slice(0, 240)
-          : "服务器暂时无法完成请求，请稍后重试"
-      const rawRetry = response.headers.get("retry-after")
-      const retry = rawRetry && /^\d+$/.test(rawRetry) ? Number(rawRetry) : 0
-      throw new AuthFailure(
-        response.status === 429 ? "rate_limited" : "server_error",
-        message,
-        validSeconds(retry, 1) ? retry : undefined,
-      )
-    }
-    return envelope.data
-  } catch (error) {
-    if (signal.aborted) throw new AuthFailure("timeout", "连接超时，请检查服务器地址或网络后重试")
-    if (error instanceof AuthFailure) throw error
-    if (error instanceof Error && /certificate|tls|ssl/i.test(error.message))
-      throw new AuthFailure("tls", "服务器证书验证失败，请联系管理员检查 HTTPS 配置")
-    throw new AuthFailure("network", "无法连接服务器，请检查地址、网络和 HTTPS 配置")
-  }
-}
-
-function parseAppInfo(data: unknown): AppInfo {
-  if (!isRecord(data) || !validText(data.app_name) || !validText(data.organization_name))
-    throw invalidResponse()
-  return {
-    appName: data.app_name.trim(),
-    organizationName: data.organization_name.trim(),
-    emailCodeLoginEnabled: data.email_code_login_enabled === true,
-    passwordLoginEnabled: data.password_login_enabled !== false,
-    thirdPartyProviders: parseThirdPartyProviders(
-      data.third_party_providers ?? data.oidc_providers,
-    ),
-  }
-}
-
-function parseThirdPartyProviders(value: unknown): ThirdPartyProvider[] {
-  if (value === undefined || value === null) return []
-  if (!Array.isArray(value) || value.length > 20) throw invalidResponse()
-  const keys = new Set<string>()
-  return value.map((provider) => {
-    if (
-      !isRecord(provider) ||
-      typeof provider.key !== "string" ||
-      !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(provider.key) ||
-      !validText(provider.name) ||
-      keys.has(provider.key)
-    ) {
-      throw invalidResponse()
-    }
-    keys.add(provider.key)
-    return { key: provider.key, name: provider.name.trim() }
-  })
-}
-
-function parseNativeSession(data: unknown): {
-  credential: NativeSessionCredential
-  user: AuthUser
-} {
-  if (!isRecord(data) || !isRecord(data.mobile_session)) {
-    throw new AuthFailure(
-      "native_session_unsupported",
-      "服务器不支持桌面客户端 Token 登录，请升级服务器后重试",
-    )
-  }
-  const token = data.mobile_session.token
-  const expiresAt = data.mobile_session.expires_at
-  if (
-    typeof token !== "string" ||
-    !token ||
-    token.length > 8_192 ||
-    typeof expiresAt !== "string" ||
-    !Number.isFinite(Date.parse(expiresAt))
-  ) {
-    throw new AuthFailure("invalid_session", "服务器返回的登录凭据格式不正确")
-  }
-  if (Date.parse(expiresAt) <= Date.now()) {
-    throw new AuthFailure("expired_session", "服务器返回的登录凭据已过期")
-  }
-  return { credential: { token, expiresAt }, user: parseUser(data) }
-}
-
-function parseUser(data: unknown): AuthUser {
-  if (
-    !isRecord(data) ||
-    !isRecord(data.user) ||
-    !validText(data.user.id) ||
-    !validText(data.user.email) ||
-    !validText(data.user.name)
-  )
-    throw invalidResponse()
-  return {
-    id: data.user.id,
-    email: data.user.email,
-    name: data.user.name,
-    avatar: typeof data.user.avatar === "string" ? data.user.avatar : "",
-  }
-}
-
-function validText(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0 && value.length <= 300
-}
-function validSeconds(value: unknown, minimum: number): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value >= minimum && value <= 86_400
-}
-function invalidResponse() {
-  return new AuthFailure("invalid_response", "服务器返回的数据格式不正确，请确认这是即应服务器")
 }

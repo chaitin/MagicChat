@@ -1,39 +1,18 @@
-import { randomUUID } from "node:crypto"
-import { lstat, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises"
+import { lstat, readdir } from "node:fs/promises"
 import path from "node:path"
 import {
   app,
   BrowserWindow,
-  dialog,
   ipcMain,
   Menu,
   nativeImage,
-  protocol,
   session,
   shell,
   Tray,
   type IpcMainInvokeEvent,
 } from "electron"
-import {
-  ACCOUNT_DATA_CHANNELS,
-  type AvatarRequest,
-  type MessageReactionUsersInput,
-  type RetryMessageInput,
-  type SendFileMessageInput,
-  type SendImageMessageInput,
-  type SendTextMessageInput,
-  type SendVideoMessageInput,
-  type SelectedMessageFile,
-  type SelectedMessageMedia,
-  type SetMessageReactionInput,
-} from "../shared/account-data"
-import {
-  AUTH_CHANNELS,
-  AuthFailure,
-  type SaveServerInput,
-  type SignInInput,
-  type ThirdPartySignInInput,
-} from "../shared/auth"
+import { ACCOUNT_DATA_CHANNELS } from "../shared/account-data"
+import { AuthFailure } from "../shared/auth"
 import {
   DESKTOP_CHANNELS,
   EXTERNAL_LINKS,
@@ -45,11 +24,18 @@ import {
   type SystemInfo,
   type ThemePreference,
 } from "../shared/desktop"
-import { MEDIA_CHANNELS, type MediaCacheRequest, type MediaPreviewRequest } from "../shared/media"
+import { MEDIA_CHANNELS } from "../shared/media"
 import { SCREENSHOT_CHANNELS, type ScreenshotSelection } from "../shared/screenshot"
 import { AuthController, authResult } from "./auth-controller"
-import { createLocalFileResponse } from "./local-file-response"
+import { registerAccountDataIpc } from "./ipc/register-account-data-ipc"
+import { registerAuthIpc } from "./ipc/register-auth-ipc"
+import { registerMediaIpc } from "./ipc/register-media-ipc"
 import { MediaPreviewWindow } from "./media-preview-window"
+import { SelectedMessageFileStore } from "./message-files/selected-message-file-store"
+import {
+  registerPrivilegedSchemes,
+  registerResourceProtocolHandlers,
+} from "./protocols/resource-protocols"
 import { ScreenshotManager } from "./screenshot-manager"
 import { ShortcutManager } from "./shortcut-manager"
 import { checkForUpdates, isTrustedReleaseUrl } from "./update-service"
@@ -61,22 +47,7 @@ if (!app.isPackaged && process.platform === "linux" && process.env.WSL_DISTRO_NA
   app.commandLine.appendSwitch("enable-unsafe-swiftshader")
 }
 
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: "jiying-avatar",
-    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
-  },
-  {
-    scheme: "jiying-media",
-    privileges: {
-      standard: true,
-      secure: true,
-      supportFetchAPI: true,
-      stream: true,
-      corsEnabled: true,
-    },
-  },
-])
+registerPrivilegedSchemes()
 
 // 新客户端与旧版账号和配置隔离。
 app.setPath("userData", path.join(app.getPath("appData"), "jiying-desktop-next"))
@@ -244,83 +215,14 @@ void app.whenReady().then(async () => {
     path.join(__dirname, "../renderer/index.html"),
     !app.isPackaged ? process.env.ELECTRON_RENDERER_URL : undefined,
   )
-  type SelectedLocalMessageFile = SelectedMessageFile & {
-    targetId: string
-    path: string
-    selectedAt: number
-    category?: "image" | "video"
-    contentType?: string
-  }
-  const selectedMessageFiles = new Map<string, SelectedLocalMessageFile>()
+  const selectedMessageFiles = new SelectedMessageFileStore(app.getPath("userData"))
   const shortcuts = new ShortcutManager(showMainWindow, () => screenshot.capture())
   try {
     shortcuts.update((await auth.getAppSettings()).shortcuts)
   } catch (error) {
     console.warn("无法注册全局快捷键", error)
   }
-  protocol.handle("jiying-avatar", async (request) => {
-    try {
-      const url = new URL(request.url)
-      const resourceKey = url.hostname === "cache" ? url.pathname.slice(1) : ""
-      const resource = await auth.readAvatarResource(resourceKey)
-      const body = resource.bytes.buffer.slice(
-        resource.bytes.byteOffset,
-        resource.bytes.byteOffset + resource.bytes.byteLength,
-      ) as ArrayBuffer
-      return new Response(body, {
-        status: 200,
-        headers: {
-          "Content-Type": resource.contentType,
-          "Cache-Control": "public, max-age=86400, immutable",
-        },
-      })
-    } catch {
-      return new Response(null, { status: 404 })
-    }
-  })
-  protocol.handle("jiying-media", async (request) => {
-    try {
-      const url = new URL(request.url)
-      const [targetId, resourceId] = url.pathname.slice(1).split("/", 2).map(decodeURIComponent)
-      if (!targetId || !resourceId) return new Response(null, { status: 404 })
-      if (url.hostname === "selection") {
-        const selected = selectedMessageFiles.get(resourceId)
-        if (!selected || selected.targetId !== targetId || !selected.contentType) {
-          return new Response(null, { status: 404 })
-        }
-        return createLocalFileResponse(
-          selected.path,
-          selected.sizeBytes,
-          selected.contentType,
-          request.headers.get("range") ?? undefined,
-        )
-      }
-      if (url.hostname === "outgoing") {
-        return await auth.readOutgoingMedia(
-          targetId,
-          resourceId,
-          request.headers.get("range") ?? undefined,
-        )
-      }
-      if (url.hostname === "cache") {
-        return await auth.readCachedMedia(
-          targetId,
-          resourceId,
-          request.headers.get("range") ?? undefined,
-        )
-      }
-      if (url.hostname === "file") {
-        return await auth.fetchTemporaryFile(
-          targetId,
-          resourceId,
-          request.headers.get("range") ?? undefined,
-        )
-      }
-      return new Response(null, { status: 404 })
-    } catch {
-      return new Response(null, { status: 404 })
-    }
-  })
+  registerResourceProtocolHandlers(auth, selectedMessageFiles)
   function handleIpc<T>(channel: string, operation: (input: unknown) => Promise<T>) {
     ipcMain.handle(channel, (event, input: unknown) =>
       authResult(async () => {
@@ -376,293 +278,18 @@ void app.whenReady().then(async () => {
     }
     screenshot.cancel()
   })
-  handleIpc(MEDIA_CHANNELS.ensureCached, (input) =>
-    auth.ensureMediaCached(input as MediaCacheRequest),
-  )
-  handleIpc(MEDIA_CHANNELS.openPreview, async (input) => {
-    const value = input as MediaPreviewRequest | undefined
-    if (
-      !value ||
-      typeof value.targetId !== "string" ||
-      typeof value.cacheKey !== "string" ||
-      typeof value.conversationName !== "string" ||
-      !value.conversationName.trim() ||
-      value.conversationName.length > 200
-    ) {
-      throw new AuthFailure("invalid_media_preview", "媒体预览请求不正确")
-    }
-    const cached = value.cacheKey.startsWith("outgoing:")
-      ? await auth
-          .getOutgoingMedia(value.targetId, value.cacheKey.slice("outgoing:".length))
-          .then((media) => ({
-            cacheKey: value.cacheKey,
-            category: media.category,
-            contentType: media.contentType,
-            originalName: media.name,
-            resourceUrl: `jiying-media://outgoing/${encodeURIComponent(value.targetId)}/${encodeURIComponent(value.cacheKey.slice("outgoing:".length))}`,
-            sizeBytes: media.sizeBytes,
-          }))
-      : await auth.getCachedMedia(value.targetId, value.cacheKey)
-    if (cached.category === "attachment") {
-      throw new AuthFailure("unsupported_media_preview", "该文件类型不支持预览")
-    }
-    mediaPreview.open({
-      title: value.conversationName.trim(),
-      category: cached.category,
-      contentType: cached.contentType,
-      originalName: cached.originalName,
-      resourceUrl: cached.resourceUrl,
-    })
-    return null
+  registerMediaIpc({ handle: handleIpc, auth, mediaPreview })
+  registerAccountDataIpc({
+    handle: handleIpc,
+    auth,
+    selectedMessageFiles,
+    getMainWindow: () => mainWindow,
   })
-  handleIpc(ACCOUNT_DATA_CHANNELS.initialize, (input) =>
-    auth.initializeAccountData(input as string),
-  )
-  handleIpc(ACCOUNT_DATA_CHANNELS.listConversations, (input) =>
-    auth.listConversations(input as string),
-  )
-  handleIpc(ACCOUNT_DATA_CHANNELS.listMessages, (input) => {
-    const value = input as { targetId?: string; conversationId?: string } | undefined
-    return auth.listMessages(value?.targetId ?? "", value?.conversationId ?? "")
+  registerAuthIpc({
+    handle: handleIpc,
+    auth,
+    getMainWindow: () => mainWindow,
   })
-  handleIpc(ACCOUNT_DATA_CHANNELS.selectMessageFile, async (input) => {
-    const targetId = typeof input === "string" ? input : ""
-    if (!targetId) throw new AuthFailure("invalid_target", "账号不存在")
-    for (const [token, file] of selectedMessageFiles) {
-      if (Date.now() - file.selectedAt > 10 * 60_000) selectedMessageFiles.delete(token)
-    }
-    if (!mainWindow) throw new AuthFailure("window_unavailable", "主窗口不可用")
-    const selection = await dialog.showOpenDialog(mainWindow, {
-      title: "选择要发送的文件",
-      properties: ["openFile"],
-    })
-    const filePath = selection.canceled ? undefined : selection.filePaths[0]
-    if (!filePath) return null
-    const fileStat = await stat(filePath)
-    if (!fileStat.isFile() || fileStat.size <= 0) {
-      throw new AuthFailure("invalid_file", "文件不能为空")
-    }
-    if (fileStat.size > 500 * 1024 * 1024) {
-      throw new AuthFailure("file_too_large", "文件不能超过 500MiB")
-    }
-    const token = randomUUID()
-    const file: SelectedMessageFile & {
-      targetId: string
-      path: string
-      selectedAt: number
-    } = {
-      token,
-      name: path.basename(filePath),
-      sizeBytes: fileStat.size,
-      targetId,
-      path: filePath,
-      selectedAt: Date.now(),
-    }
-    selectedMessageFiles.set(token, file)
-    return { token: file.token, name: file.name, sizeBytes: file.sizeBytes }
-  })
-  handleIpc(ACCOUNT_DATA_CHANNELS.selectMessageMedia, async (input) => {
-    const value = input as { targetId?: string; category?: "image" | "video" } | undefined
-    const targetId = value?.targetId ?? ""
-    const category = value?.category
-    if (!targetId || (category !== "image" && category !== "video")) {
-      throw new AuthFailure("invalid_media_selection", "媒体选择请求不正确")
-    }
-    for (const [token, file] of selectedMessageFiles) {
-      if (Date.now() - file.selectedAt > 10 * 60_000) selectedMessageFiles.delete(token)
-    }
-    if (!mainWindow) throw new AuthFailure("window_unavailable", "主窗口不可用")
-    const selection = await dialog.showOpenDialog(mainWindow, {
-      title: category === "image" ? "选择要发送的图片" : "选择要发送的视频",
-      properties: ["openFile"],
-      filters:
-        category === "image"
-          ? [{ name: "图片", extensions: ["png", "jpg", "jpeg", "webp"] }]
-          : [{ name: "视频", extensions: ["mp4", "webm"] }],
-    })
-    const filePath = selection.canceled ? undefined : selection.filePaths[0]
-    if (!filePath) return null
-    const fileStat = await stat(filePath)
-    if (!fileStat.isFile() || fileStat.size <= 0) {
-      throw new AuthFailure("invalid_media", category === "image" ? "图片不能为空" : "视频不能为空")
-    }
-    if (category === "video" && fileStat.size > 100 * 1024 * 1024) {
-      throw new AuthFailure("video_too_large", "视频大于 100MiB，无法上传")
-    }
-    const extension = path.extname(filePath).toLowerCase()
-    const contentType =
-      category === "image"
-        ? extension === ".png"
-          ? "image/png"
-          : extension === ".webp"
-            ? "image/webp"
-            : extension === ".jpg" || extension === ".jpeg"
-              ? "image/jpeg"
-              : ""
-        : extension === ".webm"
-          ? "video/webm"
-          : extension === ".mp4"
-            ? "video/mp4"
-            : ""
-    if (!contentType) {
-      throw new AuthFailure(
-        "invalid_media_type",
-        category === "image" ? "请选择 PNG、JPG 或 WebP 图片" : "视频必须是 MP4 或 WebM 格式",
-      )
-    }
-    const token = randomUUID()
-    const file: SelectedLocalMessageFile = {
-      token,
-      name: path.basename(filePath),
-      sizeBytes: fileStat.size,
-      targetId,
-      path: filePath,
-      selectedAt: Date.now(),
-      category,
-      contentType,
-    }
-    selectedMessageFiles.set(token, file)
-    return {
-      token,
-      name: file.name,
-      sizeBytes: file.sizeBytes,
-      category,
-      contentType,
-      resourceUrl: `jiying-media://selection/${encodeURIComponent(targetId)}/${encodeURIComponent(token)}`,
-    } satisfies SelectedMessageMedia
-  })
-  handleIpc(ACCOUNT_DATA_CHANNELS.sendFileMessage, async (input) => {
-    const value = input as SendFileMessageInput | undefined
-    const selected = value?.selectionToken
-      ? selectedMessageFiles.get(value.selectionToken)
-      : undefined
-    if (
-      !value ||
-      !selected ||
-      selected.targetId !== value.targetId ||
-      Date.now() - selected.selectedAt > 10 * 60_000
-    ) {
-      throw new AuthFailure("invalid_file_selection", "所选文件已失效，请重新选择")
-    }
-    selectedMessageFiles.delete(value.selectionToken)
-    const fileStat = await stat(selected.path)
-    if (!fileStat.isFile() || fileStat.size !== selected.sizeBytes) {
-      throw new AuthFailure("file_changed", "所选文件已发生变化，请重新选择")
-    }
-    return auth.sendFileMessage(value, selected)
-  })
-  handleIpc(ACCOUNT_DATA_CHANNELS.sendImageMessage, async (input) => {
-    const value = input as SendImageMessageInput | undefined
-    const selected = value?.selectionToken
-      ? selectedMessageFiles.get(value.selectionToken)
-      : undefined
-    if (
-      !value ||
-      !selected ||
-      selected.targetId !== value.targetId ||
-      selected.category !== "image" ||
-      Date.now() - selected.selectedAt > 10 * 60_000 ||
-      !(value.bytes instanceof ArrayBuffer)
-    ) {
-      throw new AuthFailure("invalid_image_selection", "所选图片已失效，请重新选择")
-    }
-    const bytes = new Uint8Array(value.bytes)
-    if (bytes.byteLength <= 0 || bytes.byteLength > 2 * 1024 * 1024) {
-      throw new AuthFailure("invalid_image", "图片大于 2MB，无法上传")
-    }
-    const contentType = detectOutgoingImageContentType(bytes)
-    if (!contentType || contentType !== value.contentType) {
-      throw new AuthFailure("invalid_image", "图片内容格式不正确")
-    }
-    const uploadsDirectory = path.join(app.getPath("userData"), "pending-uploads")
-    await mkdir(uploadsDirectory, { recursive: true })
-    const extension = contentType === "image/webp" ? ".webp" : ".png"
-    const stagedPath = path.join(uploadsDirectory, `${randomUUID()}${extension}`)
-    await writeFile(stagedPath, bytes, { flag: "wx" })
-    try {
-      const messages = await auth.sendImageMessage(value, {
-        path: stagedPath,
-        sizeBytes: bytes.byteLength,
-      })
-      selectedMessageFiles.delete(value.selectionToken)
-      return messages
-    } catch (error) {
-      await rm(stagedPath, { force: true })
-      throw error
-    }
-  })
-  handleIpc(ACCOUNT_DATA_CHANNELS.sendVideoMessage, async (input) => {
-    const value = input as SendVideoMessageInput | undefined
-    const selected = value?.selectionToken
-      ? selectedMessageFiles.get(value.selectionToken)
-      : undefined
-    if (
-      !value ||
-      !selected ||
-      selected.targetId !== value.targetId ||
-      selected.category !== "video" ||
-      (selected.contentType !== "video/mp4" && selected.contentType !== "video/webm") ||
-      Date.now() - selected.selectedAt > 10 * 60_000
-    ) {
-      throw new AuthFailure("invalid_video_selection", "所选视频已失效，请重新选择")
-    }
-    const fileStat = await stat(selected.path)
-    if (!fileStat.isFile() || fileStat.size !== selected.sizeBytes) {
-      throw new AuthFailure("video_changed", "所选视频已发生变化，请重新选择")
-    }
-    const messages = await auth.sendVideoMessage(value, {
-      path: selected.path,
-      name: selected.name,
-      sizeBytes: selected.sizeBytes,
-      contentType: selected.contentType,
-    })
-    selectedMessageFiles.delete(value.selectionToken)
-    return messages
-  })
-  handleIpc(ACCOUNT_DATA_CHANNELS.sendTextMessage, (input) =>
-    auth.sendTextMessage(input as SendTextMessageInput),
-  )
-  handleIpc(ACCOUNT_DATA_CHANNELS.retryMessage, (input) =>
-    auth.retryMessage(input as RetryMessageInput),
-  )
-  handleIpc(ACCOUNT_DATA_CHANNELS.setMessageReaction, (input) =>
-    auth.setMessageReaction(input as SetMessageReactionInput),
-  )
-  handleIpc(ACCOUNT_DATA_CHANNELS.listMessageReactionUsers, (input) =>
-    auth.listMessageReactionUsers(input as MessageReactionUsersInput),
-  )
-  handleIpc(ACCOUNT_DATA_CHANNELS.loadBeforeMessages, (input) => {
-    const value = input as
-      | { targetId?: string; conversationId?: string; beforeSeq?: number }
-      | undefined
-    return auth.loadBeforeMessages(
-      value?.targetId ?? "",
-      value?.conversationId ?? "",
-      value?.beforeSeq ?? 0,
-    )
-  })
-  handleIpc(ACCOUNT_DATA_CHANNELS.getContacts, (input) => auth.getContacts(input as string))
-  handleIpc(ACCOUNT_DATA_CHANNELS.getAvatar, (input) => auth.getAvatar(input as AvatarRequest))
-  handleIpc(ACCOUNT_DATA_CHANNELS.invalidateAvatar, (input) =>
-    auth.invalidateAvatar(input as Omit<AvatarRequest, "theme">),
-  )
-  handleIpc(AUTH_CHANNELS.getServer, () => auth.getServer())
-  handleIpc(AUTH_CHANNELS.getServers, () => auth.getServers())
-  handleIpc(AUTH_CHANNELS.restoreLastSession, () => auth.restoreLastSession())
-  handleIpc(AUTH_CHANNELS.saveServer, (input) => auth.saveServer(input as SaveServerInput))
-  handleIpc(AUTH_CHANNELS.deleteServer, (input) => auth.deleteServer(input as string))
-  handleIpc(AUTH_CHANNELS.checkServer, (input) => auth.checkServer(input as string))
-  handleIpc(AUTH_CHANNELS.checkServers, () => auth.checkServers())
-  handleIpc(AUTH_CHANNELS.connect, (input) => auth.connect(input as string))
-  handleIpc(AUTH_CHANNELS.signIn, (input) => auth.signIn(input as SignInInput))
-  handleIpc(AUTH_CHANNELS.signInThirdParty, (input) => {
-    if (!mainWindow) throw new AuthFailure("window_unavailable", "主窗口不可用，请重试")
-    return auth.signInThirdParty(input as ThirdPartySignInInput, mainWindow)
-  })
-  handleIpc(AUTH_CHANNELS.sendCode, (input) =>
-    auth.sendCode(input as { targetId: string; email: string }),
-  )
-  handleIpc(AUTH_CHANNELS.signOut, (input) => auth.signOut(input as string))
   handleIpc(DESKTOP_CHANNELS.openHomepage, async () => {
     await shell.openExternal(JIYING_HOMEPAGE)
     return null
@@ -730,17 +357,6 @@ void app.whenReady().then(async () => {
     auth.close()
   })
 })
-
-function detectOutgoingImageContentType(bytes: Uint8Array) {
-  if ([137, 80, 78, 71, 13, 10, 26, 10].every((value, index) => bytes[index] === value)) {
-    return "image/png" as const
-  }
-  const signature = new TextDecoder().decode(bytes.subarray(0, 12))
-  if (signature.startsWith("RIFF") && signature.slice(8, 12) === "WEBP") {
-    return "image/webp" as const
-  }
-  return undefined
-}
 
 function getStorageInfo(): StorageInfo {
   return { directoryPath: app.getPath("userData") }

@@ -1,0 +1,313 @@
+import { useState } from "react"
+import {
+  AppleReminderIcon,
+  ChatIcon,
+  Contact01Icon,
+  ContentWritingIcon,
+  CrosshairIcon,
+  FloppyDiskIcon,
+  FolderClosedIcon,
+  Home07Icon,
+  Loading03Icon,
+  Logout03Icon,
+  Settings02Icon,
+  UserIcon,
+  UserSquareIcon,
+} from "@hugeicons/core-free-icons"
+import type { ServerCatalog } from "../../../../shared/auth"
+import { JIYING_HOMEPAGE, type ThemePreference } from "../../../../shared/desktop"
+import { EntityAvatar } from "@/components/avatar/entity-avatar"
+import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
+import { Button as BeButton } from "@/components/motion/button/base"
+import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
+import { SettingsDialog } from "@/components/settings-dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { cn } from "@/lib/utils"
+
+export type AppSection =
+  | "chat"
+  | "contacts"
+  | "projects"
+  | "goals"
+  | "documents"
+  | "tasks"
+  | "drive"
+
+export function SectionPlaceholder({ section }: { section: Exclude<AppSection, "chat"> }) {
+  const content = {
+    contacts: { label: "通讯录", icon: Contact01Icon },
+    projects: { label: "项目管理", icon: FolderClosedIcon },
+    goals: { label: "目标管理", icon: CrosshairIcon },
+    documents: { label: "文档", icon: ContentWritingIcon },
+    tasks: { label: "任务", icon: AppleReminderIcon },
+    drive: { label: "云网盘", icon: FloppyDiskIcon },
+  }[section]
+  return (
+    <section className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3 bg-card text-center text-muted-foreground">
+      <span className="flex size-14 items-center justify-center rounded-full bg-xgui-background-1 text-xgui-brand">
+        <HugeiconsIcon icon={content.icon} className="size-6" aria-hidden />
+      </span>
+      <div className="space-y-1">
+        <h1 className="font-medium text-foreground">{content.label}</h1>
+        <p className="text-sm">功能内容尚未接入</p>
+      </div>
+    </section>
+  )
+}
+
+export function AppRail({
+  targetId,
+  userId,
+  userName,
+  userEmail,
+  resolvedTheme,
+  theme,
+  catalog,
+  isPreview,
+  activeSection,
+  onSectionChange,
+  onSignOut,
+  onThemeChange,
+  onCatalogChange,
+}: {
+  targetId: string
+  userId: string
+  userName: string
+  userEmail: string
+  resolvedTheme: "light" | "dark"
+  theme: ThemePreference
+  catalog: ServerCatalog
+  isPreview: boolean
+  activeSection: AppSection
+  onSectionChange: (section: AppSection) => void
+  onSignOut: () => Promise<boolean>
+  onThemeChange: (theme: ThemePreference) => void
+  onCatalogChange: (catalog: ServerCatalog) => void
+}) {
+  const { showToast } = useAnimatedToast()
+  const navigationItems = [
+    { id: "chat", label: "聊天", icon: ChatIcon },
+    { id: "contacts", label: "通讯录", icon: UserSquareIcon },
+    { id: "projects", label: "项目管理", icon: FolderClosedIcon },
+    { id: "goals", label: "目标管理", icon: CrosshairIcon },
+    { id: "documents", label: "文档", icon: ContentWritingIcon },
+    { id: "tasks", label: "任务", icon: AppleReminderIcon },
+    { id: "drive", label: "云网盘", icon: FloppyDiskIcon },
+  ] as const
+
+  async function openHomepage() {
+    if (!window.desktop) {
+      window.open(JIYING_HOMEPAGE, "_blank", "noopener,noreferrer")
+      return
+    }
+    try {
+      const result = await window.desktop.openHomepage()
+      if (!result.ok) {
+        showToast({ status: "error", title: "无法打开链接", description: result.error.message })
+      }
+    } catch {
+      showToast({ status: "error", title: "无法打开链接，请稍后重试" })
+    }
+  }
+
+  return (
+    <aside className="flex w-14 shrink-0 flex-col items-center bg-xgui-background-6 py-3">
+      <AccountMenu
+        targetId={targetId}
+        userId={userId}
+        userName={userName}
+        userEmail={userEmail}
+        resolvedTheme={resolvedTheme}
+        onSignOut={onSignOut}
+      />
+
+      <nav className="flex flex-1 flex-col gap-2" aria-label="主导航">
+        {navigationItems.map((item) => {
+          const active = activeSection === item.id
+          return (
+            <BeButton
+              key={item.id}
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "rounded-full hover:bg-foreground/10",
+                active && "bg-xgui-brand text-background hover:bg-xgui-brand hover:text-background",
+              )}
+              aria-label={item.label}
+              aria-current={active ? "page" : undefined}
+              title={item.label}
+              onClick={() => onSectionChange(item.id)}
+            >
+              <HugeiconsIcon icon={item.icon} aria-hidden />
+            </BeButton>
+          )
+        })}
+      </nav>
+
+      <BeButton
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="mb-2 rounded-lg hover:bg-foreground/10"
+        aria-label="即应官网"
+        title="即应官网"
+        onClick={() => void openHomepage()}
+      >
+        <HugeiconsIcon icon={Home07Icon} aria-hidden />
+      </BeButton>
+
+      <SettingsDialog
+        theme={theme}
+        catalog={catalog}
+        disabled={isPreview}
+        onThemeChange={onThemeChange}
+        onCatalogChange={onCatalogChange}
+        trigger={
+          <BeButton
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="rounded-lg hover:bg-foreground/10"
+            aria-label="设置"
+            title="设置"
+          >
+            <HugeiconsIcon icon={Settings02Icon} aria-hidden />
+          </BeButton>
+        }
+      />
+    </aside>
+  )
+}
+
+function AccountMenu({
+  targetId,
+  userId,
+  userName,
+  userEmail,
+  resolvedTheme,
+  onSignOut,
+}: {
+  targetId: string
+  userId: string
+  userName: string
+  userEmail: string
+  resolvedTheme: "light" | "dark"
+  onSignOut: () => Promise<boolean>
+}) {
+  const [logoutOpen, setLogoutOpen] = useState(false)
+  const [logoutPending, setLogoutPending] = useState(false)
+
+  async function confirmSignOut() {
+    if (logoutPending) return
+    setLogoutPending(true)
+    const signedOut = await onSignOut().catch(() => false)
+    if (!signedOut) setLogoutPending(false)
+  }
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="用户菜单"
+            title={userName}
+            className="mb-6 flex size-10 shrink-0 items-center justify-center rounded-sm bg-xgui-background-1 outline-none transition-colors hover:bg-foreground/10 focus-visible:ring-3 focus-visible:ring-ring/50 data-[state=open]:bg-foreground/10"
+          >
+            <EntityAvatar
+              targetId={targetId}
+              type="user"
+              id={userId}
+              theme={resolvedTheme}
+              size={36}
+              label={`${userName}头像`}
+              className="rounded-sm"
+              imageBackgroundClassName="bg-transparent"
+            />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="right" align="start" sideOffset={8} className="w-64">
+          <div
+            role="group"
+            aria-label="用户信息"
+            className="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-x-3 px-2 py-3"
+          >
+            <EntityAvatar
+              targetId={targetId}
+              type="user"
+              id={userId}
+              theme={resolvedTheme}
+              size={48}
+              label={`${userName}头像`}
+              className="row-span-2 rounded-sm"
+            />
+            <span className="min-w-0 truncate text-sm font-semibold">{userName}</span>
+            <span className="min-w-0 truncate text-xs text-muted-foreground">
+              {userEmail || "未设置"}
+            </span>
+          </div>
+          <DropdownMenuItem>
+            <HugeiconsIcon icon={UserIcon} className="size-4" aria-hidden />
+            个人资料
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="destructive"
+            disabled={logoutPending}
+            onSelect={() => setLogoutOpen(true)}
+          >
+            <HugeiconsIcon icon={Logout03Icon} className="size-4" aria-hidden />
+            退出登录
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <AlertDialog
+        open={logoutOpen}
+        onOpenChange={(open) => {
+          if (!logoutPending) setLogoutOpen(open)
+        }}
+      >
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认退出登录</AlertDialogTitle>
+            <AlertDialogDescription>当前会话将结束，你可以稍后重新登录。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={logoutPending}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={logoutPending}
+              onClick={(event) => {
+                event.preventDefault()
+                void confirmSignOut()
+              }}
+            >
+              {logoutPending ? (
+                <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
+              ) : null}
+              退出登录
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}

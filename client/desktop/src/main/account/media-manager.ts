@@ -2,10 +2,22 @@ import { createHash } from "node:crypto"
 import { createReadStream } from "node:fs"
 import { mkdir, open, rename, rm, stat } from "node:fs/promises"
 import path from "node:path"
-import { Readable } from "node:stream"
 import type { CachedMedia, MediaCacheRequest, MediaDownloadProgress } from "../../shared/media"
 import { AuthFailure } from "../../shared/auth"
+import { createLocalFileResponse } from "../local-file-response"
 import { AccountDatabase, type StoredMediaCache } from "./account-database"
+import {
+  contentDispositionFileName,
+  ensureNameExtension,
+  mediaExtension,
+  normalizedContentType,
+  positiveInteger,
+  positiveNumber,
+  responseUrlFileName,
+  safeOriginalName,
+  validateMediaCacheRequest,
+  validateMediaContentType,
+} from "./media-cache-policy"
 
 export type CachedMediaResource = {
   contentType: string
@@ -45,7 +57,7 @@ export class MediaManager {
 
   async ensureCached(request: MediaCacheRequest): Promise<CachedMedia> {
     this.assertOpen()
-    validateRequest(request)
+    validateMediaCacheRequest(request)
     const cacheKey = this.createCacheKey(request)
     const cached = await this.readValidRecord(cacheKey)
     if (cached) return this.toCachedMedia(cached)
@@ -89,31 +101,13 @@ export class MediaManager {
 
   async createResourceResponse(cacheKey: string, rangeHeader?: string): Promise<Response> {
     const resource = await this.getCachedResource(cacheKey)
-    const range = parseRange(rangeHeader, resource.sizeBytes)
-    const stream = createReadStream(resource.filePath, range ?? undefined)
-    const body = Readable.toWeb(stream) as ReadableStream<Uint8Array>
-    if (!range) {
-      return new Response(body, {
-        status: 200,
-        headers: {
-          "Accept-Ranges": "bytes",
-          "Cache-Control": "private, max-age=86400, immutable",
-          "Content-Length": String(resource.sizeBytes),
-          "Content-Type": resource.contentType,
-        },
-      })
-    }
-    const length = range.end - range.start + 1
-    return new Response(body, {
-      status: 206,
-      headers: {
-        "Accept-Ranges": "bytes",
-        "Cache-Control": "private, max-age=86400, immutable",
-        "Content-Length": String(length),
-        "Content-Range": `bytes ${range.start}-${range.end}/${resource.sizeBytes}`,
-        "Content-Type": resource.contentType,
-      },
-    })
+    return createLocalFileResponse(
+      resource.filePath,
+      resource.sizeBytes,
+      resource.contentType,
+      rangeHeader,
+      { cacheControl: "private, max-age=86400, immutable", cors: false },
+    )
   }
 
   close() {
@@ -145,7 +139,7 @@ export class MediaManager {
       const contentType = normalizedContentType(
         response.headers.get("content-type") || request.contentType || "application/octet-stream",
       )
-      validateContentType(request.category, contentType)
+      validateMediaContentType(request.category, contentType)
       const originalName = safeOriginalName(
         responseName || request.originalName || responseUrlFileName(response.url),
         request.category,
@@ -401,141 +395,8 @@ export class MediaManager {
   }
 }
 
-function validateRequest(request: MediaCacheRequest) {
-  if (!request || typeof request !== "object") {
-    throw new AuthFailure("invalid_media_request", "媒体缓存请求不正确")
-  }
-  if (!request.targetId || request.targetId.length > 128) {
-    throw new AuthFailure("invalid_target", "账号标识不正确")
-  }
-  if (!request.fileId || request.fileId.length > 128) {
-    throw new AuthFailure("invalid_file_id", "文件标识不正确")
-  }
-  if (!(["image", "video", "attachment"] as const).includes(request.category)) {
-    throw new AuthFailure("invalid_media_category", "媒体类型不受支持")
-  }
-  if (request.originalName && request.originalName.length > 512) {
-    throw new AuthFailure("invalid_media_name", "媒体文件名过长")
-  }
-  if (
-    request.expectedSizeBytes !== undefined &&
-    positiveNumber(request.expectedSizeBytes) === undefined
-  ) {
-    throw new AuthFailure("invalid_media_size", "媒体文件大小不正确")
-  }
-}
-
-function validateContentType(category: MediaCacheRequest["category"], contentType: string) {
-  if (contentType === "application/octet-stream") return
-  if (category === "image" && !contentType.startsWith("image/")) {
-    throw new AuthFailure("invalid_media_content", "图片文件类型不正确")
-  }
-  if (category === "video" && !contentType.startsWith("video/")) {
-    throw new AuthFailure("invalid_media_content", "视频文件类型不正确")
-  }
-}
-
-function parseRange(value: string | undefined, size: number) {
-  if (!value) return undefined
-  const match = /^bytes=(\d*)-(\d*)$/.exec(value.trim())
-  if (!match || size <= 0) throw new AuthFailure("invalid_media_range", "媒体读取范围不正确")
-  const startText = match[1]
-  const endText = match[2]
-  let start: number
-  let end: number
-  if (!startText) {
-    const suffix = Number(endText)
-    if (!Number.isSafeInteger(suffix) || suffix <= 0) throw new Error("invalid range")
-    start = Math.max(0, size - suffix)
-    end = size - 1
-  } else {
-    start = Number(startText)
-    end = endText ? Number(endText) : size - 1
-  }
-  if (
-    !Number.isSafeInteger(start) ||
-    !Number.isSafeInteger(end) ||
-    start < 0 ||
-    end < start ||
-    start >= size
-  ) {
-    throw new AuthFailure("invalid_media_range", "媒体读取范围不正确")
-  }
-  return { start, end: Math.min(end, size - 1) }
-}
-
 async function hashFile(filePath: string) {
   const hash = createHash("sha256")
   for await (const chunk of createReadStream(filePath)) hash.update(chunk)
   return hash.digest("hex")
-}
-
-function normalizedContentType(value: string) {
-  const contentType = value.split(";", 1)[0]?.trim().toLowerCase()
-  return contentType && /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(contentType)
-    ? contentType
-    : "application/octet-stream"
-}
-
-function contentDispositionFileName(value: string | null) {
-  if (!value) return ""
-  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(value)?.[1]
-  if (encoded) {
-    try {
-      return decodeURIComponent(encoded.replace(/^"|"$/g, ""))
-    } catch {
-      return ""
-    }
-  }
-  return (
-    /filename="([^"]+)"/i.exec(value)?.[1] ?? /filename=([^;]+)/i.exec(value)?.[1]?.trim() ?? ""
-  )
-}
-
-function responseUrlFileName(value: string) {
-  try {
-    return decodeURIComponent(path.basename(new URL(value).pathname))
-  } catch {
-    return ""
-  }
-}
-
-function safeOriginalName(value: string | undefined, category: MediaCacheRequest["category"]) {
-  const fallback = category === "image" ? "图片" : category === "video" ? "视频" : "附件"
-  if (!value) return fallback
-  const name = path.basename(value.replace(/[\u0000-\u001f\u007f]/g, "")).trim()
-  return name.slice(0, 255) || fallback
-}
-
-function mediaExtension(name: string, contentType: string) {
-  const candidate = path.extname(name).toLowerCase()
-  if (/^\.[a-z0-9]{1,12}$/.test(candidate)) return candidate
-  return contentTypeExtensions[contentType] ?? ".bin"
-}
-
-function ensureNameExtension(name: string, extension: string) {
-  return path.extname(name) ? name : `${name}${extension}`
-}
-
-function positiveInteger(value: string | null) {
-  if (!value || !/^\d+$/.test(value)) return undefined
-  return positiveNumber(Number(value))
-}
-
-function positiveNumber(value: number | undefined) {
-  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined
-}
-
-const contentTypeExtensions: Record<string, string> = {
-  "image/avif": ".avif",
-  "image/gif": ".gif",
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/svg+xml": ".svg",
-  "image/webp": ".webp",
-  "video/mp4": ".mp4",
-  "video/quicktime": ".mov",
-  "video/webm": ".webm",
-  "application/pdf": ".pdf",
-  "application/zip": ".zip",
 }

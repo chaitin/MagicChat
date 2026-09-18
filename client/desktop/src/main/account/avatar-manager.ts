@@ -5,6 +5,12 @@ import type { AvatarRequest, AvatarResult, AvatarType } from "../../shared/accou
 import { AuthFailure } from "../../shared/auth"
 import { AccountDatabase } from "./account-database"
 import { AuthenticatedClient } from "./authenticated-client"
+import {
+  buildCompositeAvatar,
+  compositeSignature,
+  compositeStyleVersion,
+  selectGroupMembers,
+} from "./avatar-composite"
 import { ContactManager } from "./contact-manager"
 import { ConversationManager } from "./conversation-manager"
 import { ProjectManager } from "./project-manager"
@@ -16,9 +22,6 @@ import type {
 } from "./avatar-types"
 
 const AVATAR_MAX_AGE_MS = 24 * 60 * 60 * 1_000
-const COMPOSITE_SIZE = 256
-const COMPOSITE_STYLE_VERSION = 2
-const ROLE_ORDER = { owner: 0, admin: 1, member: 2 } as const
 
 export class AvatarManager {
   private readonly avatarDirectory: string
@@ -59,8 +62,8 @@ export class AvatarManager {
             "group",
             "group-composite-light",
             "group-composite-dark",
-            `group-composite-v${COMPOSITE_STYLE_VERSION}-light`,
-            `group-composite-v${COMPOSITE_STYLE_VERSION}-dark`,
+            `group-composite-v${compositeStyleVersion}-light`,
+            `group-composite-v${compositeStyleVersion}-dark`,
           ]
         : [resolvedType]
     const records = this.database.deleteAvatarCaches(cacheTypes, resolvedId)
@@ -216,7 +219,7 @@ export class AvatarManager {
     descriptor: AvatarDescriptor,
     theme: "light" | "dark",
   ): Promise<AvatarResult> {
-    const cacheType = `group-composite-v${COMPOSITE_STYLE_VERSION}-${theme}`
+    const cacheType = `group-composite-v${compositeStyleVersion}-${theme}`
     const legacy = this.database.deleteAvatarCache(`group-composite-${theme}`, descriptor.id)
     if (legacy) await removeFile(this.localPath(legacy.localFile))
     const cached = this.database.getAvatarCache(cacheType, descriptor.id)
@@ -255,8 +258,8 @@ export class AvatarManager {
         record: await this.ensureOrdinaryAvatar(member),
       })),
     )
-    const signatureSource = JSON.stringify({
-      version: COMPOSITE_STYLE_VERSION,
+    const signature = compositeSignature({
+      version: compositeStyleVersion,
       groupId: descriptor.id,
       theme,
       grid,
@@ -266,12 +269,11 @@ export class AvatarManager {
         avatarUrl: record?.sourceUrl ?? "",
       })),
     })
-    const signature = createHash("sha256").update(signatureSource).digest("hex")
     if (cached && cachedAvailable && cached.sourceUrl === `composite:${signature}`) {
       if (validatedAt) this.database.touchAvatarCache(cacheType, descriptor.id, validatedAt)
       return { status: "ready", type: "group", resourceUrl: resourceUrl(cached) }
     }
-    const svg = await buildCompositeSvg(tiles, grid, theme, (file) =>
+    const svg = await buildCompositeAvatar(tiles, grid, theme, (file) =>
       readFile(this.localPath(file)),
     )
     await mkdir(this.avatarDirectory, { recursive: true })
@@ -328,67 +330,6 @@ function normalizeSourceUrl(serverUrl: string, sourceUrl: string): string {
   } catch {
     return ""
   }
-}
-
-function selectGroupMembers(members: AvatarMemberDescriptor[]): AvatarMemberDescriptor[] {
-  const limit = members.length <= 4 ? 4 : 9
-  return members
-    .map((member, index) => ({ member, index }))
-    .sort(
-      (left, right) =>
-        ROLE_ORDER[left.member.role] - ROLE_ORDER[right.member.role] || left.index - right.index,
-    )
-    .slice(0, limit)
-    .map(({ member }) => member)
-}
-
-async function buildCompositeSvg(
-  tiles: Array<{ member: AvatarMemberDescriptor; record?: AvatarCacheRecord }>,
-  grid: 2 | 3,
-  theme: "light" | "dark",
-  load: (file: string) => Promise<Uint8Array>,
-): Promise<string> {
-  const tileSize = COMPOSITE_SIZE / grid
-  const rows = Math.ceil(tiles.length / grid)
-  const verticalOffset = (COMPOSITE_SIZE - rows * tileSize) / 2
-  const parts = await Promise.all(
-    tiles.map(async ({ member, record }, index) => {
-      const row = Math.floor(index / grid)
-      const columnsInRow = Math.min(grid, tiles.length - row * grid)
-      const column = index % grid
-      const x = (COMPOSITE_SIZE - columnsInRow * tileSize) / 2 + column * tileSize
-      const y = verticalOffset + row * tileSize
-      if (record) {
-        try {
-          const bytes = await load(record.localFile)
-          const source = `data:${record.contentType};base64,${Buffer.from(bytes).toString("base64")}`
-          return `<image href="${source}" x="${x}" y="${y}" width="${tileSize}" height="${tileSize}" preserveAspectRatio="xMidYMid slice"/>`
-        } catch {
-          // 单个成员缓存损坏时使用该成员类型的 Fallback。
-        }
-      }
-      return fallbackTile(member.type, x, y, tileSize, theme)
-    }),
-  )
-  const background = theme === "dark" ? "#1e1e1e" : "#f7f7f7"
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${COMPOSITE_SIZE}" height="${COMPOSITE_SIZE}" viewBox="0 0 ${COMPOSITE_SIZE} ${COMPOSITE_SIZE}"><rect width="100%" height="100%" fill="${background}"/>${parts.join("")}</svg>`
-}
-
-function fallbackTile(
-  type: "user" | "app",
-  x: number,
-  y: number,
-  size: number,
-  theme: "light" | "dark",
-): string {
-  const color = type === "app" ? "#10aeff" : theme === "dark" ? "#1196ff" : "#1485ee"
-  const centerX = x + size / 2
-  const centerY = y + size / 2
-  const radius = size * 0.16
-  if (type === "app") {
-    return `<g><rect x="${x}" y="${y}" width="${size}" height="${size}" fill="${color}"/><rect x="${centerX - radius * 1.7}" y="${centerY - radius * 1.25}" width="${radius * 3.4}" height="${radius * 2.6}" rx="${radius * 0.6}" fill="none" stroke="#fff" stroke-width="${Math.max(2, size * 0.05)}"/><circle cx="${centerX - radius * 0.65}" cy="${centerY}" r="${radius * 0.2}" fill="#fff"/><circle cx="${centerX + radius * 0.65}" cy="${centerY}" r="${radius * 0.2}" fill="#fff"/><path d="M ${centerX} ${centerY - radius * 1.25}V ${centerY - radius * 2}" stroke="#fff" stroke-width="${Math.max(2, size * 0.05)}"/><circle cx="${centerX}" cy="${centerY - radius * 2.1}" r="${radius * 0.2}" fill="#fff"/></g>`
-  }
-  return `<g><rect x="${x}" y="${y}" width="${size}" height="${size}" fill="${color}"/><circle cx="${centerX}" cy="${centerY - radius}" r="${radius}" fill="#fff"/><ellipse cx="${centerX}" cy="${centerY + radius * 1.4}" rx="${radius * 1.7}" ry="${radius * 1.3}" fill="#fff"/></g>`
 }
 
 function cacheResourceKey(type: string, entityId: string, source: string): string {

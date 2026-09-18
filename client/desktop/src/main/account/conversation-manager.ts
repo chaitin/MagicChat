@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto"
-import { rm } from "node:fs/promises"
 import type {
   DesktopConversation,
   DesktopMessage,
@@ -9,26 +7,37 @@ import type {
   SetMessageReactionInput,
 } from "../../shared/account-data"
 import { AuthFailure, isRecord } from "../../shared/auth"
-import { createLocalFileResponse } from "../local-file-response"
 import { AccountDatabase, type StoredConversation, type StoredMessage } from "./account-database"
 import { AuthenticatedClient } from "./authenticated-client"
 import { retryNetworkAction } from "./retry"
-import type { AvatarDescriptor, AvatarMemberDescriptor } from "./avatar-types"
-import { normalizeDesktopMessageDetails, summarizeDesktopMessageBody } from "./message-normalizer"
-
-const builtinAssistantAppId = "00000000-0000-0000-0000-000000000001"
+import type { AvatarDescriptor } from "./avatar-types"
+import {
+  avatarDescriptorFromConversationPayload,
+  conversationIdFromEvent,
+  parseConversation,
+  parseConversationBooleanEvent,
+  parseMessage,
+  requiredString,
+} from "./conversation-parser"
+import { OutgoingMessageService } from "./outgoing-message-service"
 
 export class ConversationManager {
-  private readonly sending = new Set<string>()
-  private closed = false
+  private readonly outgoingMessages: OutgoingMessageService
 
   constructor(
     private readonly database: AccountDatabase,
     private readonly client: AuthenticatedClient,
     private readonly currentUserId: string,
-    private readonly currentUserName: string,
-    private readonly onMessagesChanged: (conversationId: string) => void,
+    currentUserName: string,
+    onMessagesChanged: (conversationId: string) => void,
   ) {
+    this.outgoingMessages = new OutgoingMessageService(
+      database,
+      client,
+      currentUserId,
+      currentUserName,
+      onMessagesChanged,
+    )
     this.database.failPendingMessages()
   }
 
@@ -119,32 +128,11 @@ export class ConversationManager {
   }
 
   getAvatarDescriptor(type: "group" | "topic", entityId: string): AvatarDescriptor | undefined {
-    const payload = this.database.getConversationPayload(entityId)
-    if (!isRecord(payload)) return undefined
-    if (type === "topic" && isRecord(payload.topic)) {
-      const parentId = optionalString(payload.topic.parent_conversation_id, 128)
-      const parentType = avatarTypeForConversation(
-        optionalString(payload.topic.parent_conversation_type, 32),
-      )
-      if (parentId) {
-        return {
-          type: parentType,
-          id: parentId,
-          name:
-            optionalString(payload.topic.parent_conversation_name, 256) ||
-            optionalString(payload.name, 256),
-          avatarUrl: optionalString(payload.avatar, 4_096),
-          ...(parentType === "group" ? { members: parseAvatarMembers(payload.members) } : {}),
-        }
-      }
-    }
-    return {
-      type: "group",
-      id: entityId,
-      name: optionalString(payload.name, 256),
-      avatarUrl: optionalString(payload.avatar, 4_096),
-      members: parseAvatarMembers(payload.members),
-    }
+    return avatarDescriptorFromConversationPayload(
+      type,
+      entityId,
+      this.database.getConversationPayload(entityId),
+    )
   }
 
   listMessages(conversationId: string): DesktopMessage[] {
@@ -152,204 +140,36 @@ export class ConversationManager {
     return this.database.listMessages(conversationId, this.currentUserId)
   }
 
-  sendTextMessage(
-    conversationId: string,
-    content: string,
-    bodyType: "text" | "markdown",
-  ): DesktopMessage[] {
-    this.assertConversationId(conversationId)
-    const normalized = content.trim()
-    if (!normalized || normalized.length > 100_000) {
-      throw new AuthFailure("invalid_message_content", "消息内容不正确")
-    }
-    if (bodyType !== "text" && bodyType !== "markdown") {
-      throw new AuthFailure("invalid_message_type", "消息类型不正确")
-    }
-    const clientMessageId = randomUUID()
-    this.database.createOptimisticMessage({
-      conversationId,
-      clientMessageId,
-      content: normalized,
-      bodyType,
-      senderId: this.currentUserId,
-      senderName: this.currentUserName,
-    })
-    this.onMessagesChanged(conversationId)
-    this.deliverMessage(conversationId, clientMessageId, normalized, bodyType)
-    return this.database.listMessages(conversationId, this.currentUserId)
+  sendTextMessage(...args: Parameters<OutgoingMessageService["sendTextMessage"]>) {
+    return this.outgoingMessages.sendTextMessage(...args)
   }
 
-  sendFileMessage(
-    conversationId: string,
-    file: { path: string; name: string; sizeBytes: number },
-  ): DesktopMessage[] {
-    this.assertConversationId(conversationId)
-    if (
-      !file.path ||
-      !file.name ||
-      file.name.length > 255 ||
-      !Number.isSafeInteger(file.sizeBytes) ||
-      file.sizeBytes <= 0 ||
-      file.sizeBytes > 500 * 1024 * 1024
-    ) {
-      throw new AuthFailure("invalid_file", "文件不符合发送要求")
-    }
-    const clientMessageId = randomUUID()
-    this.database.createOptimisticFileMessage({
-      conversationId,
-      clientMessageId,
-      filePath: file.path,
-      name: file.name,
-      sizeBytes: file.sizeBytes,
-      senderId: this.currentUserId,
-      senderName: this.currentUserName,
-    })
-    this.onMessagesChanged(conversationId)
-    this.deliverFileMessage(conversationId, clientMessageId, file)
-    return this.database.listMessages(conversationId, this.currentUserId)
+  sendFileMessage(...args: Parameters<OutgoingMessageService["sendFileMessage"]>) {
+    return this.outgoingMessages.sendFileMessage(...args)
   }
 
-  sendImageMessage(
-    conversationId: string,
-    image: {
-      path: string
-      name: string
-      sizeBytes: number
-      contentType: "image/webp" | "image/png"
-      width: number
-      height: number
-      caption: string
-    },
-  ): DesktopMessage[] {
-    this.assertConversationId(conversationId)
-    const caption = this.normalizeCaption(image.caption)
-    if (
-      !image.path ||
-      !image.name ||
-      image.name.length > 255 ||
-      /[\\/]/.test(image.name) ||
-      image.sizeBytes <= 0 ||
-      image.sizeBytes > 2 * 1024 * 1024 ||
-      !["image/webp", "image/png"].includes(image.contentType) ||
-      !Number.isSafeInteger(image.width) ||
-      !Number.isSafeInteger(image.height) ||
-      image.width <= 0 ||
-      image.height <= 0 ||
-      image.width > 1920 ||
-      image.height > 1920
-    ) {
-      throw new AuthFailure("invalid_image", "图片不符合发送要求")
-    }
-    const clientMessageId = randomUUID()
-    this.database.createOptimisticImageMessage({
-      conversationId,
-      clientMessageId,
-      ...image,
-      filePath: image.path,
-      caption,
-      senderId: this.currentUserId,
-      senderName: this.currentUserName,
-    })
-    this.onMessagesChanged(conversationId)
-    this.deliverMediaMessage("image", conversationId, clientMessageId, image, caption, true)
-    return this.database.listMessages(conversationId, this.currentUserId)
+  sendImageMessage(...args: Parameters<OutgoingMessageService["sendImageMessage"]>) {
+    return this.outgoingMessages.sendImageMessage(...args)
   }
 
-  sendVideoMessage(
-    conversationId: string,
-    video: {
-      path: string
-      name: string
-      sizeBytes: number
-      contentType: "video/mp4" | "video/webm"
-      caption: string
-    },
-  ): DesktopMessage[] {
-    this.assertConversationId(conversationId)
-    const caption = this.normalizeCaption(video.caption)
-    if (
-      !video.path ||
-      !video.name ||
-      video.name.length > 255 ||
-      /[\\/]/.test(video.name) ||
-      video.sizeBytes <= 0 ||
-      video.sizeBytes > 100 * 1024 * 1024 ||
-      !["video/mp4", "video/webm"].includes(video.contentType)
-    ) {
-      throw new AuthFailure("invalid_video", "视频不符合发送要求")
-    }
-    const clientMessageId = randomUUID()
-    this.database.createOptimisticVideoMessage({
-      conversationId,
-      clientMessageId,
-      ...video,
-      filePath: video.path,
-      caption,
-      senderId: this.currentUserId,
-      senderName: this.currentUserName,
-    })
-    this.onMessagesChanged(conversationId)
-    this.deliverMediaMessage("video", conversationId, clientMessageId, video, caption, false)
-    return this.database.listMessages(conversationId, this.currentUserId)
+  sendVideoMessage(...args: Parameters<OutgoingMessageService["sendVideoMessage"]>) {
+    return this.outgoingMessages.sendVideoMessage(...args)
   }
 
-  readOutgoingMedia(clientMessageId: string, range?: string) {
-    const media = this.database.getOutgoingMedia(clientMessageId)
-    if (!media) throw new AuthFailure("media_not_found", "待发送媒体不存在")
-    return createLocalFileResponse(media.filePath, media.sizeBytes, media.contentType, range)
+  readOutgoingMedia(...args: Parameters<OutgoingMessageService["readOutgoingMedia"]>) {
+    return this.outgoingMessages.readOutgoingMedia(...args)
   }
 
-  getOutgoingMedia(clientMessageId: string) {
-    const media = this.database.getOutgoingMedia(clientMessageId)
-    if (!media) throw new AuthFailure("media_not_found", "待发送媒体不存在")
-    return media
+  getOutgoingMedia(...args: Parameters<OutgoingMessageService["getOutgoingMedia"]>) {
+    return this.outgoingMessages.getOutgoingMedia(...args)
   }
 
-  retryMessage(conversationId: string, clientMessageId: string): DesktopMessage[] {
-    this.assertConversationId(conversationId)
-    if (!clientMessageId || clientMessageId.length > 128) {
-      throw new AuthFailure("invalid_client_message", "待发送消息不存在")
-    }
-    const message = this.database.getOutgoingMessage(conversationId, clientMessageId)
-    if (!message) throw new AuthFailure("message_not_found", "待发送消息不存在")
-    if (!this.database.setOutgoingMessageStatus(conversationId, clientMessageId, "sending")) {
-      throw new AuthFailure("message_not_found", "待发送消息不存在")
-    }
-    this.onMessagesChanged(conversationId)
-    if (message.bodyType === "file") {
-      this.deliverFileMessage(conversationId, clientMessageId, {
-        path: message.filePath,
-        name: message.name,
-        sizeBytes: message.sizeBytes,
-      })
-    } else if (message.bodyType === "image" || message.bodyType === "video") {
-      this.deliverMediaMessage(
-        message.bodyType,
-        conversationId,
-        clientMessageId,
-        {
-          path: message.filePath,
-          name: message.name,
-          sizeBytes: message.sizeBytes,
-          contentType: message.contentType,
-        },
-        message.caption,
-        message.bodyType === "image",
-      )
-    } else if (
-      (message.bodyType === "text" || message.bodyType === "markdown") &&
-      typeof message.content === "string"
-    ) {
-      this.deliverMessage(conversationId, clientMessageId, message.content, message.bodyType)
-    } else {
-      throw new AuthFailure("message_not_found", "待发送消息不存在")
-    }
-    return this.database.listMessages(conversationId, this.currentUserId)
+  retryMessage(...args: Parameters<OutgoingMessageService["retryMessage"]>) {
+    return this.outgoingMessages.retryMessage(...args)
   }
 
   close() {
-    this.closed = true
-    this.sending.clear()
+    this.outgoingMessages.close()
   }
 
   async listMessageReactionUsers(
@@ -451,129 +271,6 @@ export class ConversationManager {
     }
   }
 
-  private deliverMessage(
-    conversationId: string,
-    clientMessageId: string,
-    content: string,
-    bodyType: "text" | "markdown",
-  ) {
-    if (this.closed || this.sending.has(clientMessageId)) return
-    this.sending.add(clientMessageId)
-    void this.client
-      .post(`/api/client/conversations/${encodeURIComponent(conversationId)}/messages`, {
-        client_message_id: clientMessageId,
-        body: { type: bodyType, content },
-      })
-      .then((data) => {
-        if (this.closed || !isRecord(data) || !isRecord(data.message)) {
-          if (!this.closed) throw new AuthFailure("invalid_response", "发送消息响应格式不正确")
-          return
-        }
-        this.database.upsertMessages([parseMessage(data.message, conversationId)])
-        this.onMessagesChanged(conversationId)
-      })
-      .catch(() => {
-        this.sending.delete(clientMessageId)
-        if (this.closed) return
-        if (this.database.setOutgoingMessageStatus(conversationId, clientMessageId, "failed")) {
-          this.onMessagesChanged(conversationId)
-        }
-      })
-      .finally(() => {
-        this.sending.delete(clientMessageId)
-      })
-  }
-
-  private deliverMediaMessage(
-    category: "image" | "video",
-    conversationId: string,
-    clientMessageId: string,
-    file: { path: string; name: string; sizeBytes: number; contentType: string },
-    caption: string,
-    temporary: boolean,
-  ) {
-    if (this.closed || this.sending.has(clientMessageId)) return
-    this.sending.add(clientMessageId)
-    const fields: Record<string, string> = { client_message_id: clientMessageId }
-    if (caption) {
-      fields.caption = caption
-      fields.caption_type = "text"
-    }
-    void this.client
-      .postFile(
-        `/api/client/conversations/${encodeURIComponent(conversationId)}/messages/${category === "image" ? "images" : "videos"}`,
-        fields,
-        { ...file, fieldName: category, contentType: file.contentType },
-      )
-      .then((data) => {
-        if (this.closed || !isRecord(data) || !isRecord(data.message)) {
-          if (!this.closed)
-            throw new AuthFailure(
-              "invalid_response",
-              `发送${category === "image" ? "图片" : "视频"}响应格式不正确`,
-            )
-          return
-        }
-        this.database.upsertMessages([parseMessage(data.message, conversationId)])
-        this.onMessagesChanged(conversationId)
-        if (temporary) {
-          const cleanup = setTimeout(() => void rm(file.path, { force: true }), 60_000)
-          cleanup.unref()
-        }
-      })
-      .catch(() => {
-        this.sending.delete(clientMessageId)
-        if (this.closed) return
-        if (this.database.setOutgoingMessageStatus(conversationId, clientMessageId, "failed")) {
-          this.onMessagesChanged(conversationId)
-        }
-      })
-      .finally(() => {
-        this.sending.delete(clientMessageId)
-      })
-  }
-
-  private normalizeCaption(value: string) {
-    const caption = value.trim()
-    if (caption.length > 5_000) {
-      throw new AuthFailure("invalid_caption", "媒体说明不能超过 5000 个字符")
-    }
-    return caption
-  }
-
-  private deliverFileMessage(
-    conversationId: string,
-    clientMessageId: string,
-    file: { path: string; name: string; sizeBytes: number },
-  ) {
-    if (this.closed || this.sending.has(clientMessageId)) return
-    this.sending.add(clientMessageId)
-    void this.client
-      .postFile(
-        `/api/client/conversations/${encodeURIComponent(conversationId)}/messages/files`,
-        { client_message_id: clientMessageId },
-        file,
-      )
-      .then((data) => {
-        if (this.closed || !isRecord(data) || !isRecord(data.message)) {
-          if (!this.closed) throw new AuthFailure("invalid_response", "发送文件响应格式不正确")
-          return
-        }
-        this.database.upsertMessages([parseMessage(data.message, conversationId)])
-        this.onMessagesChanged(conversationId)
-      })
-      .catch(() => {
-        this.sending.delete(clientMessageId)
-        if (this.closed) return
-        if (this.database.setOutgoingMessageStatus(conversationId, clientMessageId, "failed")) {
-          this.onMessagesChanged(conversationId)
-        }
-      })
-      .finally(() => {
-        this.sending.delete(clientMessageId)
-      })
-  }
-
   private async fetchConversations(): Promise<StoredConversation[]> {
     const data = await this.client.get("/api/client/conversations")
     if (!isRecord(data) || !Array.isArray(data.conversations)) {
@@ -605,168 +302,6 @@ export class ConversationManager {
       hasMoreBefore: data.page.has_more_before,
     }
   }
-}
-
-function parseConversationBooleanEvent(payload: unknown, field: "pinned" | "muted") {
-  if (!isRecord(payload) || typeof payload[field] !== "boolean") {
-    throw new AuthFailure("invalid_realtime_event", "会话状态推送格式不正确")
-  }
-  return {
-    conversationId: conversationIdFromEvent(payload),
-    value: payload[field],
-  }
-}
-
-function conversationIdFromEvent(payload: unknown) {
-  if (!isRecord(payload)) {
-    throw new AuthFailure("invalid_realtime_event", "会话推送格式不正确")
-  }
-  return requiredString(payload.conversation_id, 128, "event.conversation_id")
-}
-
-function parseConversation(value: unknown, currentUserId: string): StoredConversation {
-  if (!isRecord(value)) throw new AuthFailure("invalid_response", "会话列表响应格式不正确")
-  const id = requiredString(value.id, 128, "conversation.id")
-  const type = requiredString(value.type, 32, "conversation.type")
-  const name = requiredString(value.name, 256, "conversation.name")
-  const avatarIdentity = conversationAvatarIdentity(value, id, type, currentUserId)
-  return {
-    id,
-    type,
-    name,
-    memberCount: type === "group" ? nonNegativeInteger(value.member_count) : 0,
-    avatar: optionalString(value.avatar, 4_096),
-    avatarType: avatarIdentity.type,
-    avatarId: avatarIdentity.id,
-    createdAt: requiredString(value.created_at, 64, "conversation.created_at"),
-    lastMessageAt: nullableString(value.last_message_at, 64),
-    lastMessageSummary: "",
-    pinned: value.pinned === true,
-    notificationMuted: value.notification_muted === true,
-    isBuiltinAssistant:
-      type === "app" &&
-      Array.isArray(value.members) &&
-      value.members.some(
-        (member) =>
-          isRecord(member) && member.type === "app" && member.id === builtinAssistantAppId,
-      ),
-    unreadCount: nonNegativeInteger(value.unread_count),
-    payload: value,
-  }
-}
-
-function parseMessage(value: unknown, expectedConversationId: string): StoredMessage {
-  if (!isRecord(value)) throw new AuthFailure("invalid_response", "聊天记录响应格式不正确")
-  const conversationId = requiredString(value.conversation_id, 128, "message.conversation_id")
-  if (conversationId !== expectedConversationId) {
-    throw new AuthFailure("invalid_response", "聊天记录所属会话不正确")
-  }
-  if (!isRecord(value.sender)) {
-    throw new AuthFailure("invalid_response", "聊天记录发送者格式不正确")
-  }
-  const details = normalizeDesktopMessageDetails(value)
-  const senderType = requiredString(value.sender.type, 32, "message.sender.type")
-  const senderId =
-    senderType === "system"
-      ? optionalString(value.sender.id, 128)
-      : requiredString(value.sender.id, 128, "message.sender.id")
-  return {
-    id: requiredString(value.id, 128, "message.id"),
-    conversationId,
-    seq: positiveInteger(value.seq),
-    createdAt: requiredString(value.created_at, 64, "message.created_at"),
-    senderId,
-    senderType,
-    senderName:
-      optionalString(value.sender.nickname, 256) ||
-      optionalString(value.sender.name, 256) ||
-      (senderType === "system" ? "系统" : ""),
-    isMine: false,
-    bodyType: details.body.type,
-    content: summarizeDesktopMessageBody(details.body),
-    clientMessageId: optionalString(value.client_message_id, 128),
-    deliveryStatus: undefined,
-    ...details,
-    payload: value,
-  }
-}
-
-function conversationAvatarIdentity(
-  value: Record<string, unknown>,
-  conversationId: string,
-  conversationType: string,
-  currentUserId: string,
-): Pick<AvatarDescriptor, "type" | "id"> {
-  if (conversationType === "topic" && isRecord(value.topic)) {
-    const parentId = optionalString(value.topic.parent_conversation_id, 128)
-    if (parentId) {
-      return {
-        type: avatarTypeForConversation(optionalString(value.topic.parent_conversation_type, 32)),
-        id: parentId,
-      }
-    }
-  }
-  if (conversationType === "direct" || conversationType === "app") {
-    const members = parseAvatarMembers(value.members)
-    const preferred = members.find((member) =>
-      conversationType === "app" ? member.type === "app" : member.id !== currentUserId,
-    )
-    if (preferred) return { type: preferred.type, id: preferred.id }
-  }
-  return { type: "group", id: conversationId }
-}
-
-function avatarTypeForConversation(type: string): AvatarDescriptor["type"] {
-  if (type === "direct" || type === "user") return "user"
-  if (type === "app") return "app"
-  if (type === "project") return "project"
-  return "group"
-}
-
-function parseAvatarMembers(value: unknown): AvatarMemberDescriptor[] {
-  if (!Array.isArray(value)) return []
-  return value.flatMap((member) => {
-    if (!isRecord(member) || typeof member.id !== "string" || !member.id) return []
-    return [
-      {
-        type: member.type === "app" ? "app" : "user",
-        id: member.id,
-        name: optionalString(member.nickname, 256) || optionalString(member.name, 256),
-        avatarUrl: optionalString(member.avatar, 4_096),
-        role: member.role === "owner" || member.role === "admin" ? member.role : "member",
-      } satisfies AvatarMemberDescriptor,
-    ]
-  })
-}
-
-function requiredString(value: unknown, maximum: number, field: string): string {
-  if (typeof value !== "string") {
-    throw new AuthFailure("invalid_response", `响应字段 ${field} 格式不正确`)
-  }
-  const result = value.trim()
-  if (!result || result.length > maximum) {
-    throw new AuthFailure("invalid_response", `响应字段 ${field} 格式不正确`)
-  }
-  return result
-}
-
-function optionalString(value: unknown, maximum: number): string {
-  return typeof value === "string" && value.length <= maximum ? value : ""
-}
-
-function nullableString(value: unknown, maximum: number): string | null {
-  return value === null || value === undefined ? null : optionalString(value, maximum) || null
-}
-
-function nonNegativeInteger(value: unknown): number {
-  return Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : 0
-}
-
-function positiveInteger(value: unknown): number {
-  if (!Number.isSafeInteger(value) || Number(value) <= 0) {
-    throw new AuthFailure("invalid_response", "响应序号格式不正确")
-  }
-  return Number(value)
 }
 
 async function mapConcurrent<T>(

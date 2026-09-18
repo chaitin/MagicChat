@@ -7,36 +7,23 @@ export function createLocalFileResponse(
   sizeBytes: number,
   contentType: string,
   rangeHeader?: string,
+  options: { cacheControl?: string; cors?: boolean } = {},
 ) {
   const range = parseRange(rangeHeader, sizeBytes)
   const stream = createReadStream(filePath, range ?? undefined)
   const body = Readable.toWeb(stream) as ReadableStream<Uint8Array>
-  if (!range) {
-    return new Response(body, {
-      status: 200,
-      headers: {
-        "Accept-Ranges": "bytes",
-        "Access-Control-Allow-Origin": "*",
-        "Cross-Origin-Resource-Policy": "cross-origin",
-        "Cache-Control": "private, no-store",
-        "Content-Length": String(sizeBytes),
-        "Content-Type": contentType,
-      },
-    })
-  }
-  const length = range.end - range.start + 1
-  return new Response(body, {
-    status: 206,
-    headers: {
-      "Accept-Ranges": "bytes",
-      "Access-Control-Allow-Origin": "*",
-      "Cross-Origin-Resource-Policy": "cross-origin",
-      "Cache-Control": "private, no-store",
-      "Content-Length": String(length),
-      "Content-Range": `bytes ${range.start}-${range.end}/${sizeBytes}`,
-      "Content-Type": contentType,
-    },
+  const headers = new Headers({
+    "Accept-Ranges": "bytes",
+    "Cache-Control": options.cacheControl ?? "private, no-store",
+    "Content-Length": String(range ? range.end - range.start + 1 : sizeBytes),
+    "Content-Type": contentType,
   })
+  if (options.cors !== false) {
+    headers.set("Access-Control-Allow-Origin", "*")
+    headers.set("Cross-Origin-Resource-Policy", "cross-origin")
+  }
+  if (range) headers.set("Content-Range", `bytes ${range.start}-${range.end}/${sizeBytes}`)
+  return new Response(body, { status: range ? 206 : 200, headers })
 }
 
 function parseRange(value: string | undefined, size: number) {
