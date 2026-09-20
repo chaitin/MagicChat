@@ -23,11 +23,52 @@ export function registerMediaIpc({
     if (
       !value ||
       typeof value.targetId !== "string" ||
-      typeof value.cacheKey !== "string" ||
       typeof value.conversationName !== "string" ||
       !value.conversationName.trim() ||
-      value.conversationName.length > 200
+      value.conversationName.length > ("avatar" in value ? 256 : 200)
     ) {
+      throw new AuthFailure("invalid_media_preview", "媒体预览请求不正确")
+    }
+    if ("avatar" in value) {
+      const avatar = value.avatar
+      if (
+        !avatar ||
+        !["user", "app", "group"].includes(avatar.type) ||
+        typeof avatar.id !== "string" ||
+        !avatar.id ||
+        avatar.id.length > 128 ||
+        (avatar.theme !== "light" && avatar.theme !== "dark")
+      ) {
+        throw new AuthFailure("invalid_media_preview", "头像预览请求不正确")
+      }
+      const resolved = await auth.getAvatar({
+        targetId: value.targetId,
+        type: avatar.type,
+        id: avatar.id,
+        theme: avatar.theme,
+      })
+      if (resolved.status !== "ready" || !resolved.resourceUrl) {
+        throw new AuthFailure("avatar_not_found", "暂无可预览的头像")
+      }
+      const url = new URL(resolved.resourceUrl)
+      if (
+        url.protocol !== "jiying-avatar:" ||
+        url.hostname !== "cache" ||
+        !/^\/[a-f0-9]{64}$/.test(url.pathname)
+      ) {
+        throw new AuthFailure("invalid_avatar", "头像资源不正确")
+      }
+      const resource = await auth.readAvatarResource(url.pathname.slice(1))
+      mediaPreview.open({
+        title: value.conversationName.trim(),
+        category: "image",
+        contentType: resource.contentType,
+        originalName: `${value.conversationName.trim()}头像`,
+        resourceUrl: resolved.resourceUrl,
+      })
+      return null
+    }
+    if (typeof value.cacheKey !== "string") {
       throw new AuthFailure("invalid_media_preview", "媒体预览请求不正确")
     }
     const cached = value.cacheKey.startsWith("outgoing:")

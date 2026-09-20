@@ -10,6 +10,7 @@ const platform =
 const bridge: DesktopBridge = {
   openHomepage: () => ipcRenderer.invoke(DESKTOP_CHANNELS.openHomepage),
   openExternalLink: (url) => ipcRenderer.invoke(DESKTOP_CHANNELS.openExternalLink, url),
+  copyText: (text) => ipcRenderer.invoke(DESKTOP_CHANNELS.copyText, text),
   checkForUpdates: () => ipcRenderer.invoke(DESKTOP_CHANNELS.checkForUpdates),
   getSystemInfo: () => ipcRenderer.invoke(DESKTOP_CHANNELS.getSystemInfo),
   getStorageInfo: () => ipcRenderer.invoke(DESKTOP_CHANNELS.getStorageInfo),

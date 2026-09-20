@@ -198,7 +198,7 @@ function CredentialField({
       <Label htmlFor={inputId}>{label}</Label>
       <div className="flex items-center gap-2">
         <Input
-          className="min-w-0 flex-1 font-mono! text-xs"
+          className="min-w-0 flex-1 font-mono! text-sm"
           id={inputId}
           readOnly
           value={value}

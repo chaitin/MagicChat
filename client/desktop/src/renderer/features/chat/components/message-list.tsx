@@ -7,6 +7,7 @@ import {
 } from "@hugeicons/core-free-icons"
 import type { DesktopMessage } from "../../../../shared/account-data"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
+import { ContactProfilePopover } from "@/components/avatar/contact-profile-popover"
 import { HugeiconsIcon, type HugeiconsIconProps } from "@/components/icons/hugeicons-icon"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -168,13 +169,20 @@ function MessageRow({
       {!message.isMine &&
         message.senderId &&
         (message.senderType === "user" || message.senderType === "app") && (
-          <EntityAvatar
-            targetId={targetId}
+          <ContactProfilePopover
             type={message.senderType}
             id={message.senderId}
-            theme={resolvedTheme}
-            size={32}
-          />
+            fallbackName={message.senderName || conversationName}
+          >
+            <EntityAvatar
+              targetId={targetId}
+              type={message.senderType}
+              id={message.senderId}
+              theme={resolvedTheme}
+              size={32}
+              label={`${message.senderName || conversationName}头像`}
+            />
+          </ContactProfilePopover>
         )}
       <div
         className={cn(
@@ -249,14 +257,16 @@ function MessageRow({
         </div>
       </div>
       {message.isMine && (
-        <EntityAvatar
-          targetId={targetId}
-          type="user"
-          id={userId}
-          theme={resolvedTheme}
-          size={32}
-          label={`${userName}头像`}
-        />
+        <ContactProfilePopover type="user" id={userId} fallbackName={userName}>
+          <EntityAvatar
+            targetId={targetId}
+            type="user"
+            id={userId}
+            theme={resolvedTheme}
+            size={32}
+            label={`${userName}头像`}
+          />
+        </ContactProfilePopover>
       )}
     </article>
   )

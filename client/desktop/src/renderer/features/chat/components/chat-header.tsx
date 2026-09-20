@@ -6,6 +6,7 @@ import {
 } from "@hugeicons/core-free-icons"
 import type { DesktopConversation } from "../../../../shared/account-data"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
+import { ContactProfilePopover } from "@/components/avatar/contact-profile-popover"
 import { HugeiconsIcon, type HugeiconsIconProps } from "@/components/icons/hugeicons-icon"
 import { Button as BeButton } from "@/components/motion/button/base"
 
@@ -20,16 +21,45 @@ export function ChatHeader({
   resolvedTheme: "light" | "dark"
   onPendingFeature: (label: string) => void
 }) {
+  const avatar = (
+    <EntityAvatar
+      targetId={targetId}
+      type={conversation.avatarType}
+      id={conversation.avatarId}
+      theme={resolvedTheme}
+      size={36}
+      label={`${conversation.name}头像`}
+    />
+  )
+  const profileType =
+    conversation.type === "group" || conversation.type === "app"
+      ? conversation.type
+      : conversation.type === "direct" && conversation.avatarType === "user"
+        ? "user"
+        : null
+  const profileId =
+    conversation.type === "group"
+      ? conversation.id
+      : conversation.type === "app"
+        ? conversation.avatarType === "app"
+          ? conversation.avatarId
+          : conversation.id
+        : conversation.avatarId
   return (
     <header className="flex h-14 shrink-0 items-center gap-3 border-b border-xgui-background-1 px-4">
-      <EntityAvatar
-        targetId={targetId}
-        type={conversation.avatarType}
-        id={conversation.avatarId}
-        theme={resolvedTheme}
-        size={36}
-        label={`${conversation.name}头像`}
-      />
+      {profileType ? (
+        <ContactProfilePopover
+          key={`${profileType}:${profileId}`}
+          type={profileType}
+          id={profileId}
+          fallbackName={conversation.name}
+          fallbackMemberCount={conversation.memberCount}
+        >
+          {avatar}
+        </ContactProfilePopover>
+      ) : (
+        avatar
+      )}
       <div className="min-w-0">
         <h2 className="truncate text-sm">{conversation.name}</h2>
         <p className="text-xs text-muted-foreground">{conversationDescription(conversation)}</p>

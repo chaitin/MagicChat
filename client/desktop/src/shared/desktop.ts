@@ -60,6 +60,7 @@ export type SystemInfo = {
 export const DESKTOP_CHANNELS = {
   openHomepage: "desktop-next:v1:open-homepage",
   openExternalLink: "desktop-next:v1:open-external-link",
+  copyText: "desktop-next:v1:clipboard-copy-text",
   checkForUpdates: "desktop-next:v1:check-for-updates",
   getSystemInfo: "desktop-next:v1:get-system-info",
   getStorageInfo: "desktop-next:v1:get-storage-info",
@@ -87,6 +88,7 @@ export interface DesktopBridge {
   readonly media: MediaBridge
   openHomepage(): Promise<AuthResult<null>>
   openExternalLink(url: string): Promise<AuthResult<null>>
+  copyText(text: string): Promise<AuthResult<null>>
   checkForUpdates(): Promise<AuthResult<UpdateInfo>>
   getSystemInfo(): Promise<AuthResult<SystemInfo>>
   getStorageInfo(): Promise<AuthResult<StorageInfo>>

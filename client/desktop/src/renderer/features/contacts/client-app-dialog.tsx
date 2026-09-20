@@ -802,13 +802,15 @@ function sameIds(left: string[], right: string[]) {
 function CredentialField({ label, value }: { label: string; value: string }) {
   const { showToast } = useAnimatedToast()
   const inputId = useId()
+  const copyLabel = label === "应用 ID" ? "应用 ID " : label
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(value)
-      showToast({ title: `${label}已复制`, status: "success" })
+      const result = await window.desktop!.copyText(value)
+      if (!result.ok) throw new Error(result.error.message)
+      showToast({ title: `${copyLabel}已复制`, status: "success" })
     } catch {
-      showToast({ title: `${label}复制失败`, status: "error" })
+      showToast({ title: `${copyLabel}复制失败`, status: "error" })
     }
   }
 
@@ -816,7 +818,7 @@ function CredentialField({ label, value }: { label: string; value: string }) {
     <div className="grid gap-2">
       <Label htmlFor={inputId}>{label}</Label>
       <div className="flex items-center gap-2">
-        <Input id={inputId} className="min-w-0 flex-1 font-mono! text-xs!" readOnly value={value} />
+        <Input id={inputId} className="min-w-0 flex-1 font-mono! text-sm!" readOnly value={value} />
         <Button
           variant="outline"
           size="icon"

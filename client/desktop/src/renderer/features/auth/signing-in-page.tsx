@@ -54,7 +54,7 @@ export function SigningInPage({
               <Loader
                 variant="dither"
                 size={64}
-                speed={3}
+                speed={2}
                 label="正在加载在线数据"
                 className="text-muted-foreground"
               />

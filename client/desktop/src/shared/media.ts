@@ -1,3 +1,4 @@
+import type { AvatarType } from "./account-data"
 import type { AuthResult } from "./auth"
 import type { DesktopPlatform } from "./desktop"
 
@@ -33,11 +34,21 @@ export type MediaDownloadProgress = {
   message?: string
 }
 
-export type MediaPreviewRequest = {
-  targetId: string
-  cacheKey: string
-  conversationName: string
-}
+export type MediaPreviewRequest =
+  | {
+      targetId: string
+      cacheKey: string
+      conversationName: string
+    }
+  | {
+      targetId: string
+      avatar: {
+        type: Extract<AvatarType, "user" | "app" | "group">
+        id: string
+        theme: "light" | "dark"
+      }
+      conversationName: string
+    }
 
 export type MediaPreviewPayload = {
   title: string

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react"
 import { FlashIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
+import { ContactProfileProvider } from "@/components/avatar/contact-profile-popover"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import { AppRail, SectionPlaceholder, type AppSection } from "./components/app-navigation"
 import { ContactsPage } from "../contacts/contacts-page"
@@ -155,6 +156,20 @@ export function ChatPage({
     if (selectedId) focusComposer()
   }, [focusComposer, selectedId])
 
+  const openProfileConversation = useCallback(
+    async (type: "user" | "app", id: string) => {
+      const result = await window.desktop!.accountData.openContactConversation({
+        targetId,
+        type,
+        id,
+      })
+      if (!result.ok) throw new Error(result.error.message)
+      setSelectedId(result.data.id)
+      setActiveSection("chat")
+    },
+    [setSelectedId, targetId],
+  )
+
   return (
     <main className="flex h-full min-h-0 overflow-hidden bg-background text-foreground">
       <AppRail
@@ -186,69 +201,78 @@ export function ChatPage({
           />
 
           <section className="flex min-h-0 min-w-0 flex-col bg-card" aria-label="聊天区域">
-            {selected ? (
-              <>
-                <ChatHeader
-                  conversation={selected}
-                  targetId={targetId}
-                  resolvedTheme={resolvedTheme}
-                  onPendingFeature={(label) => showPendingFeature(showToast, label)}
-                />
+            <ContactProfileProvider
+              targetId={targetId}
+              currentUserId={userId}
+              currentUserName={userName}
+              currentUserEmail={userEmail}
+              theme={resolvedTheme}
+              onOpenConversation={openProfileConversation}
+            >
+              {selected ? (
+                <>
+                  <ChatHeader
+                    conversation={selected}
+                    targetId={targetId}
+                    resolvedTheme={resolvedTheme}
+                    onPendingFeature={(label) => showPendingFeature(showToast, label)}
+                  />
 
-                <MessageList
-                  messages={messages}
-                  loading={loadingMessages}
-                  loadingBefore={loadingBeforeMessages}
-                  historyRef={historyRef}
-                  targetId={targetId}
-                  userId={userId}
-                  userName={userName}
-                  resolvedTheme={resolvedTheme}
-                  conversationName={selected.name}
-                  mentionLabelResolver={resolveMentionLabel}
-                  pendingReactionKeys={pendingReactionKeys}
-                  onReachTop={() => void loadBeforeMessages()}
-                  onSetReaction={setMessageReaction}
-                  onRetryMessage={retryMessage}
-                  onPendingFeature={(label) => showPendingFeature(showToast, label)}
-                />
+                  <MessageList
+                    messages={messages}
+                    loading={loadingMessages}
+                    loadingBefore={loadingBeforeMessages}
+                    historyRef={historyRef}
+                    targetId={targetId}
+                    userId={userId}
+                    userName={userName}
+                    resolvedTheme={resolvedTheme}
+                    conversationName={selected.name}
+                    mentionLabelResolver={resolveMentionLabel}
+                    pendingReactionKeys={pendingReactionKeys}
+                    onReachTop={() => void loadBeforeMessages()}
+                    onSetReaction={setMessageReaction}
+                    onRetryMessage={retryMessage}
+                    onPendingFeature={(label) => showPendingFeature(showToast, label)}
+                  />
 
-                <MessageComposer
-                  composerRef={composerRef}
-                  draft={draft}
-                  markdownMode={markdownMode}
-                  selectingFile={selectingFile}
-                  sendingFile={sendingFile}
-                  selectingMedia={selectingMedia}
-                  sendingMedia={sendingMedia}
-                  importingFile={importingFile}
-                  onFiles={(files) => {
-                    if (files.length !== 1) {
-                      showToast({ status: "error", title: "请每次发送一个文件" })
-                      return
-                    }
-                    void importFile(files[0])
-                  }}
-                  onDraftChange={setDraft}
-                  onKeyDown={handleComposerKeyDown}
-                  onMarkdownChange={(pressed) => {
-                    setMarkdownMode(pressed)
-                    focusComposer()
-                  }}
-                  onRestoreFocus={focusComposer}
-                  onInsertExpression={insertExpression}
-                  onSelectFile={selectFile}
-                  onSelectMedia={(category) => void selectMedia(category)}
-                  onSend={sendDraft}
-                />
-              </>
-            ) : (
-              <div className="flex flex-1 items-center justify-center text-xgui-background-2">
-                <span className="flex size-32 items-center justify-center rounded-full bg-xgui-background-1">
-                  <HugeiconsIcon icon={FlashIcon} className="size-16" aria-hidden />
-                </span>
-              </div>
-            )}
+                  <MessageComposer
+                    composerRef={composerRef}
+                    draft={draft}
+                    markdownMode={markdownMode}
+                    selectingFile={selectingFile}
+                    sendingFile={sendingFile}
+                    selectingMedia={selectingMedia}
+                    sendingMedia={sendingMedia}
+                    importingFile={importingFile}
+                    onFiles={(files) => {
+                      if (files.length !== 1) {
+                        showToast({ status: "error", title: "请每次发送一个文件" })
+                        return
+                      }
+                      void importFile(files[0])
+                    }}
+                    onDraftChange={setDraft}
+                    onKeyDown={handleComposerKeyDown}
+                    onMarkdownChange={(pressed) => {
+                      setMarkdownMode(pressed)
+                      focusComposer()
+                    }}
+                    onRestoreFocus={focusComposer}
+                    onInsertExpression={insertExpression}
+                    onSelectFile={selectFile}
+                    onSelectMedia={(category) => void selectMedia(category)}
+                    onSend={sendDraft}
+                  />
+                </>
+              ) : (
+                <div className="flex flex-1 items-center justify-center text-xgui-background-2">
+                  <span className="flex size-32 items-center justify-center rounded-full bg-xgui-background-1">
+                    <HugeiconsIcon icon={FlashIcon} className="size-16" aria-hidden />
+                  </span>
+                </div>
+              )}
+            </ContactProfileProvider>
           </section>
         </div>
       ) : activeSection === "contacts" ? (

@@ -3,6 +3,7 @@ import path from "node:path"
 import {
   app,
   BrowserWindow,
+  clipboard,
   ipcMain,
   Menu,
   nativeImage,
@@ -373,6 +374,13 @@ void app.whenReady().then(async () => {
       throw new AuthFailure("invalid_external_link", "外部链接不受信任")
     }
     await shell.openExternal(input)
+    return null
+  })
+  handleIpc(DESKTOP_CHANNELS.copyText, async (input) => {
+    if (typeof input !== "string" || !input || input.length > 4096) {
+      throw new AuthFailure("invalid_clipboard_text", "复制内容不正确")
+    }
+    clipboard.writeText(input)
     return null
   })
   handleIpc(DESKTOP_CHANNELS.checkForUpdates, () => checkForUpdates())

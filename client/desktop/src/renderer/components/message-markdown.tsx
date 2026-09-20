@@ -7,6 +7,7 @@ import remarkMath from "remark-math"
 import remarkSupersub from "remark-supersub"
 import "katex/dist/katex.min.css"
 import { MarkdownCodeBlock } from "@/components/markdown-code-block"
+import { ContactProfilePopover } from "@/components/avatar/contact-profile-popover"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   createRemarkMentionPlugin,
@@ -164,7 +165,19 @@ function createComponents(currentUserId: string): MarkdownComponents {
     mention: ({ children, node }: MentionProps) => {
       const id = nodeProperty(node, "data-mention-id")
       const type = nodeProperty(node, "data-mention-type") as "user" | "app" | "all"
-      return <span className={mentionClassName(type, id, currentUserId)}>{children}</span>
+      const label = <span className={mentionClassName(type, id, currentUserId)}>{children}</span>
+      return id && (type === "user" || type === "app") ? (
+        <ContactProfilePopover
+          type={type}
+          id={id}
+          fallbackName={codeText(children).replace(/^@/, "")}
+          triggerClassName="align-baseline"
+        >
+          {label}
+        </ContactProfilePopover>
+      ) : (
+        label
+      )
     },
     ol: ({ children }) => <ol className="list-decimal space-y-1 pl-5">{children}</ol>,
     p: ({ children }) => <p>{children}</p>,
