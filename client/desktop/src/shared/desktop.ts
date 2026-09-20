@@ -24,11 +24,13 @@ export type AppSettings = {
 
 export const JIYING_HOMEPAGE = "https://jiying.chat/"
 export const MAGICCHAT_REPOSITORY = "https://github.com/chaitin/MagicChat"
+export const MAGICCHAT_APP_DEVELOPMENT = `${MAGICCHAT_REPOSITORY}/blob/main/APPLICATION_DEVELOPMENT.md`
 export const EXTERNAL_LINKS = [
   JIYING_HOMEPAGE,
   "https://chaitin.cn/",
   "https://baizhi.cloud/",
   MAGICCHAT_REPOSITORY,
+  MAGICCHAT_APP_DEVELOPMENT,
 ] as const
 
 export type ReleasePlatform = "windows" | "macos" | "linux-amd" | "linux-arm"

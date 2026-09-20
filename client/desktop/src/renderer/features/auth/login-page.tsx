@@ -186,6 +186,7 @@ export function LoginPage({
       <>
         <ChatPage
           targetId={connection?.targetId ?? ""}
+          serverUrl={connection?.server.url ?? ""}
           userId={connection?.user?.id ?? ""}
           userName={connection?.user?.name ?? "我"}
           userEmail={connection?.user?.email ?? ""}

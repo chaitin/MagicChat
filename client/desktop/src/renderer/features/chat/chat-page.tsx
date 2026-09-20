@@ -17,6 +17,7 @@ import type { ThemePreference } from "../../../shared/desktop"
 
 export function ChatPage({
   targetId,
+  serverUrl,
   userId,
   userName,
   userEmail,
@@ -30,6 +31,7 @@ export function ChatPage({
   onCatalogChange,
 }: {
   targetId: string
+  serverUrl: string
   userId: string
   userName: string
   userEmail: string
@@ -252,6 +254,7 @@ export function ChatPage({
       ) : activeSection === "contacts" ? (
         <ContactsPage
           targetId={targetId}
+          serverUrl={serverUrl}
           userId={userId}
           organizationName={
             catalog.servers.find((server) => server.id === catalog.activeServerId)?.name ?? "通讯录"

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useId, useMemo, useState } from "react"
 import {
   ArrowRight01Icon,
   CirclePlusIcon,
@@ -13,14 +13,26 @@ import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { Button as BeButton } from "@/components/motion/button/base"
 import { Input as BeInput } from "@/components/motion/input"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
-import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Item, ItemContent } from "@/components/ui/item"
+import { Item, ItemContent, ItemGroup } from "@/components/ui/item"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import type {
@@ -38,12 +50,14 @@ type Selection = { type: Tab; id: string }
 
 export function ContactsPage({
   targetId,
+  serverUrl,
   userId,
   organizationName,
   resolvedTheme,
   onOpenConversation,
 }: {
   targetId: string
+  serverUrl: string
   userId: string
   organizationName: string
   resolvedTheme: "light" | "dark"
@@ -60,6 +74,7 @@ export function ContactsPage({
   const [friendsOpen, setFriendsOpen] = useState(false)
   const [appDialog, setAppDialog] = useState<"create" | "edit" | "credentials" | null>(null)
   const [credentials, setCredentials] = useState<DesktopClientAppCredentials | null>(null)
+  const [avatarRevision, setAvatarRevision] = useState(0)
 
   async function load(refresh = false) {
     if (!window.desktop) return
@@ -133,12 +148,15 @@ export function ContactsPage({
         key: "public-groups",
         label: "公开群组",
         type: "group" as const,
-        entries: groups.filter((item) => !item.joined),
+        entries: groups.filter((item) => item.visibility === "public"),
       },
     ]
   }, [directory, keyword, organizationName, userId])
 
   const active = directory && selection ? entityFor(directory, selection) : null
+  const isOwnedApp =
+    selection?.type === "app" &&
+    (active as DesktopContactApp | null)?.creatorUserId?.toLowerCase() === userId.toLowerCase()
 
   async function openConversation(type: Tab, id: string, joined?: boolean) {
     setBusyKey(`${type}:${id}`)
@@ -225,87 +243,101 @@ export function ContactsPage({
           className="min-h-0 min-w-0 flex-1 overflow-hidden bg-xgui-background-1"
           viewportClassName="overflow-x-hidden [&>div]:block! [&>div]:w-full! [&>div]:min-w-0!"
         >
-          <nav className="min-h-full px-2 py-1" aria-label="通讯录列表">
+          <nav className="flex min-h-full flex-col" aria-label="通讯录列表">
             {loading ? (
               <p className="p-4 text-center text-sm text-muted-foreground">正在加载通讯录…</p>
             ) : sections.every((section) => section.entries.length === 0) ? (
               <p className="p-4 text-center text-sm text-muted-foreground">没有匹配的内容</p>
             ) : (
-              sections.map((section) => {
-                if (section.entries.length === 0) return null
-                const expanded = expandedSections.has(section.key)
-                return (
-                  <section key={section.key} aria-label={section.label}>
-                    <button
-                      type="button"
-                      className="flex w-full items-center gap-1 px-2 pt-3 pb-1 text-left text-xs text-muted-foreground hover:text-foreground"
-                      aria-expanded={expanded}
-                      onClick={() =>
-                        setExpandedSections((current) => {
-                          const next = new Set(current)
-                          if (next.has(section.key)) next.delete(section.key)
-                          else next.add(section.key)
-                          return next
-                        })
-                      }
+              <div className="flex flex-col gap-1 bg-xgui-background-0 py-1">
+                {sections.map((section) => {
+                  if (section.entries.length === 0) return null
+                  const expanded = expandedSections.has(section.key)
+                  return (
+                    <section
+                      key={section.key}
+                      aria-label={section.label}
+                      className="flex flex-col gap-1"
                     >
-                      <HugeiconsIcon
-                        icon={ArrowRight01Icon}
-                        className={cn("size-3 transition-transform", expanded && "rotate-90")}
-                        aria-hidden
-                      />
-                      <span className="min-w-0 flex-1 truncate">{section.label}</span>
-                      <span>{section.entries.length}</span>
-                    </button>
-                    {expanded &&
-                      section.entries.map((entry) => {
-                        const selected =
-                          selection?.type === section.type && selection.id === entry.id
-                        return (
-                          <Item
-                            key={`${section.type}:${entry.id}`}
-                            asChild
-                            variant="default"
-                            size="sm"
-                            className={cn(
-                              "flex-nowrap border-transparent text-left hover:bg-foreground/5 hover:text-foreground",
-                              selected &&
-                                "bg-xgui-brand-1 text-sidebar-accent-foreground hover:bg-xgui-brand-1 hover:text-sidebar-accent-foreground",
-                            )}
-                          >
-                            <button
-                              type="button"
-                              aria-current={selected ? "page" : undefined}
-                              onClick={() => setSelection({ type: section.type, id: entry.id })}
-                            >
-                              <EntityAvatar
-                                targetId={targetId}
-                                type={entry.avatarType}
-                                id={entry.avatarId}
-                                theme={resolvedTheme}
-                                label={entry.name}
-                              />
-                              <ItemContent className="w-0 min-w-0">
-                                <span className="block truncate text-sm leading-snug font-medium">
-                                  {entry.name}
-                                </span>
-                                <span className="block truncate text-xs text-muted-foreground">
-                                  {entrySummary(entry)}
-                                </span>
-                              </ItemContent>
-                              {"online" in entry && entry.online && (
-                                <span
-                                  className="size-2 rounded-full bg-xgui-green"
-                                  aria-label="在线"
-                                />
-                              )}
-                            </button>
-                          </Item>
-                        )
-                      })}
-                  </section>
-                )
-              })
+                      <div className="px-2">
+                        <button
+                          type="button"
+                          className="flex h-10 w-full items-center gap-1 rounded-md px-2 text-left text-sm text-foreground transition-colors hover:bg-foreground/5"
+                          aria-expanded={expanded}
+                          onClick={() =>
+                            setExpandedSections((current) => {
+                              const next = new Set(current)
+                              if (next.has(section.key)) next.delete(section.key)
+                              else next.add(section.key)
+                              return next
+                            })
+                          }
+                        >
+                          <HugeiconsIcon
+                            icon={ArrowRight01Icon}
+                            className={cn("size-3 transition-transform", expanded && "rotate-90")}
+                            aria-hidden
+                          />
+                          <span className="min-w-0 flex-1 truncate">{section.label}</span>
+                          <Badge variant="secondary" className="text-muted-foreground">
+                            {section.entries.length}
+                          </Badge>
+                        </button>
+                      </div>
+                      {expanded && (
+                        <ItemGroup className="bg-xgui-background-1 px-2 py-1 has-data-[size=sm]:gap-1">
+                          {section.entries.map((entry) => {
+                            const selected =
+                              selection?.type === section.type && selection.id === entry.id
+                            return (
+                              <Item
+                                key={`${section.type}:${entry.id}`}
+                                asChild
+                                variant="default"
+                                size="sm"
+                                className={cn(
+                                  "flex-nowrap border-transparent text-left hover:bg-foreground/5 hover:text-foreground",
+                                  selected &&
+                                    "bg-xgui-brand-1 text-sidebar-accent-foreground hover:bg-xgui-brand-1 hover:text-sidebar-accent-foreground",
+                                )}
+                              >
+                                <button
+                                  type="button"
+                                  aria-current={selected ? "page" : undefined}
+                                  onClick={() => setSelection({ type: section.type, id: entry.id })}
+                                >
+                                  <EntityAvatar
+                                    key={`${entry.id}:${avatarRevision}`}
+                                    targetId={targetId}
+                                    type={entry.avatarType}
+                                    id={entry.avatarId}
+                                    theme={resolvedTheme}
+                                    label={entry.name}
+                                  />
+                                  <ItemContent className="w-0 min-w-0">
+                                    <span className="block truncate text-sm leading-snug font-medium">
+                                      {entry.name}
+                                    </span>
+                                    <span className="block truncate text-xs text-muted-foreground">
+                                      {entrySummary(entry)}
+                                    </span>
+                                  </ItemContent>
+                                  {"online" in entry && entry.online && (
+                                    <span
+                                      className="size-2 rounded-full bg-xgui-green"
+                                      aria-label="在线"
+                                    />
+                                  )}
+                                </button>
+                              </Item>
+                            )
+                          })}
+                        </ItemGroup>
+                      )}
+                    </section>
+                  )
+                })}
+              </div>
             )}
           </nav>
         </ScrollArea>
@@ -314,6 +346,7 @@ export function ContactsPage({
       <div className="min-w-0 overflow-y-auto bg-card px-6">
         {active ? (
           <ContactDetails
+            key={`${targetId}:${selection!.type}:${active.id}:${avatarRevision}`}
             entity={active}
             targetId={targetId}
             userId={userId}
@@ -344,9 +377,26 @@ export function ContactsPage({
                 : undefined
             }
             onManageApp={
-              selection!.type === "app" &&
-              (active as DesktopContactApp).creatorUserId?.toLowerCase() === userId.toLowerCase()
+              isOwnedApp
                 ? (mode) => void openOwnedApp(active as DesktopContactApp, mode)
+                : undefined
+            }
+            onDeleteApp={
+              isOwnedApp
+                ? async () => {
+                    const result = await window.desktop!.accountData.deleteClientApp({
+                      targetId,
+                      id: active.id,
+                    })
+                    if (!result.ok) {
+                      showToast({ title: result.error.message, status: "error" })
+                      return false
+                    }
+                    setSelection(null)
+                    void load(true)
+                    showToast({ title: "应用已删除", status: "success" })
+                    return true
+                  }
                 : undefined
             }
           />
@@ -370,8 +420,12 @@ export function ContactsPage({
       )}
       {appDialog && (
         <ClientAppDialog
+          key={`${targetId}:${appDialog}:${credentials?.app.id ?? ""}`}
           mode={appDialog}
           targetId={targetId}
+          serverUrl={serverUrl}
+          currentUserId={userId}
+          theme={resolvedTheme}
           users={directory?.users ?? []}
           credentials={credentials}
           onClose={() => {
@@ -379,10 +433,7 @@ export function ContactsPage({
             setCredentials(null)
           }}
           onChanged={() => void load(true)}
-          onDeleted={() => {
-            setSelection(null)
-            void load(true)
-          }}
+          onAvatarChanged={() => setAvatarRevision((current) => current + 1)}
         />
       )}
     </section>
@@ -397,6 +448,7 @@ function ContactDetails({
   busy,
   onMessage,
   onManageApp,
+  onDeleteApp,
   onDeleteFriend,
 }: {
   entity: DesktopContactUser | DesktopContactApp | DesktopContactGroup
@@ -406,12 +458,33 @@ function ContactDetails({
   busy: boolean
   onMessage: () => void
   onManageApp?: (mode: "edit" | "credentials") => void
+  onDeleteApp?: () => Promise<boolean>
   onDeleteFriend?: () => void
 }) {
+  const { showToast } = useAnimatedToast()
+  const deleteConfirmationId = useId()
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteConfirmation, setDeleteConfirmation] = useState("")
+  const [deleting, setDeleting] = useState(false)
   const isUser = entity.avatarType === "user"
   const isGroup = entity.avatarType === "group"
+
+  async function confirmDeleteApp() {
+    if (!onDeleteApp || deleting || deleteConfirmation !== entity.name) return
+    setDeleting(true)
+    try {
+      if (await onDeleteApp()) setDeleteOpen(false)
+    } catch (error) {
+      showToast({
+        title: error instanceof Error ? error.message : "删除应用失败",
+        status: "error",
+      })
+    } finally {
+      setDeleting(false)
+    }
+  }
   return (
-    <div className="mx-auto mt-24 flex max-w-sm flex-col items-center gap-5">
+    <div className="mx-auto mt-24 flex max-w-xs flex-col items-center gap-5">
       <EntityAvatar
         targetId={targetId}
         type={entity.avatarType}
@@ -421,7 +494,7 @@ function ContactDetails({
         label={entity.name}
       />
       <h2 className="text-lg font-medium">{entity.name}</h2>
-      <div className="w-full rounded-lg border border-xgui-background-1 p-4 text-sm">
+      <div className="w-full divide-y divide-border rounded-lg border border-border px-4 py-2 text-sm">
         {isUser ? (
           <>
             <Detail label="昵称" value={(entity as DesktopContactUser).nickname || "未设置"} />
@@ -448,29 +521,86 @@ function ContactDetails({
           </>
         )}
       </div>
-      {(!isUser || entity.id !== userId) && (
-        <Button className="w-full" disabled={busy} onClick={onMessage}>
-          {busy
-            ? "处理中…"
-            : isGroup && !(entity as DesktopContactGroup).joined
-              ? "加入群聊"
-              : "发消息"}
-        </Button>
-      )}
-      {onDeleteFriend && (
-        <Button className="w-full" variant="destructive" onClick={onDeleteFriend}>
-          删除好友
-        </Button>
-      )}
-      {onManageApp && (
-        <div className="grid w-full grid-cols-2 gap-2">
-          <Button variant="secondary" onClick={() => onManageApp("edit")}>
-            修改资料
-          </Button>
-          <Button variant="secondary" onClick={() => onManageApp("credentials")}>
-            开发指南
-          </Button>
+      {(!isUser || entity.id !== userId || onDeleteFriend || onManageApp || onDeleteApp) && (
+        <div className="grid w-full gap-2">
+          {(!isUser || entity.id !== userId) && (
+            <BeButton
+              className="w-full bg-xgui-brand text-background hover:bg-xgui-brand-4 hover:text-background active:bg-xgui-brand-5"
+              disabled={busy}
+              onClick={onMessage}
+            >
+              {busy
+                ? "处理中…"
+                : isGroup && !(entity as DesktopContactGroup).joined
+                  ? "加入群聊"
+                  : "发消息"}
+            </BeButton>
+          )}
+          {onDeleteFriend && (
+            <BeButton variant="destructive" onClick={onDeleteFriend}>
+              删除好友
+            </BeButton>
+          )}
+          {onManageApp && (
+            <>
+              <BeButton variant="secondary" onClick={() => onManageApp("edit")}>
+                修改资料
+              </BeButton>
+              <BeButton variant="secondary" onClick={() => onManageApp("credentials")}>
+                开发指南
+              </BeButton>
+            </>
+          )}
+          {onDeleteApp && (
+            <BeButton variant="destructive" disabled={deleting} onClick={() => setDeleteOpen(true)}>
+              删除应用
+            </BeButton>
+          )}
         </div>
+      )}
+      {onDeleteApp && (
+        <AlertDialog
+          open={deleteOpen}
+          onOpenChange={(open) => {
+            if (deleting) return
+            setDeleteOpen(open)
+            if (!open) setDeleteConfirmation("")
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>确认删除应用</AlertDialogTitle>
+              <AlertDialogDescription>
+                删除后应用将无法继续使用，并会退出所有会话；由应用创建的群聊会转交给可用成员，没有可用成员时将被解散。此操作无法撤销。
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="grid gap-2">
+              <Label htmlFor={deleteConfirmationId}>
+                {`请输入应用名称“${entity.name}”以确认删除`}
+              </Label>
+              <Input
+                id={deleteConfirmationId}
+                autoFocus
+                disabled={deleting}
+                value={deleteConfirmation}
+                onChange={(event) => setDeleteConfirmation(event.target.value)}
+              />
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>取消</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                disabled={deleting || deleteConfirmation !== entity.name}
+                onClick={(event) => {
+                  event.preventDefault()
+                  void confirmDeleteApp()
+                }}
+              >
+                {deleting ? "删除中…" : "删除应用"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
     </div>
   )
@@ -480,7 +610,7 @@ function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex gap-4 py-2">
       <span className="w-16 shrink-0 text-muted-foreground">{label}</span>
-      <span className="min-w-0 break-words">{value}</span>
+      <span className="ml-auto min-w-0 break-words text-right">{value}</span>
     </div>
   )
 }
