@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto"
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises"
+import { mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { dialog, type BrowserWindow } from "electron"
 import type {
+  ImportedMessageFile,
   SelectedMessageFile,
   SelectedMessageMedia,
   SendImageMessageInput,
 } from "../../shared/account-data"
-import { AuthFailure } from "../../shared/auth"
+import { AuthFailure, isRecord } from "../../shared/auth"
 import { createLocalFileResponse } from "../local-file-response"
 import { detectImageContentType, isSelectionExpired, mediaContentType } from "./selection-policy"
 
@@ -17,6 +18,31 @@ type SelectedLocalMessageFile = SelectedMessageFile & {
   selectedAt: number
   category?: "image" | "video"
   contentType?: string
+  staged?: boolean
+}
+
+function imageExtension(contentType: string) {
+  if (contentType === "image/png") return ".png"
+  if (contentType === "image/jpeg") return ".jpg"
+  if (contentType === "image/webp") return ".webp"
+  return ""
+}
+
+function videoExtension(contentType: string) {
+  if (contentType === "video/mp4") return ".mp4"
+  if (contentType === "video/webm") return ".webm"
+  return ""
+}
+
+async function readFileHeader(filePath: string) {
+  const handle = await open(filePath, "r")
+  try {
+    const header = Buffer.alloc(12)
+    const { bytesRead } = await handle.read(header, 0, header.length, 0)
+    return header.subarray(0, bytesRead)
+  } finally {
+    await handle.close()
+  }
 }
 
 export class SelectedMessageFileStore {
@@ -47,6 +73,112 @@ export class SelectedMessageFileStore {
       sizeBytes: fileStat.size,
     })
     return { token: file.token, name: file.name, sizeBytes: file.sizeBytes }
+  }
+
+  async importFile(input: unknown): Promise<ImportedMessageFile> {
+    if (!isRecord(input) || typeof input.targetId !== "string" || !input.targetId) {
+      throw new AuthFailure("invalid_target", "账号不存在")
+    }
+    const targetId = input.targetId
+    const filePath = typeof input.path === "string" ? input.path : ""
+    const bytes = input.bytes instanceof ArrayBuffer ? new Uint8Array(input.bytes) : undefined
+    if (filePath && bytes) throw new AuthFailure("invalid_file", "文件来源不正确")
+    const declaredSize = input.sizeBytes
+    let sizeBytes: number
+    if (filePath) {
+      if (!path.isAbsolute(filePath)) throw new AuthFailure("invalid_file", "文件路径不正确")
+      const fileStat = await stat(filePath)
+      if (!fileStat.isFile() || fileStat.size !== declaredSize) {
+        throw new AuthFailure("invalid_file", "所选文件已发生变化，请重新选择")
+      }
+      sizeBytes = fileStat.size
+    } else {
+      if (!bytes || bytes.byteLength > 20 * 1024 * 1024 || bytes.byteLength !== declaredSize) {
+        throw new AuthFailure("invalid_file", "剪贴板文件过大或无法读取，请从文件管理器拖入")
+      }
+      sizeBytes = bytes.byteLength
+    }
+    if (sizeBytes <= 0 || sizeBytes > 500 * 1024 * 1024) {
+      throw new AuthFailure("invalid_file", "文件不能为空且不能超过 500MiB")
+    }
+    const contentType = typeof input.contentType === "string" ? input.contentType : ""
+    const rawName = typeof input.name === "string" && input.name ? input.name : filePath
+    const name = path.basename(rawName.replaceAll("\\", "/")).slice(0, 255)
+    const extension = path.extname(name).toLowerCase()
+    const imageType = mediaContentType("image", extension || imageExtension(contentType))
+    const videoType = mediaContentType("video", extension || videoExtension(contentType))
+    let category: "image" | "video" | undefined
+    let mediaType = ""
+    if (imageType) {
+      const header = bytes ?? (await readFileHeader(filePath))
+      if (detectImageContentType(header) !== imageType) {
+        throw new AuthFailure("invalid_media_type", "图片内容格式不正确")
+      }
+      category = "image"
+      mediaType = imageType
+    } else if (videoType) {
+      if (sizeBytes > 100 * 1024 * 1024) {
+        throw new AuthFailure("video_too_large", "视频大于 100MiB，无法上传")
+      }
+      category = "video"
+      mediaType = videoType
+    }
+    this.deleteExpired()
+    let storedPath = filePath
+    if (bytes) {
+      const directory = path.join(this.userDataPath, "pending-uploads")
+      await mkdir(directory, { recursive: true })
+      storedPath = path.join(
+        directory,
+        `${randomUUID()}${extension || imageExtension(mediaType) || ".bin"}`,
+      )
+      try {
+        await writeFile(storedPath, bytes, { flag: "wx" })
+      } catch (error) {
+        await rm(storedPath, { force: true })
+        throw error
+      }
+    }
+    try {
+      const file = this.remember({
+        targetId,
+        path: storedPath,
+        name:
+          name ||
+          (category === "image"
+            ? `image${imageExtension(mediaType)}`
+            : category === "video"
+              ? `video${videoExtension(mediaType)}`
+              : "file"),
+        sizeBytes,
+        ...(category ? { category, contentType: mediaType } : {}),
+        staged: Boolean(bytes),
+      })
+      return category
+        ? {
+            token: file.token,
+            name: file.name,
+            sizeBytes,
+            category,
+            contentType: mediaType,
+            resourceUrl: `jiying-media://selection/${encodeURIComponent(targetId)}/${encodeURIComponent(file.token)}`,
+          }
+        : { token: file.token, name: file.name, sizeBytes }
+    } catch (error) {
+      if (bytes) await rm(storedPath, { force: true })
+      throw error
+    }
+  }
+
+  consume(token: string, targetId: string) {
+    this.requireSelection(token, targetId, "invalid_file_selection")
+    this.files.delete(token)
+  }
+
+  async release(token: string, targetId: string) {
+    const file = this.requireSelection(token, targetId, "invalid_file_selection")
+    this.files.delete(token)
+    if (file.staged) await rm(file.path, { force: true })
   }
 
   async selectAppAvatar(targetId: string, parent: BrowserWindow) {
@@ -214,7 +346,10 @@ export class SelectedMessageFileStore {
 
   private deleteExpired() {
     for (const [token, file] of this.files) {
-      if (this.expired(file)) this.files.delete(token)
+      if (this.expired(file)) {
+        this.files.delete(token)
+        if (file.staged) void rm(file.path, { force: true }).catch(() => undefined)
+      }
     }
   }
 

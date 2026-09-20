@@ -40,6 +40,17 @@ export function registerAccountDataIpc({
     if (!mainWindow) throw new AuthFailure("window_unavailable", "主窗口不可用")
     return selectedMessageFiles.selectFile(typeof input === "string" ? input : "", mainWindow)
   })
+  handle(ACCOUNT_DATA_CHANNELS.importMessageFile, async (input) => {
+    const value = input as { targetId?: string } | undefined
+    await auth.getContacts(value?.targetId ?? "")
+    return selectedMessageFiles.importFile(input)
+  })
+  handle(ACCOUNT_DATA_CHANNELS.releaseMessageFile, async (input) => {
+    const value = input as { targetId?: string; token?: string } | undefined
+    await auth.getContacts(value?.targetId ?? "")
+    await selectedMessageFiles.release(value?.token ?? "", value?.targetId ?? "")
+    return null
+  })
   handle(ACCOUNT_DATA_CHANNELS.selectMessageMedia, async (input) => {
     const mainWindow = getMainWindow()
     if (!mainWindow) throw new AuthFailure("window_unavailable", "主窗口不可用")
@@ -52,13 +63,17 @@ export function registerAccountDataIpc({
     const value = input as SendFileMessageInput | undefined
     if (!value) throw new AuthFailure("invalid_file_selection", "所选文件已失效，请重新选择")
     const selected = selectedMessageFiles.getFile(value.selectionToken, value.targetId)
-    selectedMessageFiles.delete(value.selectionToken)
     await selectedMessageFiles.assertUnchanged(
       selected,
       "file_changed",
       "所选文件已发生变化，请重新选择",
     )
-    return auth.sendFileMessage(value, selected)
+    const messages = await auth.sendFileMessage(value, {
+      ...selected,
+      temporary: selected.staged === true,
+    })
+    selectedMessageFiles.consume(value.selectionToken, value.targetId)
+    return messages
   })
   handle(ACCOUNT_DATA_CHANNELS.sendImageMessage, async (input) => {
     const value = input as SendImageMessageInput | undefined
@@ -72,7 +87,7 @@ export function registerAccountDataIpc({
     const staged = await selectedMessageFiles.stageImage(value)
     try {
       const messages = await auth.sendImageMessage(value, staged)
-      selectedMessageFiles.delete(value.selectionToken)
+      await selectedMessageFiles.release(value.selectionToken, value.targetId)
       return messages
     } catch (error) {
       await staged.remove()
@@ -101,8 +116,9 @@ export function registerAccountDataIpc({
       name: selected.name,
       sizeBytes: selected.sizeBytes,
       contentType: selected.contentType,
+      temporary: selected.staged === true,
     })
-    selectedMessageFiles.delete(value.selectionToken)
+    selectedMessageFiles.consume(value.selectionToken, value.targetId)
     return messages
   })
   handle(ACCOUNT_DATA_CHANNELS.sendTextMessage, (input) =>

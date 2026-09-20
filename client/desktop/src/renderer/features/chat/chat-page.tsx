@@ -80,6 +80,8 @@ export function ChatPage({
 
   const {
     selectingFile,
+    importingFile,
+    importFile,
     sendingFile,
     fileDialogOpen,
     pendingFile,
@@ -214,6 +216,14 @@ export function ChatPage({
                   sendingFile={sendingFile}
                   selectingMedia={selectingMedia}
                   sendingMedia={sendingMedia}
+                  importingFile={importingFile}
+                  onFiles={(files) => {
+                    if (files.length !== 1) {
+                      showToast({ status: "error", title: "请每次发送一个文件" })
+                      return
+                    }
+                    void importFile(files[0])
+                  }}
                   onDraftChange={setDraft}
                   onKeyDown={handleComposerKeyDown}
                   onMarkdownChange={(pressed) => {

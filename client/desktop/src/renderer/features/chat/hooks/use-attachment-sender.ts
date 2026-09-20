@@ -21,6 +21,7 @@ export function useAttachmentSender({
 }) {
   const { showToast } = useAnimatedToast()
   const [selectingFile, setSelectingFile] = useState(false)
+  const [importingFile, setImportingFile] = useState(false)
   const [sendingFile, setSendingFile] = useState(false)
   const [fileDialogOpen, setFileDialogOpen] = useState(false)
   const [pendingFile, setPendingFile] = useState<{
@@ -49,7 +50,7 @@ export function useAttachmentSender({
   }, [])
 
   const selectFile = useCallback(async () => {
-    if (!window.desktop || !selected || selectingFile || sendingFile) return
+    if (!window.desktop || !selected || selectingFile || sendingFile || importingFile) return
     setSelectingFile(true)
     try {
       const result = await window.desktop.accountData.selectMessageFile(targetId)
@@ -73,7 +74,7 @@ export function useAttachmentSender({
     } finally {
       setSelectingFile(false)
     }
-  }, [selected, selectingFile, sendingFile, showToast, targetId])
+  }, [selected, selectingFile, sendingFile, importingFile, showToast, targetId])
 
   const sendPendingFile = useCallback(async () => {
     if (!window.desktop || !pendingFile || sendingFile) return
@@ -105,7 +106,7 @@ export function useAttachmentSender({
 
   const selectMedia = useCallback(
     async (category: "image" | "video") => {
-      if (!window.desktop || !selected || selectingMedia || sendingMedia) return
+      if (!window.desktop || !selected || selectingMedia || sendingMedia || importingFile) return
       setSelectingMedia(category)
       try {
         const result = await window.desktop.accountData.selectMessageMedia({ targetId, category })
@@ -145,7 +146,69 @@ export function useAttachmentSender({
         setSelectingMedia(null)
       }
     },
-    [clearPendingImage, selected, selectingMedia, sendingMedia, showToast, targetId],
+    [clearPendingImage, selected, selectingMedia, sendingMedia, importingFile, showToast, targetId],
+  )
+
+  const importFile = useCallback(
+    async (file: File) => {
+      if (
+        !window.desktop ||
+        !selected ||
+        importingFile ||
+        selectingFile ||
+        selectingMedia ||
+        sendingFile ||
+        sendingMedia
+      )
+        return
+      setImportingFile(true)
+      let token: string | undefined
+      try {
+        const result = await window.desktop.accountData.importMessageFile({ targetId, file })
+        if (!result.ok) {
+          showToast({ status: "error", title: "读取文件失败", description: result.error.message })
+          return
+        }
+        const imported = result.data
+        token = imported.token
+        const conversationId = selected.id
+        const conversationName = selected.name
+        if (!("category" in imported)) {
+          setPendingFile({ file: imported, conversationId, conversationName })
+          setFileDialogOpen(true)
+        } else if (imported.category === "video") {
+          setMediaCaption("")
+          setPendingVideo({ selected: imported, conversationId, conversationName })
+        } else {
+          const prepared = await prepareImageMessage(imported)
+          clearPendingImage()
+          setPendingImage({ selected: imported, prepared, conversationId, conversationName })
+        }
+        token = undefined
+      } catch (error) {
+        if (token) {
+          await window.desktop.accountData.releaseMessageFile({ targetId, token })
+        }
+        showToast({
+          status: "error",
+          title: "读取文件失败",
+          description: error instanceof Error ? error.message : undefined,
+        })
+      } finally {
+        setImportingFile(false)
+      }
+    },
+    [
+      clearPendingImage,
+      importingFile,
+      selected,
+      selectingFile,
+      selectingMedia,
+      sendingFile,
+      sendingMedia,
+      showToast,
+      targetId,
+    ],
   )
 
   const sendPendingImage = useCallback(async () => {
@@ -234,8 +297,14 @@ export function useAttachmentSender({
     }
   }, [pendingImage?.prepared.resourceUrl])
 
+  function releaseSelection(token: string) {
+    if (!window.desktop) return
+    void window.desktop.accountData.releaseMessageFile({ targetId, token }).catch(() => undefined)
+  }
+
   function closeFileDialog() {
     if (sendingFile) return
+    if (pendingFile) releaseSelection(pendingFile.file.token)
     setFileDialogOpen(false)
     setPendingFile(null)
     focusComposer()
@@ -243,12 +312,14 @@ export function useAttachmentSender({
 
   function closeImageDialog() {
     if (sendingMedia) return
+    if (pendingImage) releaseSelection(pendingImage.selected.token)
     clearPendingImage()
     focusComposer()
   }
 
   function closeVideoDialog() {
     if (sendingMedia) return
+    if (pendingVideo) releaseSelection(pendingVideo.selected.token)
     setPendingVideo(null)
     setMediaCaption("")
     focusComposer()
@@ -256,6 +327,8 @@ export function useAttachmentSender({
 
   return {
     selectingFile,
+    importingFile,
+    importFile,
     sendingFile,
     fileDialogOpen,
     pendingFile,

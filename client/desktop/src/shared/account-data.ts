@@ -9,6 +9,8 @@ export const ACCOUNT_DATA_CHANNELS = {
   listMessageReactionUsers: "desktop-next:v1:conversation-message-reaction-users-list",
   sendTextMessage: "desktop-next:v1:conversation-message-text-send",
   selectMessageFile: "desktop-next:v1:conversation-message-file-select",
+  importMessageFile: "desktop-next:v1:conversation-message-file-import",
+  releaseMessageFile: "desktop-next:v1:conversation-message-file-release",
   selectMessageMedia: "desktop-next:v1:conversation-message-media-select",
   sendFileMessage: "desktop-next:v1:conversation-message-file-send",
   sendImageMessage: "desktop-next:v1:conversation-message-image-send",
@@ -289,6 +291,8 @@ export type SendFileMessageInput = {
   selectionToken: string
 }
 
+export type ImportedMessageFile = SelectedMessageFile | SelectedMessageMedia
+
 export type SelectedMessageMedia = SelectedMessageFile & {
   category: "image" | "video"
   contentType: string
@@ -349,6 +353,11 @@ export interface AccountDataBridge {
   }): Promise<AuthResult<DesktopMessagePage>>
   sendTextMessage(input: SendTextMessageInput): Promise<AuthResult<DesktopMessage[]>>
   selectMessageFile(targetId: string): Promise<AuthResult<SelectedMessageFile | null>>
+  importMessageFile(input: {
+    targetId: string
+    file: File
+  }): Promise<AuthResult<ImportedMessageFile>>
+  releaseMessageFile(input: { targetId: string; token: string }): Promise<AuthResult<null>>
   selectMessageMedia(input: {
     targetId: string
     category: "image" | "video"

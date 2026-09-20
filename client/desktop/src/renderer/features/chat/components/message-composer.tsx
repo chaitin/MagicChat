@@ -1,4 +1,11 @@
-import { useState, type KeyboardEventHandler, type RefObject } from "react"
+import {
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type DragEvent,
+  type KeyboardEventHandler,
+  type RefObject,
+} from "react"
 import {
   ArrowUp02Icon,
   Attachment01Icon,
@@ -25,6 +32,8 @@ export function MessageComposer({
   sendingFile,
   selectingMedia,
   sendingMedia,
+  importingFile,
+  onFiles,
   onDraftChange,
   onKeyDown,
   onMarkdownChange,
@@ -41,6 +50,8 @@ export function MessageComposer({
   sendingFile: boolean
   selectingMedia: "image" | "video" | null
   sendingMedia: "image" | "video" | null
+  importingFile: boolean
+  onFiles: (files: File[]) => void
   onDraftChange: (value: string) => void
   onKeyDown: KeyboardEventHandler<HTMLTextAreaElement>
   onMarkdownChange: (pressed: boolean) => void
@@ -50,9 +61,58 @@ export function MessageComposer({
   onSelectMedia: (category: "image" | "video") => void
   onSend: () => void
 }) {
+  const [dragging, setDragging] = useState(false)
+  const dragDepth = useRef(0)
+
+  function enterFile(event: DragEvent<HTMLElement>) {
+    if (!event.dataTransfer.types.includes("Files")) return
+    dragDepth.current += 1
+    setDragging(true)
+  }
+
+  function leaveFile(event: DragEvent<HTMLElement>) {
+    if (!event.dataTransfer.types.includes("Files")) return
+    dragDepth.current = Math.max(0, dragDepth.current - 1)
+    if (dragDepth.current === 0) setDragging(false)
+  }
+
+  function dropFile(event: DragEvent<HTMLElement>) {
+    const files = Array.from(event.dataTransfer.files)
+    if (!files.length) return
+    event.preventDefault()
+    dragDepth.current = 0
+    setDragging(false)
+    if (!importingFile) onFiles(files)
+  }
+
+  function pasteFile(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const files = Array.from(event.clipboardData.files)
+    if (!files.length) {
+      for (const item of event.clipboardData.items) {
+        if (item.kind === "file") {
+          const file = item.getAsFile()
+          if (file) files.push(file)
+        }
+      }
+    }
+    if (!files.length) return
+    event.preventDefault()
+    if (!importingFile) onFiles(files)
+  }
+
   return (
     <footer className="shrink-0 bg-card px-4 pt-1 pb-4">
-      <InputGroup className="bg-background">
+      <InputGroup
+        className="bg-background"
+        onDragEnter={enterFile}
+        onDragLeave={leaveFile}
+        onDragOver={(event) => {
+          if (!event.dataTransfer.types.includes("Files")) return
+          event.preventDefault()
+          event.dataTransfer.dropEffect = "copy"
+        }}
+        onDrop={dropFile}
+      >
         <InputGroupTextarea
           ref={composerRef}
           value={draft}
@@ -60,6 +120,7 @@ export function MessageComposer({
           className="max-h-48 min-h-24"
           onChange={(event) => onDraftChange(event.target.value)}
           onKeyDown={onKeyDown}
+          onPaste={pasteFile}
         />
         <InputGroupAddon align="block-end" className="justify-between gap-2">
           <div className="flex items-center gap-1">
@@ -81,21 +142,21 @@ export function MessageComposer({
             <ComposerButton
               label={selectingFile ? "正在选择文件" : "上传文件"}
               icon={selectingFile ? Loading03Icon : Attachment01Icon}
-              disabled={selectingFile || sendingFile}
+              disabled={selectingFile || sendingFile || importingFile}
               loading={selectingFile}
               onClick={onSelectFile}
             />
             <ComposerButton
               label={selectingMedia === "image" ? "正在读取图片" : "插入图片"}
               icon={selectingMedia === "image" ? Loading03Icon : Image01Icon}
-              disabled={Boolean(selectingMedia || sendingMedia)}
+              disabled={Boolean(selectingMedia || sendingMedia || importingFile)}
               loading={selectingMedia === "image"}
               onClick={() => onSelectMedia("image")}
             />
             <ComposerButton
               label={selectingMedia === "video" ? "正在选择视频" : "插入视频"}
               icon={selectingMedia === "video" ? Loading03Icon : Video01Icon}
-              disabled={Boolean(selectingMedia || sendingMedia)}
+              disabled={Boolean(selectingMedia || sendingMedia || importingFile)}
               loading={selectingMedia === "video"}
               onClick={() => onSelectMedia("video")}
             />
@@ -116,6 +177,14 @@ export function MessageComposer({
             </BeButton>
           </div>
         </InputGroupAddon>
+        {dragging && (
+          <div
+            className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-md border-2 border-dashed border-xgui-brand bg-card/90 text-sm text-xgui-brand"
+            aria-hidden
+          >
+            松开发送文件
+          </div>
+        )}
       </InputGroup>
     </footer>
   )

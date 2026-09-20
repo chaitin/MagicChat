@@ -48,7 +48,7 @@ export class OutgoingMessageService {
 
   sendFileMessage(
     conversationId: string,
-    file: { path: string; name: string; sizeBytes: number },
+    file: { path: string; name: string; sizeBytes: number; temporary?: boolean },
   ): DesktopMessage[] {
     this.assertConversationId(conversationId)
     if (
@@ -68,11 +68,12 @@ export class OutgoingMessageService {
       filePath: file.path,
       name: file.name,
       sizeBytes: file.sizeBytes,
+      temporary: file.temporary,
       senderId: this.currentUserId,
       senderName: this.currentUserName,
     })
     this.onMessagesChanged(conversationId)
-    this.deliverFileMessage(conversationId, clientMessageId, file)
+    this.deliverFileMessage(conversationId, clientMessageId, file, file.temporary === true)
     return this.database.listMessages(conversationId, this.currentUserId)
   }
 
@@ -129,6 +130,7 @@ export class OutgoingMessageService {
       name: string
       sizeBytes: number
       contentType: "video/mp4" | "video/webm"
+      temporary?: boolean
       caption: string
     },
   ): DesktopMessage[] {
@@ -156,7 +158,14 @@ export class OutgoingMessageService {
       senderName: this.currentUserName,
     })
     this.onMessagesChanged(conversationId)
-    this.deliverMediaMessage("video", conversationId, clientMessageId, video, caption, false)
+    this.deliverMediaMessage(
+      "video",
+      conversationId,
+      clientMessageId,
+      video,
+      caption,
+      video.temporary === true,
+    )
     return this.database.listMessages(conversationId, this.currentUserId)
   }
 
@@ -184,11 +193,16 @@ export class OutgoingMessageService {
     }
     this.onMessagesChanged(conversationId)
     if (message.bodyType === "file") {
-      this.deliverFileMessage(conversationId, clientMessageId, {
-        path: message.filePath,
-        name: message.name,
-        sizeBytes: message.sizeBytes,
-      })
+      this.deliverFileMessage(
+        conversationId,
+        clientMessageId,
+        {
+          path: message.filePath,
+          name: message.name,
+          sizeBytes: message.sizeBytes,
+        },
+        message.temporary,
+      )
     } else if (message.bodyType === "image" || message.bodyType === "video") {
       this.deliverMediaMessage(
         message.bodyType,
@@ -201,7 +215,7 @@ export class OutgoingMessageService {
           contentType: message.contentType,
         },
         message.caption,
-        message.bodyType === "image",
+        message.temporary,
       )
     } else if (
       (message.bodyType === "text" || message.bodyType === "markdown") &&
@@ -285,7 +299,10 @@ export class OutgoingMessageService {
         this.database.upsertMessages([parseMessage(data.message, conversationId)])
         this.onMessagesChanged(conversationId)
         if (temporary) {
-          const cleanup = setTimeout(() => void rm(file.path, { force: true }), 60_000)
+          const cleanup = setTimeout(
+            () => void rm(file.path, { force: true }).catch(() => undefined),
+            60_000,
+          )
           cleanup.unref()
         }
       })
@@ -313,6 +330,7 @@ export class OutgoingMessageService {
     conversationId: string,
     clientMessageId: string,
     file: { path: string; name: string; sizeBytes: number },
+    temporary = false,
   ) {
     if (this.closed || this.sending.has(clientMessageId)) return
     this.sending.add(clientMessageId)
@@ -329,6 +347,13 @@ export class OutgoingMessageService {
         }
         this.database.upsertMessages([parseMessage(data.message, conversationId)])
         this.onMessagesChanged(conversationId)
+        if (temporary) {
+          const cleanup = setTimeout(
+            () => void rm(file.path, { force: true }).catch(() => undefined),
+            60_000,
+          )
+          cleanup.unref()
+        }
       })
       .catch(() => {
         this.sending.delete(clientMessageId)

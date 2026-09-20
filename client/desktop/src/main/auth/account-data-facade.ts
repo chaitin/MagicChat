@@ -48,7 +48,7 @@ export class AccountDataFacade {
 
   async sendFileMessage(
     input: { targetId: string; conversationId: string },
-    file: { path: string; name: string; sizeBytes: number },
+    file: { path: string; name: string; sizeBytes: number; temporary?: boolean },
   ) {
     await this.ready(input?.targetId)
     return this.requireRuntime().sendFileMessage(input.conversationId, file)
@@ -74,6 +74,7 @@ export class AccountDataFacade {
       name: string
       sizeBytes: number
       contentType: "video/mp4" | "video/webm"
+      temporary?: boolean
     },
   ) {
     await this.ready(input?.targetId)

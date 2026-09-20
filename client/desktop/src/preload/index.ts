@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron"
+import { contextBridge, ipcRenderer, webUtils } from "electron"
 import { ACCOUNT_DATA_CHANNELS } from "../shared/account-data"
 import { DESKTOP_CHANNELS, type DesktopBridge } from "../shared/desktop"
 import { AUTH_CHANNELS } from "../shared/auth"
@@ -61,6 +61,24 @@ const bridge: DesktopBridge = {
     sendTextMessage: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.sendTextMessage, input),
     selectMessageFile: (targetId) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.selectMessageFile, targetId),
+    importMessageFile: async ({ targetId, file }) => {
+      let filePath = ""
+      try {
+        filePath = webUtils.getPathForFile(file)
+      } catch {
+        // Clipboard images can be generated in memory without a backing file.
+      }
+      return ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.importMessageFile, {
+        targetId,
+        path: filePath,
+        name: file.name,
+        contentType: file.type,
+        sizeBytes: file.size,
+        bytes: !filePath && file.size <= 20 * 1024 * 1024 ? await file.arrayBuffer() : undefined,
+      })
+    },
+    releaseMessageFile: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.releaseMessageFile, input),
     selectMessageMedia: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.selectMessageMedia, input),
     sendFileMessage: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.sendFileMessage, input),

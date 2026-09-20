@@ -66,6 +66,7 @@ export class OutgoingMessageRepository {
     filePath: string
     name: string
     sizeBytes: number
+    temporary?: boolean
     senderId: string
     senderName: string
   }) {
@@ -96,6 +97,7 @@ export class OutgoingMessageRepository {
       },
       reactions: [],
       local_file_path: input.filePath,
+      local_file_temporary: input.temporary === true,
     }
     this.upsertMessages([
       {
@@ -151,6 +153,7 @@ export class OutgoingMessageRepository {
       bodyType: "image",
       content: input.caption || "[图片]",
       summary: input.caption || "[图片]",
+      temporary: true,
       payloadBody: {
         type: "image",
         file_id: `outgoing:${input.clientMessageId}`,
@@ -169,6 +172,7 @@ export class OutgoingMessageRepository {
     sizeBytes: number
     contentType: string
     caption: string
+    temporary?: boolean
     senderId: string
     senderName: string
   }) {
@@ -258,6 +262,7 @@ export class OutgoingMessageRepository {
               ? payload.local_content_type
               : "",
         caption: typeof body?.caption === "string" ? body.caption : "",
+        temporary: payload?.local_file_temporary === true || row.body_type === "image",
         status: String(row.delivery_status),
       }
     }
@@ -331,6 +336,7 @@ export class OutgoingMessageRepository {
     payloadBody: Record<string, unknown>
     content: string
     summary: string
+    temporary?: boolean
   }) {
     const seqRow = this.database
       .prepare("SELECT COALESCE(MAX(seq), 0) AS seq FROM messages WHERE conversation_id = ?")
@@ -351,6 +357,7 @@ export class OutgoingMessageRepository {
       local_file_name: input.name,
       local_file_size: input.sizeBytes,
       local_content_type: input.contentType,
+      local_file_temporary: input.temporary === true,
     }
     this.upsertMessages([
       {

@@ -90,7 +90,10 @@ export class AccountRuntime {
     return this.conversationManager!.sendTextMessage(conversationId, content, bodyType)
   }
 
-  sendFileMessage(conversationId: string, file: { path: string; name: string; sizeBytes: number }) {
+  sendFileMessage(
+    conversationId: string,
+    file: { path: string; name: string; sizeBytes: number; temporary?: boolean },
+  ) {
     this.assertInitialized()
     return this.conversationManager!.sendFileMessage(conversationId, file)
   }
@@ -118,6 +121,7 @@ export class AccountRuntime {
       name: string
       sizeBytes: number
       contentType: "video/mp4" | "video/webm"
+      temporary?: boolean
       caption: string
     },
   ) {
