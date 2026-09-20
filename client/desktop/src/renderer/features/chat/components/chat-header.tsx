@@ -21,7 +21,7 @@ export function ChatHeader({
   onPendingFeature: (label: string) => void
 }) {
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-xgui-background-1 px-6">
+    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-xgui-background-1 px-4">
       <EntityAvatar
         targetId={targetId}
         type={conversation.avatarType}

@@ -72,6 +72,33 @@ const bridge: DesktopBridge = {
     listMessageReactionUsers: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listMessageReactionUsers, input),
     getContacts: (targetId) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getContacts, targetId),
+    refreshContacts: (targetId) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.refreshContacts, targetId),
+    searchContactUsers: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.searchContactUsers, input),
+    listFriendRequests: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listFriendRequests, input),
+    createFriendRequest: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.createFriendRequest, input),
+    acceptFriendRequest: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.acceptFriendRequest, input),
+    rejectFriendRequest: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.rejectFriendRequest, input),
+    cancelFriendRequest: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.cancelFriendRequest, input),
+    deleteFriend: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.deleteFriend, input),
+    openContactConversation: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.openContactConversation, input),
+    createClientApp: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.createClientApp, input),
+    getClientApp: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getClientApp, input),
+    updateClientApp: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.updateClientApp, input),
+    deleteClientApp: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.deleteClientApp, input),
+    regenerateClientAppSecret: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.regenerateClientAppSecret, input),
+    selectClientAppAvatar: (targetId) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.selectClientAppAvatar, targetId),
+    uploadClientAppAvatar: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.uploadClientAppAvatar, input),
     getAvatar: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getAvatar, input),
     invalidateAvatar: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.invalidateAvatar, input),
     onSyncStateChange: (callback) => {

@@ -3,6 +3,7 @@ import { FlashIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import { AppRail, SectionPlaceholder, type AppSection } from "./components/app-navigation"
+import { ContactsPage } from "../contacts/contacts-page"
 import { ChatHeader } from "./components/chat-header"
 import { ConversationSidebar } from "./components/conversation-sidebar"
 import { MessageComposer } from "./components/message-composer"
@@ -235,6 +236,19 @@ export function ChatPage({
             )}
           </section>
         </div>
+      ) : activeSection === "contacts" ? (
+        <ContactsPage
+          targetId={targetId}
+          userId={userId}
+          organizationName={
+            catalog.servers.find((server) => server.id === catalog.activeServerId)?.name ?? "通讯录"
+          }
+          resolvedTheme={resolvedTheme}
+          onOpenConversation={(conversationId) => {
+            setSelectedId(conversationId)
+            setActiveSection("chat")
+          }}
+        />
       ) : (
         <SectionPlaceholder section={activeSection} />
       )}

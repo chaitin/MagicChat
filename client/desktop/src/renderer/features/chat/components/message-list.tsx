@@ -61,7 +61,7 @@ export function MessageList({
       className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
       viewportClassName="overflow-x-hidden [&>div]:block! [&>div]:w-full! [&>div]:min-w-0!"
     >
-      <div className="min-h-full p-6">
+      <div className="min-h-full px-4 py-6">
         {loading ? (
           <div className="flex min-h-[inherit] items-center justify-center text-muted-foreground">
             <HugeiconsIcon

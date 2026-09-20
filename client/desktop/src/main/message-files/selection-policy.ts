@@ -30,6 +30,9 @@ export function detectImageContentType(bytes: Uint8Array) {
   ) {
     return "image/png" as const
   }
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg" as const
+  }
   if (bytes.length >= 12 && ascii(bytes, 0, "RIFF") && ascii(bytes, 8, "WEBP")) {
     return "image/webp" as const
   }

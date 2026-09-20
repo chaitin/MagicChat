@@ -1,11 +1,16 @@
 import type {
   AvatarRequest,
+  ContactTargetInput,
+  FriendRequestListInput,
   MessageReactionUsersInput,
+  OpenContactConversationInput,
   RetryMessageInput,
+  SaveClientAppInput,
   SendImageMessageInput,
   SendTextMessageInput,
   SendVideoMessageInput,
   SetMessageReactionInput,
+  UpdateClientAppInput,
 } from "../../shared/account-data"
 import type { MediaCacheRequest } from "../../shared/media"
 import type { AccountRuntime } from "../account/account-runtime"
@@ -126,6 +131,74 @@ export class AccountDataFacade {
   async getContacts(targetId: string) {
     await this.ready(targetId)
     return this.requireRuntime().getContacts()
+  }
+
+  async refreshContacts(targetId: string) {
+    await this.ready(targetId)
+    return this.requireRuntime().refreshContacts()
+  }
+
+  async searchContactUsers(input: { targetId: string; query: string }) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().searchContactUsers(input.query)
+  }
+
+  async listFriendRequests(input: FriendRequestListInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().listFriendRequests(input)
+  }
+
+  async mutateFriendRequest(
+    action: "create" | "accept" | "reject" | "cancel",
+    input: ContactTargetInput,
+  ) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().mutateFriendRequest(action, input.id)
+  }
+
+  async deleteFriend(input: ContactTargetInput) {
+    await this.ready(input?.targetId)
+    await this.requireRuntime().deleteFriend(input.id)
+    return null
+  }
+
+  async openContactConversation(input: OpenContactConversationInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().openContactConversation(input)
+  }
+
+  async createClientApp(input: SaveClientAppInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().createClientApp(input)
+  }
+
+  async getClientApp(input: ContactTargetInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().getClientApp(input.id)
+  }
+
+  async updateClientApp(input: UpdateClientAppInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().updateClientApp(input)
+  }
+
+  async deleteClientApp(input: ContactTargetInput) {
+    await this.ready(input?.targetId)
+    await this.requireRuntime().deleteClientApp(input.id)
+    return null
+  }
+
+  async regenerateClientAppSecret(input: ContactTargetInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().regenerateClientAppSecret(input.id)
+  }
+
+  async uploadClientAppAvatar(
+    input: ContactTargetInput,
+    file: { path: string; name: string; contentType: string },
+  ) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().uploadClientAppAvatar(input.id, file)
   }
 
   async getAvatar(request: AvatarRequest) {

@@ -57,6 +57,7 @@ export function initializeAccountSchema(database: DatabaseSync) {
       email TEXT NOT NULL,
       phone TEXT NOT NULL,
       online INTEGER NOT NULL,
+      last_online_at TEXT,
       updated_at TEXT NOT NULL,
       payload_json TEXT NOT NULL
     );
@@ -77,6 +78,7 @@ export function initializeAccountSchema(database: DatabaseSync) {
       avatar TEXT NOT NULL,
       description TEXT NOT NULL,
       online INTEGER NOT NULL,
+      creator_user_id TEXT,
       payload_json TEXT NOT NULL
     );
 
@@ -123,6 +125,8 @@ export function initializeAccountSchema(database: DatabaseSync) {
   ensureColumn(database, "messages", "sender_name", "TEXT NOT NULL DEFAULT ''")
   ensureColumn(database, "messages", "client_message_id", "TEXT NOT NULL DEFAULT ''")
   ensureColumn(database, "messages", "delivery_status", "TEXT NOT NULL DEFAULT ''")
+  ensureColumn(database, "contact_users", "last_online_at", "TEXT")
+  ensureColumn(database, "contact_apps", "creator_user_id", "TEXT")
   database.exec(`
     CREATE UNIQUE INDEX IF NOT EXISTS messages_client_message_id
       ON messages(conversation_id, client_message_id)

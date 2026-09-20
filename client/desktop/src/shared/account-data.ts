@@ -15,6 +15,22 @@ export const ACCOUNT_DATA_CHANNELS = {
   sendVideoMessage: "desktop-next:v1:conversation-message-video-send",
   retryMessage: "desktop-next:v1:conversation-message-retry",
   getContacts: "desktop-next:v1:contacts-get",
+  refreshContacts: "desktop-next:v1:contacts-refresh",
+  searchContactUsers: "desktop-next:v1:contacts-users-search",
+  listFriendRequests: "desktop-next:v1:contacts-friend-requests-list",
+  createFriendRequest: "desktop-next:v1:contacts-friend-request-create",
+  acceptFriendRequest: "desktop-next:v1:contacts-friend-request-accept",
+  rejectFriendRequest: "desktop-next:v1:contacts-friend-request-reject",
+  cancelFriendRequest: "desktop-next:v1:contacts-friend-request-cancel",
+  deleteFriend: "desktop-next:v1:contacts-friend-delete",
+  openContactConversation: "desktop-next:v1:contacts-conversation-open",
+  createClientApp: "desktop-next:v1:contacts-app-create",
+  getClientApp: "desktop-next:v1:contacts-app-get",
+  updateClientApp: "desktop-next:v1:contacts-app-update",
+  deleteClientApp: "desktop-next:v1:contacts-app-delete",
+  regenerateClientAppSecret: "desktop-next:v1:contacts-app-secret-regenerate",
+  selectClientAppAvatar: "desktop-next:v1:contacts-app-avatar-select",
+  uploadClientAppAvatar: "desktop-next:v1:contacts-app-avatar-upload",
   getAvatar: "desktop-next:v1:avatar-get",
   invalidateAvatar: "desktop-next:v1:avatar-invalidate",
   syncStateChanged: "desktop-next:v1:account-data-sync-state-changed",
@@ -158,6 +174,7 @@ export type DesktopContactUser = {
   email: string
   phone: string
   online: boolean
+  lastOnlineAt?: string | null
 }
 
 export type DesktopContactGroup = {
@@ -177,6 +194,7 @@ export type DesktopContactApp = {
   avatarId: string
   description: string
   online: boolean
+  creatorUserId?: string | null
 }
 
 export type DesktopContactDirectory = {
@@ -184,6 +202,72 @@ export type DesktopContactDirectory = {
   users: DesktopContactUser[]
   groups: DesktopContactGroup[]
   apps: DesktopContactApp[]
+}
+
+export type DesktopFriendRequest = {
+  id: string
+  requesterUserId: string
+  addresseeUserId: string
+  status: "pending" | "accepted" | "rejected" | "canceled"
+  createdAt: string
+  updatedAt: string
+  handledAt: string | null
+}
+
+export type ClientAppVisibility = "creator" | "public" | "restricted"
+
+export type DesktopClientApp = {
+  id: string
+  name: string
+  description: string
+  avatar: string
+  visibility: ClientAppVisibility
+  userIds: string[]
+  enabled: boolean
+  connectionStatus: "disabled" | "offline" | "online"
+  createdAt: string
+  updatedAt: string
+}
+
+export type DesktopClientAppCredentials = {
+  app: DesktopClientApp
+  connectionSecret: string
+}
+
+export type ContactTargetInput = {
+  targetId: string
+  id: string
+}
+
+export type FriendRequestListInput = {
+  targetId: string
+  direction: "incoming" | "outgoing"
+}
+
+export type OpenContactConversationInput = ContactTargetInput & {
+  type: "user" | "app" | "group"
+  joined?: boolean
+}
+
+export type SaveClientAppInput = {
+  targetId: string
+  name: string
+  description: string
+  visibility: ClientAppVisibility
+  userIds: string[]
+}
+
+export type UpdateClientAppInput = SaveClientAppInput & { appId: string }
+
+export type SelectedClientAppAvatar = SelectedMessageFile & {
+  contentType: "image/jpeg" | "image/png" | "image/webp"
+  resourceUrl: string
+}
+
+export type UploadClientAppAvatarInput = {
+  targetId: string
+  appId: string
+  selectionToken: string
 }
 
 export type SendTextMessageInput = {
@@ -278,6 +362,29 @@ export interface AccountDataBridge {
     input: MessageReactionUsersInput,
   ): Promise<AuthResult<DesktopMessageReactionUser[]>>
   getContacts(targetId: string): Promise<AuthResult<DesktopContactDirectory>>
+  refreshContacts(targetId: string): Promise<AuthResult<DesktopContactDirectory>>
+  searchContactUsers(input: {
+    targetId: string
+    query: string
+  }): Promise<AuthResult<DesktopContactUser[]>>
+  listFriendRequests(input: FriendRequestListInput): Promise<AuthResult<DesktopFriendRequest[]>>
+  createFriendRequest(input: ContactTargetInput): Promise<AuthResult<DesktopFriendRequest>>
+  acceptFriendRequest(input: ContactTargetInput): Promise<AuthResult<DesktopFriendRequest>>
+  rejectFriendRequest(input: ContactTargetInput): Promise<AuthResult<DesktopFriendRequest>>
+  cancelFriendRequest(input: ContactTargetInput): Promise<AuthResult<DesktopFriendRequest>>
+  deleteFriend(input: ContactTargetInput): Promise<AuthResult<null>>
+  openContactConversation(
+    input: OpenContactConversationInput,
+  ): Promise<AuthResult<DesktopConversation>>
+  createClientApp(input: SaveClientAppInput): Promise<AuthResult<DesktopClientAppCredentials>>
+  getClientApp(input: ContactTargetInput): Promise<AuthResult<DesktopClientAppCredentials>>
+  updateClientApp(input: UpdateClientAppInput): Promise<AuthResult<DesktopClientApp>>
+  deleteClientApp(input: ContactTargetInput): Promise<AuthResult<null>>
+  regenerateClientAppSecret(
+    input: ContactTargetInput,
+  ): Promise<AuthResult<DesktopClientAppCredentials>>
+  selectClientAppAvatar(targetId: string): Promise<AuthResult<SelectedClientAppAvatar | null>>
+  uploadClientAppAvatar(input: UploadClientAppAvatarInput): Promise<AuthResult<DesktopClientApp>>
   getAvatar(input: AvatarRequest): Promise<AuthResult<AvatarResult>>
   invalidateAvatar(input: Omit<AvatarRequest, "theme">): Promise<AuthResult<null>>
   onSyncStateChange(callback: (event: AccountDataSyncEvent) => void): () => void

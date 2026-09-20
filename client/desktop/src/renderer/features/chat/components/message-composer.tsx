@@ -51,7 +51,7 @@ export function MessageComposer({
   onSend: () => void
 }) {
   return (
-    <footer className="shrink-0 bg-card p-4">
+    <footer className="shrink-0 bg-card px-4 pt-1 pb-4">
       <InputGroup className="bg-background">
         <InputGroupTextarea
           ref={composerRef}

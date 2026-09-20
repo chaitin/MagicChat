@@ -1,4 +1,8 @@
-import type { DesktopContactDirectory } from "../../shared/account-data"
+import type {
+  DesktopContactDirectory,
+  DesktopContactUser,
+  DesktopFriendRequest,
+} from "../../shared/account-data"
 import { AuthFailure, isRecord } from "../../shared/auth"
 import {
   AccountDatabase,
@@ -75,6 +79,66 @@ export class ContactManager {
     return this.database.getContacts()
   }
 
+  async refreshAndGetDirectory() {
+    await this.refresh()
+    return this.getDirectory()
+  }
+
+  async searchUsers(query: string): Promise<DesktopContactUser[]> {
+    const normalized = query.trim()
+    if (!normalized || normalized.length > 256) {
+      throw new AuthFailure("invalid_query", "请输入有效的搜索关键词")
+    }
+    const data = await this.client.post("/api/client/users/search", { query: normalized })
+    if (!isRecord(data) || !Array.isArray(data.user_ids)) {
+      throw new AuthFailure("invalid_response", "用户查找响应格式不正确")
+    }
+    const ids = data.user_ids.map((id) => requiredString(id, 128, "search.user_ids"))
+    return this.resolveUsers(Array.from(new Set(ids)))
+  }
+
+  async listFriendRequests(direction: "incoming" | "outgoing") {
+    const data = await this.client.get(
+      `/api/client/friend-requests?direction=${encodeURIComponent(direction)}`,
+    )
+    if (!isRecord(data) || !Array.isArray(data.requests)) {
+      throw new AuthFailure("invalid_response", "好友申请响应格式不正确")
+    }
+    return data.requests.map(parseFriendRequest)
+  }
+
+  createFriendRequest(userId: string) {
+    return this.mutateFriendRequest("/api/client/friend-requests", "POST", {
+      user_id: validId(userId),
+    })
+  }
+
+  acceptFriendRequest(requestId: string) {
+    return this.mutateFriendRequest(
+      `/api/client/friend-requests/${encodeURIComponent(validId(requestId))}/accept`,
+      "POST",
+    )
+  }
+
+  rejectFriendRequest(requestId: string) {
+    return this.mutateFriendRequest(
+      `/api/client/friend-requests/${encodeURIComponent(validId(requestId))}/reject`,
+      "POST",
+    )
+  }
+
+  cancelFriendRequest(requestId: string) {
+    return this.mutateFriendRequest(
+      `/api/client/friend-requests/${encodeURIComponent(validId(requestId))}`,
+      "DELETE",
+    )
+  }
+
+  async deleteFriend(userId: string) {
+    await this.client.delete(`/api/client/friends/${encodeURIComponent(validId(userId))}`)
+    await this.refresh()
+  }
+
   getAvatarDescriptor(
     type: "user" | "group" | "app",
     entityId: string,
@@ -105,6 +169,16 @@ export class ContactManager {
       if (descriptor) this.refreshedAvatars.set(`${type}:${entityId}`, descriptor)
       return descriptor
     })
+  }
+
+  private async mutateFriendRequest(
+    path: string,
+    method: "DELETE" | "POST",
+    body?: Record<string, unknown>,
+  ): Promise<DesktopFriendRequest> {
+    const data =
+      method === "POST" ? await this.client.post(path, body ?? {}) : await this.client.delete(path)
+    return parseFriendRequest(data)
   }
 
   private async fetchDirectory(): Promise<ContactSnapshot> {
@@ -156,6 +230,8 @@ function parseUser(value: unknown): StoredContactUser {
     email: optionalString(value.email, 254),
     phone: optionalString(value.phone, 64),
     online: value.online === true,
+    lastOnlineAt:
+      value.last_online_at === null ? null : optionalString(value.last_online_at, 64) || null,
     updatedAt: requiredString(value.updated_at, 64, "contact_user.updated_at"),
     payload: value,
   }
@@ -188,8 +264,45 @@ function parseApp(value: unknown): StoredContactApp {
     avatarId: id,
     description: optionalString(value.description, 4_096),
     online: value.online === true,
+    creatorUserId:
+      value.creator_user_id === null ? null : optionalString(value.creator_user_id, 128) || null,
     payload: value,
   }
+}
+
+function parseFriendRequest(value: unknown): DesktopFriendRequest {
+  if (!isRecord(value)) throw new AuthFailure("invalid_response", "好友申请响应格式不正确")
+  const status = value.status
+  if (
+    status !== "pending" &&
+    status !== "accepted" &&
+    status !== "rejected" &&
+    status !== "canceled"
+  ) {
+    throw new AuthFailure("invalid_response", "好友申请状态不正确")
+  }
+  return {
+    id: requiredString(value.id, 128, "friend_request.id"),
+    requesterUserId: requiredString(
+      value.requester_user_id,
+      128,
+      "friend_request.requester_user_id",
+    ),
+    addresseeUserId: requiredString(
+      value.addressee_user_id,
+      128,
+      "friend_request.addressee_user_id",
+    ),
+    status,
+    createdAt: requiredString(value.created_at, 64, "friend_request.created_at"),
+    updatedAt: requiredString(value.updated_at, 64, "friend_request.updated_at"),
+    handledAt: value.handled_at === null ? null : optionalString(value.handled_at, 64) || null,
+  }
+}
+
+function validId(value: string) {
+  if (!value || value.length > 128) throw new AuthFailure("invalid_id", "请求标识不正确")
+  return value
 }
 
 function avatarDescriptor(

@@ -25,8 +25,8 @@ export class ContactRepository {
   }) {
     const userStatement = this.database.prepare(`
       INSERT INTO contact_users (
-        id, name, nickname, avatar, email, phone, online, updated_at, payload_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, name, nickname, avatar, email, phone, online, last_online_at, updated_at, payload_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     const groupStatement = this.database.prepare(`
       INSERT INTO contact_groups (
@@ -35,8 +35,8 @@ export class ContactRepository {
     `)
     const appStatement = this.database.prepare(`
       INSERT INTO contact_apps (
-        id, name, avatar, description, online, payload_json
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        id, name, avatar, description, online, creator_user_id, payload_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `)
     const metadataStatement = this.database.prepare(`
       INSERT INTO metadata(key, value) VALUES ('contact_directory_mode', ?)
@@ -57,6 +57,7 @@ export class ContactRepository {
           user.email,
           user.phone,
           Number(user.online),
+          user.lastOnlineAt ?? null,
           user.updatedAt,
           JSON.stringify(user.payload),
         )
@@ -79,6 +80,7 @@ export class ContactRepository {
           app.avatar,
           app.description,
           Number(app.online),
+          app.creatorUserId ?? null,
           JSON.stringify(app.payload),
         )
       }
@@ -100,7 +102,7 @@ export class ContactRepository {
     const mode = modeRow?.value === "friends" ? "friends" : "organization"
     const users = this.database
       .prepare(
-        "SELECT id, name, nickname, avatar, email, phone, online FROM contact_users ORDER BY name",
+        "SELECT id, name, nickname, avatar, email, phone, online, last_online_at FROM contact_users ORDER BY name",
       )
       .all() as Array<Record<string, unknown>>
     const groups = this.database
@@ -109,7 +111,9 @@ export class ContactRepository {
       )
       .all() as Array<Record<string, unknown>>
     const apps = this.database
-      .prepare("SELECT id, name, avatar, description, online FROM contact_apps ORDER BY name")
+      .prepare(
+        "SELECT id, name, avatar, description, online, creator_user_id FROM contact_apps ORDER BY name",
+      )
       .all() as Array<Record<string, unknown>>
     return {
       mode,
@@ -122,6 +126,7 @@ export class ContactRepository {
         email: String(row.email),
         phone: String(row.phone),
         online: row.online === 1,
+        lastOnlineAt: typeof row.last_online_at === "string" ? row.last_online_at : null,
       })),
       groups: groups.map((row) => ({
         id: String(row.id),
@@ -139,6 +144,7 @@ export class ContactRepository {
         avatarId: String(row.id),
         description: String(row.description),
         online: row.online === 1,
+        creatorUserId: typeof row.creator_user_id === "string" ? row.creator_user_id : null,
       })),
     }
   }

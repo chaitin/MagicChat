@@ -127,6 +127,35 @@ export class ConversationManager {
     return this.database.listConversations()
   }
 
+  async openContactConversation(input: {
+    type: "user" | "app" | "group"
+    id: string
+    joined?: boolean
+  }) {
+    this.assertConversationId(input.id)
+    const path =
+      input.type === "user"
+        ? "/api/client/conversations/direct"
+        : input.type === "app"
+          ? "/api/client/conversations/apps"
+          : input.joined
+            ? `/api/client/conversations/${encodeURIComponent(input.id)}/restore`
+            : `/api/client/conversations/groups/${encodeURIComponent(input.id)}/join`
+    const body =
+      input.type === "user"
+        ? { user_id: input.id }
+        : input.type === "app"
+          ? { app_id: input.id }
+          : {}
+    const data = await this.client.post(path, body)
+    if (!isRecord(data) || !isRecord(data.conversation)) {
+      throw new AuthFailure("invalid_response", "会话操作响应格式不正确")
+    }
+    const conversation = parseConversation(data.conversation, this.currentUserId)
+    this.database.upsertCurrentConversations([conversation])
+    return this.database.listConversations().find((item) => item.id === conversation.id)!
+  }
+
   getAvatarDescriptor(type: "group" | "topic", entityId: string): AvatarDescriptor | undefined {
     return avatarDescriptorFromConversationPayload(
       type,

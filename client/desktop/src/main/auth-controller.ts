@@ -272,6 +272,54 @@ export class AuthController {
     return this.accountData.getContacts(...args)
   }
 
+  refreshContacts(...args: Parameters<AccountDataFacade["refreshContacts"]>) {
+    return this.accountData.refreshContacts(...args)
+  }
+
+  searchContactUsers(...args: Parameters<AccountDataFacade["searchContactUsers"]>) {
+    return this.accountData.searchContactUsers(...args)
+  }
+
+  listFriendRequests(...args: Parameters<AccountDataFacade["listFriendRequests"]>) {
+    return this.accountData.listFriendRequests(...args)
+  }
+
+  mutateFriendRequest(...args: Parameters<AccountDataFacade["mutateFriendRequest"]>) {
+    return this.accountData.mutateFriendRequest(...args)
+  }
+
+  deleteFriend(...args: Parameters<AccountDataFacade["deleteFriend"]>) {
+    return this.accountData.deleteFriend(...args)
+  }
+
+  openContactConversation(...args: Parameters<AccountDataFacade["openContactConversation"]>) {
+    return this.accountData.openContactConversation(...args)
+  }
+
+  createClientApp(...args: Parameters<AccountDataFacade["createClientApp"]>) {
+    return this.accountData.createClientApp(...args)
+  }
+
+  getClientApp(...args: Parameters<AccountDataFacade["getClientApp"]>) {
+    return this.accountData.getClientApp(...args)
+  }
+
+  updateClientApp(...args: Parameters<AccountDataFacade["updateClientApp"]>) {
+    return this.accountData.updateClientApp(...args)
+  }
+
+  deleteClientApp(...args: Parameters<AccountDataFacade["deleteClientApp"]>) {
+    return this.accountData.deleteClientApp(...args)
+  }
+
+  regenerateClientAppSecret(...args: Parameters<AccountDataFacade["regenerateClientAppSecret"]>) {
+    return this.accountData.regenerateClientAppSecret(...args)
+  }
+
+  uploadClientAppAvatar(...args: Parameters<AccountDataFacade["uploadClientAppAvatar"]>) {
+    return this.accountData.uploadClientAppAvatar(...args)
+  }
+
   getAvatar(...args: Parameters<AccountDataFacade["getAvatar"]>) {
     return this.accountData.getAvatar(...args)
   }

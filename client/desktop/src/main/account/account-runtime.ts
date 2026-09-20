@@ -12,8 +12,12 @@ import type {
   DesktopConversation,
   DesktopMessage,
   DesktopMessagePage,
+  FriendRequestListInput,
   MessageReactionUsersInput,
+  OpenContactConversationInput,
+  SaveClientAppInput,
   SetMessageReactionInput,
+  UpdateClientAppInput,
 } from "../../shared/account-data"
 import { AuthFailure } from "../../shared/auth"
 import type { CachedMedia, MediaCacheRequest, MediaDownloadProgress } from "../../shared/media"
@@ -21,6 +25,7 @@ import { AccountDatabase } from "./account-database"
 import { AvatarManager } from "./avatar-manager"
 import type { AvatarResource } from "./avatar-types"
 import { AuthenticatedClient } from "./authenticated-client"
+import { ClientAppManager } from "./client-app-manager"
 import { ContactManager } from "./contact-manager"
 import { ConversationManager } from "./conversation-manager"
 import { MediaManager } from "./media-manager"
@@ -32,6 +37,7 @@ export class AccountRuntime {
   private client?: AuthenticatedClient
   private conversationManager?: ConversationManager
   private contactManager?: ContactManager
+  private clientAppManager?: ClientAppManager
   private projectManager?: ProjectManager
   private avatarManager?: AvatarManager
   private mediaManager?: MediaManager
@@ -200,6 +206,92 @@ export class AccountRuntime {
     return this.contactManager!.getDirectory()
   }
 
+  async refreshContacts() {
+    this.assertInitialized()
+    const directory = await this.contactManager!.refreshAndGetDirectory()
+    this.notifyChanged(["contacts"], [])
+    return directory
+  }
+
+  searchContactUsers(query: string) {
+    this.assertInitialized()
+    return this.contactManager!.searchUsers(query)
+  }
+
+  listFriendRequests(input: FriendRequestListInput) {
+    this.assertInitialized()
+    return this.contactManager!.listFriendRequests(input.direction)
+  }
+
+  async mutateFriendRequest(action: "create" | "accept" | "reject" | "cancel", id: string) {
+    this.assertInitialized()
+    const manager = this.contactManager!
+    const request =
+      action === "create"
+        ? await manager.createFriendRequest(id)
+        : action === "accept"
+          ? await manager.acceptFriendRequest(id)
+          : action === "reject"
+            ? await manager.rejectFriendRequest(id)
+            : await manager.cancelFriendRequest(id)
+    if (action === "create" || action === "accept") await manager.refresh()
+    this.notifyChanged(["contacts"], [])
+    return request
+  }
+
+  async deleteFriend(userId: string) {
+    this.assertInitialized()
+    await this.contactManager!.deleteFriend(userId)
+    this.notifyChanged(["contacts"], [])
+  }
+
+  async openContactConversation(input: Omit<OpenContactConversationInput, "targetId">) {
+    this.assertInitialized()
+    const conversation = await this.conversationManager!.openContactConversation(input)
+    this.notifyChanged(["conversations"], [conversation.id])
+    return conversation
+  }
+
+  async createClientApp(input: SaveClientAppInput) {
+    this.assertInitialized()
+    const result = await this.clientAppManager!.create(input)
+    this.notifyChanged(["contacts"], [])
+    return result
+  }
+
+  getClientApp(appId: string) {
+    this.assertInitialized()
+    return this.clientAppManager!.get(appId)
+  }
+
+  async updateClientApp(input: UpdateClientAppInput) {
+    this.assertInitialized()
+    const result = await this.clientAppManager!.update(input)
+    this.notifyChanged(["contacts"], [])
+    return result
+  }
+
+  async deleteClientApp(appId: string) {
+    this.assertInitialized()
+    await this.clientAppManager!.delete(appId)
+    this.notifyChanged(["contacts", "conversations"], [])
+  }
+
+  regenerateClientAppSecret(appId: string) {
+    this.assertInitialized()
+    return this.clientAppManager!.regenerateSecret(appId)
+  }
+
+  async uploadClientAppAvatar(
+    appId: string,
+    file: { path: string; name: string; contentType: string },
+  ) {
+    this.assertInitialized()
+    const app = await this.clientAppManager!.uploadAvatar(appId, file)
+    this.notifyChanged(["contacts"], [])
+    return app
+  }
+
   getAvatar(request: Omit<AvatarRequest, "targetId">): Promise<AvatarResult> {
     this.assertInitialized()
     return this.avatarManager!.getAvatar(request)
@@ -226,6 +318,7 @@ export class AccountRuntime {
     this.conversationManager?.close()
     this.conversationManager = undefined
     this.contactManager = undefined
+    this.clientAppManager = undefined
     this.projectManager = undefined
     this.avatarManager = undefined
     this.database?.close()
@@ -257,6 +350,7 @@ export class AccountRuntime {
         (conversationId) => this.notifyChanged(["conversations", "messages"], [conversationId]),
       )
       this.contactManager = new ContactManager(this.database, client)
+      this.clientAppManager = new ClientAppManager(client, this.contactManager)
       const currentUserAvatar = {
         type: "user" as const,
         id: this.input.userId,

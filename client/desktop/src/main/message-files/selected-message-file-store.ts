@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { mkdir, rm, stat, writeFile } from "node:fs/promises"
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { dialog, type BrowserWindow } from "electron"
 import type {
@@ -47,6 +47,28 @@ export class SelectedMessageFileStore {
       sizeBytes: fileStat.size,
     })
     return { token: file.token, name: file.name, sizeBytes: file.sizeBytes }
+  }
+
+  async selectAppAvatar(targetId: string, parent: BrowserWindow) {
+    const media = await this.selectMedia({ targetId, category: "image" }, parent)
+    if (!media) return null
+    const file = this.getMedia(media.token, targetId, "image", "invalid_image_selection")
+    if (file.sizeBytes > 5 * 1024 * 1024) {
+      this.delete(media.token)
+      throw new AuthFailure("image_too_large", "应用头像不能超过 5MiB")
+    }
+    const detected = detectImageContentType(await readFile(file.path))
+    if (!detected || detected !== file.contentType) {
+      this.delete(media.token)
+      throw new AuthFailure("invalid_image", "应用头像内容格式不正确")
+    }
+    return {
+      token: media.token,
+      name: media.name,
+      sizeBytes: media.sizeBytes,
+      contentType: media.contentType as "image/jpeg" | "image/png" | "image/webp",
+      resourceUrl: media.resourceUrl,
+    }
   }
 
   async selectMedia(

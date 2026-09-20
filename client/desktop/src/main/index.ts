@@ -29,6 +29,7 @@ import { SCREENSHOT_CHANNELS, type ScreenshotSelection } from "../shared/screens
 import { AuthController, authResult } from "./auth-controller"
 import { registerAccountDataIpc } from "./ipc/register-account-data-ipc"
 import { registerAuthIpc } from "./ipc/register-auth-ipc"
+import { registerContactIpc } from "./ipc/register-contact-ipc"
 import { registerMediaIpc } from "./ipc/register-media-ipc"
 import { MediaPreviewWindow } from "./media-preview-window"
 import { SelectedMessageFileStore } from "./message-files/selected-message-file-store"
@@ -284,6 +285,53 @@ void app.whenReady().then(async () => {
     auth,
     selectedMessageFiles,
     getMainWindow: () => mainWindow,
+  })
+  registerContactIpc({
+    handle: handleIpc,
+    operations: {
+      refreshContacts: (targetId) => auth.refreshContacts(targetId),
+      searchContactUsers: (input) => auth.searchContactUsers(input),
+      listFriendRequests: (input) => auth.listFriendRequests(input),
+      createFriendRequest: (input) => auth.mutateFriendRequest("create", input),
+      acceptFriendRequest: (input) => auth.mutateFriendRequest("accept", input),
+      rejectFriendRequest: (input) => auth.mutateFriendRequest("reject", input),
+      cancelFriendRequest: (input) => auth.mutateFriendRequest("cancel", input),
+      deleteFriend: (input) => auth.deleteFriend(input),
+      openContactConversation: (input) => auth.openContactConversation(input),
+      createClientApp: (input) => auth.createClientApp(input),
+      getClientApp: (input) => auth.getClientApp(input),
+      updateClientApp: (input) => auth.updateClientApp(input),
+      deleteClientApp: (input) => auth.deleteClientApp(input),
+      regenerateClientAppSecret: (input) => auth.regenerateClientAppSecret(input),
+      selectClientAppAvatar: async (targetId) => {
+        const parent = mainWindow
+        if (!parent) throw new AuthFailure("window_unavailable", "主窗口不可用")
+        return selectedMessageFiles.selectAppAvatar(targetId, parent)
+      },
+      uploadClientAppAvatar: async (input) => {
+        const selected = selectedMessageFiles.getMedia(
+          input.selectionToken,
+          input.targetId,
+          "image",
+          "invalid_image_selection",
+        )
+        await selectedMessageFiles.assertUnchanged(
+          selected,
+          "image_changed",
+          "所选图片已发生变化，请重新选择",
+        )
+        const app = await auth.uploadClientAppAvatar(
+          { targetId: input.targetId, id: input.appId },
+          {
+            path: selected.path,
+            name: selected.name,
+            contentType: selected.contentType ?? "application/octet-stream",
+          },
+        )
+        selectedMessageFiles.delete(input.selectionToken)
+        return app
+      },
+    },
   })
   registerAuthIpc({
     handle: handleIpc,

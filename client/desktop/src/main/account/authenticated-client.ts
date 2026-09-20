@@ -31,6 +31,14 @@ export class AuthenticatedClient {
     return this.request(path, "PUT", body)
   }
 
+  patch(path: string, body: Record<string, unknown>): Promise<unknown> {
+    return this.request(path, "PATCH", body)
+  }
+
+  delete(path: string): Promise<unknown> {
+    return this.request(path, "DELETE")
+  }
+
   async postFile(
     endpoint: string,
     fields: Record<string, string>,
@@ -122,7 +130,7 @@ export class AuthenticatedClient {
 
   private async request(
     endpoint: string,
-    method: "GET" | "POST" | "PUT",
+    method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT",
     body?: Record<string, unknown>,
   ): Promise<unknown> {
     this.assertEndpoint(endpoint)
