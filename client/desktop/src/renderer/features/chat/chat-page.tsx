@@ -26,6 +26,7 @@ export function ChatPage({
   isPreview,
   onThemeChange,
   onSignOut,
+  onRequestQuit,
   onCatalogChange,
 }: {
   targetId: string
@@ -38,6 +39,7 @@ export function ChatPage({
   isPreview: boolean
   onThemeChange: (theme: ThemePreference) => void
   onSignOut: () => Promise<boolean>
+  onRequestQuit: () => void
   onCatalogChange: (catalog: ServerCatalog) => void
 }) {
   const { showToast } = useAnimatedToast()
@@ -165,6 +167,7 @@ export function ChatPage({
         activeSection={activeSection}
         onSectionChange={setActiveSection}
         onSignOut={onSignOut}
+        onRequestQuit={onRequestQuit}
         onThemeChange={onThemeChange}
         onCatalogChange={onCatalogChange}
       />

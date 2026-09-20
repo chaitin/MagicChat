@@ -72,7 +72,7 @@ export function WindowTitleBar({
               aria-hidden
             />
           </WindowButton>
-          <WindowButton label="关闭" onClick={() => void controls?.close()}>
+          <WindowButton label="关闭" destructive onClick={() => void controls?.close()}>
             <HugeiconsIcon icon={Cancel01Icon} className="size-3.5" aria-hidden />
           </WindowButton>
         </div>
@@ -83,12 +83,12 @@ export function WindowTitleBar({
 
 function WindowButton({
   label,
-  className = "",
+  destructive = false,
   onClick,
   children,
 }: {
   label: string
-  className?: string
+  destructive?: boolean
   onClick: () => void
   children: ReactNode
 }) {
@@ -97,7 +97,7 @@ function WindowButton({
       type="button"
       aria-label={label}
       title={label}
-      className={`flex h-8 w-9 items-center justify-center text-muted-foreground outline-none transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 ${className}`}
+      className={`flex h-8 w-9 items-center justify-center text-muted-foreground outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50 ${destructive ? "hover:bg-destructive hover:text-white focus-visible:bg-destructive focus-visible:text-white" : "hover:bg-foreground/10 hover:text-foreground"}`}
       onClick={onClick}
     >
       {children}

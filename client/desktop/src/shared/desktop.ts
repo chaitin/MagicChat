@@ -69,6 +69,9 @@ export const DESKTOP_CHANNELS = {
   setShortcutSettings: "desktop-next:v1:set-shortcut-settings",
   setShortcutRecording: "desktop-next:v1:set-shortcut-recording",
   openSettings: "desktop-next:v1:open-settings",
+  requestSignOut: "desktop-next:v1:request-sign-out",
+  requestQuit: "desktop-next:v1:request-quit",
+  windowQuit: "desktop-next:v1:window-quit",
   windowGetState: "desktop-next:v1:window-get-state",
   windowMinimize: "desktop-next:v1:window-minimize",
   windowToggleMaximize: "desktop-next:v1:window-toggle-maximize",
@@ -93,12 +96,15 @@ export interface DesktopBridge {
   setShortcutSettings(settings: ShortcutSettings): Promise<AuthResult<null>>
   setShortcutRecording(recording: boolean): Promise<AuthResult<null>>
   onOpenSettings(callback: () => void): () => void
+  onRequestSignOut(callback: () => void): () => void
+  onRequestQuit(callback: () => void): () => void
   readonly windowControls: {
     readonly platform: DesktopPlatform
     getMaximized(): Promise<boolean>
     minimize(): Promise<void>
     toggleMaximize(): Promise<void>
     close(): Promise<void>
+    quit(): Promise<void>
     onMaximizedChange(callback: (maximized: boolean) => void): () => void
   }
 }

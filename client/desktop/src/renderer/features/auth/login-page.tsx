@@ -13,6 +13,16 @@ import { FieldGroup } from "@/components/ui/field"
 import { LoginForm, LoginFrame } from "@/components/login-form"
 import { PoweredBy } from "@/components/powered-by"
 import { SettingsDialog } from "@/components/settings-dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { ServerSelectPage } from "./server-select-page"
 import { SigningInPage } from "./signing-in-page"
 import { ChatPage } from "../chat/chat-page"
@@ -49,6 +59,8 @@ export function LoginPage({
   const shownConnectionError = useRef("")
   const [busy, setBusy] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [quitOpen, setQuitOpen] = useState(false)
+  const [quitPending, setQuitPending] = useState(false)
   const enterChat = useCallback(() => setScreen("chat"), [])
   const handleInitializationFailure = useCallback(
     (problem: { code: string; message: string }) => {
@@ -76,6 +88,7 @@ export function LoginPage({
   }, [accept, connection, showToast])
 
   useEffect(() => window.desktop?.onOpenSettings(() => setSettingsOpen(true)), [])
+  useEffect(() => window.desktop?.onRequestQuit(() => setQuitOpen(true)), [])
 
   useEffect(() => {
     onOrganizationNameChange(connection?.user ? connection.info.organizationName : "")
@@ -100,6 +113,49 @@ export function LoginPage({
     showToast({ status: "error", title: "无法连接服务器", description: error.message })
   }, [error, screen, showToast])
 
+  async function confirmQuit() {
+    if (quitPending || !window.desktop) return
+    setQuitPending(true)
+    try {
+      await window.desktop.windowControls.quit()
+    } catch {
+      setQuitPending(false)
+      showToast({ status: "error", title: "无法关闭即应，请稍后重试" })
+    }
+  }
+
+  const quitConfirmDialog = (
+    <AlertDialog
+      open={quitOpen}
+      onOpenChange={(open) => {
+        if (!quitPending) setQuitOpen(open)
+      }}
+    >
+      <AlertDialogContent size="sm">
+        <AlertDialogHeader>
+          <AlertDialogTitle>确认关闭即应</AlertDialogTitle>
+          <AlertDialogDescription>即应将停止运行，确认要关闭吗？</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={quitPending}>取消</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={quitPending}
+            onClick={(event) => {
+              event.preventDefault()
+              void confirmQuit()
+            }}
+          >
+            {quitPending ? (
+              <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
+            ) : null}
+            关闭即应
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+
   const traySettingsDialog = (
     <SettingsDialog
       theme={theme}
@@ -120,6 +176,7 @@ export function LoginPage({
           <SigningInPage loadingOnly />
         </AuthBackground>
         {traySettingsDialog}
+        {quitConfirmDialog}
       </>
     )
   }
@@ -138,9 +195,11 @@ export function LoginPage({
           isPreview={isPreview}
           onThemeChange={onThemeChange}
           onSignOut={handleSignOut}
+          onRequestQuit={() => setQuitOpen(true)}
           onCatalogChange={acceptCatalog}
         />
         {traySettingsDialog}
+        {quitConfirmDialog}
       </>
     )
   }
@@ -165,6 +224,7 @@ export function LoginPage({
           />
         </AuthBackground>
         {traySettingsDialog}
+        {quitConfirmDialog}
       </>
     )
   }
@@ -180,6 +240,7 @@ export function LoginPage({
           />
         </AuthBackground>
         {traySettingsDialog}
+        {quitConfirmDialog}
       </>
     )
   }
@@ -274,6 +335,7 @@ export function LoginPage({
         </main>
       </AuthBackground>
       {traySettingsDialog}
+      {quitConfirmDialog}
     </>
   )
 }

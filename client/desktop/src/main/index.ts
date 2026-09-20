@@ -131,6 +131,21 @@ function openSettings() {
   mainWindow?.webContents.send(DESKTOP_CHANNELS.openSettings)
 }
 
+function requestSignOut() {
+  showMainWindow()
+  mainWindow?.webContents.send(DESKTOP_CHANNELS.requestSignOut)
+}
+
+function requestQuit() {
+  showMainWindow()
+  mainWindow?.webContents.send(DESKTOP_CHANNELS.requestQuit)
+}
+
+function quitApp() {
+  isQuitting = true
+  app.quit()
+}
+
 function createTray() {
   const iconPath = app.isPackaged
     ? path.join(process.resourcesPath, "tray-icon.png")
@@ -154,26 +169,30 @@ function createTray() {
       },
       { type: "separator" },
       {
-        label: "退出即应",
+        label: "退出登录",
+        icon: createTrayMenuIcon("signOut"),
+        click: requestSignOut,
+      },
+      {
+        label: "关闭即应",
         icon: createTrayMenuIcon("quit"),
-        click: () => {
-          isQuitting = true
-          app.quit()
-        },
+        click: requestQuit,
       },
     ]),
   )
   tray.on("double-click", showMainWindow)
 }
 
-function createTrayMenuIcon(type: "open" | "settings" | "quit") {
-  const color = type === "quit" ? "#fa5151" : "#7d7d7d"
+function createTrayMenuIcon(type: "open" | "settings" | "signOut" | "quit") {
+  const color = type === "signOut" || type === "quit" ? "#fa5151" : "#7d7d7d"
   const graphic =
     type === "open"
       ? `<rect x="2.5" y="3" width="11" height="10" rx="2"/><path d="M5 7.5h6M8 5v5"/>`
       : type === "settings"
         ? `<circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v1.4M8 12.8v1.4M1.8 8h1.4M12.8 8h1.4M3.6 3.6l1 1M11.4 11.4l1 1M12.4 3.6l-1 1M4.6 11.4l-1 1"/>`
-        : `<path d="M8 2v6M4.5 3.8a6 6 0 1 0 7 0"/>`
+        : type === "signOut"
+          ? `<path d="M7 2.5H3.5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1H7M9.5 5l3 3-3 3M6 8h6.5"/>`
+          : `<path d="M8 2v6M4.5 3.8a6 6 0 1 0 7 0"/>`
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="${color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${graphic}</svg>`
   return nativeImage.createFromDataURL(
     `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`,
@@ -254,6 +273,10 @@ void app.whenReady().then(async () => {
   })
   ipcMain.handle(DESKTOP_CHANNELS.windowClose, (event) => {
     windowForControl(event).close()
+  })
+  ipcMain.handle(DESKTOP_CHANNELS.windowQuit, (event) => {
+    assertTrustedSender(event)
+    quitApp()
   })
   ipcMain.handle(MEDIA_CHANNELS.previewInitialize, (event) => {
     if (event.senderFrame !== event.sender.mainFrame || !mediaPreview.ownsSender(event.sender)) {

@@ -1,15 +1,16 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   AppleReminderIcon,
   ChatIcon,
-  Contact01Icon,
   ContentWritingIcon,
   CrosshairIcon,
   FloppyDiskIcon,
   FolderClosedIcon,
+  FlashIcon,
   Home07Icon,
   Loading03Icon,
   Logout03Icon,
+  PowerIcon,
   Settings02Icon,
   UserIcon,
   UserSquareIcon,
@@ -50,23 +51,22 @@ export type AppSection =
   | "drive"
 
 export function SectionPlaceholder({ section }: { section: Exclude<AppSection, "chat"> }) {
-  const content = {
-    contacts: { label: "通讯录", icon: Contact01Icon },
-    projects: { label: "项目管理", icon: FolderClosedIcon },
-    goals: { label: "目标管理", icon: CrosshairIcon },
-    documents: { label: "文档", icon: ContentWritingIcon },
-    tasks: { label: "任务", icon: AppleReminderIcon },
-    drive: { label: "云网盘", icon: FloppyDiskIcon },
+  const label = {
+    contacts: "通讯录",
+    projects: "项目管理",
+    goals: "目标管理",
+    documents: "文档",
+    tasks: "任务",
+    drive: "云网盘",
   }[section]
   return (
-    <section className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3 bg-card text-center text-muted-foreground">
-      <span className="flex size-14 items-center justify-center rounded-full bg-xgui-background-1 text-xgui-brand">
-        <HugeiconsIcon icon={content.icon} className="size-6" aria-hidden />
+    <section
+      aria-label={`${label}（功能尚未接入）`}
+      className="flex min-w-0 flex-1 items-center justify-center bg-card text-xgui-background-2"
+    >
+      <span className="flex size-32 items-center justify-center rounded-full bg-xgui-background-1">
+        <HugeiconsIcon icon={FlashIcon} className="size-16" aria-hidden />
       </span>
-      <div className="space-y-1">
-        <h1 className="font-medium text-foreground">{content.label}</h1>
-        <p className="text-sm">功能内容尚未接入</p>
-      </div>
     </section>
   )
 }
@@ -83,6 +83,7 @@ export function AppRail({
   activeSection,
   onSectionChange,
   onSignOut,
+  onRequestQuit,
   onThemeChange,
   onCatalogChange,
 }: {
@@ -97,6 +98,7 @@ export function AppRail({
   activeSection: AppSection
   onSectionChange: (section: AppSection) => void
   onSignOut: () => Promise<boolean>
+  onRequestQuit: () => void
   onThemeChange: (theme: ThemePreference) => void
   onCatalogChange: (catalog: ServerCatalog) => void
 }) {
@@ -135,6 +137,7 @@ export function AppRail({
         userEmail={userEmail}
         resolvedTheme={resolvedTheme}
         onSignOut={onSignOut}
+        onRequestQuit={onRequestQuit}
       />
 
       <nav className="flex flex-1 flex-col gap-2" aria-label="主导航">
@@ -203,6 +206,7 @@ function AccountMenu({
   userEmail,
   resolvedTheme,
   onSignOut,
+  onRequestQuit,
 }: {
   targetId: string
   userId: string
@@ -210,9 +214,12 @@ function AccountMenu({
   userEmail: string
   resolvedTheme: "light" | "dark"
   onSignOut: () => Promise<boolean>
+  onRequestQuit: () => void
 }) {
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [logoutPending, setLogoutPending] = useState(false)
+
+  useEffect(() => window.desktop?.onRequestSignOut(() => setLogoutOpen(true)), [])
 
   async function confirmSignOut() {
     if (logoutPending) return
@@ -275,6 +282,10 @@ function AccountMenu({
           >
             <HugeiconsIcon icon={Logout03Icon} className="size-4" aria-hidden />
             退出登录
+          </DropdownMenuItem>
+          <DropdownMenuItem variant="destructive" onSelect={onRequestQuit}>
+            <HugeiconsIcon icon={PowerIcon} className="size-4" aria-hidden />
+            关闭即应
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

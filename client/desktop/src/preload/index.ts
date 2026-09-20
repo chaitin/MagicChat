@@ -28,12 +28,23 @@ const bridge: DesktopBridge = {
     ipcRenderer.on(DESKTOP_CHANNELS.openSettings, listener)
     return () => ipcRenderer.removeListener(DESKTOP_CHANNELS.openSettings, listener)
   },
+  onRequestSignOut: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on(DESKTOP_CHANNELS.requestSignOut, listener)
+    return () => ipcRenderer.removeListener(DESKTOP_CHANNELS.requestSignOut, listener)
+  },
+  onRequestQuit: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on(DESKTOP_CHANNELS.requestQuit, listener)
+    return () => ipcRenderer.removeListener(DESKTOP_CHANNELS.requestQuit, listener)
+  },
   windowControls: {
     platform,
     getMaximized: () => ipcRenderer.invoke(DESKTOP_CHANNELS.windowGetState),
     minimize: () => ipcRenderer.invoke(DESKTOP_CHANNELS.windowMinimize),
     toggleMaximize: () => ipcRenderer.invoke(DESKTOP_CHANNELS.windowToggleMaximize),
     close: () => ipcRenderer.invoke(DESKTOP_CHANNELS.windowClose),
+    quit: () => ipcRenderer.invoke(DESKTOP_CHANNELS.windowQuit),
     onMaximizedChange: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, maximized: boolean) =>
         callback(maximized)
