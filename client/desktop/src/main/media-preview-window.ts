@@ -1,11 +1,17 @@
 import { BrowserWindow, type WebContents } from "electron"
-import { DESKTOP_CHANNELS } from "../shared/desktop"
+import { DESKTOP_CHANNELS, type ThemePreference } from "../shared/desktop"
 import { MEDIA_CHANNELS, type MediaPreviewPayload } from "../shared/media"
 import { AuthFailure } from "../shared/auth"
+
+export type MediaPreviewSource =
+  | { targetId: string; kind: "cached"; cacheKey: string }
+  | { targetId: string; kind: "outgoing"; clientMessageId: string }
+  | { targetId: string; kind: "avatar"; resourceKey: string }
 
 export class MediaPreviewWindow {
   private window: BrowserWindow | null = null
   private payload: MediaPreviewPayload | null = null
+  private source: MediaPreviewSource | null = null
 
   constructor(
     private readonly preloadPath: string,
@@ -13,8 +19,9 @@ export class MediaPreviewWindow {
     private readonly developmentUrl?: string,
   ) {}
 
-  open(payload: MediaPreviewPayload) {
+  open(payload: MediaPreviewPayload, source: MediaPreviewSource) {
     this.payload = payload
+    this.source = source
     const windowTitle = `即应 Chat - ${payload.title}`
     if (this.window && !this.window.isDestroyed()) {
       this.window.setTitle(windowTitle)
@@ -73,11 +80,24 @@ export class MediaPreviewWindow {
     }
   }
 
+  notifyThemeChanged(theme: ThemePreference) {
+    if (this.window && !this.window.isDestroyed()) {
+      this.window.webContents.send(MEDIA_CHANNELS.previewThemeChanged, theme)
+    }
+  }
+
   getPayload(sender: WebContents) {
     if (!this.ownsSender(sender) || !this.payload) {
       throw new AuthFailure("preview_unavailable", "媒体预览内容不可用")
     }
     return this.payload
+  }
+
+  getSource(sender: WebContents) {
+    if (!this.ownsSender(sender) || !this.source) {
+      throw new AuthFailure("preview_unavailable", "媒体预览内容不可用")
+    }
+    return this.source
   }
 
   ownsSender(sender: WebContents) {
@@ -88,5 +108,6 @@ export class MediaPreviewWindow {
     this.window?.destroy()
     this.window = null
     this.payload = null
+    this.source = null
   }
 }

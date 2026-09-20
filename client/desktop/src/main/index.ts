@@ -1,4 +1,4 @@
-import { lstat, readdir } from "node:fs/promises"
+import { lstat, readFile, readdir, stat } from "node:fs/promises"
 import path from "node:path"
 import {
   app,
@@ -32,6 +32,7 @@ import { registerAccountDataIpc } from "./ipc/register-account-data-ipc"
 import { registerAuthIpc } from "./ipc/register-auth-ipc"
 import { registerContactIpc } from "./ipc/register-contact-ipc"
 import { registerMediaIpc } from "./ipc/register-media-ipc"
+import { decodePreviewImage } from "./media-preview-image-decoder"
 import { MediaPreviewWindow } from "./media-preview-window"
 import { SelectedMessageFileStore } from "./message-files/selected-message-file-store"
 import {
@@ -42,11 +43,10 @@ import { ScreenshotManager } from "./screenshot-manager"
 import { ShortcutManager } from "./shortcut-manager"
 import { checkForUpdates, isTrustedReleaseUrl } from "./update-service"
 
-// WSLg 不会稳定继承 Windows 的 DPI，且 Chromium GPU 黑名单会禁用 WebGL。
+// WSLg 不会稳定继承 Windows 的 DPI，且硬件视频合成可能只播放声音而显示黑屏。
 if (!app.isPackaged && process.platform === "linux" && process.env.WSL_DISTRO_NAME) {
   app.commandLine.appendSwitch("force-device-scale-factor", "1.5")
-  app.commandLine.appendSwitch("ignore-gpu-blocklist")
-  app.commandLine.appendSwitch("enable-unsafe-swiftshader")
+  app.disableHardwareAcceleration()
 }
 
 registerPrivilegedSchemes()
@@ -285,6 +285,60 @@ void app.whenReady().then(async () => {
     }
     return mediaPreview.getPayload(event.sender)
   })
+  ipcMain.handle(MEDIA_CHANNELS.previewGetTheme, (event) => {
+    if (event.senderFrame !== event.sender.mainFrame || !mediaPreview.ownsSender(event.sender)) {
+      throw new AuthFailure("untrusted_sender", "窗口请求来源不受信任")
+    }
+    return auth.getAppSettings().then((settings) => settings.theme)
+  })
+  async function currentPreviewFile(event: IpcMainInvokeEvent) {
+    if (event.senderFrame !== event.sender.mainFrame || !mediaPreview.ownsSender(event.sender)) {
+      throw new AuthFailure("untrusted_sender", "窗口请求来源不受信任")
+    }
+    const source = mediaPreview.getSource(event.sender)
+    const payload = mediaPreview.getPayload(event.sender)
+    const filePath =
+      source.kind === "cached"
+        ? (await auth.getCachedMediaResource(source.targetId, source.cacheKey)).filePath
+        : source.kind === "outgoing"
+          ? (await auth.getOutgoingMedia(source.targetId, source.clientMessageId)).filePath
+          : await auth.getAvatarResourceFilePath(source.targetId, source.resourceKey)
+    const file = await stat(filePath).catch(() => null)
+    if (!file?.isFile()) throw new AuthFailure("media_not_found", "媒体文件不存在")
+    if (mediaPreview.getSource(event.sender) !== source) {
+      throw new AuthFailure("preview_changed", "预览内容已更换，请重试")
+    }
+    return { payload, source, filePath, sizeBytes: file.size }
+  }
+  ipcMain.handle(MEDIA_CHANNELS.previewRevealCurrent, (event) =>
+    authResult(async () => {
+      const { filePath } = await currentPreviewFile(event)
+      shell.showItemInFolder(filePath)
+      return null
+    }),
+  )
+  ipcMain.handle(MEDIA_CHANNELS.previewCopyImage, (event) =>
+    authResult(async () => {
+      const { payload, source, filePath, sizeBytes } = await currentPreviewFile(event)
+      if (payload.category !== "image") {
+        throw new AuthFailure("unsupported_media_copy", "仅图片支持复制")
+      }
+      if (sizeBytes > 20 * 1024 * 1024) {
+        throw new AuthFailure("media_too_large", "图片过大，无法复制")
+      }
+      const bytes = await readFile(filePath)
+      const image = await decodePreviewImage(bytes, payload.contentType)
+      const { width, height } = image.getSize()
+      if (width * height > 25_000_000) {
+        throw new AuthFailure("media_too_large", "图片尺寸过大，无法复制")
+      }
+      if (mediaPreview.getSource(event.sender) !== source) {
+        throw new AuthFailure("preview_changed", "预览内容已更换，请重试")
+      }
+      clipboard.writeImage(image)
+      return null
+    }),
+  )
   ipcMain.handle(SCREENSHOT_CHANNELS.initialize, (event) => {
     if (!screenshot.ownsSender(event.sender)) {
       throw new AuthFailure("untrusted_sender", "截图请求来源不受信任")
@@ -394,7 +448,9 @@ void app.whenReady().then(async () => {
   handleIpc(DESKTOP_CHANNELS.calculateStorageUsage, async () => calculateStorageUsage())
   handleIpc(DESKTOP_CHANNELS.getAppSettings, () => auth.getAppSettings())
   handleIpc(DESKTOP_CHANNELS.setTheme, async (input) => {
-    await auth.setTheme(input as ThemePreference)
+    const theme = input as ThemePreference
+    await auth.setTheme(theme)
+    mediaPreview.notifyThemeChanged(theme)
     return null
   })
   handleIpc(DESKTOP_CHANNELS.setNotificationSettings, async (input) => {

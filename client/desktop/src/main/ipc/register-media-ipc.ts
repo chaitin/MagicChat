@@ -59,13 +59,16 @@ export function registerMediaIpc({
         throw new AuthFailure("invalid_avatar", "头像资源不正确")
       }
       const resource = await auth.readAvatarResource(url.pathname.slice(1))
-      mediaPreview.open({
-        title: value.conversationName.trim(),
-        category: "image",
-        contentType: resource.contentType,
-        originalName: `${value.conversationName.trim()}头像`,
-        resourceUrl: resolved.resourceUrl,
-      })
+      mediaPreview.open(
+        {
+          title: value.conversationName.trim(),
+          category: "image",
+          contentType: resource.contentType,
+          originalName: `${value.conversationName.trim()}头像`,
+          resourceUrl: resolved.resourceUrl,
+        },
+        { targetId: value.targetId, kind: "avatar", resourceKey: url.pathname.slice(1) },
+      )
       return null
     }
     if (typeof value.cacheKey !== "string") {
@@ -86,13 +89,22 @@ export function registerMediaIpc({
     if (cached.category === "attachment") {
       throw new AuthFailure("unsupported_media_preview", "该文件类型不支持预览")
     }
-    mediaPreview.open({
-      title: value.conversationName.trim(),
-      category: cached.category,
-      contentType: cached.contentType,
-      originalName: cached.originalName,
-      resourceUrl: cached.resourceUrl,
-    })
+    mediaPreview.open(
+      {
+        title: value.conversationName.trim(),
+        category: cached.category,
+        contentType: cached.contentType,
+        originalName: cached.originalName,
+        resourceUrl: cached.resourceUrl,
+      },
+      value.cacheKey.startsWith("outgoing:")
+        ? {
+            targetId: value.targetId,
+            kind: "outgoing",
+            clientMessageId: value.cacheKey.slice("outgoing:".length),
+          }
+        : { targetId: value.targetId, kind: "cached", cacheKey: cached.cacheKey },
+    )
     return null
   })
 }

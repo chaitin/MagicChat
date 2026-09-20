@@ -71,15 +71,24 @@ export class AvatarManager {
   }
 
   async readResource(resourceKey: string): Promise<AvatarResource> {
+    const record = this.resourceRecord(resourceKey)
+    return {
+      contentType: record.contentType,
+      bytes: await readFile(this.localPath(record.localFile)),
+    }
+  }
+
+  getResourceFilePath(resourceKey: string): string {
+    return this.localPath(this.resourceRecord(resourceKey).localFile)
+  }
+
+  private resourceRecord(resourceKey: string): AvatarCacheRecord {
     if (!/^[a-f0-9]{64}$/.test(resourceKey)) {
       throw new AuthFailure("invalid_avatar", "头像资源不存在")
     }
     const record = this.database.getAvatarCacheByResourceKey(resourceKey)
     if (!record) throw new AuthFailure("avatar_not_found", "头像资源不存在")
-    return {
-      contentType: record.contentType,
-      bytes: await readFile(this.localPath(record.localFile)),
-    }
+    return record
   }
 
   private async resolveAvatar(request: Omit<AvatarRequest, "targetId">): Promise<AvatarResult> {

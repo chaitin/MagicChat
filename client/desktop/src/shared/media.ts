@@ -1,6 +1,6 @@
 import type { AvatarType } from "./account-data"
 import type { AuthResult } from "./auth"
-import type { DesktopPlatform } from "./desktop"
+import type { DesktopPlatform, ThemePreference } from "./desktop"
 
 export type MediaCategory = "image" | "video" | "attachment"
 export type MediaCacheStatus = "downloading" | "verifying" | "ready" | "failed"
@@ -64,6 +64,10 @@ export const MEDIA_CHANNELS = {
   downloadProgress: "desktop-next:v1:media-download-progress",
   previewInitialize: "desktop-next:v1:media-preview-initialize",
   previewChanged: "desktop-next:v1:media-preview-changed",
+  previewGetTheme: "desktop-next:v1:media-preview-get-theme",
+  previewThemeChanged: "desktop-next:v1:media-preview-theme-changed",
+  previewRevealCurrent: "desktop-next:v1:media-preview-reveal-current",
+  previewCopyImage: "desktop-next:v1:media-preview-copy-image",
 } as const
 
 export interface MediaBridge {
@@ -75,6 +79,10 @@ export interface MediaBridge {
 export interface MediaPreviewBridge {
   initialize(): Promise<MediaPreviewPayload>
   onChanged(callback: (payload: MediaPreviewPayload) => void): () => void
+  getTheme(): Promise<ThemePreference>
+  onThemeChanged(callback: (theme: ThemePreference) => void): () => void
+  revealCurrent(): Promise<AuthResult<null>>
+  copyCurrentImage(): Promise<AuthResult<null>>
   readonly windowControls: {
     readonly platform: DesktopPlatform
     getMaximized(): Promise<boolean>

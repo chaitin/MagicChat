@@ -119,6 +119,11 @@ export class AccountDataFacade {
     return this.requireRuntime().getCachedMedia(cacheKey)
   }
 
+  async getCachedMediaResource(targetId: string, cacheKey: string) {
+    await this.ready(targetId)
+    return this.requireRuntime().getCachedMediaResource(cacheKey)
+  }
+
   async readCachedMedia(targetId: string, cacheKey: string, range?: string) {
     await this.ready(targetId)
     return this.requireRuntime().readCachedMedia(cacheKey, range)
@@ -220,6 +225,11 @@ export class AccountDataFacade {
   async readAvatarResource(resourceKey: string) {
     await this.awaitInitialized()
     return this.requireRuntime().readAvatarResource(resourceKey)
+  }
+
+  async getAvatarResourceFilePath(targetId: string, resourceKey: string) {
+    await this.ready(targetId)
+    return this.requireRuntime().getAvatarResourceFilePath(resourceKey)
   }
 
   private async ready(targetId: unknown) {

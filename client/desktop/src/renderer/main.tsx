@@ -1,6 +1,7 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { MotionConfig } from "motion/react"
+import { AnimatedToastProvider } from "./components/motion/animated-toast-provider"
 import { App } from "./App"
 import { MediaPreviewPage } from "./features/media-preview/media-preview-page"
 import { ScreenshotOverlay } from "./screenshot-overlay"
@@ -15,7 +16,15 @@ const mediaPreviewMode = window.location.hash === "#/media-preview"
 createRoot(root).render(
   <StrictMode>
     <MotionConfig reducedMotion="user">
-      {screenshotMode ? <ScreenshotOverlay /> : mediaPreviewMode ? <MediaPreviewPage /> : <App />}
+      {screenshotMode ? (
+        <ScreenshotOverlay />
+      ) : mediaPreviewMode ? (
+        <AnimatedToastProvider>
+          <MediaPreviewPage />
+        </AnimatedToastProvider>
+      ) : (
+        <App />
+      )}
     </MotionConfig>
   </StrictMode>,
 )

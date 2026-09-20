@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron"
-import type { DesktopPlatform } from "../shared/desktop"
+import type { DesktopPlatform, ThemePreference } from "../shared/desktop"
 import type { MediaPreviewBridge, MediaPreviewPayload } from "../shared/media"
 
 // Keep this preload self-contained: sandboxed Electron preloads cannot load Rollup shared chunks.
@@ -14,6 +14,10 @@ const WINDOW_CHANNELS = {
 const PREVIEW_CHANNELS = {
   initialize: "desktop-next:v1:media-preview-initialize",
   changed: "desktop-next:v1:media-preview-changed",
+  getTheme: "desktop-next:v1:media-preview-get-theme",
+  themeChanged: "desktop-next:v1:media-preview-theme-changed",
+  revealCurrent: "desktop-next:v1:media-preview-reveal-current",
+  copyImage: "desktop-next:v1:media-preview-copy-image",
 } as const
 
 const platform: DesktopPlatform =
@@ -27,6 +31,14 @@ const bridge: MediaPreviewBridge = {
     ipcRenderer.on(PREVIEW_CHANNELS.changed, listener)
     return () => ipcRenderer.removeListener(PREVIEW_CHANNELS.changed, listener)
   },
+  getTheme: () => ipcRenderer.invoke(PREVIEW_CHANNELS.getTheme),
+  onThemeChanged: (callback: (theme: ThemePreference) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, theme: ThemePreference) => callback(theme)
+    ipcRenderer.on(PREVIEW_CHANNELS.themeChanged, listener)
+    return () => ipcRenderer.removeListener(PREVIEW_CHANNELS.themeChanged, listener)
+  },
+  revealCurrent: () => ipcRenderer.invoke(PREVIEW_CHANNELS.revealCurrent),
+  copyCurrentImage: () => ipcRenderer.invoke(PREVIEW_CHANNELS.copyImage),
   windowControls: {
     platform,
     getMaximized: () => ipcRenderer.invoke(WINDOW_CHANNELS.getState),

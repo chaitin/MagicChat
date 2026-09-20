@@ -166,6 +166,11 @@ export class AccountRuntime {
     return this.mediaManager!.getCached(cacheKey)
   }
 
+  async getCachedMediaResource(cacheKey: string) {
+    this.assertInitialized()
+    return this.mediaManager!.getCachedResource(cacheKey)
+  }
+
   async readCachedMedia(cacheKey: string, range?: string): Promise<Response> {
     this.assertInitialized()
     return this.mediaManager!.createResourceResponse(cacheKey, range)
@@ -309,6 +314,11 @@ export class AccountRuntime {
   async readAvatarResource(resourceKey: string): Promise<AvatarResource> {
     this.assertInitialized()
     return this.avatarManager!.readResource(resourceKey)
+  }
+
+  getAvatarResourceFilePath(resourceKey: string): string {
+    this.assertInitialized()
+    return this.avatarManager!.getResourceFilePath(resourceKey)
   }
 
   close() {

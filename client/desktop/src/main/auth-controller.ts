@@ -260,6 +260,10 @@ export class AuthController {
     return this.accountData.getCachedMedia(...args)
   }
 
+  getCachedMediaResource(...args: Parameters<AccountDataFacade["getCachedMediaResource"]>) {
+    return this.accountData.getCachedMediaResource(...args)
+  }
+
   readCachedMedia(...args: Parameters<AccountDataFacade["readCachedMedia"]>) {
     return this.accountData.readCachedMedia(...args)
   }
@@ -330,6 +334,10 @@ export class AuthController {
 
   readAvatarResource(...args: Parameters<AccountDataFacade["readAvatarResource"]>) {
     return this.accountData.readAvatarResource(...args)
+  }
+
+  getAvatarResourceFilePath(...args: Parameters<AccountDataFacade["getAvatarResourceFilePath"]>) {
+    return this.accountData.getAvatarResourceFilePath(...args)
   }
 
   close() {

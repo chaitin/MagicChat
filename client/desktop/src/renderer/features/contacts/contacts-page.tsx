@@ -76,9 +76,10 @@ export function ContactsPage({
   const [credentials, setCredentials] = useState<DesktopClientAppCredentials | null>(null)
   const [avatarRevision, setAvatarRevision] = useState(0)
 
-  async function load(refresh = false) {
+  async function load(refresh = false, background = false) {
     if (!window.desktop) return
-    refresh ? setRefreshing(true) : setLoading(true)
+    if (refresh) setRefreshing(true)
+    else if (!background) setLoading(true)
     const result = refresh
       ? await window.desktop.accountData.refreshContacts(targetId)
       : await window.desktop.accountData.getContacts(targetId)
@@ -86,14 +87,16 @@ export function ContactsPage({
       setDirectory(result.data)
       setSelection((current) => (current && entityFor(result.data, current) ? current : null))
     } else showToast({ title: result.error.message, status: "error" })
-    setLoading(false)
-    setRefreshing(false)
+    if (!background) setLoading(false)
+    if (refresh) setRefreshing(false)
   }
 
   useEffect(() => {
     void load()
     return window.desktop?.accountData.onChanged((event) => {
-      if (event.targetId === targetId && event.domains.includes("contacts")) void load()
+      if (event.targetId === targetId && event.domains.includes("contacts")) {
+        void load(false, true)
+      }
     })
   }, [targetId])
 
