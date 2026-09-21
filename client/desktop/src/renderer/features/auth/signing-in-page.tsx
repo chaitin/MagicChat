@@ -10,11 +10,13 @@ export function SigningInPage({
   onComplete,
   onFailure,
   loadingOnly = false,
+  refreshAll = false,
 }: {
   targetId?: string
   onComplete?: () => void
   onFailure?: (error: AuthProblem) => void
   loadingOnly?: boolean
+  refreshAll?: boolean
 }) {
   useEffect(() => {
     if (loadingOnly || !targetId || !onComplete || !onFailure) return
@@ -28,7 +30,9 @@ export function SigningInPage({
       let result: AuthResult<null>
       try {
         result = window.desktop
-          ? await window.desktop.accountData.initialize(initializationTarget)
+          ? await (refreshAll
+              ? window.desktop.accountData.refreshAll(initializationTarget)
+              : window.desktop.accountData.initialize(initializationTarget))
           : { ok: false, error: { code: "bridge", message: "桌面服务暂不可用，请重试" } }
       } catch {
         result = { ok: false, error: { code: "bridge", message: "桌面服务暂不可用，请重试" } }
@@ -43,7 +47,7 @@ export function SigningInPage({
     return () => {
       cancelled = true
     }
-  }, [loadingOnly, onComplete, onFailure, targetId])
+  }, [loadingOnly, onComplete, onFailure, refreshAll, targetId])
 
   return (
     <main className="login-page login-page--shader">

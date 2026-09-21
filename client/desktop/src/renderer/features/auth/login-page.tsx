@@ -61,9 +61,14 @@ export function LoginPage({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [quitOpen, setQuitOpen] = useState(false)
   const [quitPending, setQuitPending] = useState(false)
-  const enterChat = useCallback(() => setScreen("chat"), [])
+  const [refreshingAll, setRefreshingAll] = useState(false)
+  const enterChat = useCallback(() => {
+    setRefreshingAll(false)
+    setScreen("chat")
+  }, [])
   const handleInitializationFailure = useCallback(
     (problem: { code: string; message: string }) => {
+      setRefreshingAll(false)
       if (connection) accept({ ...connection, user: null })
       setScreen("servers")
       showToast({ status: "error", title: "账号初始化失败", description: problem.message })
@@ -198,6 +203,10 @@ export function LoginPage({
           onSignOut={handleSignOut}
           onRequestQuit={() => setQuitOpen(true)}
           onCatalogChange={acceptCatalog}
+          onRefresh={() => {
+            setRefreshingAll(true)
+            setScreen("signing-in")
+          }}
         />
         {traySettingsDialog}
         {quitConfirmDialog}
@@ -236,6 +245,7 @@ export function LoginPage({
         <AuthBackground theme={resolvedTheme}>
           <SigningInPage
             targetId={connection?.targetId ?? ""}
+            refreshAll={refreshingAll}
             onComplete={enterChat}
             onFailure={handleInitializationFailure}
           />

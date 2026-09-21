@@ -1,6 +1,7 @@
 import type {
   AvatarRequest,
   ContactTargetInput,
+  CreateGroupConversationInput,
   FriendRequestListInput,
   MessageReactionUsersInput,
   OpenContactConversationInput,
@@ -25,6 +26,11 @@ export class AccountDataFacade {
   async listConversations(targetId: string) {
     await this.ready(targetId)
     return this.requireRuntime().listConversations()
+  }
+
+  async createGroupConversation(input: CreateGroupConversationInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().createGroupConversation(input)
   }
 
   async listMessages(targetId: string, conversationId: string) {

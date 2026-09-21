@@ -1,14 +1,9 @@
-import {
-  CirclePlusIcon,
-  Loading03Icon,
-  NotificationOff01Icon,
-  Search01Icon,
-} from "@hugeicons/core-free-icons"
+import { useState } from "react"
+import { Loading03Icon, NotificationOff01Icon } from "@hugeicons/core-free-icons"
 import type { DesktopConversation } from "../../../../shared/account-data"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
-import { Button as BeButton } from "@/components/motion/button/base"
-import { Input as BeInput } from "@/components/motion/input"
+import { SidebarSearchHeader } from "@/components/sidebar-search-header"
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { parseMentionTemplate, type MentionLabelResolver } from "@/lib/message-mentions"
@@ -22,6 +17,9 @@ export function ConversationSidebar({
   resolvedTheme,
   mentionLabelResolver,
   onSelect,
+  onCreateGroup,
+  onCreateApp,
+  onRefresh,
 }: {
   conversations: DesktopConversation[]
   loading: boolean
@@ -30,39 +28,37 @@ export function ConversationSidebar({
   resolvedTheme: "light" | "dark"
   mentionLabelResolver: MentionLabelResolver
   onSelect: (id: string) => void
+  onCreateGroup: () => void
+  onCreateApp: () => void
+  onRefresh: () => void
 }) {
-  const pinned = conversations
+  const [keyword, setKeyword] = useState("")
+  const query = keyword.trim().toLocaleLowerCase()
+  const visibleConversations = query
+    ? conversations.filter((conversation) =>
+        [conversation.name, conversation.lastMessageSummary]
+          .join("\n")
+          .toLocaleLowerCase()
+          .includes(query),
+      )
+    : conversations
+  const pinned = visibleConversations
     .filter((conversation) => conversation.pinned || conversation.isBuiltinAssistant)
     .sort(compareConversationActivity)
-  const regular = conversations
+  const regular = visibleConversations
     .filter((conversation) => !conversation.pinned && !conversation.isBuiltinAssistant)
     .sort(compareConversationActivity)
 
   return (
     <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-sidebar">
-      <header className="flex h-14 shrink-0 items-center gap-2 bg-xgui-background-0 pr-2 pl-3">
-        <BeInput
-          type="search"
-          placeholder="搜索"
-          aria-label="搜索会话"
-          leftIcon={<HugeiconsIcon icon={Search01Icon} aria-hidden />}
-          classNames={{
-            root: "min-w-0 flex-1",
-            field: "h-8 rounded-full border-transparent bg-background",
-            input: "pl-9 text-sm",
-          }}
-        />
-        <BeButton
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="shrink-0 rounded-lg hover:bg-foreground/10 [&_svg]:size-5"
-          aria-label="新建会话"
-          title="新建会话"
-        >
-          <HugeiconsIcon icon={CirclePlusIcon} aria-hidden />
-        </BeButton>
-      </header>
+      <SidebarSearchHeader
+        value={keyword}
+        searchLabel="搜索会话"
+        onValueChange={setKeyword}
+        onCreateGroup={onCreateGroup}
+        onCreateApp={onCreateApp}
+        onRefresh={onRefresh}
+      />
 
       <ScrollArea
         type="hover"
@@ -79,9 +75,9 @@ export function ConversationSidebar({
                 aria-label="正在读取对话"
               />
             </div>
-          ) : conversations.length === 0 ? (
+          ) : visibleConversations.length === 0 ? (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              暂无对话
+              {query ? "没有匹配的对话" : "暂无对话"}
             </div>
           ) : (
             <>

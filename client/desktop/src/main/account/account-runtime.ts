@@ -8,6 +8,7 @@ import type {
   AccountDataDomain,
   AccountDataSyncEvent,
   AvatarResult,
+  CreateGroupConversationInput,
   DesktopContactDirectory,
   DesktopConversation,
   DesktopMessage,
@@ -70,9 +71,21 @@ export class AccountRuntime {
     return this.initialization
   }
 
+  async refreshAll() {
+    this.assertInitialized()
+    await this.synchronize()
+  }
+
   listConversations(): DesktopConversation[] {
     this.assertInitialized()
     return this.conversationManager!.listConversations()
+  }
+
+  async createGroupConversation(input: CreateGroupConversationInput) {
+    this.assertInitialized()
+    const conversation = await this.conversationManager!.createGroupConversation(input)
+    this.notifyChanged(["conversations"], [conversation.id])
+    return conversation
   }
 
   listMessages(conversationId: string): DesktopMessage[] {

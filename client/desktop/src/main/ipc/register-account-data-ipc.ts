@@ -2,6 +2,7 @@ import type { BrowserWindow } from "electron"
 import {
   ACCOUNT_DATA_CHANNELS,
   type AvatarRequest,
+  type CreateGroupConversationInput,
   type MessageReactionUsersInput,
   type RetryMessageInput,
   type SendFileMessageInput,
@@ -28,8 +29,12 @@ export function registerAccountDataIpc({
   getMainWindow: () => BrowserWindow | null
 }) {
   handle(ACCOUNT_DATA_CHANNELS.initialize, (input) => auth.initializeAccountData(input as string))
+  handle(ACCOUNT_DATA_CHANNELS.refreshAll, (input) => auth.refreshAll(input as string))
   handle(ACCOUNT_DATA_CHANNELS.listConversations, (input) =>
     auth.listConversations(input as string),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.createGroupConversation, (input) =>
+    auth.createGroupConversation(input as CreateGroupConversationInput),
   )
   handle(ACCOUNT_DATA_CHANNELS.listMessages, (input) => {
     const value = input as { targetId?: string; conversationId?: string } | undefined

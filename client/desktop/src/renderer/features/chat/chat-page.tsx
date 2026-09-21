@@ -4,15 +4,18 @@ import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { ContactProfileProvider } from "@/components/avatar/contact-profile-popover"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import { AppRail, SectionPlaceholder, type AppSection } from "./components/app-navigation"
+import { ClientAppDialog } from "../contacts/client-app-dialog"
 import { ContactsPage } from "../contacts/contacts-page"
 import { ChatHeader } from "./components/chat-header"
 import { ConversationSidebar } from "./components/conversation-sidebar"
+import { CreateGroupConversationDialog } from "./components/create-group-conversation-dialog"
 import { MessageComposer } from "./components/message-composer"
 import { MessageList } from "./components/message-list"
 import { useAttachmentSender } from "./hooks/use-attachment-sender"
 import { useChatData } from "./hooks/use-chat-data"
 import { SendFileMessageDialog } from "./send-file-message-dialog"
 import { SendMediaMessageDialog } from "./send-media-message-dialog"
+import type { DesktopContactDirectory } from "../../../shared/account-data"
 import type { ServerCatalog } from "../../../shared/auth"
 import type { ThemePreference } from "../../../shared/desktop"
 
@@ -30,6 +33,7 @@ export function ChatPage({
   onSignOut,
   onRequestQuit,
   onCatalogChange,
+  onRefresh,
 }: {
   targetId: string
   serverUrl: string
@@ -44,9 +48,12 @@ export function ChatPage({
   onSignOut: () => Promise<boolean>
   onRequestQuit: () => void
   onCatalogChange: (catalog: ServerCatalog) => void
+  onRefresh: () => void
 }) {
   const { showToast } = useAnimatedToast()
   const [activeSection, setActiveSection] = useState<AppSection>("chat")
+  const [actionDialog, setActionDialog] = useState<"group" | "app" | null>(null)
+  const [actionDirectory, setActionDirectory] = useState<DesktopContactDirectory | null>(null)
   const [draft, setDraft] = useState("")
   const [markdownMode, setMarkdownMode] = useState(false)
   const composerRef = useRef<HTMLTextAreaElement>(null)
@@ -170,6 +177,24 @@ export function ChatPage({
     [setSelectedId, targetId],
   )
 
+  const openActionDialog = useCallback(
+    async (dialog: "group" | "app") => {
+      if (!window.desktop) return
+      try {
+        const result = await window.desktop.accountData.getContacts(targetId)
+        if (!result.ok) throw new Error(result.error.message)
+        setActionDirectory(result.data)
+        setActionDialog(dialog)
+      } catch (error) {
+        showToast({
+          status: "error",
+          title: error instanceof Error ? error.message : "无法读取通讯录",
+        })
+      }
+    },
+    [showToast, targetId],
+  )
+
   return (
     <main className="flex h-full min-h-0 overflow-hidden bg-background text-foreground">
       <AppRail
@@ -198,6 +223,9 @@ export function ChatPage({
             resolvedTheme={resolvedTheme}
             mentionLabelResolver={resolveMentionLabel}
             onSelect={setSelectedId}
+            onCreateGroup={() => void openActionDialog("group")}
+            onCreateApp={() => void openActionDialog("app")}
+            onRefresh={onRefresh}
           />
 
           <section className="flex min-h-0 min-w-0 flex-col bg-card" aria-label="聊天区域">
@@ -288,9 +316,41 @@ export function ChatPage({
             setSelectedId(conversationId)
             setActiveSection("chat")
           }}
+          onCreateGroup={() => void openActionDialog("group")}
+          onCreateApp={() => void openActionDialog("app")}
+          onRefresh={onRefresh}
         />
       ) : (
         <SectionPlaceholder section={activeSection} />
+      )}
+      {actionDialog === "group" && actionDirectory && (
+        <CreateGroupConversationDialog
+          targetId={targetId}
+          currentUserId={userId}
+          theme={resolvedTheme}
+          contacts={actionDirectory.users}
+          apps={actionDirectory.apps}
+          onClose={() => setActionDialog(null)}
+          onCreated={(conversation) => {
+            setActionDialog(null)
+            setSelectedId(conversation.id)
+            setActiveSection("chat")
+          }}
+        />
+      )}
+      {actionDialog === "app" && actionDirectory && (
+        <ClientAppDialog
+          mode="create"
+          targetId={targetId}
+          serverUrl={serverUrl}
+          currentUserId={userId}
+          theme={resolvedTheme}
+          users={actionDirectory.users}
+          credentials={null}
+          onClose={() => setActionDialog(null)}
+          onChanged={() => undefined}
+          onAvatarChanged={() => undefined}
+        />
       )}
       <SendMediaMessageDialog
         category="image"

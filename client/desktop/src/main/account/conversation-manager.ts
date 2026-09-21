@@ -127,6 +127,26 @@ export class ConversationManager {
     return this.database.listConversations()
   }
 
+  async createGroupConversation(input: { name: string; memberIds: string[]; appIds: string[] }) {
+    const name = typeof input.name === "string" ? input.name.trim() : ""
+    if (!name || name.length > 256) {
+      throw new AuthFailure("invalid_group_name", "请输入有效的群聊名称")
+    }
+    const memberIds = validEntityIds(input.memberIds, "群聊成员")
+    const appIds = validEntityIds(input.appIds, "群聊应用")
+    const data = await this.client.post("/api/client/conversations/groups", {
+      name,
+      member_ids: memberIds,
+      app_ids: appIds,
+    })
+    if (!isRecord(data) || !isRecord(data.conversation)) {
+      throw new AuthFailure("invalid_response", "创建群聊响应格式不正确")
+    }
+    const conversation = parseConversation(data.conversation, this.currentUserId)
+    this.database.upsertCurrentConversations([conversation])
+    return this.database.listConversations().find((item) => item.id === conversation.id)!
+  }
+
   async openContactConversation(input: {
     type: "user" | "app" | "group"
     id: string
@@ -331,6 +351,19 @@ export class ConversationManager {
       hasMoreBefore: data.page.has_more_before,
     }
   }
+}
+
+function validEntityIds(values: string[], label: string) {
+  if (!Array.isArray(values) || values.length > 500) {
+    throw new AuthFailure("invalid_group_members", `${label}不正确`)
+  }
+  const result = values.map((value) => {
+    if (typeof value !== "string" || !value || value.length > 128) {
+      throw new AuthFailure("invalid_group_members", `${label}不正确`)
+    }
+    return value
+  })
+  return Array.from(new Set(result))
 }
 
 async function mapConcurrent<T>(

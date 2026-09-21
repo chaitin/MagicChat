@@ -204,6 +204,19 @@ function systemEventSummary(event: string, body: Record<string, unknown>) {
   switch (event) {
     case "friendship_created":
       return "你们已成为好友，现在可以开始聊天了"
+    case "group_members_invited": {
+      const inviter = displayName(body.inviter) || "成员"
+      const invitees = Array.isArray(body.invitees)
+        ? body.invitees.map(displayName).filter(Boolean)
+        : []
+      return invitees.length
+        ? `${inviter} 邀请 ${invitees.join(",")} 加入群聊`
+        : `${inviter}邀请成员加入了群聊`
+    }
+    case "group_visibility_changed":
+      return body.visibility === "public"
+        ? `${actor || "管理员"}将当前群设置为公开群`
+        : `${actor || "管理员"}将当前群设为私有群`
     case "group_member_joined":
       return `${actor || "成员"}加入了群聊`
     case "group_member_left":

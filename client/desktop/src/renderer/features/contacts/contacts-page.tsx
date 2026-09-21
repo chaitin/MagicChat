@@ -1,18 +1,10 @@
 import { useEffect, useId, useMemo, useState } from "react"
-import {
-  ArrowRight01Icon,
-  CirclePlusIcon,
-  FlashIcon,
-  MoreHorizontalIcon,
-  RefreshIcon,
-  Search01Icon,
-  UserMultiple02Icon,
-} from "@hugeicons/core-free-icons"
+import { ArrowRight01Icon, FlashIcon } from "@hugeicons/core-free-icons"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { Button as BeButton } from "@/components/motion/button/base"
-import { Input as BeInput } from "@/components/motion/input"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
+import { SidebarSearchHeader } from "@/components/sidebar-search-header"
 import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog,
@@ -24,12 +16,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -43,7 +29,6 @@ import type {
   DesktopContactUser,
 } from "../../../shared/account-data"
 import { ClientAppDialog } from "./client-app-dialog"
-import { FriendManagementDialog } from "./friend-management-dialog"
 
 type Tab = "user" | "app" | "group"
 type Selection = { type: Tab; id: string }
@@ -55,6 +40,9 @@ export function ContactsPage({
   organizationName,
   resolvedTheme,
   onOpenConversation,
+  onCreateGroup,
+  onCreateApp,
+  onRefresh,
 }: {
   targetId: string
   serverUrl: string
@@ -62,24 +50,24 @@ export function ContactsPage({
   organizationName: string
   resolvedTheme: "light" | "dark"
   onOpenConversation: (conversationId: string) => void
+  onCreateGroup: () => void
+  onCreateApp: () => void
+  onRefresh: () => void
 }) {
   const { showToast } = useAnimatedToast()
   const [directory, setDirectory] = useState<DesktopContactDirectory | null>(null)
   const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
   const [keyword, setKeyword] = useState("")
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set())
   const [selection, setSelection] = useState<Selection | null>(null)
   const [busyKey, setBusyKey] = useState("")
-  const [friendsOpen, setFriendsOpen] = useState(false)
-  const [appDialog, setAppDialog] = useState<"create" | "edit" | "credentials" | null>(null)
+  const [appDialog, setAppDialog] = useState<"edit" | "credentials" | null>(null)
   const [credentials, setCredentials] = useState<DesktopClientAppCredentials | null>(null)
   const [avatarRevision, setAvatarRevision] = useState(0)
 
   async function load(refresh = false, background = false) {
     if (!window.desktop) return
-    if (refresh) setRefreshing(true)
-    else if (!background) setLoading(true)
+    if (!refresh && !background) setLoading(true)
     const result = refresh
       ? await window.desktop.accountData.refreshContacts(targetId)
       : await window.desktop.accountData.getContacts(targetId)
@@ -88,7 +76,6 @@ export function ContactsPage({
       setSelection((current) => (current && entityFor(result.data, current) ? current : null))
     } else showToast({ title: result.error.message, status: "error" })
     if (!background) setLoading(false)
-    if (refresh) setRefreshing(false)
   }
 
   useEffect(() => {
@@ -186,60 +173,14 @@ export function ContactsPage({
   return (
     <section className="grid min-w-0 flex-1 grid-cols-[19rem_minmax(0,1fr)] bg-card">
       <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-sidebar">
-        <header className="flex h-14 shrink-0 items-center gap-2 bg-xgui-background-0 pr-2 pl-3">
-          <BeInput
-            type="search"
-            value={keyword}
-            placeholder="搜索"
-            aria-label="搜索通讯录"
-            leftIcon={<HugeiconsIcon icon={Search01Icon} aria-hidden />}
-            classNames={{
-              root: "min-w-0 flex-1",
-              field: "h-8 rounded-full border-transparent bg-background",
-              input: "pl-9 text-sm",
-            }}
-            onChange={setKeyword}
-          />
-          {directory?.mode === "friends" && (
-            <BeButton
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="shrink-0 rounded-lg hover:bg-foreground/10 [&_svg]:size-5"
-              aria-label="好友管理"
-              title="好友管理"
-              onClick={() => setFriendsOpen(true)}
-            >
-              <HugeiconsIcon icon={UserMultiple02Icon} aria-hidden />
-            </BeButton>
-          )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <BeButton
-                type="button"
-                variant="ghost"
-                size="icon"
-                pressScale={1}
-                whileHover={{ scale: 1 }}
-                className="shrink-0 rounded-lg hover:bg-foreground/10 [&_svg]:size-5"
-                aria-label="通讯录更多操作"
-                title="更多操作"
-              >
-                <HugeiconsIcon icon={MoreHorizontalIcon} aria-hidden />
-              </BeButton>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => setAppDialog("create")}>
-                <HugeiconsIcon icon={CirclePlusIcon} aria-hidden />
-                创建应用
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled={refreshing} onSelect={() => void load(true)}>
-                <HugeiconsIcon icon={RefreshIcon} aria-hidden />
-                刷新
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </header>
+        <SidebarSearchHeader
+          value={keyword}
+          searchLabel="搜索通讯录"
+          onValueChange={setKeyword}
+          onCreateGroup={onCreateGroup}
+          onCreateApp={onCreateApp}
+          onRefresh={onRefresh}
+        />
         <ScrollArea
           type="hover"
           scrollHideDelay={200}
@@ -412,15 +353,6 @@ export function ContactsPage({
         )}
       </div>
 
-      {friendsOpen && directory && (
-        <FriendManagementDialog
-          targetId={targetId}
-          userId={userId}
-          contacts={directory.users}
-          onClose={() => setFriendsOpen(false)}
-          onChanged={() => void load(true)}
-        />
-      )}
       {appDialog && (
         <ClientAppDialog
           key={`${targetId}:${appDialog}:${credentials?.app.id ?? ""}`}

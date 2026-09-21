@@ -204,8 +204,22 @@ export class AuthController {
     return this.initializeAccountRuntime(active, runtime)
   }
 
+  async refreshAll(targetId: string): Promise<null> {
+    await this.initialized
+    const active = this.requireTarget(targetId)
+    const runtime = this.accountRuntime
+    if (!active.user || !active.credential || !runtime) {
+      throw new AuthFailure("not_authenticated", "请重新登录账号")
+    }
+    return this.initializeAccountRuntime(active, runtime, () => runtime.refreshAll())
+  }
+
   listConversations(...args: Parameters<AccountDataFacade["listConversations"]>) {
     return this.accountData.listConversations(...args)
+  }
+
+  createGroupConversation(...args: Parameters<AccountDataFacade["createGroupConversation"]>) {
+    return this.accountData.createGroupConversation(...args)
   }
 
   listMessages(...args: Parameters<AccountDataFacade["listMessages"]>) {
@@ -604,9 +618,13 @@ export class AuthController {
     }).catch(() => undefined)
   }
 
-  private async initializeAccountRuntime(active: ActiveConnection, runtime: AccountRuntime) {
+  private async initializeAccountRuntime(
+    active: ActiveConnection,
+    runtime: AccountRuntime,
+    operation: () => Promise<void> = () => runtime.initialize(),
+  ) {
     try {
-      await runtime.initialize()
+      await operation()
       return null
     } catch (error) {
       if (this.accountRuntime === runtime) {

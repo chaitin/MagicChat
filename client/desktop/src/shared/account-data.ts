@@ -2,7 +2,9 @@ import type { AuthResult } from "./auth"
 
 export const ACCOUNT_DATA_CHANNELS = {
   initialize: "desktop-next:v1:account-data-initialize",
+  refreshAll: "desktop-next:v1:account-data-refresh-all",
   listConversations: "desktop-next:v1:conversations-list",
+  createGroupConversation: "desktop-next:v1:conversation-group-create",
   listMessages: "desktop-next:v1:conversation-messages-list",
   loadBeforeMessages: "desktop-next:v1:conversation-messages-load-before",
   setMessageReaction: "desktop-next:v1:conversation-message-reaction-set",
@@ -251,6 +253,13 @@ export type OpenContactConversationInput = ContactTargetInput & {
   joined?: boolean
 }
 
+export type CreateGroupConversationInput = {
+  targetId: string
+  name: string
+  memberIds: string[]
+  appIds: string[]
+}
+
 export type SaveClientAppInput = {
   targetId: string
   name: string
@@ -341,7 +350,11 @@ export type SetMessageReactionInput = {
 
 export interface AccountDataBridge {
   initialize(targetId: string): Promise<AuthResult<null>>
+  refreshAll(targetId: string): Promise<AuthResult<null>>
   listConversations(targetId: string): Promise<AuthResult<DesktopConversation[]>>
+  createGroupConversation(
+    input: CreateGroupConversationInput,
+  ): Promise<AuthResult<DesktopConversation>>
   listMessages(input: {
     targetId: string
     conversationId: string
