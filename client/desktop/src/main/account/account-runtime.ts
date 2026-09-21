@@ -14,6 +14,7 @@ import type {
   DesktopMessage,
   DesktopMessagePage,
   FriendRequestListInput,
+  LocalSearchInput,
   MessageReactionUsersInput,
   OpenContactConversationInput,
   SaveClientAppInput,
@@ -32,6 +33,7 @@ import { ConversationManager } from "./conversation-manager"
 import { MediaManager } from "./media-manager"
 import { ProjectManager } from "./project-manager"
 import { RealtimeManager, type RealtimeEvent } from "./realtime-manager"
+import { SearchManager } from "./search-manager"
 
 export class AccountRuntime {
   private database?: AccountDatabase
@@ -42,6 +44,7 @@ export class AccountRuntime {
   private projectManager?: ProjectManager
   private avatarManager?: AvatarManager
   private mediaManager?: MediaManager
+  private searchManager?: SearchManager
   private realtimeManager?: RealtimeManager
   private initialization?: Promise<void>
   private revision = 0
@@ -74,6 +77,11 @@ export class AccountRuntime {
   async refreshAll() {
     this.assertInitialized()
     await this.synchronize()
+  }
+
+  searchLocal(input: Omit<LocalSearchInput, "targetId">) {
+    this.assertInitialized()
+    return this.searchManager!.search(input)
   }
 
   listConversations(): DesktopConversation[] {
@@ -342,6 +350,7 @@ export class AccountRuntime {
     this.realtimeManager = undefined
     this.mediaManager?.close()
     this.mediaManager = undefined
+    this.searchManager = undefined
     this.conversationManager?.close()
     this.conversationManager = undefined
     this.contactManager = undefined
@@ -377,6 +386,7 @@ export class AccountRuntime {
         (conversationId) => this.notifyChanged(["conversations", "messages"], [conversationId]),
       )
       this.contactManager = new ContactManager(this.database, client)
+      this.searchManager = new SearchManager(this.database)
       this.clientAppManager = new ClientAppManager(client, this.contactManager)
       const currentUserAvatar = {
         type: "user" as const,

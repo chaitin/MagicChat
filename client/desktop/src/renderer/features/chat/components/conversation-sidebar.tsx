@@ -1,6 +1,5 @@
-import { useState } from "react"
 import { Loading03Icon, NotificationOff01Icon } from "@hugeicons/core-free-icons"
-import type { DesktopConversation } from "../../../../shared/account-data"
+import type { DesktopConversation, LocalSearchResult } from "../../../../shared/account-data"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { SidebarSearchHeader } from "@/components/sidebar-search-header"
@@ -20,6 +19,7 @@ export function ConversationSidebar({
   onCreateGroup,
   onCreateApp,
   onRefresh,
+  onSelectSearchResult,
 }: {
   conversations: DesktopConversation[]
   loading: boolean
@@ -31,30 +31,23 @@ export function ConversationSidebar({
   onCreateGroup: () => void
   onCreateApp: () => void
   onRefresh: () => void
+  onSelectSearchResult: (result: LocalSearchResult) => void
 }) {
-  const [keyword, setKeyword] = useState("")
-  const query = keyword.trim().toLocaleLowerCase()
-  const visibleConversations = query
-    ? conversations.filter((conversation) =>
-        [conversation.name, conversation.lastMessageSummary]
-          .join("\n")
-          .toLocaleLowerCase()
-          .includes(query),
-      )
-    : conversations
-  const pinned = visibleConversations
+  const pinned = conversations
     .filter((conversation) => conversation.pinned || conversation.isBuiltinAssistant)
     .sort(compareConversationActivity)
-  const regular = visibleConversations
+  const regular = conversations
     .filter((conversation) => !conversation.pinned && !conversation.isBuiltinAssistant)
     .sort(compareConversationActivity)
 
   return (
     <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-sidebar">
       <SidebarSearchHeader
-        value={keyword}
         searchLabel="搜索会话"
-        onValueChange={setKeyword}
+        targetId={targetId}
+        theme={resolvedTheme}
+        mentionLabelResolver={mentionLabelResolver}
+        onSelectSearchResult={onSelectSearchResult}
         onCreateGroup={onCreateGroup}
         onCreateApp={onCreateApp}
         onRefresh={onRefresh}
@@ -75,9 +68,9 @@ export function ConversationSidebar({
                 aria-label="正在读取对话"
               />
             </div>
-          ) : visibleConversations.length === 0 ? (
+          ) : conversations.length === 0 ? (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              {query ? "没有匹配的对话" : "暂无对话"}
+              暂无对话
             </div>
           ) : (
             <>

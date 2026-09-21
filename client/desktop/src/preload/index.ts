@@ -66,6 +66,7 @@ const bridge: DesktopBridge = {
   accountData: {
     initialize: (targetId) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.initialize, targetId),
     refreshAll: (targetId) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.refreshAll, targetId),
+    searchLocal: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.searchLocal, input),
     listConversations: (targetId) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listConversations, targetId),
     createGroupConversation: (input) =>

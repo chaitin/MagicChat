@@ -5,6 +5,7 @@ import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { Button as BeButton } from "@/components/motion/button/base"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import { SidebarSearchHeader } from "@/components/sidebar-search-header"
+import type { MentionLabelResolver } from "@/lib/message-mentions"
 import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog,
@@ -27,6 +28,7 @@ import type {
   DesktopContactDirectory,
   DesktopContactGroup,
   DesktopContactUser,
+  LocalSearchResult,
 } from "../../../shared/account-data"
 import { ClientAppDialog } from "./client-app-dialog"
 
@@ -43,6 +45,8 @@ export function ContactsPage({
   onCreateGroup,
   onCreateApp,
   onRefresh,
+  onSelectSearchResult,
+  mentionLabelResolver,
 }: {
   targetId: string
   serverUrl: string
@@ -53,11 +57,12 @@ export function ContactsPage({
   onCreateGroup: () => void
   onCreateApp: () => void
   onRefresh: () => void
+  onSelectSearchResult: (result: LocalSearchResult) => void
+  mentionLabelResolver: MentionLabelResolver
 }) {
   const { showToast } = useAnimatedToast()
   const [directory, setDirectory] = useState<DesktopContactDirectory | null>(null)
   const [loading, setLoading] = useState(true)
-  const [keyword, setKeyword] = useState("")
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set())
   const [selection, setSelection] = useState<Selection | null>(null)
   const [busyKey, setBusyKey] = useState("")
@@ -89,16 +94,15 @@ export function ContactsPage({
 
   const sections = useMemo(() => {
     if (!directory) return []
-    const query = keyword.trim().toLowerCase()
-    const users = directory.users
-      .filter((item) => matchesContact(item, query))
-      .sort((left, right) => left.name.localeCompare(right.name, "zh-CN"))
-    const apps = directory.apps
-      .filter((item) => matchesContact(item, query))
-      .sort((left, right) => left.name.localeCompare(right.name, "zh-CN"))
-    const groups = directory.groups
-      .filter((item) => matchesContact(item, query))
-      .sort((left, right) => left.name.localeCompare(right.name, "zh-CN"))
+    const users = [...directory.users].sort((left, right) =>
+      left.name.localeCompare(right.name, "zh-CN"),
+    )
+    const apps = [...directory.apps].sort((left, right) =>
+      left.name.localeCompare(right.name, "zh-CN"),
+    )
+    const groups = [...directory.groups].sort((left, right) =>
+      left.name.localeCompare(right.name, "zh-CN"),
+    )
     return [
       {
         key: "users",
@@ -141,7 +145,7 @@ export function ContactsPage({
         entries: groups.filter((item) => item.visibility === "public"),
       },
     ]
-  }, [directory, keyword, organizationName, userId])
+  }, [directory, organizationName, userId])
 
   const active = directory && selection ? entityFor(directory, selection) : null
   const isOwnedApp =
@@ -174,9 +178,11 @@ export function ContactsPage({
     <section className="grid min-w-0 flex-1 grid-cols-[19rem_minmax(0,1fr)] bg-card">
       <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-sidebar">
         <SidebarSearchHeader
-          value={keyword}
           searchLabel="搜索通讯录"
-          onValueChange={setKeyword}
+          targetId={targetId}
+          theme={resolvedTheme}
+          mentionLabelResolver={mentionLabelResolver}
+          onSelectSearchResult={onSelectSearchResult}
           onCreateGroup={onCreateGroup}
           onCreateApp={onCreateApp}
           onRefresh={onRefresh}
@@ -191,7 +197,7 @@ export function ContactsPage({
             {loading ? (
               <p className="p-4 text-center text-sm text-muted-foreground">正在加载通讯录…</p>
             ) : sections.every((section) => section.entries.length === 0) ? (
-              <p className="p-4 text-center text-sm text-muted-foreground">没有匹配的内容</p>
+              <p className="p-4 text-center text-sm text-muted-foreground">暂无通讯录内容</p>
             ) : (
               <div className="flex flex-col gap-1 bg-xgui-background-0 py-1">
                 {sections.map((section) => {
@@ -555,20 +561,6 @@ function entrySummary(entry: DesktopContactUser | DesktopContactApp | DesktopCon
     return entry.nickname || entry.email || (entry.online ? "在线" : "离线")
   if (entry.avatarType === "app") return entry.description || (entry.online ? "在线" : "离线")
   return `${entry.memberCount} 人 · ${entry.joined ? "已加入" : "公开群组"}`
-}
-
-function matchesContact(
-  entry: DesktopContactUser | DesktopContactApp | DesktopContactGroup,
-  query: string,
-) {
-  if (!query) return true
-  const fields =
-    entry.avatarType === "user"
-      ? [entry.name, entry.nickname, entry.email, entry.phone]
-      : entry.avatarType === "app"
-        ? [entry.name, entry.description]
-        : [entry.name]
-  return fields.some((value) => value.toLowerCase().includes(query))
 }
 
 function entityFor(directory: DesktopContactDirectory, selection: Selection) {

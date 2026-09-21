@@ -29,6 +29,7 @@ export function MessageList({
   conversationName,
   mentionLabelResolver,
   pendingReactionKeys,
+  highlightedMessageId,
   onReachTop,
   onSetReaction,
   onRetryMessage,
@@ -45,6 +46,7 @@ export function MessageList({
   conversationName: string
   mentionLabelResolver: MentionLabelResolver
   pendingReactionKeys: Set<string>
+  highlightedMessageId: string | null
   onReachTop: () => void
   onSetReaction: (message: DesktopMessage, text: string, reacted: boolean) => Promise<void>
   onRetryMessage: (message: DesktopMessage) => void
@@ -103,6 +105,7 @@ export function MessageList({
                     conversationName={conversationName}
                     mentionLabelResolver={mentionLabelResolver}
                     pendingReactionKeys={pendingReactionKeys}
+                    highlighted={message.id === highlightedMessageId}
                     onSetReaction={onSetReaction}
                     onRetryMessage={onRetryMessage}
                     onPendingFeature={onPendingFeature}
@@ -126,6 +129,7 @@ function MessageRow({
   conversationName,
   mentionLabelResolver,
   pendingReactionKeys,
+  highlighted,
   onSetReaction,
   onRetryMessage,
   onPendingFeature,
@@ -138,13 +142,20 @@ function MessageRow({
   conversationName: string
   mentionLabelResolver: MentionLabelResolver
   pendingReactionKeys: Set<string>
+  highlighted: boolean
   onSetReaction: (message: DesktopMessage, text: string, reacted: boolean) => Promise<void>
   onRetryMessage: (message: DesktopMessage) => void
   onPendingFeature: (label: string) => void
 }) {
   if (message.body.type === "system_event") {
     return (
-      <article className="flex justify-center">
+      <article
+        data-message-id={message.id}
+        className={cn(
+          "flex justify-center rounded-lg transition-colors duration-300",
+          highlighted && "bg-xgui-background-1",
+        )}
+      >
         <Badge variant="secondary">
           <MessageBodyRenderer
             body={message.body}
@@ -161,8 +172,10 @@ function MessageRow({
   const flushMediaBubble = shouldFlushMediaBubble(message)
   return (
     <article
+      data-message-id={message.id}
       className={cn(
-        "group/message-row flex items-start gap-2",
+        "group/message-row flex items-start gap-2 rounded-lg transition-colors duration-300",
+        highlighted && "bg-xgui-background-1",
         message.isMine ? "justify-end" : "justify-start",
       )}
     >

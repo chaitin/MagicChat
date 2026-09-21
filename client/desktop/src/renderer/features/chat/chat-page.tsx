@@ -15,7 +15,7 @@ import { useAttachmentSender } from "./hooks/use-attachment-sender"
 import { useChatData } from "./hooks/use-chat-data"
 import { SendFileMessageDialog } from "./send-file-message-dialog"
 import { SendMediaMessageDialog } from "./send-media-message-dialog"
-import type { DesktopContactDirectory } from "../../../shared/account-data"
+import type { DesktopContactDirectory, LocalSearchResult } from "../../../shared/account-data"
 import type { ServerCatalog } from "../../../shared/auth"
 import type { ThemePreference } from "../../../shared/desktop"
 
@@ -54,6 +54,10 @@ export function ChatPage({
   const [activeSection, setActiveSection] = useState<AppSection>("chat")
   const [actionDialog, setActionDialog] = useState<"group" | "app" | null>(null)
   const [actionDirectory, setActionDirectory] = useState<DesktopContactDirectory | null>(null)
+  const [searchMessageTarget, setSearchMessageTarget] = useState<{
+    conversationId: string
+    messageId: string
+  } | null>(null)
   const [draft, setDraft] = useState("")
   const [markdownMode, setMarkdownMode] = useState(false)
   const composerRef = useRef<HTMLTextAreaElement>(null)
@@ -76,6 +80,34 @@ export function ChatPage({
     retryMessage,
     loadBeforeMessages,
   } = useChatData({ targetId, userId, userName })
+
+  useEffect(() => {
+    if (
+      !searchMessageTarget ||
+      activeSection !== "chat" ||
+      selectedId !== searchMessageTarget.conversationId ||
+      loadingMessages
+    ) {
+      return
+    }
+    let clearHighlightTimer: number | undefined
+    const frame = window.requestAnimationFrame(() => {
+      const row = Array.from(
+        historyRef.current?.querySelectorAll<HTMLElement>("[data-message-id]") ?? [],
+      ).find((element) => element.dataset.messageId === searchMessageTarget.messageId)
+      if (!row) return
+      row.scrollIntoView({ block: "center" })
+      clearHighlightTimer = window.setTimeout(() => {
+        setSearchMessageTarget((current) =>
+          current?.messageId === searchMessageTarget.messageId ? null : current,
+        )
+      }, 1600)
+    })
+    return () => {
+      window.cancelAnimationFrame(frame)
+      if (clearHighlightTimer !== undefined) window.clearTimeout(clearHighlightTimer)
+    }
+  }, [activeSection, historyRef, loadingMessages, messages, searchMessageTarget, selectedId])
 
   const focusComposer = useCallback(() => {
     requestAnimationFrame(() => {
@@ -177,6 +209,32 @@ export function ChatPage({
     [setSelectedId, targetId],
   )
 
+  const selectSearchResult = useCallback(
+    async (result: LocalSearchResult) => {
+      if (result.kind === "message") {
+        setSearchMessageTarget({ conversationId: result.conversationId, messageId: result.id })
+        setSelectedId(result.conversationId)
+        setActiveSection("chat")
+        return
+      }
+      if (!window.desktop) return
+      const conversation = await window.desktop.accountData.openContactConversation({
+        targetId,
+        type: result.kind === "contact" ? "user" : result.kind,
+        id: result.id,
+        joined: result.kind === "group" ? result.joined : undefined,
+      })
+      if (!conversation.ok) {
+        showToast({ status: "error", title: conversation.error.message })
+        return
+      }
+      setSearchMessageTarget(null)
+      setSelectedId(conversation.data.id)
+      setActiveSection("chat")
+    },
+    [setSelectedId, showToast, targetId],
+  )
+
   const openActionDialog = useCallback(
     async (dialog: "group" | "app") => {
       if (!window.desktop) return
@@ -226,6 +284,7 @@ export function ChatPage({
             onCreateGroup={() => void openActionDialog("group")}
             onCreateApp={() => void openActionDialog("app")}
             onRefresh={onRefresh}
+            onSelectSearchResult={selectSearchResult}
           />
 
           <section className="flex min-h-0 min-w-0 flex-col bg-card" aria-label="聊天区域">
@@ -258,6 +317,11 @@ export function ChatPage({
                     conversationName={selected.name}
                     mentionLabelResolver={resolveMentionLabel}
                     pendingReactionKeys={pendingReactionKeys}
+                    highlightedMessageId={
+                      searchMessageTarget?.conversationId === selected.id
+                        ? searchMessageTarget.messageId
+                        : null
+                    }
                     onReachTop={() => void loadBeforeMessages()}
                     onSetReaction={setMessageReaction}
                     onRetryMessage={retryMessage}
@@ -319,6 +383,8 @@ export function ChatPage({
           onCreateGroup={() => void openActionDialog("group")}
           onCreateApp={() => void openActionDialog("app")}
           onRefresh={onRefresh}
+          onSelectSearchResult={selectSearchResult}
+          mentionLabelResolver={resolveMentionLabel}
         />
       ) : (
         <SectionPlaceholder section={activeSection} />

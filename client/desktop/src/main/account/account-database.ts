@@ -11,6 +11,7 @@ import {
 import { ConversationRepository, type StoredConversation } from "./database/conversation-repository"
 import { initializeAccountSchema } from "./database/account-schema"
 import { MessageRepository } from "./database/message-repository"
+import { SearchRepository } from "./database/search-repository"
 
 export type { StoredConversation } from "./database/conversation-repository"
 export type { StoredMessage } from "./database/message-repository"
@@ -27,6 +28,7 @@ export class AccountDatabase {
   private readonly contacts: ContactRepository
   private readonly conversations: ConversationRepository
   private readonly messages: MessageRepository
+  private readonly search: SearchRepository
   private closed = false
 
   constructor(filePath: string) {
@@ -36,6 +38,7 @@ export class AccountDatabase {
     this.contacts = new ContactRepository(this.database)
     this.conversations = new ConversationRepository(this.database)
     this.messages = new MessageRepository(this.database)
+    this.search = new SearchRepository(this.database)
   }
 
   upsertCurrentConversations(conversations: StoredConversation[]) {
@@ -114,6 +117,22 @@ export class AccountDatabase {
 
   listMessages(...args: Parameters<MessageRepository["listMessages"]>) {
     return this.messages.listMessages(...args)
+  }
+
+  searchContacts(...args: Parameters<SearchRepository["searchContacts"]>) {
+    return this.search.searchContacts(...args)
+  }
+
+  searchApps(...args: Parameters<SearchRepository["searchApps"]>) {
+    return this.search.searchApps(...args)
+  }
+
+  searchGroups(...args: Parameters<SearchRepository["searchGroups"]>) {
+    return this.search.searchGroups(...args)
+  }
+
+  searchMessages(...args: Parameters<SearchRepository["searchMessages"]>) {
+    return this.search.searchMessages(...args)
   }
 
   replaceContacts(input: {

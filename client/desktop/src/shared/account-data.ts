@@ -3,6 +3,7 @@ import type { AuthResult } from "./auth"
 export const ACCOUNT_DATA_CHANNELS = {
   initialize: "desktop-next:v1:account-data-initialize",
   refreshAll: "desktop-next:v1:account-data-refresh-all",
+  searchLocal: "desktop-next:v1:account-data-search-local",
   listConversations: "desktop-next:v1:conversations-list",
   createGroupConversation: "desktop-next:v1:conversation-group-create",
   listMessages: "desktop-next:v1:conversation-messages-list",
@@ -260,6 +261,47 @@ export type CreateGroupConversationInput = {
   appIds: string[]
 }
 
+export type LocalSearchCategory = "all" | "contacts" | "apps" | "groups" | "messages"
+
+export type LocalSearchInput = {
+  targetId: string
+  query: string
+  category: LocalSearchCategory
+}
+
+export type LocalSearchContactResult = DesktopContactUser & { kind: "contact" }
+export type LocalSearchAppResult = DesktopContactApp & { kind: "app" }
+export type LocalSearchGroupResult = DesktopContactGroup & { kind: "group" }
+export type LocalSearchMessageResult = {
+  kind: "message"
+  id: string
+  conversationId: string
+  conversationName: string
+  conversationAvatarType: AvatarType
+  conversationAvatarId: string
+  senderName: string
+  createdAt: string
+  summary: string
+}
+
+export type LocalSearchResult =
+  | LocalSearchContactResult
+  | LocalSearchAppResult
+  | LocalSearchGroupResult
+  | LocalSearchMessageResult
+
+export type LocalSearchSection<T> = {
+  items: T[]
+  hasMore: boolean
+}
+
+export type LocalSearchResponse = {
+  contacts: LocalSearchSection<LocalSearchContactResult>
+  apps: LocalSearchSection<LocalSearchAppResult>
+  groups: LocalSearchSection<LocalSearchGroupResult>
+  messages: LocalSearchSection<LocalSearchMessageResult>
+}
+
 export type SaveClientAppInput = {
   targetId: string
   name: string
@@ -351,6 +393,7 @@ export type SetMessageReactionInput = {
 export interface AccountDataBridge {
   initialize(targetId: string): Promise<AuthResult<null>>
   refreshAll(targetId: string): Promise<AuthResult<null>>
+  searchLocal(input: LocalSearchInput): Promise<AuthResult<LocalSearchResponse>>
   listConversations(targetId: string): Promise<AuthResult<DesktopConversation[]>>
   createGroupConversation(
     input: CreateGroupConversationInput,

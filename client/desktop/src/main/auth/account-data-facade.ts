@@ -3,6 +3,7 @@ import type {
   ContactTargetInput,
   CreateGroupConversationInput,
   FriendRequestListInput,
+  LocalSearchInput,
   MessageReactionUsersInput,
   OpenContactConversationInput,
   RetryMessageInput,
@@ -22,6 +23,11 @@ export class AccountDataFacade {
     private readonly requireTarget: (targetId: unknown) => void,
     private readonly requireRuntime: () => AccountRuntime,
   ) {}
+
+  async searchLocal(input: LocalSearchInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().searchLocal(input)
+  }
 
   async listConversations(targetId: string) {
     await this.ready(targetId)

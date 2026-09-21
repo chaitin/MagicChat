@@ -214,6 +214,10 @@ export class AuthController {
     return this.initializeAccountRuntime(active, runtime, () => runtime.refreshAll())
   }
 
+  searchLocal(...args: Parameters<AccountDataFacade["searchLocal"]>) {
+    return this.accountData.searchLocal(...args)
+  }
+
   listConversations(...args: Parameters<AccountDataFacade["listConversations"]>) {
     return this.accountData.listConversations(...args)
   }
