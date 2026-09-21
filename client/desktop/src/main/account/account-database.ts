@@ -188,6 +188,10 @@ export class AccountDatabase {
     return this.cache.getMedia(cacheKey)
   }
 
+  listMediaCachesByFile(...args: Parameters<CacheRepository["listMediaByFile"]>) {
+    return this.cache.listMediaByFile(...args)
+  }
+
   listIncompleteMediaCaches(): StoredMediaCache[] {
     return this.cache.listIncompleteMedia()
   }

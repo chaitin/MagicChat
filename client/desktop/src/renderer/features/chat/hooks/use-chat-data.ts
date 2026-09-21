@@ -25,14 +25,18 @@ export function useChatData({
   const [contactRevision, setContactRevision] = useState(0)
   const [mentionLabels, setMentionLabels] = useState<Map<string, string>>(new Map())
   const [pendingReactionKeys, setPendingReactionKeys] = useState<Set<string>>(new Set())
+  const [newMessageCount, setNewMessageCount] = useState(0)
   const realtimeRevisionRef = useRef(0)
   const loadingBeforeRef = useRef(false)
   const prependSnapshotRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null)
   const scrollToBottomRef = useRef(true)
+  const isAtBottomRef = useRef(true)
+  const messagesRef = useRef(messages)
   const selectedIdRef = useRef(selectedId)
   const loadedConversationIdRef = useRef<string | null>(null)
   const historyRef = useRef<HTMLDivElement>(null)
   selectedIdRef.current = selectedId
+  messagesRef.current = messages
 
   const selected = useMemo(
     () => conversations.find((conversation) => conversation.id === selectedId) ?? null,
@@ -154,7 +158,7 @@ export function useChatData({
   )
 
   const sendTextMessage = useCallback(
-    (content: string, bodyType: "text" | "markdown") => {
+    (content: string, bodyType: "text" | "markdown" | "link") => {
       const conversationId = selectedIdRef.current
       if (!conversationId || !window.desktop) return
       scrollToBottomRef.current = true
@@ -223,6 +227,8 @@ export function useChatData({
     loadedConversationIdRef.current = selectedId
     if (switchingConversation) {
       scrollToBottomRef.current = true
+      isAtBottomRef.current = true
+      setNewMessageCount(0)
       prependSnapshotRef.current = null
       setHasMoreBeforeMessages(false)
       setLoadingMessages(true)
@@ -232,6 +238,17 @@ export function useChatData({
       .then((result) => {
         if (cancelled) return
         if (result.ok) {
+          if (!switchingConversation) {
+            const previous = messagesRef.current
+            const latestSeq = previous.at(-1)?.seq ?? 0
+            const receivedCount = result.data.filter(
+              (message) => message.seq > latestSeq && !message.isMine,
+            ).length
+            if (receivedCount > 0) {
+              if (isAtBottomRef.current) scrollToBottomRef.current = true
+              else setNewMessageCount((count) => count + receivedCount)
+            }
+          }
           setMessages(result.data)
           setHasMoreBeforeMessages(result.data.length > 0 && result.data[0].seq > 1)
         } else {
@@ -257,6 +274,34 @@ export function useChatData({
     }
   }, [messageRevision, selectedId, showToast, targetId])
 
+  const updateHistoryScrollPosition = useCallback((viewport: HTMLDivElement) => {
+    const atBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= 48
+    isAtBottomRef.current = atBottom
+    if (atBottom) setNewMessageCount(0)
+  }, [])
+
+  const scrollToLatestMessage = useCallback(() => {
+    const viewport = historyRef.current
+    if (!viewport) return
+    viewport.scrollTop = viewport.scrollHeight
+    isAtBottomRef.current = true
+    scrollToBottomRef.current = false
+    setNewMessageCount(0)
+  }, [])
+
+  useEffect(() => {
+    const viewport = historyRef.current
+    const content = viewport?.firstElementChild
+    if (!viewport || !content || typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(() => {
+      if (isAtBottomRef.current || scrollToBottomRef.current) {
+        viewport.scrollTop = viewport.scrollHeight
+      }
+    })
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [selectedId])
+
   useLayoutEffect(() => {
     if (!selected || loadingMessages) return
     const viewport = historyRef.current
@@ -267,10 +312,14 @@ export function useChatData({
       prependSnapshotRef.current = null
       return
     }
-    if (scrollToBottomRef.current) {
+    if (!scrollToBottomRef.current) return
+    viewport.scrollTop = viewport.scrollHeight
+    const frame = window.requestAnimationFrame(() => {
       viewport.scrollTop = viewport.scrollHeight
+      isAtBottomRef.current = true
       scrollToBottomRef.current = false
-    }
+    })
+    return () => window.cancelAnimationFrame(frame)
   }, [loadingMessages, messages, selected])
 
   const loadBeforeMessages = useCallback(async () => {
@@ -330,8 +379,11 @@ export function useChatData({
     loadingMessages,
     loadingBeforeMessages,
     pendingReactionKeys,
+    newMessageCount,
     historyRef,
     setSelectedId,
+    updateHistoryScrollPosition,
+    scrollToLatestMessage,
     resolveMentionLabel,
     setMessageReaction,
     applySentMessages,

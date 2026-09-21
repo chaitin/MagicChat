@@ -1,8 +1,11 @@
+import path from "node:path"
+import { shell } from "electron"
 import { AuthFailure } from "../../shared/auth"
 import {
   MEDIA_CHANNELS,
   type MediaCacheRequest,
   type MediaPreviewRequest,
+  type MediaRevealRequest,
 } from "../../shared/media"
 import type { AuthController } from "../auth-controller"
 import type { MediaPreviewWindow } from "../media-preview-window"
@@ -18,6 +21,20 @@ export function registerMediaIpc({
   mediaPreview: MediaPreviewWindow
 }) {
   handle(MEDIA_CHANNELS.ensureCached, (input) => auth.ensureMediaCached(input as MediaCacheRequest))
+  handle(MEDIA_CHANNELS.checkCached, (input) => auth.checkMediaCached(input as MediaCacheRequest))
+  handle(MEDIA_CHANNELS.revealCached, async (input) => {
+    const value = input as MediaRevealRequest | undefined
+    if (!value || typeof value.targetId !== "string" || typeof value.cacheKey !== "string") {
+      throw new AuthFailure("invalid_media_reveal", "文件定位请求不正确")
+    }
+    const filePath = value.cacheKey.startsWith("outgoing:")
+      ? (await auth.getOutgoingMedia(value.targetId, value.cacheKey.slice("outgoing:".length)))
+          .filePath
+      : (await auth.getCachedMediaResource(value.targetId, value.cacheKey)).filePath
+    const error = await shell.openPath(path.dirname(filePath))
+    if (error) throw new AuthFailure("media_reveal_failed", "无法打开文件所在文件夹")
+    return null
+  })
   handle(MEDIA_CHANNELS.openPreview, async (input) => {
     const value = input as MediaPreviewRequest | undefined
     if (

@@ -266,6 +266,10 @@ export class AuthController {
     return this.accountData.ensureMediaCached(...args)
   }
 
+  checkMediaCached(...args: Parameters<AccountDataFacade["checkMediaCached"]>) {
+    return this.accountData.checkMediaCached(...args)
+  }
+
   getOutgoingMedia(...args: Parameters<AccountDataFacade["getOutgoingMedia"]>) {
     return this.accountData.getOutgoingMedia(...args)
   }

@@ -106,7 +106,7 @@ export class AccountRuntime {
     return this.conversationManager!.loadBeforeMessages(conversationId, beforeSeq)
   }
 
-  sendTextMessage(conversationId: string, content: string, bodyType: "text" | "markdown") {
+  sendTextMessage(conversationId: string, content: string, bodyType: "text" | "markdown" | "link") {
     this.assertInitialized()
     return this.conversationManager!.sendTextMessage(conversationId, content, bodyType)
   }
@@ -180,6 +180,11 @@ export class AccountRuntime {
   async ensureMediaCached(request: MediaCacheRequest): Promise<CachedMedia> {
     this.assertInitialized()
     return this.mediaManager!.ensureCached(request)
+  }
+
+  async checkMediaCached(request: MediaCacheRequest): Promise<CachedMedia | null> {
+    this.assertInitialized()
+    return this.mediaManager!.checkCached(request)
   }
 
   async getCachedMedia(cacheKey: string): Promise<CachedMedia> {

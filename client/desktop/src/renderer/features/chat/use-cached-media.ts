@@ -64,6 +64,25 @@ export function useCachedMedia(input: MediaCacheRequest, automatic: boolean) {
   }, [outgoing, request])
 
   useEffect(() => {
+    if (automatic || outgoing) return
+    const media = window.desktop?.media
+    if (!media) return
+    let cancelled = false
+    void media.checkCached(request).then((result) => {
+      if (cancelled || !result.ok || !result.data) return
+      setState({
+        cached: result.data,
+        downloadedBytes: result.data.sizeBytes,
+        status: "ready",
+        totalBytes: result.data.sizeBytes,
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [automatic, outgoing, request])
+
+  useEffect(() => {
     const media = window.desktop?.media
     if (!media) return
     return media.onDownloadProgress((event) => {

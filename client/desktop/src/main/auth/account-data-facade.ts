@@ -116,6 +116,11 @@ export class AccountDataFacade {
     return this.requireRuntime().ensureMediaCached(request)
   }
 
+  async checkMediaCached(request: MediaCacheRequest) {
+    await this.ready(request?.targetId)
+    return this.requireRuntime().checkMediaCached(request)
+  }
+
   async getOutgoingMedia(targetId: string, clientMessageId: string) {
     await this.ready(targetId)
     return this.requireRuntime().getOutgoingMedia(clientMessageId)

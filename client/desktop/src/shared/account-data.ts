@@ -327,7 +327,7 @@ export type SendTextMessageInput = {
   targetId: string
   conversationId: string
   content: string
-  bodyType: "text" | "markdown"
+  bodyType: "text" | "markdown" | "link"
 }
 
 export type SelectedMessageFile = {

@@ -1,6 +1,7 @@
 import { Fragment, type RefObject } from "react"
 import {
   AlertCircleIcon,
+  ArrowDown02Icon,
   Loading03Icon,
   MoreHorizontalIcon,
   UploadCircle01Icon,
@@ -10,6 +11,7 @@ import { EntityAvatar } from "@/components/avatar/entity-avatar"
 import { ContactProfilePopover } from "@/components/avatar/contact-profile-popover"
 import { HugeiconsIcon, type HugeiconsIconProps } from "@/components/icons/hugeicons-icon"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { MentionLabelResolver } from "@/lib/message-mentions"
 import { cn } from "@/lib/utils"
@@ -30,6 +32,9 @@ export function MessageList({
   mentionLabelResolver,
   pendingReactionKeys,
   highlightedMessageId,
+  newMessageCount,
+  onViewportScroll,
+  onScrollToBottom,
   onReachTop,
   onSetReaction,
   onRetryMessage,
@@ -47,76 +52,94 @@ export function MessageList({
   mentionLabelResolver: MentionLabelResolver
   pendingReactionKeys: Set<string>
   highlightedMessageId: string | null
+  newMessageCount: number
+  onViewportScroll: (viewport: HTMLDivElement) => void
+  onScrollToBottom: () => void
   onReachTop: () => void
   onSetReaction: (message: DesktopMessage, text: string, reacted: boolean) => Promise<void>
   onRetryMessage: (message: DesktopMessage) => void
   onPendingFeature: (label: string) => void
 }) {
   return (
-    <ScrollArea
-      data-chat-history
-      type="hover"
-      scrollHideDelay={200}
-      viewportRef={historyRef}
-      onViewportScroll={(event) => {
-        if (event.currentTarget.scrollTop <= 80) onReachTop()
-      }}
-      className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
-      viewportClassName="overflow-x-hidden [&>div]:block! [&>div]:w-full! [&>div]:min-w-0!"
-    >
-      <div className="min-h-full px-4 py-6">
-        {loading ? (
-          <div className="flex min-h-[inherit] items-center justify-center text-muted-foreground">
-            <HugeiconsIcon
-              icon={Loading03Icon}
-              className="size-5 animate-spin"
-              aria-label="正在读取聊天记录"
-            />
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="flex min-h-[inherit] items-center justify-center text-sm text-muted-foreground">
-            暂无聊天记录
-          </div>
-        ) : (
-          <>
-            {loadingBefore && (
-              <div className="flex justify-center pb-4 text-muted-foreground">
-                <HugeiconsIcon
-                  icon={Loading03Icon}
-                  className="size-4 animate-spin"
-                  aria-label="正在加载更早消息"
-                />
-              </div>
-            )}
-            <div className="flex w-full flex-col gap-5">
-              {messages.map((message, index) => (
-                <Fragment key={message.id}>
-                  {shouldShowMessageTimeMarker(messages[index - 1], message) && (
-                    <div className="text-center text-xs text-muted-foreground">
-                      {formatMessageTime(message.createdAt)}
-                    </div>
-                  )}
-                  <MessageRow
-                    message={message}
-                    targetId={targetId}
-                    userId={userId}
-                    userName={userName}
-                    resolvedTheme={resolvedTheme}
-                    conversationName={conversationName}
-                    mentionLabelResolver={mentionLabelResolver}
-                    pendingReactionKeys={pendingReactionKeys}
-                    highlighted={message.id === highlightedMessageId}
-                    onSetReaction={onSetReaction}
-                    onRetryMessage={onRetryMessage}
-                    onPendingFeature={onPendingFeature}
-                  />
-                </Fragment>
-              ))}
+    <div className="relative flex min-h-0 min-w-0 flex-1">
+      <ScrollArea
+        data-chat-history
+        type="hover"
+        scrollHideDelay={200}
+        viewportRef={historyRef}
+        onViewportScroll={(event) => {
+          onViewportScroll(event.currentTarget)
+          if (event.currentTarget.scrollTop <= 80) onReachTop()
+        }}
+        className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
+        viewportClassName="overflow-x-hidden [&>div]:block! [&>div]:w-full! [&>div]:min-w-0!"
+      >
+        <div className="min-h-full px-4 py-6">
+          {loading ? (
+            <div className="flex min-h-[inherit] items-center justify-center text-muted-foreground">
+              <HugeiconsIcon
+                icon={Loading03Icon}
+                className="size-5 animate-spin"
+                aria-label="正在读取聊天记录"
+              />
             </div>
-          </>
-        )}
-      </div>
-    </ScrollArea>
+          ) : messages.length === 0 ? (
+            <div className="flex min-h-[inherit] items-center justify-center text-sm text-muted-foreground">
+              暂无聊天记录
+            </div>
+          ) : (
+            <>
+              {loadingBefore && (
+                <div className="flex justify-center pb-4 text-muted-foreground">
+                  <HugeiconsIcon
+                    icon={Loading03Icon}
+                    className="size-4 animate-spin"
+                    aria-label="正在加载更早消息"
+                  />
+                </div>
+              )}
+              <div className="flex w-full flex-col gap-5">
+                {messages.map((message, index) => (
+                  <Fragment key={message.id}>
+                    {shouldShowMessageTimeMarker(messages[index - 1], message) && (
+                      <div className="text-center text-xs text-muted-foreground">
+                        {formatMessageTime(message.createdAt)}
+                      </div>
+                    )}
+                    <MessageRow
+                      message={message}
+                      targetId={targetId}
+                      userId={userId}
+                      userName={userName}
+                      resolvedTheme={resolvedTheme}
+                      conversationName={conversationName}
+                      mentionLabelResolver={mentionLabelResolver}
+                      pendingReactionKeys={pendingReactionKeys}
+                      highlighted={message.id === highlightedMessageId}
+                      onSetReaction={onSetReaction}
+                      onRetryMessage={onRetryMessage}
+                      onPendingFeature={onPendingFeature}
+                    />
+                  </Fragment>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </ScrollArea>
+      {newMessageCount > 0 && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full bg-popover px-4 shadow-lg hover:bg-popover hover:text-xgui-brand dark:hover:bg-popover"
+          onClick={onScrollToBottom}
+        >
+          <HugeiconsIcon icon={ArrowDown02Icon} className="size-4" aria-hidden />
+          {newMessageCount} 条新消息
+        </Button>
+      )}
+    </div>
   )
 }
 
@@ -219,7 +242,7 @@ function MessageRow({
         >
           <div
             className={cn(
-              "max-w-full rounded-xl text-sm leading-6",
+              "group/bubble max-w-full rounded-xl text-sm leading-6",
               flushMediaBubble ? "overflow-hidden p-0" : "px-3 py-2.5",
               message.isMine
                 ? "rounded-tr-sm bg-xgui-brand-1 hover:bg-xgui-brand-6"

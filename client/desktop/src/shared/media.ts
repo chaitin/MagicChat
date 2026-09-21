@@ -23,6 +23,11 @@ export type CachedMedia = {
   sizeBytes: number
 }
 
+export type MediaRevealRequest = {
+  targetId: string
+  cacheKey: string
+}
+
 export type MediaDownloadProgress = {
   targetId: string
   cacheKey: string
@@ -60,6 +65,8 @@ export type MediaPreviewPayload = {
 
 export const MEDIA_CHANNELS = {
   ensureCached: "desktop-next:v1:media-ensure-cached",
+  checkCached: "desktop-next:v1:media-check-cached",
+  revealCached: "desktop-next:v1:media-reveal-cached",
   openPreview: "desktop-next:v1:media-open-preview",
   downloadProgress: "desktop-next:v1:media-download-progress",
   previewInitialize: "desktop-next:v1:media-preview-initialize",
@@ -72,6 +79,8 @@ export const MEDIA_CHANNELS = {
 
 export interface MediaBridge {
   ensureCached(input: MediaCacheRequest): Promise<AuthResult<CachedMedia>>
+  checkCached(input: MediaCacheRequest): Promise<AuthResult<CachedMedia | null>>
+  revealCached(input: MediaRevealRequest): Promise<AuthResult<null>>
   openPreview(input: MediaPreviewRequest): Promise<AuthResult<null>>
   onDownloadProgress(callback: (event: MediaDownloadProgress) => void): () => void
 }

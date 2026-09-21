@@ -1,19 +1,22 @@
-import { useContext, useState } from "react"
-import { File01Icon, ImageNotFound01Icon, PlayIcon } from "@hugeicons/core-free-icons"
+import { useContext, useRef, useState } from "react"
+import {
+  DocumentAttachmentIcon,
+  Download01Icon,
+  Folder02Icon,
+  ImageNotFound01Icon,
+  Loading03Icon,
+  PauseCircleIcon,
+  PlayCircle02Icon,
+  Volume02Icon,
+} from "@hugeicons/core-free-icons"
 import type { DesktopMessageBody } from "../../../../shared/account-data"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useCachedMedia } from "../use-cached-media"
 import { MediaContext } from "./context"
 import { MarkdownBody, TextBody } from "./text-body"
-import {
-  formatDuration,
-  formatFileSize,
-  imageThumbnailFrame,
-  mediaUrl,
-  progressPercentage,
-  progressWidth,
-} from "./utils"
+import { formatFileSize, imageThumbnailFrame, mediaUrl, progressPercentage } from "./utils"
 
 export function ImageBody({
   body,
@@ -117,8 +120,9 @@ export function VideoBody({
         onClick={() => void downloadAndOpen()}
       >
         <HugeiconsIcon
-          icon={PlayIcon}
+          icon={PlayCircle02Icon}
           className="size-10 text-background transition-colors group-hover:text-xgui-brand-4"
+          strokeWidth={1}
           aria-hidden
         />
         {downloading && (
@@ -140,19 +144,79 @@ export function VoiceBody({
   body: Extract<DesktopMessageBody, { type: "voice" }>
   targetId: string
 }) {
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const [state, setState] = useState<"idle" | "loading" | "playing" | "paused">("idle")
+  const [elapsedMS, setElapsedMS] = useState(0)
+  const loading = state === "loading"
+  const playing = state === "playing"
+  const displayedDuration = state === "idle" ? body.durationMS : elapsedMS
+
+  async function togglePlayback() {
+    const audio = audioRef.current
+    if (!audio || loading) return
+    if (playing) {
+      audio.pause()
+      setState("paused")
+      return
+    }
+    setState("loading")
+    try {
+      await audio.play()
+    } catch {
+      setState("idle")
+      setElapsedMS(0)
+    }
+  }
+
   return (
-    <div className="grid w-72 max-w-full gap-2">
+    <div className="flex w-80 max-w-full items-center gap-3">
       <audio
-        controls
-        preload="metadata"
-        className="h-9 w-full"
+        ref={audioRef}
+        preload="none"
+        className="hidden"
         src={mediaUrl(targetId, body.fileId)}
+        onPlaying={() => setState("playing")}
+        onWaiting={() => setState("loading")}
+        onPause={() => setState((current) => (current === "idle" ? current : "paused"))}
+        onTimeUpdate={(event) => setElapsedMS(event.currentTarget.currentTime * 1000)}
+        onEnded={() => {
+          setState("idle")
+          setElapsedMS(0)
+        }}
+        onError={() => {
+          setState("idle")
+          setElapsedMS(0)
+        }}
       />
-      <div className="flex justify-between text-xs text-muted-foreground">
-        <span>{formatDuration(body.durationMS)}</span>
-        <span>{formatFileSize(body.sizeBytes)}</span>
+      <HugeiconsIcon
+        icon={Volume02Icon}
+        className="size-7 shrink-0 text-foreground"
+        strokeWidth={1.5}
+        aria-hidden
+      />
+      <div className="min-w-0 flex-1">
+        <div className="truncate">语音 - {formatPlaybackTime(displayedDuration)}</div>
+        <div className="truncate text-xs text-muted-foreground">
+          {body.transcript || "暂无文字摘要"}
+        </div>
       </div>
-      {body.transcript && <p className="text-sm text-muted-foreground">{body.transcript}</p>}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        className="shrink-0 hover:bg-foreground/5"
+        disabled={loading}
+        aria-label={loading ? "正在加载语音" : playing ? "暂停语音" : "播放语音"}
+        title={loading ? "正在加载" : playing ? "暂停" : "播放"}
+        onClick={() => void togglePlayback()}
+      >
+        <HugeiconsIcon
+          icon={loading ? Loading03Icon : playing ? PauseCircleIcon : PlayCircle02Icon}
+          className={cn("size-4 group-hover/bubble:text-xgui-brand-5", loading && "animate-spin")}
+          strokeWidth={1.5}
+          aria-hidden
+        />
+      </Button>
     </div>
   )
 }
@@ -170,38 +234,54 @@ export function FileBody({ body }: { body: Extract<DesktopMessageBody, { type: "
     false,
   )
   const downloading = media.status === "downloading" || media.status === "verifying"
+
+  async function revealCached() {
+    if (!media.cached || !window.desktop) return
+    await window.desktop.media.revealCached({ targetId, cacheKey: media.cached.cacheKey })
+  }
+
   return (
-    <button
-      type="button"
-      className="relative flex w-80 max-w-full items-center gap-3 overflow-hidden text-left"
-      disabled={downloading}
-      onClick={() => void media.ensureCached()}
-    >
+    <div className="relative flex w-80 max-w-full items-center gap-3 overflow-hidden text-left">
       <HugeiconsIcon
-        icon={File01Icon}
-        className="size-6 shrink-0 text-muted-foreground"
+        icon={DocumentAttachmentIcon}
+        className="size-7 shrink-0 text-foreground"
+        strokeWidth={1.5}
         aria-hidden
       />
       <div className="min-w-0 flex-1">
         <div className="truncate">{body.name}</div>
         <div className="text-xs text-muted-foreground">
-          {media.status === "ready"
-            ? `已缓存 · ${formatFileSize(body.sizeBytes)}`
-            : downloading
-              ? `下载中 · ${formatFileSize(media.downloadedBytes)}`
-              : formatFileSize(body.sizeBytes)}
+          {downloading
+            ? `下载中 · ${formatFileSize(media.downloadedBytes)}`
+            : formatFileSize(body.sizeBytes)}
         </div>
       </div>
-      {downloading && (
-        <span className="absolute right-0 bottom-0 left-0 h-0.5 bg-foreground/10">
-          <span
-            className="block h-full bg-xgui-brand transition-[width]"
-            style={{ width: progressWidth(media.downloadedBytes, media.totalBytes) }}
-          />
-        </span>
-      )}
-    </button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        className="shrink-0 hover:bg-foreground/5"
+        disabled={downloading}
+        aria-label={media.cached ? "打开文件所在文件夹" : downloading ? "正在下载文件" : "下载文件"}
+        title={media.cached ? "打开文件所在文件夹" : downloading ? "正在下载" : "下载文件"}
+        onClick={() => void (media.cached ? revealCached() : media.ensureCached())}
+      >
+        <HugeiconsIcon
+          icon={media.cached ? Folder02Icon : downloading ? Loading03Icon : Download01Icon}
+          className={cn(
+            "size-4 group-hover/bubble:text-xgui-brand-5",
+            downloading && "animate-spin",
+          )}
+          aria-hidden
+        />
+      </Button>
+    </div>
   )
+}
+
+function formatPlaybackTime(milliseconds: number) {
+  const seconds = Math.max(0, Math.floor(milliseconds / 1000))
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
 }
 
 function MediaCaption({

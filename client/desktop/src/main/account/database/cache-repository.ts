@@ -106,6 +106,21 @@ export class CacheRepository {
     return row ? mediaCacheRecord(row) : undefined
   }
 
+  listMediaByFile(category: MediaCategory, fileId: string): StoredMediaCache[] {
+    return (
+      this.database
+        .prepare(
+          `SELECT cache_key, category, target_id, file_id, status, relative_path,
+                  original_name, content_type, extension, size_bytes, sha256,
+                  modified_at_ms, created_at, last_accessed_at
+           FROM media_cache
+           WHERE category = ? AND file_id = ? AND status = 'ready'
+           ORDER BY last_accessed_at DESC, created_at DESC`,
+        )
+        .all(category, fileId) as Array<Record<string, unknown>>
+    ).map(mediaCacheRecord)
+  }
+
   listIncompleteMedia(): StoredMediaCache[] {
     return (
       this.database

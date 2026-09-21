@@ -12,7 +12,7 @@ export class OutgoingMessageRepository {
     conversationId: string
     clientMessageId: string
     content: string
-    bodyType: "text" | "markdown"
+    bodyType: "text" | "markdown" | "link"
     senderId: string
     senderName: string
   }) {
@@ -22,6 +22,10 @@ export class OutgoingMessageRepository {
     const seq = Number(seqRow.seq) + 1
     const createdAt = new Date().toISOString()
     const id = `optimistic:${input.clientMessageId}`
+    const body: DesktopMessageBody =
+      input.bodyType === "link"
+        ? { type: "link", title: input.content, url: input.content }
+        : { type: input.bodyType, content: input.content }
     const payload = {
       id,
       client_message_id: input.clientMessageId,
@@ -29,7 +33,7 @@ export class OutgoingMessageRepository {
       created_at: createdAt,
       sender: { id: input.senderId, type: "user", name: input.senderName },
       seq,
-      body: { type: input.bodyType, content: input.content },
+      body,
       reactions: [],
     }
     this.upsertMessages([
@@ -46,7 +50,7 @@ export class OutgoingMessageRepository {
         content: input.content,
         clientMessageId: input.clientMessageId,
         deliveryStatus: "sending",
-        body: { type: input.bodyType, content: input.content },
+        body,
         reactions: [],
         payload,
       },
@@ -222,7 +226,7 @@ export class OutgoingMessageRepository {
         `SELECT content, body_type, delivery_status, payload_json
          FROM messages
          WHERE conversation_id = ? AND client_message_id = ?
-           AND body_type IN ('text', 'markdown', 'file', 'image', 'video')`,
+           AND body_type IN ('text', 'markdown', 'link', 'file', 'image', 'video')`,
       )
       .get(conversationId, clientMessageId) as Record<string, unknown> | undefined
     if (!row) return undefined
@@ -266,9 +270,15 @@ export class OutgoingMessageRepository {
         status: String(row.delivery_status),
       }
     }
+    const bodyType =
+      row.body_type === "markdown"
+        ? ("markdown" as const)
+        : row.body_type === "link"
+          ? ("link" as const)
+          : ("text" as const)
     return {
       content: String(row.content),
-      bodyType: row.body_type === "markdown" ? ("markdown" as const) : ("text" as const),
+      bodyType,
       status: String(row.delivery_status),
     }
   }

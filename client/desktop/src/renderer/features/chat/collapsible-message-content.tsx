@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 const collapsedHeights = {
-  markdown: 240,
-  text: 240,
+  markdown: 200,
+  text: 200,
 } as const
 
 const collapsedContentMask = {

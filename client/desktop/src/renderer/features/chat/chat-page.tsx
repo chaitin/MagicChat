@@ -18,6 +18,7 @@ import { SendMediaMessageDialog } from "./send-media-message-dialog"
 import type { DesktopContactDirectory, LocalSearchResult } from "../../../shared/account-data"
 import type { ServerCatalog } from "../../../shared/auth"
 import type { ThemePreference } from "../../../shared/desktop"
+import { normalizeSingleLinkMessageURL } from "../../../shared/message-link"
 
 export function ChatPage({
   targetId,
@@ -71,8 +72,11 @@ export function ChatPage({
     loadingMessages,
     loadingBeforeMessages,
     pendingReactionKeys,
+    newMessageCount,
     historyRef,
     setSelectedId,
+    updateHistoryScrollPosition,
+    scrollToLatestMessage,
     resolveMentionLabel,
     setMessageReaction,
     applySentMessages,
@@ -153,10 +157,11 @@ export function ChatPage({
   const sendDraft = useCallback(() => {
     const content = draft.trim()
     if (!content) return
-    const bodyType = markdownMode ? "markdown" : "text"
+    const link = normalizeSingleLinkMessageURL(content)
+    const bodyType = link ? "link" : markdownMode ? "markdown" : "text"
     setDraft("")
     focusComposer()
-    sendTextMessage(content, bodyType)
+    sendTextMessage(link ?? content, bodyType)
   }, [draft, focusComposer, markdownMode, sendTextMessage])
 
   const handleComposerKeyDown = useCallback(
@@ -322,6 +327,9 @@ export function ChatPage({
                         ? searchMessageTarget.messageId
                         : null
                     }
+                    newMessageCount={newMessageCount}
+                    onViewportScroll={updateHistoryScrollPosition}
+                    onScrollToBottom={scrollToLatestMessage}
                     onReachTop={() => void loadBeforeMessages()}
                     onSetReaction={setMessageReaction}
                     onRetryMessage={retryMessage}

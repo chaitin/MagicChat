@@ -10,6 +10,7 @@ const platform =
 const bridge: DesktopBridge = {
   openHomepage: () => ipcRenderer.invoke(DESKTOP_CHANNELS.openHomepage),
   openExternalLink: (url) => ipcRenderer.invoke(DESKTOP_CHANNELS.openExternalLink, url),
+  openWebLink: (url) => ipcRenderer.invoke(DESKTOP_CHANNELS.openWebLink, url),
   copyText: (text) => ipcRenderer.invoke(DESKTOP_CHANNELS.copyText, text),
   checkForUpdates: () => ipcRenderer.invoke(DESKTOP_CHANNELS.checkForUpdates),
   getSystemInfo: () => ipcRenderer.invoke(DESKTOP_CHANNELS.getSystemInfo),
@@ -55,6 +56,8 @@ const bridge: DesktopBridge = {
   },
   media: {
     ensureCached: (input) => ipcRenderer.invoke(MEDIA_CHANNELS.ensureCached, input),
+    checkCached: (input) => ipcRenderer.invoke(MEDIA_CHANNELS.checkCached, input),
+    revealCached: (input) => ipcRenderer.invoke(MEDIA_CHANNELS.revealCached, input),
     openPreview: (input) => ipcRenderer.invoke(MEDIA_CHANNELS.openPreview, input),
     onDownloadProgress: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, value: MediaDownloadProgress) =>

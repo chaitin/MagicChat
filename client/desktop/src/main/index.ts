@@ -17,6 +17,7 @@ import { AuthFailure } from "../shared/auth"
 import {
   DESKTOP_CHANNELS,
   EXTERNAL_LINKS,
+  isSafeWebUrl,
   JIYING_HOMEPAGE,
   type NotificationSettings,
   type ShortcutSettings,
@@ -426,6 +427,13 @@ void app.whenReady().then(async () => {
       (!(EXTERNAL_LINKS as readonly string[]).includes(input) && !isTrustedReleaseUrl(input))
     ) {
       throw new AuthFailure("invalid_external_link", "外部链接不受信任")
+    }
+    await shell.openExternal(input)
+    return null
+  })
+  handleIpc(DESKTOP_CHANNELS.openWebLink, async (input) => {
+    if (!isSafeWebUrl(input)) {
+      throw new AuthFailure("invalid_web_link", "网页链接不正确")
     }
     await shell.openExternal(input)
     return null

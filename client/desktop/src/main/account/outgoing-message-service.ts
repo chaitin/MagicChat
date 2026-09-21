@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { rm } from "node:fs/promises"
 import type { DesktopMessage } from "../../shared/account-data"
 import { AuthFailure, isRecord } from "../../shared/auth"
+import { normalizeSingleLinkMessageURL } from "../../shared/message-link"
 import { createLocalFileResponse } from "../local-file-response"
 import { AccountDatabase } from "./account-database"
 import { AuthenticatedClient } from "./authenticated-client"
@@ -22,14 +23,15 @@ export class OutgoingMessageService {
   sendTextMessage(
     conversationId: string,
     content: string,
-    bodyType: "text" | "markdown",
+    bodyType: "text" | "markdown" | "link",
   ): DesktopMessage[] {
     this.assertConversationId(conversationId)
-    const normalized = content.trim()
+    const normalized =
+      bodyType === "link" ? (normalizeSingleLinkMessageURL(content) ?? "") : content.trim()
     if (!normalized || normalized.length > 100_000) {
       throw new AuthFailure("invalid_message_content", "消息内容不正确")
     }
-    if (bodyType !== "text" && bodyType !== "markdown") {
+    if (bodyType !== "text" && bodyType !== "markdown" && bodyType !== "link") {
       throw new AuthFailure("invalid_message_type", "消息类型不正确")
     }
     const clientMessageId = randomUUID()
@@ -218,7 +220,9 @@ export class OutgoingMessageService {
         message.temporary,
       )
     } else if (
-      (message.bodyType === "text" || message.bodyType === "markdown") &&
+      (message.bodyType === "text" ||
+        message.bodyType === "markdown" ||
+        message.bodyType === "link") &&
       typeof message.content === "string"
     ) {
       this.deliverMessage(conversationId, clientMessageId, message.content, message.bodyType)
@@ -237,14 +241,14 @@ export class OutgoingMessageService {
     conversationId: string,
     clientMessageId: string,
     content: string,
-    bodyType: "text" | "markdown",
+    bodyType: "text" | "markdown" | "link",
   ) {
     if (this.closed || this.sending.has(clientMessageId)) return
     this.sending.add(clientMessageId)
     void this.client
       .post(`/api/client/conversations/${encodeURIComponent(conversationId)}/messages`, {
         client_message_id: clientMessageId,
-        body: { type: bodyType, content },
+        body: bodyType === "link" ? { type: "link", url: content } : { type: bodyType, content },
       })
       .then((data) => {
         if (this.closed || !isRecord(data) || !isRecord(data.message)) {

@@ -60,6 +60,7 @@ export type SystemInfo = {
 export const DESKTOP_CHANNELS = {
   openHomepage: "desktop-next:v1:open-homepage",
   openExternalLink: "desktop-next:v1:open-external-link",
+  openWebLink: "desktop-next:v1:open-web-link",
   copyText: "desktop-next:v1:clipboard-copy-text",
   checkForUpdates: "desktop-next:v1:check-for-updates",
   getSystemInfo: "desktop-next:v1:get-system-info",
@@ -82,12 +83,28 @@ export const DESKTOP_CHANNELS = {
   windowMaximizedChanged: "desktop-next:v1:window-maximized-changed",
 } as const
 
+export function isSafeWebUrl(value: unknown): value is string {
+  if (typeof value !== "string" || !value || value.length > 2048) return false
+  try {
+    const url = new URL(value)
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      Boolean(url.hostname) &&
+      !url.username &&
+      !url.password
+    )
+  } catch {
+    return false
+  }
+}
+
 export interface DesktopBridge {
   readonly auth: AuthBridge
   readonly accountData: AccountDataBridge
   readonly media: MediaBridge
   openHomepage(): Promise<AuthResult<null>>
   openExternalLink(url: string): Promise<AuthResult<null>>
+  openWebLink(url: string): Promise<AuthResult<null>>
   copyText(text: string): Promise<AuthResult<null>>
   checkForUpdates(): Promise<AuthResult<UpdateInfo>>
   getSystemInfo(): Promise<AuthResult<SystemInfo>>

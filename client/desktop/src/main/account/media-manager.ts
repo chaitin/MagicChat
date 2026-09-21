@@ -6,6 +6,8 @@ import type { CachedMedia, MediaCacheRequest, MediaDownloadProgress } from "../.
 import { AuthFailure } from "../../shared/auth"
 import { createLocalFileResponse } from "../local-file-response"
 import { AccountDatabase, type StoredMediaCache } from "./account-database"
+import { numberedAttachmentFileName } from "./attachment-file-name"
+import { createMediaCacheKey } from "./media-cache-key"
 import {
   contentDispositionFileName,
   ensureNameExtension,
@@ -34,6 +36,7 @@ export class MediaManager {
   private readonly cacheRoot: string
   private readonly downloads = new Map<string, DownloadJob>()
   private readonly verifiedModifiedAt = new Map<string, number>()
+  private readonly reservedAttachmentPaths = new Set<string>()
   private closed = false
 
   constructor(
@@ -59,8 +62,8 @@ export class MediaManager {
     this.assertOpen()
     validateMediaCacheRequest(request)
     const cacheKey = this.createCacheKey(request)
-    const cached = await this.readValidRecord(cacheKey)
-    if (cached) return this.toCachedMedia(cached)
+    const cached = await this.findCachedRecord(request, cacheKey)
+    if (cached) return this.toCachedMedia(await this.ensureFriendlyAttachmentPath(cached))
 
     const current = this.downloads.get(cacheKey)
     if (current) return current.promise
@@ -73,6 +76,13 @@ export class MediaManager {
     return promise
   }
 
+  async checkCached(request: MediaCacheRequest): Promise<CachedMedia | null> {
+    this.assertOpen()
+    validateMediaCacheRequest(request)
+    const cached = await this.findCachedRecord(request, this.createCacheKey(request))
+    return cached ? this.toCachedMedia(await this.ensureFriendlyAttachmentPath(cached)) : null
+  }
+
   async getCached(cacheKey: string): Promise<CachedMedia> {
     this.assertOpen()
     if (!/^[0-9a-f]{64}$/.test(cacheKey)) {
@@ -80,7 +90,7 @@ export class MediaManager {
     }
     const record = await this.readValidRecord(cacheKey)
     if (!record) throw new AuthFailure("media_not_cached", "媒体文件尚未缓存")
-    return this.toCachedMedia(record)
+    return this.toCachedMedia(await this.ensureFriendlyAttachmentPath(record))
   }
 
   async getCachedResource(cacheKey: string): Promise<CachedMediaResource> {
@@ -88,8 +98,9 @@ export class MediaManager {
     if (!/^[0-9a-f]{64}$/.test(cacheKey)) {
       throw new AuthFailure("invalid_media_cache_key", "媒体缓存标识不正确")
     }
-    const record = await this.readValidRecord(cacheKey)
-    if (!record) throw new AuthFailure("media_not_cached", "媒体文件尚未缓存")
+    const existing = await this.readValidRecord(cacheKey)
+    if (!existing) throw new AuthFailure("media_not_cached", "媒体文件尚未缓存")
+    const record = await this.ensureFriendlyAttachmentPath(existing)
     const now = Date.now()
     this.database.touchMediaCache(cacheKey, now)
     return {
@@ -145,14 +156,18 @@ export class MediaManager {
         request.category,
       )
       const extension = mediaExtension(originalName, contentType)
-      const relativePath = path.posix.join(request.category, `${cacheKey}${extension}`)
+      const finalOriginalName = ensureNameExtension(originalName, extension)
+      const relativePath =
+        request.category === "attachment"
+          ? await this.reserveAttachmentPath(finalOriginalName)
+          : path.posix.join(request.category, `${cacheKey}${extension}`)
       const totalBytes =
         positiveInteger(response.headers.get("content-length")) ??
         positiveNumber(request.expectedSizeBytes)
       record = {
         ...record,
         relativePath,
-        originalName: ensureNameExtension(originalName, extension),
+        originalName: finalOriginalName,
         contentType,
         extension,
         sizeBytes: totalBytes ?? 0,
@@ -245,6 +260,10 @@ export class MediaManager {
         )
       }
       throw error
+    } finally {
+      if (record.category === "attachment") {
+        this.reservedAttachmentPaths.delete(record.relativePath)
+      }
     }
   }
 
@@ -269,6 +288,24 @@ export class MediaManager {
       createdAt,
       lastAccessedAt: createdAt,
     }
+  }
+
+  private async findCachedRecord(request: MediaCacheRequest, cacheKey: string) {
+    const exact = await this.readValidRecord(cacheKey)
+    if (exact) return this.updateCacheTarget(exact, request.targetId)
+    for (const candidate of this.database.listMediaCachesByFile(request.category, request.fileId)) {
+      if (candidate.cacheKey === cacheKey) continue
+      const cached = await this.readValidRecord(candidate.cacheKey)
+      if (cached) return this.updateCacheTarget(cached, request.targetId)
+    }
+    return undefined
+  }
+
+  private updateCacheTarget(record: StoredMediaCache, targetId: string) {
+    if (record.targetId === targetId) return record
+    const updated = { ...record, targetId, lastAccessedAt: Date.now() }
+    this.database.upsertMediaCache(updated)
+    return updated
   }
 
   private async readValidRecord(cacheKey: string): Promise<StoredMediaCache | undefined> {
@@ -328,6 +365,44 @@ export class MediaManager {
     }
   }
 
+  private async ensureFriendlyAttachmentPath(record: StoredMediaCache) {
+    if (
+      record.category !== "attachment" ||
+      !path.posix.basename(record.relativePath).startsWith(record.cacheKey)
+    ) {
+      return record
+    }
+    const relativePath = await this.reserveAttachmentPath(record.originalName)
+    try {
+      await rename(
+        this.resolveRelativePath(record.relativePath),
+        this.resolveRelativePath(relativePath),
+      )
+      const updated = { ...record, relativePath }
+      this.database.upsertMediaCache(updated)
+      return updated
+    } catch {
+      return record
+    } finally {
+      this.reservedAttachmentPaths.delete(relativePath)
+    }
+  }
+
+  private async reserveAttachmentPath(originalName: string) {
+    for (let index = 0; index < 10_000; index += 1) {
+      const fileName = numberedAttachmentFileName(originalName, index)
+      const relativePath = path.posix.join("attachment", fileName)
+      if (this.reservedAttachmentPaths.has(relativePath)) continue
+      const exists = await stat(this.resolveRelativePath(relativePath))
+        .then((value) => value.isFile() || value.isDirectory())
+        .catch(() => false)
+      if (exists) continue
+      this.reservedAttachmentPaths.add(relativePath)
+      return relativePath
+    }
+    throw new AuthFailure("media_name_exhausted", "无法为附件分配本地文件名")
+  }
+
   private async removeRecordFiles(record: StoredMediaCache) {
     try {
       const finalPath = this.resolveRelativePath(record.relativePath)
@@ -347,17 +422,7 @@ export class MediaManager {
   }
 
   private createCacheKey(request: MediaCacheRequest) {
-    return createHash("sha256")
-      .update("media-cache-v1")
-      .update("\0")
-      .update(this.namespace)
-      .update("\0")
-      .update(request.targetId)
-      .update("\0")
-      .update(request.category)
-      .update("\0")
-      .update(request.fileId)
-      .digest("hex")
+    return createMediaCacheKey(this.namespace, request.category, request.fileId)
   }
 
   private toCachedMedia(record: StoredMediaCache): CachedMedia {
