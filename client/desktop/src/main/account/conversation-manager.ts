@@ -79,7 +79,13 @@ export class ConversationManager {
       const message = parseMessage(payload.message, conversationId)
       this.database.upsertMessages([message])
       this.database.touchConversationActivity(conversationId, message.createdAt)
-      return { conversationIds: [conversationId], messages: true }
+      const parentConversationId = this.updateTopicParentPreview(conversationId)
+      return {
+        conversationIds: parentConversationId
+          ? [conversationId, parentConversationId]
+          : [conversationId],
+        messages: true,
+      }
     }
     if (name === "conversation.pin_updated") {
       const event = parseConversationBooleanEvent(payload, "pinned")
@@ -383,6 +389,39 @@ export class ConversationManager {
     return data.conversations
       .slice(0, 30)
       .map((conversation) => parseConversation(conversation, this.currentUserId))
+  }
+
+  private updateTopicParentPreview(topicConversationId: string) {
+    const payload = this.database.getConversationPayload(topicConversationId)
+    const topic = isRecord(payload) ? payload.topic : undefined
+    if (!isRecord(topic)) return null
+    const parentConversationId =
+      typeof topic.parent_conversation_id === "string" ? topic.parent_conversation_id : ""
+    const sourceMessageId =
+      typeof topic.source_message_id === "string" ? topic.source_message_id : ""
+    if (!parentConversationId || !sourceMessageId) return null
+
+    const recentReplies = this.database
+      .listMessages(topicConversationId, this.currentUserId)
+      .filter(
+        (message) =>
+          (message.senderType === "user" || message.senderType === "app") &&
+          message.body.type !== "revoked",
+      )
+      .slice(-3)
+      .map((message) => ({
+        id: message.id,
+        created_at: message.createdAt,
+        sender: { id: message.senderId, type: message.senderType },
+        summary: message.content,
+      }))
+    return this.database.updateMessageTopicRecentReplies(
+      parentConversationId,
+      sourceMessageId,
+      recentReplies,
+    )
+      ? parentConversationId
+      : null
   }
 
   private async fetchMessages(conversationId: string): Promise<StoredMessage[]> {

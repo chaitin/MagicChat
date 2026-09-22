@@ -82,6 +82,7 @@ export function ChatPage({
     newMessageCount,
     historyRef,
     setSelectedId,
+    openTopicConversation,
     updateHistoryScrollPosition,
     scrollToLatestMessage,
     resolveMentionLabel,
@@ -359,6 +360,7 @@ export function ChatPage({
                     onReachTop={() => void loadBeforeMessages()}
                     onSetReaction={setMessageReaction}
                     onSubmitChoice={submitChoiceResponse}
+                    onOpenTopic={openTopicConversation}
                     onRetryMessage={retryMessage}
                     onPendingFeature={(label) => showPendingFeature(showToast, label)}
                   />

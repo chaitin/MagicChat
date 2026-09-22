@@ -123,6 +123,12 @@ export class AccountDatabase {
     return this.messages.updateMessageChoice(...args)
   }
 
+  updateMessageTopicRecentReplies(
+    ...args: Parameters<MessageRepository["updateMessageTopicRecentReplies"]>
+  ) {
+    return this.messages.updateMessageTopicRecentReplies(...args)
+  }
+
   searchContacts(...args: Parameters<SearchRepository["searchContacts"]>) {
     return this.search.searchContacts(...args)
   }

@@ -4,6 +4,7 @@ import type { DesktopMessage, DesktopMessageReactionUser } from "../../../shared
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { MentionLabelResolver } from "@/lib/message-mentions"
+import { cn } from "@/lib/utils"
 
 type Reaction = DesktopMessage["reactions"][number]
 
@@ -12,6 +13,7 @@ export function MessageReactionChips({
   conversationId,
   messageId,
   reactions,
+  expandBubble,
   pendingKeys,
   resolveLabel,
   onSetReaction,
@@ -20,18 +22,24 @@ export function MessageReactionChips({
   conversationId: string
   messageId: string
   reactions: DesktopMessage["reactions"]
+  expandBubble: boolean
   pendingKeys: ReadonlySet<string>
   resolveLabel: MentionLabelResolver
   onSetReaction: (text: string, reacted: boolean) => Promise<void>
 }) {
   return (
-    <div className="mt-2 flex w-full min-w-0 flex-wrap gap-1 [contain:inline-size]">
+    <div
+      className={cn(
+        "mt-2 flex max-w-full min-w-0 flex-wrap items-center justify-start gap-1",
+        !expandBubble && "[contain:inline-size]",
+      )}
+    >
       {reactions.map((reaction) => {
         const pending = pendingKeys.has(`${messageId}\0${reaction.text}`)
         return (
           <div
             key={reaction.text}
-            className="inline-flex min-h-6 max-w-full flex-wrap items-center gap-x-1 gap-y-0.5 rounded-md bg-background/70 px-2 py-0.5 text-xs text-foreground"
+            className="inline-flex min-h-6 max-w-full flex-wrap items-center gap-x-1 gap-y-0.5 rounded-md bg-background/70 px-2 py-0.5 text-xs text-foreground whitespace-normal"
           >
             <button
               type="button"

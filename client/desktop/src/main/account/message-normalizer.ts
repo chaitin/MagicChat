@@ -42,8 +42,32 @@ export function normalizeDesktopMessageDetails(payload: unknown): DesktopMessage
   const choice = normalizeDesktopMessageChoiceState(record?.choice)
   const topicRecord = asRecord(record?.topic)
   const topicId = stringValue(topicRecord?.conversation_id)
+  const recentReplies = Array.isArray(topicRecord?.recent_replies)
+    ? topicRecord.recent_replies
+        .flatMap((value) => {
+          const reply = asRecord(value)
+          const sender = asRecord(reply?.sender)
+          const id = stringValue(reply?.id)
+          const createdAt = stringValue(reply?.created_at)
+          const senderId = stringValue(sender?.id)
+          const senderType: "user" | "app" | null =
+            sender?.type === "app" ? "app" : sender?.type === "user" ? "user" : null
+          return id && createdAt && senderId && senderType
+            ? [
+                {
+                  id,
+                  createdAt,
+                  senderId,
+                  senderType,
+                  summary: stringValue(reply?.summary),
+                },
+              ]
+            : []
+        })
+        .slice(-3)
+    : []
   const topic = topicId
-    ? { conversationId: topicId, archived: topicRecord?.archived === true }
+    ? { conversationId: topicId, archived: topicRecord?.archived === true, recentReplies }
     : undefined
   return { body, replyTo, reactions, choice, topic }
 }

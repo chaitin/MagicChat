@@ -160,7 +160,19 @@ export type DesktopMessage = {
     users: DesktopMessageReactionUser[]
   }>
   choice?: DesktopMessageChoiceState
-  topic?: { conversationId: string; archived: boolean }
+  topic?: {
+    conversationId: string
+    archived: boolean
+    recentReplies: DesktopMessageTopicReply[]
+  }
+}
+
+export type DesktopMessageTopicReply = {
+  id: string
+  createdAt: string
+  senderId: string
+  senderType: "user" | "app"
+  summary: string
 }
 
 export type DesktopMessageChoiceState = {

@@ -15,7 +15,10 @@ export function useChatData({
   const { showToast } = useAnimatedToast()
   const [conversations, setConversations] = useState<DesktopConversation[]>([])
   const [messages, setMessages] = useState<DesktopMessage[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedIdState] = useState<string | null>(null)
+  const [transientConversation, setTransientConversation] = useState<DesktopConversation | null>(
+    null,
+  )
   const [loadingConversations, setLoadingConversations] = useState(true)
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [loadingBeforeMessages, setLoadingBeforeMessages] = useState(false)
@@ -39,8 +42,44 @@ export function useChatData({
   messagesRef.current = messages
 
   const selected = useMemo(
-    () => conversations.find((conversation) => conversation.id === selectedId) ?? null,
-    [conversations, selectedId],
+    () =>
+      conversations.find((conversation) => conversation.id === selectedId) ??
+      (transientConversation?.id === selectedId ? transientConversation : null),
+    [conversations, selectedId, transientConversation],
+  )
+
+  const setSelectedId = useCallback((conversationId: string) => {
+    setTransientConversation(null)
+    setSelectedIdState(conversationId)
+  }, [])
+
+  const openTopicConversation = useCallback(
+    (conversationId: string) => {
+      if (!conversations.some((conversation) => conversation.id === conversationId)) {
+        const parent = conversations.find(
+          (conversation) => conversation.id === selectedIdRef.current,
+        )
+        setTransientConversation({
+          id: conversationId,
+          type: "topic",
+          name: "话题",
+          memberCount: parent?.memberCount ?? 0,
+          avatarType: parent?.avatarType ?? "group",
+          avatarId: parent?.avatarId ?? "",
+          createdAt: "",
+          lastMessageAt: null,
+          lastMessageSummary: "",
+          pinned: false,
+          notificationMuted: false,
+          isBuiltinAssistant: false,
+          unreadCount: 0,
+        })
+      } else {
+        setTransientConversation(null)
+      }
+      setSelectedIdState(conversationId)
+    },
+    [conversations],
   )
 
   useEffect(() => {
@@ -397,6 +436,7 @@ export function useChatData({
     newMessageCount,
     historyRef,
     setSelectedId,
+    openTopicConversation,
     updateHistoryScrollPosition,
     scrollToLatestMessage,
     resolveMentionLabel,

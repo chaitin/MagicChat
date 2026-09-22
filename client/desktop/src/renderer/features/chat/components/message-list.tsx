@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils"
 import { MessageBodyRenderer } from "../message-body-renderer"
 import { MessageReactionChips } from "../message-reaction-chips"
 import { MessageReactionPicker } from "../message-reaction-picker"
+import { TopicReplyPreview } from "../topic-reply-preview"
 
 export function MessageList({
   messages,
@@ -39,6 +40,7 @@ export function MessageList({
   onReachTop,
   onSetReaction,
   onSubmitChoice,
+  onOpenTopic,
   onRetryMessage,
   onPendingFeature,
 }: {
@@ -61,6 +63,7 @@ export function MessageList({
   onReachTop: () => void
   onSetReaction: (message: DesktopMessage, text: string, reacted: boolean) => Promise<void>
   onSubmitChoice: (message: DesktopMessage, optionIds: string[]) => Promise<void>
+  onOpenTopic: (conversationId: string) => void
   onRetryMessage: (message: DesktopMessage) => void
   onPendingFeature: (label: string) => void
 }) {
@@ -123,6 +126,7 @@ export function MessageList({
                       highlighted={message.id === highlightedMessageId}
                       onSetReaction={onSetReaction}
                       onSubmitChoice={onSubmitChoice}
+                      onOpenTopic={onOpenTopic}
                       onRetryMessage={onRetryMessage}
                       onPendingFeature={onPendingFeature}
                     />
@@ -162,6 +166,7 @@ function MessageRow({
   highlighted,
   onSetReaction,
   onSubmitChoice,
+  onOpenTopic,
   onRetryMessage,
   onPendingFeature,
 }: {
@@ -177,6 +182,7 @@ function MessageRow({
   highlighted: boolean
   onSetReaction: (message: DesktopMessage, text: string, reacted: boolean) => Promise<void>
   onSubmitChoice: (message: DesktopMessage, optionIds: string[]) => Promise<void>
+  onOpenTopic: (conversationId: string) => void
   onRetryMessage: (message: DesktopMessage) => void
   onPendingFeature: (label: string) => void
 }) {
@@ -286,6 +292,7 @@ function MessageRow({
                   conversationId={message.conversationId}
                   messageId={message.id}
                   reactions={message.reactions}
+                  expandBubble={message.body.type === "text" || message.body.type === "markdown"}
                   pendingKeys={pendingReactionKeys}
                   resolveLabel={mentionLabelResolver}
                   onSetReaction={(text, reacted) => onSetReaction(message, text, reacted)}
@@ -293,9 +300,15 @@ function MessageRow({
               </div>
             )}
             {message.topic && (
-              <div className="mt-2 border-t border-foreground/10 pt-2 text-xs text-muted-foreground">
-                {message.topic.archived ? "话题已归档" : "查看话题回复"}
-              </div>
+              <TopicReplyPreview
+                topic={message.topic}
+                targetId={targetId}
+                currentUserId={userId}
+                currentUserName={userName}
+                resolvedTheme={resolvedTheme}
+                mentionLabelResolver={mentionLabelResolver}
+                onOpen={() => onOpenTopic(message.topic!.conversationId)}
+              />
             )}
           </div>
           <MessageStatus
