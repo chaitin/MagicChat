@@ -9,6 +9,7 @@ import type {
   RetryMessageInput,
   SaveClientAppInput,
   SendImageMessageInput,
+  SendRichMessageInput,
   SendTextMessageInput,
   SendVideoMessageInput,
   SetMessageReactionInput,
@@ -57,6 +58,11 @@ export class AccountDataFacade {
       input.content,
       input.bodyType,
     )
+  }
+
+  async sendRichMessage(input: SendRichMessageInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().sendRichMessage(input)
   }
 
   async sendFileMessage(

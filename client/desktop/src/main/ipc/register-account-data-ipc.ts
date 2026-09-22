@@ -8,6 +8,7 @@ import {
   type RetryMessageInput,
   type SendFileMessageInput,
   type SendImageMessageInput,
+  type SendRichMessageInput,
   type SendTextMessageInput,
   type SendVideoMessageInput,
   type SetMessageReactionInput,
@@ -131,6 +132,9 @@ export function registerAccountDataIpc({
   })
   handle(ACCOUNT_DATA_CHANNELS.sendTextMessage, (input) =>
     auth.sendTextMessage(input as SendTextMessageInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.sendRichMessage, (input) =>
+    auth.sendRichMessage(input as SendRichMessageInput),
   )
   handle(ACCOUNT_DATA_CHANNELS.retryMessage, (input) =>
     auth.retryMessage(input as RetryMessageInput),

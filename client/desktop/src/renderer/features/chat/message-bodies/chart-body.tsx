@@ -33,8 +33,9 @@ type ChartBodyValue = Extract<DesktopMessageBody, { type: "chart" }>
 type LegendItem = { key: string; label: string; color: string }
 type SeriesItem = { key: string; name: string; values: unknown[]; color: string }
 const tooltipStyle = { borderRadius: 8, fontSize: 12 }
+const chartGridColor = "color-mix(in srgb, var(--foreground) 5%, transparent)"
 
-export function ChartBody({ body }: { body: ChartBodyValue }) {
+export function ChartBody({ body, className }: { body: ChartBodyValue; className?: string }) {
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(() => new Set())
   const model = useMemo(() => createChartModel(body, hiddenKeys), [body, hiddenKeys])
 
@@ -50,7 +51,10 @@ export function ChartBody({ body }: { body: ChartBodyValue }) {
   }
 
   return (
-    <div className="grid w-[30rem] max-w-full gap-3" data-chart-type={body.chartType}>
+    <div
+      className={cn("grid w-[30rem] max-w-full gap-3", className)}
+      data-chart-type={body.chartType}
+    >
       <div className="border-b border-foreground/10 pb-2 text-sm leading-snug font-medium">
         {body.title}
       </div>
@@ -93,15 +97,23 @@ function createChartModel(body: ChartBodyValue, hiddenKeys: Set<string>) {
       return {
         legend,
         chart: (
-          <LineChart data={rows} margin={{ left: 4, right: 12 }}>
-            <CartesianGrid stroke="var(--xgui-background-0)" vertical={false} />
+          <LineChart data={rows} margin={{ top: 12, right: 12, bottom: 12, left: 12 }}>
+            <CartesianGrid stroke={chartGridColor} vertical={false} />
             <XAxis
               dataKey="label"
               axisLine={false}
               tickLine={false}
+              interval="preserveStartEnd"
+              padding={{ left: 16, right: 16 }}
               tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
             />
-            <YAxis hide />
+            <YAxis
+              hide
+              domain={([dataMin, dataMax]: readonly [number, number]) => {
+                const padding = Math.max(Math.abs(dataMin), Math.abs(dataMax), 1) * 0.08
+                return [Math.min(0, dataMin - padding), Math.max(0, dataMax + padding)]
+              }}
+            />
             <Tooltip contentStyle={tooltipStyle} />
             {series.map((item) => (
               <Line
@@ -138,20 +150,25 @@ function createChartModel(body: ChartBodyValue, hiddenKeys: Set<string>) {
       legend,
       chart: horizontal ? (
         <BarChart data={rows} layout="vertical" margin={{ left: 12, right: 12 }}>
-          <CartesianGrid stroke="var(--xgui-background-0)" horizontal={false} />
-          <XAxis
-            type="number"
+          <CartesianGrid stroke={chartGridColor} horizontal={false} />
+          <XAxis type="number" hide />
+          <YAxis
+            type="category"
+            dataKey="label"
+            width={Math.min(128, Math.max(56, ...rows.map((row) => row.label.length * 12)))}
             axisLine={false}
             tickLine={false}
             tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
           />
-          <YAxis type="category" dataKey="label" hide />
-          <Tooltip contentStyle={tooltipStyle} />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            cursor={{ fill: "var(--foreground)", fillOpacity: 0.05 }}
+          />
           {bars}
         </BarChart>
       ) : (
         <BarChart data={rows} margin={{ left: 4, right: 12 }}>
-          <CartesianGrid stroke="var(--xgui-background-0)" vertical={false} />
+          <CartesianGrid stroke={chartGridColor} vertical={false} />
           <XAxis
             dataKey="label"
             axisLine={false}
@@ -159,7 +176,10 @@ function createChartModel(body: ChartBodyValue, hiddenKeys: Set<string>) {
             tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
           />
           <YAxis hide />
-          <Tooltip contentStyle={tooltipStyle} />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            cursor={{ fill: "var(--foreground)", fillOpacity: 0.05 }}
+          />
           {bars}
         </BarChart>
       ),
@@ -217,7 +237,7 @@ function createChartModel(body: ChartBodyValue, hiddenKeys: Set<string>) {
       legend: series.map(({ key, name, color }) => ({ key, label: name, color })),
       chart: (
         <RadarChart data={rows} outerRadius="70%">
-          <PolarGrid stroke="var(--xgui-background-0)" />
+          <PolarGrid stroke={chartGridColor} />
           <PolarAngleAxis
             dataKey="label"
             tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}

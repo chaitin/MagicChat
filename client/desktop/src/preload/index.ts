@@ -78,6 +78,7 @@ const bridge: DesktopBridge = {
     loadBeforeMessages: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.loadBeforeMessages, input),
     sendTextMessage: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.sendTextMessage, input),
+    sendRichMessage: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.sendRichMessage, input),
     selectMessageFile: (targetId) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.selectMessageFile, targetId),
     importMessageFile: async ({ targetId, file }) => {

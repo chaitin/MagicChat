@@ -14,8 +14,14 @@ import { MessageList } from "./components/message-list"
 import { useAttachmentSender } from "./hooks/use-attachment-sender"
 import { useChatData } from "./hooks/use-chat-data"
 import { SendFileMessageDialog } from "./send-file-message-dialog"
+import { SendChoiceMessageDialog } from "./send-choice-message-dialog"
+import { SendChartMessageDialog } from "./send-chart-message-dialog"
 import { SendMediaMessageDialog } from "./send-media-message-dialog"
-import type { DesktopContactDirectory, LocalSearchResult } from "../../../shared/account-data"
+import type {
+  DesktopContactDirectory,
+  LocalSearchResult,
+  SendRichMessageBody,
+} from "../../../shared/account-data"
 import type { ServerCatalog } from "../../../shared/auth"
 import type { ThemePreference } from "../../../shared/desktop"
 import { normalizeSingleLinkMessageURL } from "../../../shared/message-link"
@@ -61,6 +67,7 @@ export function ChatPage({
   } | null>(null)
   const [draft, setDraft] = useState("")
   const [markdownMode, setMarkdownMode] = useState(false)
+  const [richDialog, setRichDialog] = useState<"choice" | "chart" | null>(null)
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const pendingComposerCursorRef = useRef<number | null>(null)
   const {
@@ -164,6 +171,21 @@ export function ChatPage({
     focusComposer()
     sendTextMessage(link ?? content, bodyType)
   }, [draft, focusComposer, markdownMode, sendTextMessage])
+
+  const sendRichMessage = useCallback(
+    async (body: SendRichMessageBody) => {
+      if (!selectedId || !window.desktop) throw new Error("桌面服务暂不可用")
+      const result = await window.desktop.accountData.sendRichMessage({
+        targetId,
+        conversationId: selectedId,
+        body,
+      })
+      if (!result.ok) throw new Error(result.error.message)
+      applySentMessages(selectedId, result.data)
+      focusComposer()
+    },
+    [applySentMessages, focusComposer, selectedId, targetId],
+  )
 
   const handleComposerKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -367,6 +389,8 @@ export function ChatPage({
                     onInsertExpression={insertExpression}
                     onSelectFile={selectFile}
                     onSelectMedia={(category) => void selectMedia(category)}
+                    onSelectChoice={() => setRichDialog("choice")}
+                    onSelectChart={() => setRichDialog("chart")}
                     onSend={sendDraft}
                   />
                 </>
@@ -456,6 +480,24 @@ export function ChatPage({
         onOpenChange={(open) => {
           if (!open) closeVideoDialog()
         }}
+      />
+      <SendChoiceMessageDialog
+        key={`choice:${selectedId ?? ""}`}
+        conversationName={selected?.name ?? ""}
+        open={richDialog === "choice" && Boolean(selected)}
+        onOpenChange={(open) => {
+          if (!open) setRichDialog(null)
+        }}
+        onSend={sendRichMessage}
+      />
+      <SendChartMessageDialog
+        key={`chart:${selectedId ?? ""}`}
+        conversationName={selected?.name ?? ""}
+        open={richDialog === "chart" && Boolean(selected)}
+        onOpenChange={(open) => {
+          if (!open) setRichDialog(null)
+        }}
+        onSend={sendRichMessage}
       />
       <SendFileMessageDialog
         conversationName={pendingFile?.conversationName ?? ""}

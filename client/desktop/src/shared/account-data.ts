@@ -12,6 +12,7 @@ export const ACCOUNT_DATA_CHANNELS = {
   submitChoiceResponse: "desktop-next:v1:conversation-message-choice-submit",
   listMessageReactionUsers: "desktop-next:v1:conversation-message-reaction-users-list",
   sendTextMessage: "desktop-next:v1:conversation-message-text-send",
+  sendRichMessage: "desktop-next:v1:conversation-message-rich-send",
   selectMessageFile: "desktop-next:v1:conversation-message-file-select",
   importMessageFile: "desktop-next:v1:conversation-message-file-import",
   releaseMessageFile: "desktop-next:v1:conversation-message-file-release",
@@ -338,6 +339,16 @@ export type SendTextMessageInput = {
   bodyType: "text" | "markdown" | "link"
 }
 
+export type SendRichMessageBody =
+  | Extract<DesktopMessageBody, { type: "choice" }>
+  | Extract<DesktopMessageBody, { type: "chart" }>
+
+export type SendRichMessageInput = {
+  targetId: string
+  conversationId: string
+  body: SendRichMessageBody
+}
+
 export type SelectedMessageFile = {
   token: string
   name: string
@@ -423,6 +434,7 @@ export interface AccountDataBridge {
     beforeSeq: number
   }): Promise<AuthResult<DesktopMessagePage>>
   sendTextMessage(input: SendTextMessageInput): Promise<AuthResult<DesktopMessage[]>>
+  sendRichMessage(input: SendRichMessageInput): Promise<AuthResult<DesktopMessage[]>>
   selectMessageFile(targetId: string): Promise<AuthResult<SelectedMessageFile | null>>
   importMessageFile(input: {
     targetId: string

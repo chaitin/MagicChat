@@ -9,6 +9,8 @@ import {
 import {
   ArrowUp02Icon,
   Attachment01Icon,
+  Analytics01Icon,
+  CheckmarkSquare02Icon,
   Image01Icon,
   Loading03Icon,
   Mic01Icon,
@@ -41,6 +43,8 @@ export function MessageComposer({
   onInsertExpression,
   onSelectFile,
   onSelectMedia,
+  onSelectChoice,
+  onSelectChart,
   onSend,
 }: {
   composerRef: RefObject<HTMLTextAreaElement | null>
@@ -59,6 +63,8 @@ export function MessageComposer({
   onInsertExpression: (value: string) => void
   onSelectFile: () => void
   onSelectMedia: (category: "image" | "video") => void
+  onSelectChoice: () => void
+  onSelectChart: () => void
   onSend: () => void
 }) {
   const [dragging, setDragging] = useState(false)
@@ -160,6 +166,12 @@ export function MessageComposer({
               loading={selectingMedia === "video"}
               onClick={() => onSelectMedia("video")}
             />
+            <ComposerButton
+              label="发送选择消息"
+              icon={CheckmarkSquare02Icon}
+              onClick={onSelectChoice}
+            />
+            <ComposerButton label="发送图表消息" icon={Analytics01Icon} onClick={onSelectChart} />
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <ComposerButton label="语音输入" icon={Mic01Icon} />

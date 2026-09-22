@@ -238,6 +238,10 @@ export class AuthController {
     return this.accountData.sendTextMessage(...args)
   }
 
+  sendRichMessage(...args: Parameters<AccountDataFacade["sendRichMessage"]>) {
+    return this.accountData.sendRichMessage(...args)
+  }
+
   sendFileMessage(...args: Parameters<AccountDataFacade["sendFileMessage"]>) {
     return this.accountData.sendFileMessage(...args)
   }

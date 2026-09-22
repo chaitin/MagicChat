@@ -18,6 +18,7 @@ import type {
   MessageReactionUsersInput,
   OpenContactConversationInput,
   SaveClientAppInput,
+  SendRichMessageInput,
   SetMessageReactionInput,
   SubmitChoiceResponseInput,
   UpdateClientAppInput,
@@ -110,6 +111,13 @@ export class AccountRuntime {
   sendTextMessage(conversationId: string, content: string, bodyType: "text" | "markdown" | "link") {
     this.assertInitialized()
     return this.conversationManager!.sendTextMessage(conversationId, content, bodyType)
+  }
+
+  async sendRichMessage(input: Omit<SendRichMessageInput, "targetId">) {
+    this.assertInitialized()
+    const messages = await this.conversationManager!.sendRichMessage(input)
+    this.notifyChanged(["messages", "conversations"], [input.conversationId])
+    return messages
   }
 
   sendFileMessage(

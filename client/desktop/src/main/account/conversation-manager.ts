@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto"
 import type {
   DesktopConversation,
   DesktopMessage,
   DesktopMessagePage,
   DesktopMessageReactionUser,
   MessageReactionUsersInput,
+  SendRichMessageInput,
   SetMessageReactionInput,
   SubmitChoiceResponseInput,
 } from "../../shared/account-data"
@@ -21,6 +23,7 @@ import {
   requiredString,
 } from "./conversation-parser"
 import { normalizeDesktopMessageChoiceState } from "./message-normalizer"
+import { normalizeOutgoingRichMessageBody } from "./rich-message-input"
 import { OutgoingMessageService } from "./outgoing-message-service"
 
 export class ConversationManager {
@@ -193,6 +196,22 @@ export class ConversationManager {
 
   sendTextMessage(...args: Parameters<OutgoingMessageService["sendTextMessage"]>) {
     return this.outgoingMessages.sendTextMessage(...args)
+  }
+
+  async sendRichMessage(input: Omit<SendRichMessageInput, "targetId">) {
+    this.assertConversationId(input.conversationId)
+    const normalized = normalizeOutgoingRichMessageBody(input.body)
+    const data = await this.client.post(
+      `/api/client/conversations/${encodeURIComponent(input.conversationId)}/messages`,
+      { client_message_id: randomUUID(), body: normalized },
+    )
+    if (!isRecord(data) || !isRecord(data.message)) {
+      throw new AuthFailure("invalid_response", "发送富消息响应格式不正确")
+    }
+    const message = parseMessage(data.message, input.conversationId)
+    this.database.upsertMessages([message])
+    this.database.touchConversationActivity(input.conversationId, message.createdAt)
+    return this.database.listMessages(input.conversationId, this.currentUserId)
   }
 
   sendFileMessage(...args: Parameters<OutgoingMessageService["sendFileMessage"]>) {

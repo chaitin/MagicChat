@@ -90,12 +90,13 @@ export interface AuthBridge {
 }
 
 export class AuthFailure extends Error {
-  constructor(
-    public readonly code: string,
-    message: string,
-    public readonly retryAfterSeconds?: number,
-  ) {
+  readonly code: string
+  readonly retryAfterSeconds?: number
+
+  constructor(code: string, message: string, retryAfterSeconds?: number) {
     super(message)
+    this.code = code
+    this.retryAfterSeconds = retryAfterSeconds
   }
 }
 
