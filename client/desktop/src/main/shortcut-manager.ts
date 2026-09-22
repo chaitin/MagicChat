@@ -60,13 +60,16 @@ function validateShortcutSettings(settings: ShortcutSettings) {
     !settings ||
     typeof settings.showWindow !== "string" ||
     typeof settings.screenshot !== "string" ||
+    typeof settings.search !== "string" ||
     !validAccelerator(settings.showWindow) ||
-    !validAccelerator(settings.screenshot)
+    !validAccelerator(settings.screenshot) ||
+    !validAccelerator(settings.search)
   ) {
     throw new AuthFailure("invalid_shortcut", "快捷键格式不正确")
   }
-  if (normalize(settings.showWindow) === normalize(settings.screenshot)) {
-    throw new AuthFailure("duplicate_shortcut", "两个功能不能使用相同的快捷键")
+  const shortcuts = [settings.showWindow, settings.screenshot, settings.search].map(normalize)
+  if (new Set(shortcuts).size !== shortcuts.length) {
+    throw new AuthFailure("duplicate_shortcut", "不同功能不能使用相同的快捷键")
   }
 }
 

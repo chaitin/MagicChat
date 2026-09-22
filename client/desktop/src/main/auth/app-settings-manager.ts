@@ -56,8 +56,10 @@ export class AppSettingsManager {
       !isRecord(shortcuts) ||
       typeof shortcuts.showWindow !== "string" ||
       typeof shortcuts.screenshot !== "string" ||
+      typeof shortcuts.search !== "string" ||
       shortcuts.showWindow.length > 64 ||
-      shortcuts.screenshot.length > 64
+      shortcuts.screenshot.length > 64 ||
+      shortcuts.search.length > 64
     ) {
       throw new AuthFailure("invalid_shortcut", "快捷键设置不正确")
     }

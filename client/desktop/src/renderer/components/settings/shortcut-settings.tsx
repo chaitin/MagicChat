@@ -10,6 +10,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item"
 import { DEFAULT_SHORTCUTS, type ShortcutSettings } from "../../../shared/desktop"
+import { formatKeyboardShortcut, notifyAppShortcutsChanged } from "@/lib/app-shortcuts"
 
 type ShortcutAction = keyof ShortcutSettings
 
@@ -50,8 +51,10 @@ export function ShortcutSettingsPage({ disabled }: { disabled: boolean }) {
       void window.desktop
         ?.setShortcutSettings(next)
         .then((result) => {
-          if (result.ok) setSettings(next)
-          else {
+          if (result.ok) {
+            setSettings(next)
+            notifyAppShortcutsChanged(next)
+          } else {
             showToast({
               status: "error",
               title: "无法保存快捷键",
@@ -106,6 +109,14 @@ export function ShortcutSettingsPage({ disabled }: { disabled: boolean }) {
           onRecord={() => void beginRecording("showWindow")}
         />
         <ShortcutItem
+          title="搜索"
+          description="在即应内打开搜索，不注册系统全局快捷键"
+          shortcut={settings.search}
+          recording={recording === "search"}
+          disabled={disabled || saving}
+          onRecord={() => void beginRecording("search")}
+        />
+        <ShortcutItem
           title="截图"
           description="选择屏幕区域并复制到剪贴板"
           shortcut={settings.screenshot}
@@ -147,7 +158,9 @@ function ShortcutItem({
           disabled={disabled}
           onClick={onRecord}
         >
-          {recording ? "请按快捷键" : formatShortcut(shortcut)}
+          {recording
+            ? "请按快捷键"
+            : formatKeyboardShortcut(shortcut, window.desktop?.windowControls.platform ?? "linux")}
         </BeButton>
       </ItemActions>
     </Item>
@@ -183,8 +196,4 @@ function acceleratorKey(event: KeyboardEvent): string | null {
     Delete: "Delete",
   }
   return keys[event.key] ?? null
-}
-
-function formatShortcut(shortcut: string): string {
-  return shortcut.split("+").join(" + ")
 }

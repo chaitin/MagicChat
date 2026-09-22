@@ -8,6 +8,7 @@ import {
 import { GlobalSearchDialog } from "@/components/global-search-dialog"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { Button as BeButton } from "@/components/motion/button/base"
+import { matchesKeyboardShortcut, useAppShortcuts } from "@/lib/app-shortcuts"
 import type { LocalSearchResult } from "../../shared/account-data"
 import type { MentionLabelResolver } from "@/lib/message-mentions"
 import {
@@ -37,16 +38,25 @@ export function SidebarSearchHeader({
   onRefresh: () => void
 }) {
   const [searchOpen, setSearchOpen] = useState(false)
+  const shortcuts = useAppShortcuts()
 
   useEffect(() => {
     function openSearch(event: KeyboardEvent) {
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "f") return
+      if (
+        !matchesKeyboardShortcut(
+          event,
+          shortcuts.search,
+          window.desktop?.windowControls.platform ?? "linux",
+        )
+      ) {
+        return
+      }
       event.preventDefault()
       setSearchOpen(true)
     }
     document.addEventListener("keydown", openSearch)
     return () => document.removeEventListener("keydown", openSearch)
-  }, [])
+  }, [shortcuts.search])
 
   return (
     <>

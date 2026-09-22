@@ -7,10 +7,12 @@ export type DesktopPlatform = "windows" | "macos" | "linux"
 export type ShortcutSettings = {
   showWindow: string
   screenshot: string
+  search: string
 }
 export const DEFAULT_SHORTCUTS: ShortcutSettings = {
-  showWindow: "Alt+Shift+J",
+  showWindow: "Alt+J",
   screenshot: "Alt+Shift+A",
+  search: "CommandOrControl+F",
 }
 export type NotificationSettings = {
   soundEnabled: boolean

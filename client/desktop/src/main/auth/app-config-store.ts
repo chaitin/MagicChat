@@ -186,6 +186,12 @@ export class AppConfigStore {
           stored.shortcuts.screenshot.length <= 64
             ? stored.shortcuts.screenshot
             : DEFAULT_SHORTCUTS.screenshot,
+        search:
+          isRecord(stored.shortcuts) &&
+          typeof stored.shortcuts.search === "string" &&
+          stored.shortcuts.search.length <= 64
+            ? stored.shortcuts.search
+            : DEFAULT_SHORTCUTS.search,
       }
       const theme =
         stored.theme === "light" || stored.theme === "dark" || stored.theme === "system"
