@@ -74,7 +74,7 @@ export type DesktopConversation = {
   type: string
   name: string
   memberCount: number
-  avatarType: Exclude<AvatarType, "topic">
+  avatarType: AvatarType
   avatarId: string
   createdAt: string
   lastMessageAt: string | null
@@ -83,6 +83,18 @@ export type DesktopConversation = {
   notificationMuted: boolean
   isBuiltinAssistant: boolean
   unreadCount: number
+  topic?: DesktopConversationTopic
+}
+
+export type DesktopConversationTopic = {
+  archived: boolean
+  parentConversationId: string
+  participating: boolean
+  sourceSender: {
+    id: string
+    name: string
+    type: "user" | "app"
+  }
 }
 
 export type DesktopMessageBody =

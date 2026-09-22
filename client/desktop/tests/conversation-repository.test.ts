@@ -45,6 +45,91 @@ test("会话仓储稳定读取最后一条消息", () => {
   database.close()
 })
 
+test("会话列表保留历史普通会话并过滤长期无活动的已读话题", () => {
+  const database = new DatabaseSync(":memory:")
+  initializeAccountSchema(database)
+  const repository = new ConversationRepository(database)
+  const now = new Date("2026-09-22T12:00:00.000Z")
+  repository.upsertCurrent([
+    conversation("older-group", {
+      createdAt: "2026-01-01T00:00:00.000Z",
+      lastMessageAt: "2026-01-01T00:00:00.000Z",
+    }),
+    conversation("stale-topic", {
+      type: "topic",
+      lastMessageAt: "2026-09-22T11:29:59.000Z",
+    }),
+    conversation("unread-topic", {
+      type: "topic",
+      lastMessageAt: "2026-09-22T11:00:00.000Z",
+      unreadCount: 1,
+    }),
+    conversation("recent-topic", {
+      type: "topic",
+      lastMessageAt: "2026-09-22T11:30:00.000Z",
+    }),
+  ])
+
+  repository.upsertCurrent([conversation("latest-group", { lastMessageAt: now.toISOString() })])
+
+  assert.deepEqual(
+    repository.list(now).map((item) => item.id),
+    ["latest-group", "recent-topic", "unread-topic", "older-group"],
+  )
+  assert.equal(repository.hasCurrent("stale-topic"), true)
+  assert.notEqual(repository.getPayload("stale-topic"), undefined)
+  database.close()
+})
+
+test("会话仓储解析话题父会话和发起人", () => {
+  const database = new DatabaseSync(":memory:")
+  initializeAccountSchema(database)
+  const repository = new ConversationRepository(database)
+  repository.upsertCurrent([
+    conversation("topic-1", {
+      type: "topic",
+      unreadCount: 1,
+      avatarId: "parent-1",
+      payload: {
+        id: "topic-1",
+        type: "topic",
+        topic: {
+          archived: false,
+          parent_conversation_id: "parent-1",
+          participating: true,
+          source_sender: { id: "user-1", name: "Alice", type: "user" },
+        },
+      },
+    }),
+  ])
+
+  assert.deepEqual(repository.list()[0].topic, {
+    archived: false,
+    parentConversationId: "parent-1",
+    participating: true,
+    sourceSender: { id: "user-1", name: "Alice", type: "user" },
+  })
+  database.close()
+})
+
+test("可见性修复恢复被快照同步误隐藏的普通会话", () => {
+  const database = new DatabaseSync(":memory:")
+  initializeAccountSchema(database)
+  const repository = new ConversationRepository(database)
+  repository.upsertCurrent([
+    conversation("hidden-group"),
+    conversation("hidden-topic", { type: "topic" }),
+  ])
+  database.exec("UPDATE conversations SET current = 0")
+  database.exec("DELETE FROM metadata WHERE key = 'parent_conversation_visibility_v3'")
+
+  initializeAccountSchema(database)
+
+  assert.equal(repository.hasCurrent("hidden-group"), true)
+  assert.equal(repository.hasCurrent("hidden-topic"), false)
+  database.close()
+})
+
 test("可见性迁移只执行一次并恢复旧会话", () => {
   const database = new DatabaseSync(":memory:")
   initializeAccountSchema(database)

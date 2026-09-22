@@ -133,6 +133,7 @@ export function initializeAccountSchema(database: DatabaseSync) {
       WHERE client_message_id <> '';
   `)
   migrateConversationVisibility(database)
+  migrateParentConversationVisibility(database)
 }
 
 function ensureColumn(database: DatabaseSync, table: string, column: string, definition: string) {
@@ -141,6 +142,23 @@ function ensureColumn(database: DatabaseSync, table: string, column: string, def
   >
   if (!columns.some((entry) => entry.name === column)) {
     database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+  }
+}
+
+function migrateParentConversationVisibility(database: DatabaseSync) {
+  const migrationKey = "parent_conversation_visibility_v3"
+  const migrated = database
+    .prepare("SELECT 1 AS found FROM metadata WHERE key = ?")
+    .get(migrationKey) as Record<string, unknown> | undefined
+  if (migrated?.found === 1) return
+  database.exec("BEGIN IMMEDIATE")
+  try {
+    database.prepare("UPDATE conversations SET current = 1 WHERE type <> ?").run("topic")
+    database.prepare("INSERT INTO metadata(key, value) VALUES (?, '1')").run(migrationKey)
+    database.exec("COMMIT")
+  } catch (error) {
+    database.exec("ROLLBACK")
+    throw error
   }
 }
 

@@ -1,7 +1,9 @@
+import type { AvatarType } from "../../shared/account-data"
 import { AuthFailure, isRecord } from "../../shared/auth"
 import type { StoredConversation, StoredMessage } from "./account-database"
 import type { AvatarDescriptor, AvatarMemberDescriptor } from "./avatar-types"
 import { normalizeDesktopMessageDetails, summarizeDesktopMessageBody } from "./message-normalizer"
+import { parseConversationTopic } from "./conversation-topic"
 
 const builtinAssistantAppId = "00000000-0000-0000-0000-000000000001"
 
@@ -49,6 +51,7 @@ export function parseConversation(value: unknown, currentUserId: string): Stored
           isRecord(member) && member.type === "app" && member.id === builtinAssistantAppId,
       ),
     unreadCount: nonNegativeInteger(value.unread_count),
+    topic: parseConversationTopic(value),
     payload: value,
   }
 }
@@ -126,16 +129,8 @@ function conversationAvatarIdentity(
   conversationId: string,
   conversationType: string,
   currentUserId: string,
-): Pick<AvatarDescriptor, "type" | "id"> {
-  if (conversationType === "topic" && isRecord(value.topic)) {
-    const parentId = optionalString(value.topic.parent_conversation_id, 128)
-    if (parentId) {
-      return {
-        type: avatarTypeForConversation(optionalString(value.topic.parent_conversation_type, 32)),
-        id: parentId,
-      }
-    }
-  }
+): { type: AvatarType; id: string } {
+  if (conversationType === "topic") return { type: "topic", id: conversationId }
   if (conversationType === "direct" || conversationType === "app") {
     const members = parseAvatarMembers(value.members)
     const preferred = members.find((member) =>

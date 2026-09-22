@@ -1,4 +1,8 @@
-import { Loading03Icon, NotificationOff01Icon } from "@hugeicons/core-free-icons"
+import {
+  ArrowMoveDownRightIcon,
+  Loading03Icon,
+  NotificationOff01Icon,
+} from "@hugeicons/core-free-icons"
 import type { DesktopConversation, LocalSearchResult } from "../../../../shared/account-data"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
@@ -7,6 +11,7 @@ import { Item, ItemContent, ItemGroup } from "@/components/ui/item"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { parseMentionTemplate, type MentionLabelResolver } from "@/lib/message-mentions"
 import { cn } from "@/lib/utils"
+import { groupConversationList } from "../conversation-list-order"
 
 export function ConversationSidebar({
   conversations,
@@ -33,12 +38,7 @@ export function ConversationSidebar({
   onRefresh: () => void
   onSelectSearchResult: (result: LocalSearchResult) => void
 }) {
-  const pinned = conversations
-    .filter((conversation) => conversation.pinned || conversation.isBuiltinAssistant)
-    .sort(compareConversationActivity)
-  const regular = conversations
-    .filter((conversation) => !conversation.pinned && !conversation.isBuiltinAssistant)
-    .sort(compareConversationActivity)
+  const { pinned, regular } = groupConversationList(conversations)
 
   return (
     <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-sidebar">
@@ -132,7 +132,8 @@ function ConversationGroup({
             variant="default"
             size="sm"
             className={cn(
-              "flex-nowrap border-transparent text-left hover:bg-foreground/5 hover:text-foreground",
+              "relative flex-nowrap border-transparent text-left hover:bg-foreground/5 hover:text-foreground",
+              conversation.type === "topic" && "py-1.5 pl-6",
               active &&
                 "bg-xgui-brand-1 text-sidebar-accent-foreground hover:bg-xgui-brand-1 hover:text-sidebar-accent-foreground",
             )}
@@ -142,17 +143,26 @@ function ConversationGroup({
               aria-current={active ? "page" : undefined}
               onClick={() => onSelect(conversation.id)}
             >
-              <EntityAvatar
+              {conversation.type === "topic" && (
+                <HugeiconsIcon
+                  icon={ArrowMoveDownRightIcon}
+                  className="absolute left-3.5 size-2.5 text-muted-foreground"
+                  aria-hidden
+                />
+              )}
+              <ConversationListAvatar
+                conversation={conversation}
                 targetId={targetId}
-                type={conversation.avatarType}
-                id={conversation.avatarId}
-                theme={resolvedTheme}
-                size={40}
-                label={`${conversation.name}头像`}
+                resolvedTheme={resolvedTheme}
               />
               <ItemContent className="w-0 min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
-                  <div className="min-w-0 flex-1 truncate text-sm leading-snug font-medium">
+                  <div
+                    className={cn(
+                      "min-w-0 flex-1 truncate leading-snug font-medium",
+                      conversation.type === "topic" ? "text-xs" : "text-sm",
+                    )}
+                  >
                     {conversation.name}
                   </div>
                   <span className="shrink-0 text-xs font-normal text-muted-foreground">
@@ -183,26 +193,64 @@ function ConversationGroup({
   )
 }
 
+function ConversationListAvatar({
+  conversation,
+  targetId,
+  resolvedTheme,
+}: {
+  conversation: DesktopConversation
+  targetId: string
+  resolvedTheme: "light" | "dark"
+}) {
+  const isTopic = conversation.type === "topic"
+  const sourceSender = isTopic ? conversation.topic?.sourceSender : undefined
+  return (
+    <div
+      className={cn("flex shrink-0 items-center justify-center", isTopic ? "size-7" : "size-10")}
+    >
+      {isTopic ? (
+        <div className="relative size-6">
+          <EntityAvatar
+            targetId={targetId}
+            type={conversation.avatarType}
+            id={conversation.avatarId}
+            theme={resolvedTheme}
+            size={24}
+            label={`${conversation.name}头像`}
+          />
+          {sourceSender && (
+            <span className="absolute -right-1 -bottom-1 flex rounded-full bg-background p-0.5 leading-none shadow-xs">
+              <EntityAvatar
+                targetId={targetId}
+                type={sourceSender.type}
+                id={sourceSender.id}
+                theme={resolvedTheme}
+                size={12}
+                label={`${sourceSender.name}头像`}
+                className="rounded-full"
+              />
+            </span>
+          )}
+        </div>
+      ) : (
+        <EntityAvatar
+          targetId={targetId}
+          type={conversation.avatarType}
+          id={conversation.avatarId}
+          theme={resolvedTheme}
+          size={40}
+          label={`${conversation.name}头像`}
+        />
+      )}
+    </div>
+  )
+}
+
 function formatConversationSummary(summary: string, mentionLabelResolver: MentionLabelResolver) {
   if (!summary) return "暂无消息"
   return parseMentionTemplate(summary, mentionLabelResolver)
     .map((part) => (part.type === "text" ? part.text : part.label))
     .join("")
-}
-
-function compareConversationActivity(left: DesktopConversation, right: DesktopConversation) {
-  if (left.isBuiltinAssistant !== right.isBuiltinAssistant) {
-    return left.isBuiltinAssistant ? -1 : 1
-  }
-  const leftTime = parseConversationActivity(left.lastMessageAt ?? left.createdAt)
-  const rightTime = parseConversationActivity(right.lastMessageAt ?? right.createdAt)
-  return rightTime - leftTime || left.name.localeCompare(right.name, "zh-CN")
-}
-
-function parseConversationActivity(value: string | null) {
-  if (!value) return Number.NEGATIVE_INFINITY
-  const timestamp = Date.parse(value)
-  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp
 }
 
 function formatConversationTime(value: string | null): string {

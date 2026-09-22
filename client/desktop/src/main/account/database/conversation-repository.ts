@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite"
 import type { DesktopConversation } from "../../../shared/account-data"
+import { parseConversationTopic } from "../conversation-topic.ts"
 
 export type StoredConversation = DesktopConversation & { avatar: string; payload: unknown }
 
@@ -11,6 +12,10 @@ export class ConversationRepository {
   }
 
   upsertCurrent(conversations: StoredConversation[]) {
+    this.transaction(() => this.upsertRows(conversations))
+  }
+
+  private upsertRows(conversations: StoredConversation[]) {
     const statement = this.database.prepare(`
       INSERT INTO conversations (
         id, type, name, member_count, avatar, avatar_type, avatar_id, created_at, last_message_at,
@@ -34,27 +39,25 @@ export class ConversationRepository {
         current = 1,
         payload_json = excluded.payload_json
     `)
-    this.transaction(() => {
-      for (const conversation of conversations) {
-        statement.run(
-          conversation.id,
-          conversation.type,
-          conversation.name,
-          conversation.memberCount,
-          conversation.avatar,
-          conversation.avatarType,
-          conversation.avatarId,
-          conversation.createdAt,
-          conversation.lastMessageAt,
-          conversation.lastMessageSummary,
-          Number(conversation.pinned),
-          Number(conversation.notificationMuted),
-          Number(conversation.isBuiltinAssistant),
-          conversation.unreadCount,
-          JSON.stringify(conversation.payload),
-        )
-      }
-    })
+    for (const conversation of conversations) {
+      statement.run(
+        conversation.id,
+        conversation.type,
+        conversation.name,
+        conversation.memberCount,
+        conversation.avatar,
+        conversation.avatarType,
+        conversation.avatarId,
+        conversation.createdAt,
+        conversation.lastMessageAt,
+        conversation.lastMessageSummary,
+        Number(conversation.pinned),
+        Number(conversation.notificationMuted),
+        Number(conversation.isBuiltinAssistant),
+        conversation.unreadCount,
+        JSON.stringify(conversation.payload),
+      )
+    }
   }
 
   hasCurrent(conversationId: string) {
@@ -97,7 +100,8 @@ export class ConversationRepository {
     this.database.prepare("UPDATE conversations SET current = 0 WHERE id = ?").run(conversationId)
   }
 
-  list(): DesktopConversation[] {
+  list(now = new Date()): DesktopConversation[] {
+    const topicActivityCutoff = new Date(now.getTime() - 30 * 60 * 1000).toISOString()
     const rows = this.database
       .prepare(
         `SELECT conversations.id, conversations.type, conversations.name,
@@ -111,14 +115,20 @@ export class ConversationRepository {
                   LIMIT 1
                 ), '') AS last_message_summary,
                 conversations.pinned, conversations.notification_muted,
-                conversations.is_builtin_assistant, conversations.unread_count
+                conversations.is_builtin_assistant, conversations.unread_count,
+                conversations.payload_json
          FROM conversations
          WHERE conversations.current = 1
+           AND (
+             conversations.type <> 'topic'
+             OR conversations.unread_count > 0
+             OR COALESCE(conversations.last_message_at, conversations.created_at) >= ?
+           )
          ORDER BY conversations.is_builtin_assistant DESC, conversations.pinned DESC,
                   COALESCE(conversations.last_message_at, conversations.created_at, '') DESC,
                   conversations.name ASC`,
       )
-      .all() as Array<Record<string, unknown>>
+      .all(topicActivityCutoff) as Array<Record<string, unknown>>
     return rows.map((row) => ({
       id: String(row.id),
       type: String(row.type),
@@ -133,6 +143,7 @@ export class ConversationRepository {
       notificationMuted: row.notification_muted === 1,
       isBuiltinAssistant: row.is_builtin_assistant === 1,
       unreadCount: Number(row.unread_count),
+      topic: parseConversationTopic(parsePayload({ payload_json: row.payload_json })),
     }))
   }
 
