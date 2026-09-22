@@ -5,6 +5,7 @@ import type {
   DesktopMessageReactionUser,
   MessageReactionUsersInput,
   SetMessageReactionInput,
+  SubmitChoiceResponseInput,
 } from "../../shared/account-data"
 import { AuthFailure, isRecord } from "../../shared/auth"
 import { AccountDatabase, type StoredConversation, type StoredMessage } from "./account-database"
@@ -19,6 +20,7 @@ import {
   parseMessage,
   requiredString,
 } from "./conversation-parser"
+import { normalizeDesktopMessageChoiceState } from "./message-normalizer"
 import { OutgoingMessageService } from "./outgoing-message-service"
 
 export class ConversationManager {
@@ -296,6 +298,40 @@ export class ConversationManager {
         data.reactions,
       )
     ) {
+      throw new AuthFailure("message_not_found", "消息不存在")
+    }
+    return this.database.listMessages(input.conversationId, this.currentUserId)
+  }
+
+  async submitChoiceResponse(
+    input: Omit<SubmitChoiceResponseInput, "targetId">,
+  ): Promise<DesktopMessage[]> {
+    this.assertConversationId(input.conversationId)
+    if (!input.messageId || input.messageId.length > 128) {
+      throw new AuthFailure("invalid_message", "消息不存在")
+    }
+    if (
+      !Array.isArray(input.optionIds) ||
+      input.optionIds.length === 0 ||
+      input.optionIds.length > 100 ||
+      input.optionIds.some((id) => typeof id !== "string" || !id || id.length > 128)
+    ) {
+      throw new AuthFailure("invalid_choice", "请选择有效选项")
+    }
+    const optionIds = Array.from(new Set(input.optionIds))
+    const data = await this.client.put(
+      `/api/client/conversations/${encodeURIComponent(input.conversationId)}/messages/${encodeURIComponent(input.messageId)}/choice-response`,
+      { option_ids: optionIds },
+    )
+    if (
+      !isRecord(data) ||
+      data.conversation_id !== input.conversationId ||
+      data.message_id !== input.messageId ||
+      !normalizeDesktopMessageChoiceState(data.choice)
+    ) {
+      throw new AuthFailure("invalid_response", "选择响应格式不正确")
+    }
+    if (!this.database.updateMessageChoice(input.conversationId, input.messageId, data.choice)) {
       throw new AuthFailure("message_not_found", "消息不存在")
     }
     return this.database.listMessages(input.conversationId, this.currentUserId)

@@ -9,6 +9,7 @@ export const ACCOUNT_DATA_CHANNELS = {
   listMessages: "desktop-next:v1:conversation-messages-list",
   loadBeforeMessages: "desktop-next:v1:conversation-messages-load-before",
   setMessageReaction: "desktop-next:v1:conversation-message-reaction-set",
+  submitChoiceResponse: "desktop-next:v1:conversation-message-choice-submit",
   listMessageReactionUsers: "desktop-next:v1:conversation-message-reaction-users-list",
   sendTextMessage: "desktop-next:v1:conversation-message-text-send",
   selectMessageFile: "desktop-next:v1:conversation-message-file-select",
@@ -157,7 +158,14 @@ export type DesktopMessage = {
     reactedByMe: boolean
     users: DesktopMessageReactionUser[]
   }>
+  choice?: DesktopMessageChoiceState
   topic?: { conversationId: string; archived: boolean }
+}
+
+export type DesktopMessageChoiceState = {
+  myOptionIds: string[]
+  options: Array<{ id: string; responseCount: number }>
+  responseCount: number
 }
 
 export type DesktopMessageReactionUser = {
@@ -390,6 +398,13 @@ export type SetMessageReactionInput = {
   reacted: boolean
 }
 
+export type SubmitChoiceResponseInput = {
+  targetId: string
+  conversationId: string
+  messageId: string
+  optionIds: string[]
+}
+
 export interface AccountDataBridge {
   initialize(targetId: string): Promise<AuthResult<null>>
   refreshAll(targetId: string): Promise<AuthResult<null>>
@@ -423,6 +438,7 @@ export interface AccountDataBridge {
   sendVideoMessage(input: SendVideoMessageInput): Promise<AuthResult<DesktopMessage[]>>
   retryMessage(input: RetryMessageInput): Promise<AuthResult<DesktopMessage[]>>
   setMessageReaction(input: SetMessageReactionInput): Promise<AuthResult<DesktopMessage[]>>
+  submitChoiceResponse(input: SubmitChoiceResponseInput): Promise<AuthResult<DesktopMessage[]>>
   listMessageReactionUsers(
     input: MessageReactionUsersInput,
   ): Promise<AuthResult<DesktopMessageReactionUser[]>>

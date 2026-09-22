@@ -32,7 +32,7 @@ const chartColors = [
 type ChartBodyValue = Extract<DesktopMessageBody, { type: "chart" }>
 type LegendItem = { key: string; label: string; color: string }
 type SeriesItem = { key: string; name: string; values: unknown[]; color: string }
-const tooltipStyle = { fontSize: 12 }
+const tooltipStyle = { borderRadius: 8, fontSize: 12 }
 
 export function ChartBody({ body }: { body: ChartBodyValue }) {
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(() => new Set())
@@ -120,14 +120,17 @@ function createChartModel(body: ChartBodyValue, hiddenKeys: Set<string>) {
     }
     const horizontal = data.direction === "horizontal"
     const stacked = data.mode === "stacked"
-    const bars = series.map((item) => (
+    const visibleSeriesIndexes = series.flatMap((item, index) =>
+      hiddenKeys.has(item.key) ? [] : [index],
+    )
+    const bars = series.map((item, index) => (
       <Bar
         key={item.key}
         dataKey={item.key}
         name={item.name}
         hide={hiddenKeys.has(item.key)}
         fill={item.color}
-        radius={4}
+        radius={getBarRadius(horizontal, stacked, index, visibleSeriesIndexes)}
         stackId={stacked ? "total" : undefined}
       />
     ))
@@ -238,6 +241,23 @@ function createChartModel(body: ChartBodyValue, hiddenKeys: Set<string>) {
     }
   }
   return null
+}
+
+function getBarRadius(
+  horizontal: boolean,
+  stacked: boolean,
+  seriesIndex: number,
+  visibleSeriesIndexes: number[],
+): number | [number, number, number, number] {
+  if (!stacked) return 4
+  const firstIndex = visibleSeriesIndexes[0]
+  const lastIndex = visibleSeriesIndexes.at(-1)
+  if (seriesIndex !== firstIndex && seriesIndex !== lastIndex) return 0
+  if (firstIndex === lastIndex) return 4
+  if (horizontal) {
+    return seriesIndex === firstIndex ? [4, 0, 0, 4] : [0, 4, 4, 0]
+  }
+  return seriesIndex === firstIndex ? [0, 0, 4, 4] : [4, 4, 0, 0]
 }
 
 function parseSeries(values: unknown[]): SeriesItem[] {

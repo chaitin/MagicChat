@@ -79,6 +79,7 @@ export function ChatPage({
     scrollToLatestMessage,
     resolveMentionLabel,
     setMessageReaction,
+    submitChoiceResponse,
     applySentMessages,
     sendTextMessage,
     retryMessage,
@@ -320,6 +321,9 @@ export function ChatPage({
                     userName={userName}
                     resolvedTheme={resolvedTheme}
                     conversationName={selected.name}
+                    showChoiceResponseCounts={
+                      selected.type === "group" || selected.type === "topic"
+                    }
                     mentionLabelResolver={resolveMentionLabel}
                     pendingReactionKeys={pendingReactionKeys}
                     highlightedMessageId={
@@ -332,6 +336,7 @@ export function ChatPage({
                     onScrollToBottom={scrollToLatestMessage}
                     onReachTop={() => void loadBeforeMessages()}
                     onSetReaction={setMessageReaction}
+                    onSubmitChoice={submitChoiceResponse}
                     onRetryMessage={retryMessage}
                     onPendingFeature={(label) => showPendingFeature(showToast, label)}
                   />

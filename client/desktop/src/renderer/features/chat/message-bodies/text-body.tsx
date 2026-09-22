@@ -7,7 +7,7 @@ import { MentionContext } from "./context"
 export function TextBody({ content }: { content: string }) {
   const { currentUserId, resolveLabel } = useContext(MentionContext)
   return (
-    <span className="break-all whitespace-pre-wrap">
+    <span className="inline-block max-w-[30rem] break-all whitespace-pre-wrap">
       {parseMentionTemplate(content, resolveLabel).map((part, index) =>
         part.type === "text" ? (
           part.text
@@ -39,10 +39,12 @@ export function TextBody({ content }: { content: string }) {
 export function MarkdownBody({ content }: { content: string }) {
   const { currentUserId, resolveLabel } = useContext(MentionContext)
   return (
-    <MessageMarkdown
-      content={content}
-      currentUserId={currentUserId}
-      mentionLabelResolver={resolveLabel}
-    />
+    <div className="max-w-[30rem]">
+      <MessageMarkdown
+        content={content}
+        currentUserId={currentUserId}
+        mentionLabelResolver={resolveLabel}
+      />
+    </div>
   )
 }

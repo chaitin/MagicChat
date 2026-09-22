@@ -148,6 +148,21 @@ export function useChatData({
     [pendingReactionKeys, showToast, targetId],
   )
 
+  const submitChoiceResponse = useCallback(
+    async (message: DesktopMessage, optionIds: string[]) => {
+      if (!window.desktop) throw new Error("桌面服务暂不可用")
+      const result = await window.desktop.accountData.submitChoiceResponse({
+        targetId,
+        conversationId: message.conversationId,
+        messageId: message.id,
+        optionIds,
+      })
+      if (!result.ok) throw new Error(result.error.message)
+      if (selectedIdRef.current === message.conversationId) setMessages(result.data)
+    },
+    [targetId],
+  )
+
   const applySentMessages = useCallback(
     (conversationId: string, nextMessages: DesktopMessage[]) => {
       if (selectedIdRef.current !== conversationId) return
@@ -386,6 +401,7 @@ export function useChatData({
     scrollToLatestMessage,
     resolveMentionLabel,
     setMessageReaction,
+    submitChoiceResponse,
     applySentMessages,
     sendTextMessage,
     retryMessage,

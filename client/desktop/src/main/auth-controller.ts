@@ -262,6 +262,10 @@ export class AuthController {
     return this.accountData.setMessageReaction(...args)
   }
 
+  submitChoiceResponse(...args: Parameters<AccountDataFacade["submitChoiceResponse"]>) {
+    return this.accountData.submitChoiceResponse(...args)
+  }
+
   ensureMediaCached(...args: Parameters<AccountDataFacade["ensureMediaCached"]>) {
     return this.accountData.ensureMediaCached(...args)
   }

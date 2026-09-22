@@ -29,6 +29,7 @@ export function MessageList({
   userName,
   resolvedTheme,
   conversationName,
+  showChoiceResponseCounts,
   mentionLabelResolver,
   pendingReactionKeys,
   highlightedMessageId,
@@ -37,6 +38,7 @@ export function MessageList({
   onScrollToBottom,
   onReachTop,
   onSetReaction,
+  onSubmitChoice,
   onRetryMessage,
   onPendingFeature,
 }: {
@@ -49,6 +51,7 @@ export function MessageList({
   userName: string
   resolvedTheme: "light" | "dark"
   conversationName: string
+  showChoiceResponseCounts: boolean
   mentionLabelResolver: MentionLabelResolver
   pendingReactionKeys: Set<string>
   highlightedMessageId: string | null
@@ -57,6 +60,7 @@ export function MessageList({
   onScrollToBottom: () => void
   onReachTop: () => void
   onSetReaction: (message: DesktopMessage, text: string, reacted: boolean) => Promise<void>
+  onSubmitChoice: (message: DesktopMessage, optionIds: string[]) => Promise<void>
   onRetryMessage: (message: DesktopMessage) => void
   onPendingFeature: (label: string) => void
 }) {
@@ -113,10 +117,12 @@ export function MessageList({
                       userName={userName}
                       resolvedTheme={resolvedTheme}
                       conversationName={conversationName}
+                      showChoiceResponseCounts={showChoiceResponseCounts}
                       mentionLabelResolver={mentionLabelResolver}
                       pendingReactionKeys={pendingReactionKeys}
                       highlighted={message.id === highlightedMessageId}
                       onSetReaction={onSetReaction}
+                      onSubmitChoice={onSubmitChoice}
                       onRetryMessage={onRetryMessage}
                       onPendingFeature={onPendingFeature}
                     />
@@ -150,10 +156,12 @@ function MessageRow({
   userName,
   resolvedTheme,
   conversationName,
+  showChoiceResponseCounts,
   mentionLabelResolver,
   pendingReactionKeys,
   highlighted,
   onSetReaction,
+  onSubmitChoice,
   onRetryMessage,
   onPendingFeature,
 }: {
@@ -163,10 +171,12 @@ function MessageRow({
   userName: string
   resolvedTheme: "light" | "dark"
   conversationName: string
+  showChoiceResponseCounts: boolean
   mentionLabelResolver: MentionLabelResolver
   pendingReactionKeys: Set<string>
   highlighted: boolean
   onSetReaction: (message: DesktopMessage, text: string, reacted: boolean) => Promise<void>
+  onSubmitChoice: (message: DesktopMessage, optionIds: string[]) => Promise<void>
   onRetryMessage: (message: DesktopMessage) => void
   onPendingFeature: (label: string) => void
 }) {
@@ -263,6 +273,10 @@ function MessageRow({
               currentUserId={userId}
               mentionLabelResolver={mentionLabelResolver}
               conversationName={conversationName}
+              messageId={message.id}
+              choice={message.choice}
+              showChoiceResponseCounts={showChoiceResponseCounts}
+              onChoiceRespond={(optionIds) => onSubmitChoice(message, optionIds)}
               flushMedia={flushMediaBubble}
             />
             {message.reactions.length > 0 && (

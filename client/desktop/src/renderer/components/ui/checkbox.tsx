@@ -4,7 +4,11 @@ import { Checkbox as CheckboxPrimitive } from "radix-ui"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { Tick02Icon } from "@hugeicons/core-free-icons"
 
-function Checkbox({ className, ...props }: React.ComponentProps<typeof CheckboxPrimitive.Root>) {
+function Checkbox({
+  className,
+  iconStrokeWidth = 2,
+  ...props
+}: React.ComponentProps<typeof CheckboxPrimitive.Root> & { iconStrokeWidth?: number }) {
   return (
     <CheckboxPrimitive.Root
       data-slot="checkbox"
@@ -18,7 +22,7 @@ function Checkbox({ className, ...props }: React.ComponentProps<typeof CheckboxP
         data-slot="checkbox-indicator"
         className="grid place-content-center text-current transition-none [&>svg]:size-3.5"
       >
-        <HugeiconsIcon icon={Tick02Icon} strokeWidth={2} />
+        <HugeiconsIcon icon={Tick02Icon} strokeWidth={iconStrokeWidth} />
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
   )

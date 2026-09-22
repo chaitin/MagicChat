@@ -11,6 +11,7 @@ import {
   type SendTextMessageInput,
   type SendVideoMessageInput,
   type SetMessageReactionInput,
+  type SubmitChoiceResponseInput,
 } from "../../shared/account-data"
 import { AuthFailure } from "../../shared/auth"
 import type { AuthController } from "../auth-controller"
@@ -136,6 +137,9 @@ export function registerAccountDataIpc({
   )
   handle(ACCOUNT_DATA_CHANNELS.setMessageReaction, (input) =>
     auth.setMessageReaction(input as SetMessageReactionInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.submitChoiceResponse, (input) =>
+    auth.submitChoiceResponse(input as SubmitChoiceResponseInput),
   )
   handle(ACCOUNT_DATA_CHANNELS.listMessageReactionUsers, (input) =>
     auth.listMessageReactionUsers(input as MessageReactionUsersInput),

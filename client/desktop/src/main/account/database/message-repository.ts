@@ -171,6 +171,18 @@ export class MessageRepository {
     })
   }
 
+  updateMessageChoice(conversationId: string, messageId: string, choice: unknown) {
+    const row = this.database
+      .prepare("SELECT payload_json FROM messages WHERE conversation_id = ? AND id = ? LIMIT 1")
+      .get(conversationId, messageId) as Record<string, unknown> | undefined
+    const payload = parsePayload(row)
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false
+    const result = this.database
+      .prepare("UPDATE messages SET payload_json = ? WHERE conversation_id = ? AND id = ?")
+      .run(JSON.stringify({ ...payload, choice }), conversationId, messageId)
+    return result.changes > 0
+  }
+
   private transaction(operation: () => void) {
     this.database.exec("BEGIN IMMEDIATE")
     try {

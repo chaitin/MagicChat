@@ -12,6 +12,7 @@ import type {
   SendTextMessageInput,
   SendVideoMessageInput,
   SetMessageReactionInput,
+  SubmitChoiceResponseInput,
   UpdateClientAppInput,
 } from "../../shared/account-data"
 import type { MediaCacheRequest } from "../../shared/media"
@@ -109,6 +110,11 @@ export class AccountDataFacade {
   async setMessageReaction(input: SetMessageReactionInput) {
     await this.ready(input?.targetId)
     return this.requireRuntime().setMessageReaction(input)
+  }
+
+  async submitChoiceResponse(input: SubmitChoiceResponseInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().submitChoiceResponse(input)
   }
 
   async ensureMediaCached(request: MediaCacheRequest) {

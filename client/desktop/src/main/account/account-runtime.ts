@@ -19,6 +19,7 @@ import type {
   OpenContactConversationInput,
   SaveClientAppInput,
   SetMessageReactionInput,
+  SubmitChoiceResponseInput,
   UpdateClientAppInput,
 } from "../../shared/account-data"
 import { AuthFailure } from "../../shared/auth"
@@ -173,6 +174,13 @@ export class AccountRuntime {
   async setMessageReaction(input: Omit<SetMessageReactionInput, "targetId">) {
     this.assertInitialized()
     const messages = await this.conversationManager!.setMessageReaction(input)
+    this.notifyChanged(["messages"], [input.conversationId])
+    return messages
+  }
+
+  async submitChoiceResponse(input: Omit<SubmitChoiceResponseInput, "targetId">) {
+    this.assertInitialized()
+    const messages = await this.conversationManager!.submitChoiceResponse(input)
     this.notifyChanged(["messages"], [input.conversationId])
     return messages
   }

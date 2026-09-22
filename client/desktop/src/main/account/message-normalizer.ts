@@ -1,6 +1,13 @@
-import type { DesktopMessage, DesktopMessageBody } from "../../shared/account-data"
+import type {
+  DesktopMessage,
+  DesktopMessageBody,
+  DesktopMessageChoiceState,
+} from "../../shared/account-data"
 
-export type DesktopMessageDetails = Pick<DesktopMessage, "body" | "replyTo" | "reactions" | "topic">
+export type DesktopMessageDetails = Pick<
+  DesktopMessage,
+  "body" | "replyTo" | "reactions" | "choice" | "topic"
+>
 
 export function normalizeDesktopMessageDetails(payload: unknown): DesktopMessageDetails {
   const record = asRecord(payload)
@@ -32,12 +39,36 @@ export function normalizeDesktopMessageDetails(payload: unknown): DesktopMessage
           : []
       })
     : []
+  const choice = normalizeDesktopMessageChoiceState(record?.choice)
   const topicRecord = asRecord(record?.topic)
   const topicId = stringValue(topicRecord?.conversation_id)
   const topic = topicId
     ? { conversationId: topicId, archived: topicRecord?.archived === true }
     : undefined
-  return { body, replyTo, reactions, topic }
+  return { body, replyTo, reactions, choice, topic }
+}
+
+export function normalizeDesktopMessageChoiceState(
+  value: unknown,
+): DesktopMessageChoiceState | undefined {
+  const choice = asRecord(value)
+  if (!choice || !Array.isArray(choice.my_option_ids) || !Array.isArray(choice.options)) {
+    return undefined
+  }
+  const myOptionIds = choice.my_option_ids.flatMap((value) => {
+    const id = stringValue(value)
+    return id ? [id] : []
+  })
+  const options = choice.options.flatMap((value) => {
+    const option = asRecord(value)
+    const id = stringValue(option?.id)
+    return id ? [{ id, responseCount: nonNegativeInteger(option?.response_count) }] : []
+  })
+  return {
+    myOptionIds,
+    options,
+    responseCount: nonNegativeInteger(choice.response_count),
+  }
 }
 
 export function summarizeDesktopMessageBody(body: DesktopMessageBody): string {

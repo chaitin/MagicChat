@@ -119,6 +119,10 @@ export class AccountDatabase {
     return this.messages.listMessages(...args)
   }
 
+  updateMessageChoice(...args: Parameters<MessageRepository["updateMessageChoice"]>) {
+    return this.messages.updateMessageChoice(...args)
+  }
+
   searchContacts(...args: Parameters<SearchRepository["searchContacts"]>) {
     return this.search.searchContacts(...args)
   }

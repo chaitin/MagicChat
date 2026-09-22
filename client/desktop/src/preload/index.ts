@@ -106,6 +106,8 @@ const bridge: DesktopBridge = {
     retryMessage: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.retryMessage, input),
     setMessageReaction: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.setMessageReaction, input),
+    submitChoiceResponse: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.submitChoiceResponse, input),
     listMessageReactionUsers: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listMessageReactionUsers, input),
     getContacts: (targetId) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getContacts, targetId),

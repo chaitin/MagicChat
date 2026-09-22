@@ -1,5 +1,5 @@
 import { MessageMultiple02Icon } from "@hugeicons/core-free-icons"
-import type { DesktopMessageBody } from "../../../../shared/account-data"
+import type { DesktopMessageBody, DesktopMessageChoiceState } from "../../../../shared/account-data"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { CollapsibleMessageContent } from "../collapsible-message-content"
 import { ChartBody } from "./chart-body"
@@ -11,11 +11,19 @@ import { formatDateTime } from "./utils"
 export function MessageBodyContent({
   body,
   targetId,
+  messageId,
+  choice,
+  showChoiceResponseCounts = false,
+  onChoiceRespond,
   flushMedia = false,
   collapseLongContent = false,
 }: {
   body: DesktopMessageBody
   targetId: string
+  messageId?: string
+  choice?: DesktopMessageChoiceState
+  showChoiceResponseCounts?: boolean
+  onChoiceRespond?: (optionIds: string[]) => Promise<void>
   flushMedia?: boolean
   collapseLongContent?: boolean
 }) {
@@ -51,7 +59,15 @@ export function MessageBodyContent({
     case "chart":
       return <ChartBody body={body} />
     case "choice":
-      return <ChoiceBody body={body} />
+      return (
+        <ChoiceBody
+          body={body}
+          messageId={messageId}
+          choice={choice}
+          showResponseCounts={showChoiceResponseCounts}
+          onRespond={onChoiceRespond}
+        />
+      )
     case "forward_bundle":
       return <ForwardBundleBody body={body} targetId={targetId} />
     case "system_event":
