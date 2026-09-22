@@ -116,7 +116,7 @@ describe("ChatPage create topic confirmation", () => {
 })
 
 describe("ChatPage topic source forwarding", () => {
-  it("forwards the source message before selected topic replies", async () => {
+  it("renders the virtual source normally but excludes it from forwarding", async () => {
     const user = userEvent.setup()
     const parent = createConversation("conversation-parent", "父会话")
     const topic: ClientConversation = {
@@ -151,6 +151,13 @@ describe("ChatPage topic source forwarding", () => {
       },
       seq: 8,
       summary: "讨论发布计划",
+    }
+    const virtualSource: ClientMessage = {
+      ...createSourceMessage(topic.id),
+      id: "virtual-topic-source",
+      sender: { id: "user-2", type: "user" },
+      seq: 0,
+      virtualType: "topic_source",
     }
     const topicReply: ClientMessage = {
       ...createSourceMessage(topic.id),
@@ -190,7 +197,7 @@ describe("ChatPage topic source forwarding", () => {
             ? {
                 ...createConversationMessageState(),
                 loaded: true,
-                messages: [topicReply],
+                messages: [virtualSource, topicReply],
               }
             : createConversationMessageState()
         ),
@@ -198,18 +205,22 @@ describe("ChatPage topic source forwarding", () => {
       `/chat/${topic.id}`
     )
 
-    const sourceBubble = await screen.findByTestId(
-      "topic-source-message-bubble"
-    )
+    const sourceContent = (await screen.findAllByText("讨论发布计划")).at(-1)!
     expect(
       screen.queryByRole("button", { name: "话题列表" })
     ).not.toBeInTheDocument()
-    fireEvent.contextMenu(sourceBubble)
-    await user.click(screen.getByRole("menuitem", { name: "多选" }))
-    await user.click(screen.getByText("话题回复"))
-    expect(screen.getByText("已选择 2 条")).toBeInTheDocument()
+    fireEvent.contextMenu(sourceContent)
+    expect(screen.getByRole("menuitem", { name: "多选" })).toHaveAttribute(
+      "data-disabled"
+    )
+    fireEvent.keyDown(document, { key: "Escape" })
 
-    await user.click(screen.getByRole("button", { name: "合并转发" }))
+    fireEvent.contextMenu(screen.getByText("话题回复"))
+    await user.click(screen.getByRole("menuitem", { name: "多选" }))
+    expect(screen.getByText("已选择 1 条")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "合并转发" })).toBeDisabled()
+
+    await user.click(screen.getByRole("button", { name: "逐条转发" }))
     await user.click(screen.getByRole("checkbox", { name: parent.name }))
     await user.click(screen.getByRole("button", { name: "转发（1）" }))
 
@@ -217,8 +228,8 @@ describe("ChatPage topic source forwarding", () => {
       expect(mocks.forwardConversationMessages).toHaveBeenCalledWith(
         topic.id,
         expect.objectContaining({
-          messageIds: [sourceMessage.id, topicReply.id],
-          mode: "merged",
+          messageIds: [topicReply.id],
+          mode: "separate",
           targetConversationIds: [parent.id],
         })
       )

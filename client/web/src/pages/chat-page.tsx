@@ -16,7 +16,6 @@ import {
   type ImageCaptionType,
   type ClientMessage,
   type ClientMessageSearchResult,
-  type ClientTopicSourceMessage,
   type ContactApp,
   type ContactUser,
 } from "@/lib/client-data-api"
@@ -33,7 +32,6 @@ import {
   type ConversationDraftMention,
 } from "@/lib/conversation-drafts"
 import type { VoiceMessageRecording } from "@/lib/voice-message"
-import { isTopicSourceMessageSelectable } from "@/lib/topic-source-message"
 import {
   formatConversationMessageSummary,
   toConversationPanelMessage,
@@ -47,7 +45,6 @@ import {
   TopicArchiveAction,
   TopicDrawer,
 } from "@/components/conversation/topic-drawer"
-import { TopicSourceBanner } from "@/components/conversation/topic-source-banner"
 import {
   ConversationPanel,
   type ConversationPanelForwardMode,
@@ -206,10 +203,6 @@ export function ChatPage() {
   const [creatingTopic, setCreatingTopic] = React.useState(false)
   const [topicDrawerConversationId, setTopicDrawerConversationId] =
     React.useState("")
-  const [loadedTopicSource, setLoadedTopicSource] = React.useState<{
-    conversationId: string
-    message: ClientTopicSourceMessage
-  } | null>(null)
   React.useEffect(
     () => () => setForegroundConversationId?.(""),
     [setForegroundConversationId]
@@ -402,39 +395,19 @@ export function ChatPage() {
       me,
     ]
   )
-  const activeTopicSource =
-    loadedTopicSource?.conversationId === activeConversationId
-      ? loadedTopicSource.message
-      : null
-  const activeTopicSourceSelectable = Boolean(
-    activeTopicSource && isTopicSourceMessageSelectable(activeTopicSource)
-  )
-  const selectedForwardMessageIds = React.useMemo(() => {
-    const messageIds: string[] = []
-    if (
-      activeTopicSourceSelectable &&
-      activeTopicSource &&
-      selectedMessageIds.has(activeTopicSource.id)
-    ) {
-      messageIds.push(activeTopicSource.id)
-    }
-    for (const message of activeClientMessages) {
-      if (
+  const selectedForwardMessageIds = React.useMemo(
+    () =>
+      activeClientMessages.flatMap((message) =>
         selectedMessageIds.has(message.id) &&
+        message.virtualType !== "topic_source" &&
         message.body.type !== "revoked" &&
         message.body.type !== "unsupported" &&
         message.body.type !== "system_event"
-      ) {
-        messageIds.push(message.id)
-      }
-    }
-    return messageIds
-  }, [
-    activeClientMessages,
-    activeTopicSource,
-    activeTopicSourceSelectable,
-    selectedMessageIds,
-  ])
+          ? [message.id]
+          : []
+      ),
+    [activeClientMessages, selectedMessageIds]
+  )
   const visibleMessageSelection = React.useMemo(
     () => ({
       active: messageSelection.active,
@@ -656,96 +629,11 @@ export function ChatPage() {
     [toggleSelectableMessage]
   )
 
-  const recordTopicSourceMessage = React.useCallback(
-    (message: ClientTopicSourceMessage) => {
-      if (!activeConversationId || activeConversationType !== "topic") {
-        return
-      }
-      setLoadedTopicSource((current) =>
-        current?.conversationId === activeConversationId &&
-        current.message === message
-          ? current
-          : { conversationId: activeConversationId, message }
-      )
-    },
-    [activeConversationId, activeConversationType]
-  )
-
-  const forwardTopicSourceMessage = React.useCallback(
-    (message: ClientTopicSourceMessage) => {
-      if (activeTopicSourceSelectable && activeTopicSource?.id === message.id) {
-        openForwardOperation([message.id], "separate")
-      }
-    },
-    [activeTopicSource, activeTopicSourceSelectable, openForwardOperation]
-  )
-
-  const startTopicSourceSelection = React.useCallback(
-    (message: ClientTopicSourceMessage) => {
-      if (activeTopicSourceSelectable && activeTopicSource?.id === message.id) {
-        startSelectingMessage(message.id)
-      }
-    },
-    [activeTopicSource, activeTopicSourceSelectable, startSelectingMessage]
-  )
-
-  const toggleTopicSourceSelection = React.useCallback(
-    (message: ClientTopicSourceMessage) => {
-      if (activeTopicSourceSelectable && activeTopicSource?.id === message.id) {
-        toggleSelectableMessage(message.id)
-      }
-    },
-    [activeTopicSource, activeTopicSourceSelectable, toggleSelectableMessage]
-  )
-
   const forwardSelectedMessages = React.useCallback(
     (mode: ConversationPanelForwardMode) => {
       openForwardOperation(selectedForwardMessageIds, mode)
     },
     [openForwardOperation, selectedForwardMessageIds]
-  )
-
-  const activeHistoryHeader = React.useMemo(
-    () =>
-      activeConversation?.type === "topic" ? (
-        <TopicSourceBanner
-          appsById={contactAppsByLookup}
-          conversationId={activeConversation.id}
-          currentUserId={me.id}
-          currentUser={me}
-          mentionLabelResolver={activeMentionLabelResolver}
-          onForward={forwardTopicSourceMessage}
-          onMultiSelect={startTopicSourceSelection}
-          onSourceMessageLoaded={recordTopicSourceMessage}
-          onToggleSelected={toggleTopicSourceSelection}
-          reactionConversationId={
-            activeConversation.topic?.parentConversationId
-          }
-          selected={Boolean(
-            activeTopicSource &&
-            visibleMessageSelection.selectedMessageIds.has(activeTopicSource.id)
-          )}
-          selectionMode={visibleMessageSelection.active}
-          showChoiceResponseCounts={
-            activeConversation.topic?.parentConversationType === "group"
-          }
-          sourceMessage={activeTopicSource ?? undefined}
-          usersById={usersById}
-        />
-      ) : undefined,
-    [
-      activeConversation,
-      activeMentionLabelResolver,
-      activeTopicSource,
-      contactAppsByLookup,
-      forwardTopicSourceMessage,
-      me,
-      recordTopicSourceMessage,
-      startTopicSourceSelection,
-      toggleTopicSourceSelection,
-      usersById,
-      visibleMessageSelection,
-    ]
   )
 
   async function submitForwardOperation(targetConversationIds: string[]) {
@@ -1058,7 +946,6 @@ export function ChatPage() {
         historyLoading={historyLoading}
         historyLoadingBefore={Boolean(activeMessageState?.loadingBefore)}
         historyNavigation={activeHistoryNavigation}
-        historyHeader={activeHistoryHeader}
         headerActions={
           activeConversation?.type === "topic" ? (
             activeConversation.canSend !== false ? (

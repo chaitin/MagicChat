@@ -523,31 +523,58 @@ export const ConversationPanelHistory = React.memo(
                     />
                   ) : (
                     <MessageBubble
-                      canReply={canReply}
+                      canReply={
+                        canReply && message.virtualType !== "topic_source"
+                      }
                       message={message}
                       conversation={conversation}
                       currentUserId={currentUserId}
                       mentionLabelResolver={mentionLabelResolver}
                       onForward={
+                        message.virtualType !== "topic_source" &&
                         isMessageForwardable(message)
                           ? onForwardMessage
                           : undefined
                       }
-                      onCreateTopic={onCreateTopic}
+                      onCreateTopic={
+                        message.virtualType === "topic_source"
+                          ? undefined
+                          : onCreateTopic
+                      }
                       onInsertMention={onInsertMention}
                       onOpenTopic={onOpenTopic}
                       onMultiSelect={
+                        message.virtualType !== "topic_source" &&
                         isMessageForwardable(message)
                           ? onStartMessageSelection
                           : undefined
                       }
                       onReeditRevoked={onReeditRevokedMessage}
-                      onReply={onReplyToMessage}
-                      onRevoke={onRevokeMessage}
-                      onSetReaction={onSetMessageReaction}
-                      onRespondToChoice={onRespondToChoice}
+                      onReply={
+                        message.virtualType === "topic_source"
+                          ? undefined
+                          : onReplyToMessage
+                      }
+                      onRevoke={
+                        message.virtualType === "topic_source"
+                          ? undefined
+                          : onRevokeMessage
+                      }
+                      onSetReaction={
+                        message.virtualType === "topic_source"
+                          ? undefined
+                          : onSetMessageReaction
+                      }
+                      onRespondToChoice={
+                        message.virtualType === "topic_source"
+                          ? undefined
+                          : onRespondToChoice
+                      }
                       onToggleSelected={onToggleMessageSelection}
-                      selectable={isMessageForwardable(message)}
+                      selectable={
+                        message.virtualType !== "topic_source" &&
+                        isMessageForwardable(message)
+                      }
                       selected={messageSelection?.selectedMessageIds.has(
                         message.id
                       )}

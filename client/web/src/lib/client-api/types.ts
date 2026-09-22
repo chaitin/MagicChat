@@ -526,6 +526,7 @@ export type MessageResponse = {
   sender?: MessageSenderResponse
   seq?: number
   topic?: MessageTopicResponse | null
+  virtual_type?: "topic_source"
 }
 
 export type MessageChoiceStateResponse = {
@@ -1255,6 +1256,7 @@ export type ClientMessage = {
   sender: ClientMessageSender
   seq: number
   topic?: ClientMessageTopic
+  virtualType?: "topic_source"
   deliveryStatus?: "sending" | "failed"
   retry?: () => void
 }

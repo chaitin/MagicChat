@@ -107,6 +107,9 @@ export function normalizeMessage(
     },
     seq: message.seq,
   }
+  if (message.virtual_type === "topic_source") {
+    normalized.virtualType = "topic_source"
+  }
   if (normalized.body.type === "choice") {
     normalized.choice = normalizeMessageChoiceState(message.choice)
   }

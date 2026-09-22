@@ -119,7 +119,7 @@ func TestTopicLifecycleKeepsGroupVisibilityParticipantScoped(t *testing.T) {
 	}
 }
 
-func TestTopicDetailIncludesSourceMessageReply(t *testing.T) {
+func TestTopicDetailUsesIndependentSourceSnapshot(t *testing.T) {
 	db := openConversationTestDB(t)
 	now := time.Date(2026, 7, 20, 4, 20, 0, 0, time.UTC)
 	owner := insertConversationTestUser(t, db, "topic-reply-owner@example.com", "Owner", now)
@@ -150,17 +150,24 @@ func TestTopicDetailIncludesSourceMessageReply(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create topic: %v", err)
 	}
+	revokedAt := now.Add(3 * time.Second)
+	if err := db.Model(&store.Message{}).Where("id = ?", source.ID).Updates(map[string]any{
+		"body":       json.RawMessage(`{"type":"text","content":"父消息已变化"}`),
+		"revoked_at": revokedAt, "deleted_at": revokedAt,
+	}).Error; err != nil {
+		t.Fatalf("change parent source message: %v", err)
+	}
 	detail, err := service.GetTopic(context.Background(), GetTopicCommand{
 		Actor: actorFromTestUser(member), TopicConversationID: created.Conversation.ID,
 	})
 	if err != nil {
 		t.Fatalf("get topic: %v", err)
 	}
-	if detail.SourceMessage.ReplyTo == nil ||
-		detail.SourceMessage.ReplyTo.ID != quoted.ID ||
-		detail.SourceMessage.ReplyTo.Sender.Name != owner.Name ||
-		detail.SourceMessage.ReplyTo.Summary != quoted.Summary {
-		t.Fatalf("source reply = %#v", detail.SourceMessage.ReplyTo)
+	if string(detail.SourceMessage.Body) != string(source.Body) || detail.SourceMessage.RevokedAt != nil || detail.SourceMessage.ReplyTo != nil {
+		t.Fatalf("source snapshot = %#v", detail.SourceMessage)
+	}
+	if !detail.SourceMessage.CreatedAt.Equal(now.Add(2 * time.Second)) {
+		t.Fatalf("source snapshot time = %v", detail.SourceMessage.CreatedAt)
 	}
 }
 

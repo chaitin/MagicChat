@@ -64,7 +64,6 @@ export function MessageList({
   resourceStates,
   server,
   showChoiceResponseCounts,
-  topicSourceMessage,
 }: {
   canAddReaction: boolean
   canCreateTopic: boolean
@@ -101,7 +100,6 @@ export function MessageList({
   resourceStates: ReadonlyMap<string, ResourceLoadState>
   server: ServerTarget
   showChoiceResponseCounts: boolean
-  topicSourceMessage?: PresentedMessage
 }) {
   const { colors } = useXGUITheme()
   const listStyle = useMemo(
@@ -290,7 +288,7 @@ export function MessageList({
     )
   }
 
-  if (messages.length === 0 && !topicSourceMessage) {
+  if (messages.length === 0) {
     return <YStack bg={colors.background0} flex={1} />
   }
 
@@ -310,30 +308,6 @@ export function MessageList({
             {isFetchingOlder ? (
               <XGUILoadmore accessibilityLabel="正在加载更早的消息" />
             ) : null}
-            {!hasOlder && topicSourceMessage ? (
-              <YStack pb="$3" pt="$2">
-                <MessageBubble
-                  canAddReaction={false}
-                  canCreateTopic={false}
-                  canRespondToChoice={false}
-                  currentUserId={currentUserId}
-                  message={topicSourceMessage}
-                  messageActionsEnabled={false}
-                  onAvatarPress={onAvatarPress}
-                  onImagePress={onImagePress}
-                  onMentionPress={onMentionPress}
-                  onMessageLongPress={() => undefined}
-                  onOpenTopic={onOpenTopic}
-                  onResourceError={onResourceError}
-                  onResourcePress={onResourcePress}
-                  onVoiceResourcePress={onVoiceResourcePress}
-                  resolveMentionLabel={resolveMentionLabel}
-                  resourceStates={resourceStates}
-                  server={server}
-                  showChoiceResponseCounts={false}
-                />
-              </YStack>
-            ) : null}
           </>
         }
         maintainVisibleContentPosition={maintainVisibleContentPosition}
@@ -352,12 +326,19 @@ export function MessageList({
             />
           ) : (
             <MessageBubble
-              canAddReaction={canAddReaction}
-              canCreateTopic={canCreateTopic}
-              canRespondToChoice={canRespondToChoice}
+              canAddReaction={
+                canAddReaction && item.message.virtualType !== "topic_source"
+              }
+              canCreateTopic={
+                canCreateTopic && item.message.virtualType !== "topic_source"
+              }
+              canRespondToChoice={
+                canRespondToChoice && item.message.virtualType !== "topic_source"
+              }
               currentUserId={currentUserId}
               highlighted={item.message.id === highlightedMessageId}
               message={item.message}
+              messageActionsEnabled={item.message.virtualType !== "topic_source"}
               optimisticClientMessageId={
                 optimisticById.get(item.message.id)?.message.clientMessageId
               }
@@ -367,12 +348,24 @@ export function MessageList({
               onAvatarPress={onAvatarPress}
               onImagePress={onImagePress}
               onMentionPress={onMentionPress}
-              onMessageLongPress={onMessageLongPress}
+              onMessageLongPress={
+                item.message.virtualType === "topic_source"
+                  ? () => undefined
+                  : onMessageLongPress
+              }
               onOpenTopic={onOpenTopic}
               onResourceError={onResourceError}
               onResourcePress={onResourcePress}
-              onRespondChoice={onRespondChoice}
-              onSetReaction={onSetReaction}
+              onRespondChoice={
+                item.message.virtualType === "topic_source"
+                  ? undefined
+                  : onRespondChoice
+              }
+              onSetReaction={
+                item.message.virtualType === "topic_source"
+                  ? undefined
+                  : onSetReaction
+              }
               onVoiceResourcePress={onVoiceResourcePress}
               resolveMentionLabel={resolveMentionLabel}
               resourceStates={resourceStates}

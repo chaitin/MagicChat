@@ -74,7 +74,10 @@ export function parseMessage(value: unknown, expectedConversationId: string): St
   return {
     id: requiredString(value.id, 128, "message.id"),
     conversationId,
-    seq: positiveInteger(value.seq),
+    seq:
+      details.virtualType === "topic_source"
+        ? nonNegativeInteger(value.seq)
+        : positiveInteger(value.seq),
     createdAt: requiredString(value.created_at, 64, "message.created_at"),
     senderId,
     senderType,

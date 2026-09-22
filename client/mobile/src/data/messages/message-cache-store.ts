@@ -405,6 +405,8 @@ async function upsertMessages(
   const cachedAt = Date.now()
 
   for (const candidate of messages) {
+    if (candidate.virtualType === "topic_source") continue
+
     const incoming = applyChoiceMessageTombstone(target, candidate)
     if (!incoming) continue
 

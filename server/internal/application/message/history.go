@@ -8,8 +8,11 @@ import (
 
 	"app/internal/store"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
+
+const topicSourceVirtualType = "topic_source"
 
 func (s *Service) List(ctx context.Context, cmd ListCommand) (ListResult, error) {
 	if cmd.BeforeSeq != nil && cmd.AfterSeq != nil {
@@ -69,12 +72,54 @@ func (s *Service) List(ctx context.Context, cmd ListCommand) (ListResult, error)
 	if err := attachMessageChoices(db, messages, cmd.AccountID); err != nil {
 		return ListResult{}, internalError(err)
 	}
+	if cmd.AfterSeq == nil && !hasMoreBefore {
+		messages, err = prependTopicSourceMessage(db, cmd.ConversationID, messages)
+		if err != nil {
+			return ListResult{}, internalError(err)
+		}
+	}
 	page := Page{HasMoreAfter: hasMoreAfter, HasMoreBefore: hasMoreBefore, Limit: limit}
 	if len(stored) > 0 {
 		page.OldestSeq = stored[0].Seq
 		page.NewestSeq = stored[len(stored)-1].Seq
 	}
 	return ListResult{Messages: messages, Page: page}, nil
+}
+
+func prependTopicSourceMessage(db *gorm.DB, conversationID string, messages []Message) ([]Message, error) {
+	var topic store.ConversationTopic
+	result := db.Where("conversation_id = ?", conversationID).Limit(1).Find(&topic)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return messages, nil
+	}
+
+	root := Message{
+		Body:           topic.SourceMessageBody,
+		Choice:         emptyChoiceState(topic.SourceMessageBody),
+		ConversationID: conversationID,
+		CreatedAt:      topic.CreatedAt,
+		ID:             uuid.NewSHA1(uuid.NameSpaceOID, []byte(topicSourceVirtualType+":"+conversationID)).String(),
+		Reactions:      []ReactionSummary{},
+		Sender: Identity{
+			ID:   dereferenceMessageString(topic.SourceSenderID),
+			Name: topic.SourceSenderName,
+			Type: topic.SourceSenderType,
+		},
+		Seq:         0,
+		Summary:     topic.SourceMessageSummary,
+		VirtualType: topicSourceVirtualType,
+	}
+	return append([]Message{root}, messages...), nil
+}
+
+func dereferenceMessageString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func attachMessageTopics(db *gorm.DB, messages []Message) error {

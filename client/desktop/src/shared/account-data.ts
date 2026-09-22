@@ -177,6 +177,7 @@ export type DesktopMessage = {
     archived: boolean
     recentReplies: DesktopMessageTopicReply[]
   }
+  virtualType?: "topic_source"
 }
 
 export type DesktopMessageTopicReply = {

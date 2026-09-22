@@ -492,6 +492,7 @@ export type ClientMessage = {
   sender: ClientMessageSender
   seq: number
   topic?: ClientMessageTopic
+  virtualType?: "topic_source"
 }
 
 export type ClientTopicSourceMessage = {

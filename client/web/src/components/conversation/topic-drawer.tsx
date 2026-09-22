@@ -5,17 +5,11 @@ import { toast } from "sonner"
 import {
   archiveConversationTopic,
   getConversationTopic,
-  listConversationMessageChoiceSnapshots,
-  listConversationMessageReactionSnapshots,
   normalizeConversationRemovedEventPayload,
-  normalizeMessageChoiceUpdatedEventPayload,
-  normalizeMessageReactionsUpdatedEventPayload,
   participateConversationTopic,
   type ClientMessage,
   type ImageCaptionType,
   type ClientTopicDetail,
-  type MessageChoiceSnapshot,
-  type MessageReactionSnapshot,
 } from "@/lib/client-data-api"
 import { getClientDataErrorMessage } from "@/lib/client-data-state"
 import { createConversationMentionLabelResolver } from "@/lib/conversation-mention-labels"
@@ -34,7 +28,6 @@ import {
   ConversationPanel,
   type ConversationPanelMessage,
 } from "@/components/conversation-panel"
-import { TopicSourceBanner } from "@/components/conversation/topic-source-banner"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -120,10 +113,6 @@ function TopicDrawerContent({
   >([])
   const [replyTarget, setReplyTarget] =
     React.useState<ConversationDraftReplyTarget | null>(null)
-  const [sourceReactionSnapshot, setSourceReactionSnapshot] =
-    React.useState<MessageReactionSnapshot | null>(null)
-  const [sourceChoiceSnapshot, setSourceChoiceSnapshot] =
-    React.useState<MessageChoiceSnapshot | null>(null)
   const [richTextMode, setRichTextMode] = React.useState(false)
   React.useEffect(() => {
     if (!open || !conversationId) {
@@ -148,78 +137,6 @@ function TopicDrawerContent({
       active = false
     }
   }, [conversationId, ensureConversationMessages, open])
-
-  const sourceConversationId = detail?.parentConversation.id ?? ""
-  const sourceMessageId = detail?.sourceMessage.id ?? ""
-  const sourceConversationCanSend =
-    getConversation(sourceConversationId)?.canSend !== false
-  const refreshSourceReactions = React.useCallback(async () => {
-    if (!sourceConversationId || !sourceMessageId) return
-    const [snapshot] = await listConversationMessageReactionSnapshots(
-      sourceConversationId,
-      [sourceMessageId]
-    )
-    if (!snapshot) return
-    setSourceReactionSnapshot((current) =>
-      current && current.reactionVersion > snapshot.reactionVersion
-        ? current
-        : snapshot
-    )
-  }, [sourceConversationId, sourceMessageId])
-
-  const sourceIsChoice = detail?.sourceMessage.body.type === "choice"
-  const refreshSourceChoice = React.useCallback(async () => {
-    if (!sourceIsChoice || !sourceConversationId || !sourceMessageId) {
-      setSourceChoiceSnapshot(null)
-      return
-    }
-    const [snapshot] = await listConversationMessageChoiceSnapshots(
-      sourceConversationId,
-      [sourceMessageId]
-    )
-    if (snapshot) {
-      setSourceChoiceSnapshot(snapshot)
-    }
-  }, [sourceConversationId, sourceIsChoice, sourceMessageId])
-
-  React.useEffect(() => {
-    if (!open || !sourceConversationId || !sourceMessageId) return
-    let active = true
-    void listConversationMessageReactionSnapshots(sourceConversationId, [
-      sourceMessageId,
-    ])
-      .then(([snapshot]) => {
-        if (!active || !snapshot) return
-        setSourceReactionSnapshot((current) =>
-          current && current.reactionVersion > snapshot.reactionVersion
-            ? current
-            : snapshot
-        )
-      })
-      .catch(() => undefined)
-    return () => {
-      active = false
-    }
-  }, [open, sourceConversationId, sourceMessageId])
-
-  React.useEffect(() => {
-    if (!open || !sourceIsChoice) {
-      return
-    }
-    let active = true
-    void listConversationMessageChoiceSnapshots(sourceConversationId, [
-      sourceMessageId,
-    ])
-      .then(([snapshot]) => {
-        if (active && snapshot) {
-          setSourceChoiceSnapshot(snapshot)
-        }
-      })
-      .catch(() => undefined)
-    return () => {
-      active = false
-    }
-  }, [open, sourceConversationId, sourceIsChoice, sourceMessageId])
 
   const detailConversation = detail?.conversation ?? null
   const listedConversation = detailConversation
@@ -477,21 +394,6 @@ function TopicDrawerContent({
     }
   }
 
-  async function setSourceReaction(text: string, reacted: boolean) {
-    if (!detail) return
-    const snapshot = await setMessageReaction(
-      detail.parentConversation.id,
-      detail.sourceMessage.id,
-      text,
-      reacted
-    )
-    setSourceReactionSnapshot((current) =>
-      current && current.reactionVersion > snapshot.reactionVersion
-        ? current
-        : snapshot
-    )
-  }
-
   return (
     <Sheet onOpenChange={onOpenChange} open={open}>
       {open && (
@@ -501,22 +403,6 @@ function TopicDrawerContent({
             onRemoved={() => onOpenChange(false)}
             parentConversationId={detail?.parentConversation.id}
           />
-          {sourceConversationId && sourceMessageId && (
-            <>
-              <TopicSourceReactionSync
-                conversationId={sourceConversationId}
-                messageId={sourceMessageId}
-                onUpdate={refreshSourceReactions}
-              />
-              {sourceIsChoice && (
-                <TopicSourceChoiceSync
-                  conversationId={sourceConversationId}
-                  messageId={sourceMessageId}
-                  onUpdate={refreshSourceChoice}
-                />
-              )}
-            </>
-          )}
         </>
       )}
       <SheetContent
@@ -568,38 +454,6 @@ function TopicDrawerContent({
             )}
             historyLoadingBefore={Boolean(messageState?.loadingBefore)}
             historyNavigation={historyNavigation}
-            historyHeader={
-              <TopicSourceBanner
-                appsById={appsById}
-                reactionConversationId={sourceConversationId}
-                currentUserId={me.id}
-                currentUser={me}
-                mentionLabelResolver={mentionLabelResolver}
-                onSetReaction={
-                  conversation.canSend === false ? undefined : setSourceReaction
-                }
-                onRespondToChoice={
-                  sourceIsChoice && sourceConversationCanSend
-                    ? async (optionIds) => {
-                        await respondToChoice(
-                          sourceConversationId,
-                          sourceMessageId,
-                          optionIds
-                        )
-                        await refreshSourceChoice()
-                      }
-                    : undefined
-                }
-                reactions={sourceReactionSnapshot?.reactions}
-                showChoiceResponseCounts={
-                  conversation.topic?.parentConversationType === "group"
-                }
-                sourceChoice={sourceChoiceSnapshot?.choice}
-                sourceChoiceStatus={sourceChoiceSnapshot?.status}
-                sourceMessage={detail?.sourceMessage}
-                usersById={usersById}
-              />
-            }
             mentionLabelResolver={mentionLabelResolver}
             messages={messages}
             onCancelReply={() => setReplyTarget(null)}
@@ -710,70 +564,6 @@ function TopicRemovalSync({
         }
       }),
     [conversationId, onRemoved, parentConversationId, subscribeRealtimeEvent]
-  )
-
-  return null
-}
-
-function TopicSourceReactionSync({
-  conversationId,
-  messageId,
-  onUpdate,
-}: {
-  conversationId: string
-  messageId: string
-  onUpdate: () => Promise<void>
-}) {
-  const { subscribeRealtimeEvent } = useRealtime()
-
-  React.useEffect(
-    () =>
-      subscribeRealtimeEvent("message.reactions_updated", (payload) => {
-        try {
-          const event = normalizeMessageReactionsUpdatedEventPayload(payload)
-          if (
-            event.conversationId === conversationId &&
-            event.messageId === messageId
-          ) {
-            void onUpdate().catch(() => undefined)
-          }
-        } catch {
-          // Ignore malformed realtime events. The websocket remains usable.
-        }
-      }),
-    [conversationId, messageId, onUpdate, subscribeRealtimeEvent]
-  )
-
-  return null
-}
-
-function TopicSourceChoiceSync({
-  conversationId,
-  messageId,
-  onUpdate,
-}: {
-  conversationId: string
-  messageId: string
-  onUpdate: () => Promise<void>
-}) {
-  const { subscribeRealtimeEvent } = useRealtime()
-
-  React.useEffect(
-    () =>
-      subscribeRealtimeEvent("message.choice_updated", (payload) => {
-        try {
-          const event = normalizeMessageChoiceUpdatedEventPayload(payload)
-          if (
-            event.conversationId === conversationId &&
-            event.messageId === messageId
-          ) {
-            void onUpdate().catch(() => undefined)
-          }
-        } catch {
-          // Ignore malformed realtime events. The websocket remains usable.
-        }
-      }),
-    [conversationId, messageId, onUpdate, subscribeRealtimeEvent]
   )
 
   return null

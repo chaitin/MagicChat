@@ -12113,6 +12113,10 @@ const docTemplate = `{
                 },
                 "topic": {
                     "$ref": "#/definitions/client.messageTopicResponse"
+                },
+                "virtual_type": {
+                    "type": "string",
+                    "example": "topic_source"
                 }
             }
         },
@@ -12214,6 +12218,10 @@ const docTemplate = `{
                 },
                 "topic": {
                     "$ref": "#/definitions/client.messageTopicResponse"
+                },
+                "virtual_type": {
+                    "type": "string",
+                    "example": "topic_source"
                 }
             }
         },

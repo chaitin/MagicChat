@@ -87,6 +87,75 @@ func TestServiceCreateAndListPreserveIdempotencyOutboxAndReply(t *testing.T) {
 	}
 }
 
+func TestServiceListPrependsVirtualTopicSourceOnlyOnOldestPage(t *testing.T) {
+	db := openMessageTestDB(t)
+	fixture := insertMessageTestFixture(t, db)
+	now := time.Date(2026, 7, 15, 14, 0, 0, 0, time.UTC)
+	topicConversation := store.Conversation{
+		ID: uuid.NewString(), Kind: store.ConversationKindTopic, Name: "来源消息",
+		CreatedByUserID: fixture.user.ID, Status: store.ConversationStatusActive,
+		PostingPolicy: store.ConversationPostingPolicyOpen, Visibility: store.ConversationVisibilityPrivate,
+		LastMessageSeq: 2, CreatedAt: now, UpdatedAt: now,
+	}
+	sourceID := uuid.NewString()
+	senderID := fixture.user.ID
+	topic := store.ConversationTopic{
+		ConversationID: topicConversation.ID, ParentConversationID: fixture.conversation.ID,
+		SourceMessageID: sourceID, SourceMessageSeq: 7,
+		SourceMessageBody:    json.RawMessage(`{"type":"text","content":"来源消息"}`),
+		SourceMessageSummary: "来源消息", SourceSenderType: store.MessageSenderTypeUser,
+		SourceSenderID: &senderID, SourceSenderName: fixture.user.Name,
+		SourceMessageCreatedAt: now.Add(-time.Hour), CreatedByUserID: fixture.user.ID,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	participant := store.ConversationTopicParticipant{
+		ConversationID: topicConversation.ID, ParticipantType: store.ConversationMemberTypeUser,
+		ParticipantID: fixture.user.ID, JoinedReason: store.TopicParticipantReasonCreator,
+		JoinedAt: now, HistoryVisibleFromSeq: 1, CreatedAt: now, UpdatedAt: now,
+	}
+	replies := []store.Message{
+		{ID: uuid.NewString(), ConversationID: topicConversation.ID, Seq: 1, SenderType: store.MessageSenderTypeUser, SenderID: &senderID, Body: json.RawMessage(`{"type":"text","content":"回复一"}`), Summary: "回复一", CreatedAt: now.Add(time.Minute), UpdatedAt: now.Add(time.Minute)},
+		{ID: uuid.NewString(), ConversationID: topicConversation.ID, Seq: 2, SenderType: store.MessageSenderTypeUser, SenderID: &senderID, Body: json.RawMessage(`{"type":"text","content":"回复二"}`), Summary: "回复二", CreatedAt: now.Add(2 * time.Minute), UpdatedAt: now.Add(2 * time.Minute)},
+	}
+	if err := db.Create(&topicConversation).Error; err != nil {
+		t.Fatalf("create topic conversation: %v", err)
+	}
+	if err := db.Create(&topic).Error; err != nil {
+		t.Fatalf("create topic metadata: %v", err)
+	}
+	if err := db.Create(&participant).Error; err != nil {
+		t.Fatalf("create topic participant: %v", err)
+	}
+	if err := db.Create(&replies).Error; err != nil {
+		t.Fatalf("create topic replies: %v", err)
+	}
+
+	service := NewService(Dependencies{DB: db})
+	latest, err := service.List(context.Background(), ListCommand{
+		AccountID: fixture.user.ID, ConversationID: topicConversation.ID, Limit: 1,
+	})
+	if err != nil {
+		t.Fatalf("list latest topic page: %v", err)
+	}
+	if len(latest.Messages) != 1 || latest.Messages[0].Seq != 2 || !latest.Page.HasMoreBefore {
+		t.Fatalf("latest topic page = %#v", latest)
+	}
+
+	beforeSeq := int64(2)
+	oldest, err := service.List(context.Background(), ListCommand{
+		AccountID: fixture.user.ID, ConversationID: topicConversation.ID, BeforeSeq: &beforeSeq, Limit: 1,
+	})
+	if err != nil {
+		t.Fatalf("list oldest topic page: %v", err)
+	}
+	if len(oldest.Messages) != 2 || oldest.Messages[0].VirtualType != topicSourceVirtualType || oldest.Messages[0].Seq != 0 || oldest.Messages[1].Seq != 1 {
+		t.Fatalf("oldest topic page = %#v", oldest)
+	}
+	if oldest.Messages[0].CreatedAt != now || oldest.Messages[0].Summary != topic.SourceMessageSummary || oldest.Page.HasMoreBefore {
+		t.Fatalf("virtual topic source = %#v, page = %#v", oldest.Messages[0], oldest.Page)
+	}
+}
+
 func TestServiceAppMessageCanReplyToVisibleMessage(t *testing.T) {
 	db := openMessageTestDB(t)
 	fixture := insertMessageTestFixture(t, db)

@@ -182,7 +182,7 @@ func TestTopicHistoryUsesTopicSequenceSpaceForVisibleParentMember(t *testing.T) 
 	if err != nil {
 		t.Fatalf("list topic messages: %v", err)
 	}
-	if len(listed.Messages) != 1 || listed.Messages[0].ID != message.ID {
+	if len(listed.Messages) != 2 || listed.Messages[0].VirtualType != topicSourceVirtualType || listed.Messages[1].ID != message.ID {
 		t.Fatalf("messages = %#v", listed.Messages)
 	}
 }

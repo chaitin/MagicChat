@@ -56,6 +56,9 @@ export function normalizeClientMessage(value: unknown): ClientMessage {
     },
     seq,
   }
+  if (message.virtual_type === "topic_source") {
+    normalized.virtualType = "topic_source"
+  }
   if (normalized.body.type === "choice") {
     const choice = normalizeMessageChoiceState(message.choice)
     if (!isMessageChoiceStateValidForBody(normalized.body, choice)) {

@@ -23,6 +23,7 @@ export type ConversationPanelMessage = {
   senderAppId: string | null
   senderAppProfile: ConversationPanelAppProfile | null
   senderUserId: string | null
+  virtualType?: "topic_source"
 }
 
 export type ConversationPanelMessageTopic = {

@@ -58,6 +58,7 @@ type Message struct {
 	Seq              int64
 	Summary          string
 	Topic            *MessageTopic
+	VirtualType      string
 }
 
 type ChoiceOptionState struct {

@@ -52,7 +52,9 @@ export function toConversationPanelMessage(
     ),
     body: message.body,
     choice: message.choice,
-    canRevoke: canRevokeMessage(message, conversation, currentUser.id),
+    canRevoke:
+      message.virtualType !== "topic_source" &&
+      canRevokeMessage(message, conversation, currentUser.id),
     createdAt: message.createdAt,
     delegatedByName: message.delegatedBy?.name ?? "",
     deliveryStatus: message.deliveryStatus,
@@ -83,6 +85,7 @@ export function toConversationPanelMessage(
       appsById,
       mentionLabelResolver
     ),
+    virtualType: message.virtualType,
   }
 }
 

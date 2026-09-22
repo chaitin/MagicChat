@@ -1586,6 +1586,9 @@ definitions:
         type: integer
       topic:
         $ref: '#/definitions/client.messageTopicResponse'
+      virtual_type:
+        example: topic_source
+        type: string
     type: object
   client.messageSearchConversationResponse:
     properties:
@@ -1655,6 +1658,9 @@ definitions:
         type: string
       topic:
         $ref: '#/definitions/client.messageTopicResponse'
+      virtual_type:
+        example: topic_source
+        type: string
     type: object
   client.messageSenderResponse:
     properties:

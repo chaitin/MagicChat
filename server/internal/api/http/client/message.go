@@ -159,6 +159,7 @@ type messageResponse struct {
 	Sender           messageSenderResponse       `json:"sender"`
 	Seq              int64                       `json:"seq" example:"13"`
 	Topic            *messageTopicResponse       `json:"topic,omitempty"`
+	VirtualType      string                      `json:"virtual_type,omitempty" example:"topic_source"`
 }
 
 type messageTopicResponse struct {
@@ -397,6 +398,7 @@ func newClientMessageResponse(value messageapp.Message) messageResponse {
 		ReactionVersion: value.ReactionVersion, Reactions: reactions,
 		RevokedAt: value.RevokedAt, RevokedByUserID: value.RevokedByUserID,
 		Sender: messageSenderResponse{ID: value.Sender.ID, Type: value.Sender.Type}, Seq: value.Seq,
+		VirtualType: value.VirtualType,
 	}
 	if value.Choice != nil {
 		choice := newMessageChoiceStateResponse(*value.Choice)

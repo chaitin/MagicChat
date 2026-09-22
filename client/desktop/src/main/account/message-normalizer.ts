@@ -6,7 +6,7 @@ import type {
 
 export type DesktopMessageDetails = Pick<
   DesktopMessage,
-  "body" | "replyTo" | "reactions" | "choice" | "topic"
+  "body" | "replyTo" | "reactions" | "choice" | "topic" | "virtualType"
 >
 
 export function normalizeDesktopMessageDetails(payload: unknown): DesktopMessageDetails {
@@ -69,7 +69,8 @@ export function normalizeDesktopMessageDetails(payload: unknown): DesktopMessage
   const topic = topicId
     ? { conversationId: topicId, archived: topicRecord?.archived === true, recentReplies }
     : undefined
-  return { body, replyTo, reactions, choice, topic }
+  const virtualType = record?.virtual_type === "topic_source" ? "topic_source" : undefined
+  return { body, replyTo, reactions, choice, topic, virtualType }
 }
 
 export function normalizeDesktopMessageChoiceState(

@@ -951,10 +951,15 @@ function updatePageRange(
   page: ClientMessageList["page"],
   messages: ClientMessage[]
 ) {
+  const storedSeqs = messages
+    .filter((message) => message.virtualType !== "topic_source")
+    .map((message) => message.seq)
   return {
     ...page,
-    newestSeq: messages[0]?.seq ?? page.newestSeq,
-    oldestSeq: messages[messages.length - 1]?.seq ?? page.oldestSeq,
+    newestSeq:
+      storedSeqs.length > 0 ? Math.max(...storedSeqs) : page.newestSeq,
+    oldestSeq:
+      storedSeqs.length > 0 ? Math.min(...storedSeqs) : page.oldestSeq,
   }
 }
 

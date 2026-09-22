@@ -65,6 +65,7 @@ export type PresentedMessage = {
       time: string
     }[]
   }
+  virtualType?: "topic_source"
 }
 
 const messageTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
@@ -121,7 +122,9 @@ export function buildPresentedMessages({
         appsById
       ),
       body: message.body,
-      canRevoke: canRevokeMessage(message, conversation, currentUser.id),
+      canRevoke:
+        message.virtualType !== "topic_source" &&
+        canRevokeMessage(message, conversation, currentUser.id),
       choice: message.choice,
       createdAt: message.createdAt,
       delegatedByName: message.delegatedBy?.name ?? "",
@@ -196,6 +199,7 @@ export function buildPresentedMessages({
             })),
           }
         : undefined,
+      virtualType: message.virtualType,
     }
   })
 }

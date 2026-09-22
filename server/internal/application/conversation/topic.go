@@ -313,25 +313,6 @@ func (s *Service) GetTopic(ctx context.Context, cmd GetTopicCommand) (TopicDetai
 		return TopicDetail{}, internalError(err)
 	}
 	canArchive := isUserCreator || isSourceSender || isSourceRequester || member.Role == store.ConversationMemberRoleOwner || member.Role == store.ConversationMemberRoleAdmin
-	var revokedAt *time.Time
-	var sourceReply *TopicSourceReply
-	storedSource, err := loadTopicSourceMessage(db, access.Topic.ParentConversationID, access.Topic.SourceMessageID)
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return TopicDetail{}, internalError(err)
-	}
-	if err == nil {
-		revokedAt = storedSource.RevokedAt
-		if revokedAt == nil {
-			sourceReply, err = loadTopicSourceReply(db, storedSource, member.HistoryVisibleFromSeq)
-			if err != nil {
-				return TopicDetail{}, internalError(err)
-			}
-		}
-	}
-	sourceBody := access.Topic.SourceMessageBody
-	if revokedAt != nil {
-		sourceBody = nil
-	}
 	senderAvatar, err := loadTopicSourceSenderAvatar(db, access.Topic.SourceSenderType, access.Topic.SourceSenderID)
 	if err != nil {
 		return TopicDetail{}, internalError(err)
@@ -345,9 +326,9 @@ func (s *Service) GetTopic(ctx context.Context, cmd GetTopicCommand) (TopicDetai
 			Type: item.Topic.ParentConversationType,
 		},
 		SourceMessage: TopicSourceMessage{
-			Body: sourceBody, CreatedAt: access.Topic.SourceMessageCreatedAt, ID: access.Topic.SourceMessageID,
-			ReplyTo: sourceReply, RevokedAt: revokedAt, Sender: MessageIdentity{Avatar: senderAvatar, ID: dereferenceString(access.Topic.SourceSenderID), Name: access.Topic.SourceSenderName, Type: access.Topic.SourceSenderType},
-			Seq: access.Topic.SourceMessageSeq, Summary: access.Topic.SourceMessageSummary,
+			Body: access.Topic.SourceMessageBody, CreatedAt: access.Topic.CreatedAt, ID: access.Topic.SourceMessageID,
+			Sender: MessageIdentity{Avatar: senderAvatar, ID: dereferenceString(access.Topic.SourceSenderID), Name: access.Topic.SourceSenderName, Type: access.Topic.SourceSenderType},
+			Seq:    access.Topic.SourceMessageSeq, Summary: access.Topic.SourceMessageSummary,
 		},
 	}, nil
 }

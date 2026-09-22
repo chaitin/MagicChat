@@ -28,6 +28,7 @@ import { OutgoingMessageService } from "./outgoing-message-service"
 
 export class ConversationManager {
   private readonly outgoingMessages: OutgoingMessageService
+  private readonly virtualMessages = new Map<string, DesktopMessage[]>()
 
   constructor(
     private readonly database: AccountDatabase,
@@ -53,6 +54,10 @@ export class ConversationManager {
   async refresh() {
     const conversations = await retryNetworkAction(() => this.fetchConversations())
     this.database.upsertCurrentConversations(conversations)
+    const currentConversationIds = new Set(conversations.map((conversation) => conversation.id))
+    for (const conversationId of this.virtualMessages.keys()) {
+      if (!currentConversationIds.has(conversationId)) this.virtualMessages.delete(conversationId)
+    }
     await mapConcurrent(conversations, 4, async (conversation) => {
       const messages = await retryNetworkAction(() => this.fetchMessages(conversation.id))
       this.database.upsertMessages(messages)
@@ -104,6 +109,7 @@ export class ConversationManager {
     if (name === "conversation.removed") {
       const conversationId = conversationIdFromEvent(payload)
       this.database.removeCurrentConversation(conversationId)
+      this.virtualMessages.delete(conversationId)
       return { conversationIds: [conversationId], messages: false }
     }
     if (
@@ -197,11 +203,14 @@ export class ConversationManager {
 
   listMessages(conversationId: string): DesktopMessage[] {
     this.assertConversationId(conversationId)
-    return this.database.listMessages(conversationId, this.currentUserId)
+    return this.withVirtualMessages(
+      conversationId,
+      this.database.listMessages(conversationId, this.currentUserId),
+    )
   }
 
   sendTextMessage(...args: Parameters<OutgoingMessageService["sendTextMessage"]>) {
-    return this.outgoingMessages.sendTextMessage(...args)
+    return this.withVirtualMessages(args[0], this.outgoingMessages.sendTextMessage(...args))
   }
 
   async sendRichMessage(input: Omit<SendRichMessageInput, "targetId">) {
@@ -217,19 +226,19 @@ export class ConversationManager {
     const message = parseMessage(data.message, input.conversationId)
     this.database.upsertMessages([message])
     this.database.touchConversationActivity(input.conversationId, message.createdAt)
-    return this.database.listMessages(input.conversationId, this.currentUserId)
+    return this.listMessages(input.conversationId)
   }
 
   sendFileMessage(...args: Parameters<OutgoingMessageService["sendFileMessage"]>) {
-    return this.outgoingMessages.sendFileMessage(...args)
+    return this.withVirtualMessages(args[0], this.outgoingMessages.sendFileMessage(...args))
   }
 
   sendImageMessage(...args: Parameters<OutgoingMessageService["sendImageMessage"]>) {
-    return this.outgoingMessages.sendImageMessage(...args)
+    return this.withVirtualMessages(args[0], this.outgoingMessages.sendImageMessage(...args))
   }
 
   sendVideoMessage(...args: Parameters<OutgoingMessageService["sendVideoMessage"]>) {
-    return this.outgoingMessages.sendVideoMessage(...args)
+    return this.withVirtualMessages(args[0], this.outgoingMessages.sendVideoMessage(...args))
   }
 
   readOutgoingMedia(...args: Parameters<OutgoingMessageService["readOutgoingMedia"]>) {
@@ -241,7 +250,7 @@ export class ConversationManager {
   }
 
   retryMessage(...args: Parameters<OutgoingMessageService["retryMessage"]>) {
-    return this.outgoingMessages.retryMessage(...args)
+    return this.withVirtualMessages(args[0], this.outgoingMessages.retryMessage(...args))
   }
 
   close() {
@@ -325,7 +334,7 @@ export class ConversationManager {
     ) {
       throw new AuthFailure("message_not_found", "消息不存在")
     }
-    return this.database.listMessages(input.conversationId, this.currentUserId)
+    return this.listMessages(input.conversationId)
   }
 
   async submitChoiceResponse(
@@ -359,7 +368,7 @@ export class ConversationManager {
     if (!this.database.updateMessageChoice(input.conversationId, input.messageId, data.choice)) {
       throw new AuthFailure("message_not_found", "消息不存在")
     }
-    return this.database.listMessages(input.conversationId, this.currentUserId)
+    return this.listMessages(input.conversationId)
   }
 
   async loadBeforeMessages(conversationId: string, beforeSeq: number): Promise<DesktopMessagePage> {
@@ -368,9 +377,9 @@ export class ConversationManager {
       throw new AuthFailure("invalid_message_cursor", "消息游标不正确")
     }
     const page = await retryNetworkAction(() => this.fetchMessagePage(conversationId, beforeSeq))
-    this.database.upsertMessages(page.messages)
+    this.database.upsertMessages(this.captureVirtualMessages(conversationId, page.messages))
     return {
-      messages: this.database.listMessages(conversationId, this.currentUserId),
+      messages: this.listMessages(conversationId),
       hasMoreBefore: page.hasMoreBefore,
     }
   }
@@ -425,7 +434,23 @@ export class ConversationManager {
   }
 
   private async fetchMessages(conversationId: string): Promise<StoredMessage[]> {
-    return (await this.fetchMessagePage(conversationId)).messages
+    const messages = (await this.fetchMessagePage(conversationId)).messages
+    return this.captureVirtualMessages(conversationId, messages)
+  }
+
+  private captureVirtualMessages(conversationId: string, messages: StoredMessage[]) {
+    const virtualMessages = messages.flatMap(({ payload: _payload, ...message }) =>
+      message.virtualType === "topic_source" ? [message] : [],
+    )
+    if (virtualMessages.length > 0) this.virtualMessages.set(conversationId, virtualMessages)
+    return messages.filter((message) => message.virtualType !== "topic_source")
+  }
+
+  private withVirtualMessages(conversationId: string, messages: DesktopMessage[]) {
+    const virtualMessages = this.virtualMessages.get(conversationId) ?? []
+    if (virtualMessages.length === 0) return messages
+    const virtualIds = new Set(virtualMessages.map((message) => message.id))
+    return [...virtualMessages, ...messages.filter((message) => !virtualIds.has(message.id))]
   }
 
   private async fetchMessagePage(conversationId: string, beforeSeq?: number) {

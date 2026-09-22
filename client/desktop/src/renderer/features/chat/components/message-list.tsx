@@ -282,10 +282,14 @@ function MessageRow({
               messageId={message.id}
               choice={message.choice}
               showChoiceResponseCounts={showChoiceResponseCounts}
-              onChoiceRespond={(optionIds) => onSubmitChoice(message, optionIds)}
+              onChoiceRespond={
+                message.virtualType === "topic_source"
+                  ? undefined
+                  : (optionIds) => onSubmitChoice(message, optionIds)
+              }
               flushMedia={flushMediaBubble}
             />
-            {message.reactions.length > 0 && (
+            {message.virtualType !== "topic_source" && message.reactions.length > 0 && (
               <div className={cn("max-w-full min-w-0", flushMediaBubble && "mx-2 mb-2")}>
                 <MessageReactionChips
                   targetId={targetId}
@@ -381,6 +385,7 @@ function MessageStatus({
   }
   if (
     message.deliveryStatus ||
+    message.virtualType === "topic_source" ||
     message.body.type === "revoked" ||
     message.body.type === "unsupported"
   ) {
