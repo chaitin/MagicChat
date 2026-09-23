@@ -35,9 +35,11 @@ import { ContactManager } from "./contact-manager"
 import { ConversationManager } from "./conversation-manager"
 import { parseConversationPresenceEvent } from "./conversation-presence"
 import { MediaManager } from "./media-manager"
+import { incomingMessageNotification } from "./message-notification-policy"
 import { ProjectManager } from "./project-manager"
 import { RealtimeManager, type RealtimeEvent } from "./realtime-manager"
 import { SearchManager } from "./search-manager"
+import type { IncomingMessageNotification } from "../../shared/desktop"
 
 export class AccountRuntime {
   private database?: AccountDatabase
@@ -68,6 +70,7 @@ export class AccountRuntime {
       onSyncStateChange: (event: AccountDataSyncEvent) => void
       onDataChanged: (event: AccountDataChangedEvent) => void
       onConversationPresenceChanged: (event: ConversationPresenceEvent) => void
+      onIncomingMessage: (event: IncomingMessageNotification) => void
       onMediaProgress: (event: MediaDownloadProgress) => void
     },
   ) {}
@@ -92,6 +95,13 @@ export class AccountRuntime {
   listConversations(): DesktopConversation[] {
     this.assertInitialized()
     return this.conversationManager!.listConversations()
+  }
+
+  async markConversationRead(conversationId: string, upToSeq: number) {
+    this.assertInitialized()
+    await this.conversationManager!.markRead(conversationId, upToSeq)
+    this.notifyChanged(["conversations"], [conversationId])
+    return null
   }
 
   async createGroupConversation(input: CreateGroupConversationInput) {
@@ -563,6 +573,18 @@ export class AccountRuntime {
       const domains: AccountDataDomain[] = ["conversations"]
       if (conversationChange.messages) domains.push("messages")
       this.notifyChanged(domains, conversationChange.conversationIds)
+      if (conversationChange.notification) {
+        const { message, muted } = conversationChange.notification
+        const details = incomingMessageNotification(message, this.input.userId, muted)
+        if (details) {
+          this.input.onIncomingMessage({
+            targetId: this.input.targetId,
+            conversationId: message.conversationId,
+            messageId: message.id,
+            ...details,
+          })
+        }
+      }
       return
     }
     if (await this.contactManager!.applyRealtimeEvent(event.name, event.payload)) {

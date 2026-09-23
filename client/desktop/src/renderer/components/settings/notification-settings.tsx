@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
+import { Switch } from "@/components/motion/switch"
 import {
   Item,
   ItemActions,
@@ -8,17 +9,14 @@ import {
   ItemGroup,
   ItemTitle,
 } from "@/components/ui/item"
-import { Switch } from "@/components/ui/switch"
-import type { NotificationSettings as NotificationPreferences } from "../../../shared/desktop"
-
-const defaults: NotificationPreferences = {
-  soundEnabled: true,
-  desktopEnabled: true,
-}
+import {
+  DEFAULT_NOTIFICATION_SETTINGS,
+  type NotificationSettings as NotificationPreferences,
+} from "../../../shared/desktop"
 
 export function NotificationSettings({ disabled }: { disabled: boolean }) {
   const { showToast } = useAnimatedToast()
-  const [settings, setSettings] = useState(defaults)
+  const [settings, setSettings] = useState(DEFAULT_NOTIFICATION_SETTINGS)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -82,6 +80,13 @@ export function NotificationSettings({ disabled }: { disabled: boolean }) {
           disabled={switchDisabled}
           onCheckedChange={(checked) => void update({ ...settings, desktopEnabled: checked })}
         />
+        <NotificationSettingItem
+          title="显示消息内容"
+          description="在桌面通知中显示发送人和消息摘要，关闭后仅提示收到新消息"
+          checked={settings.showMessagePreview}
+          disabled={switchDisabled || !settings.desktopEnabled}
+          onCheckedChange={(checked) => void update({ ...settings, showMessagePreview: checked })}
+        />
       </ItemGroup>
     </section>
   )
@@ -108,10 +113,11 @@ function NotificationSettingItem({
       </ItemContent>
       <ItemActions className="shrink-0">
         <Switch
+          size="sm"
           checked={checked}
           disabled={disabled}
           onCheckedChange={onCheckedChange}
-          aria-label={title}
+          ariaLabel={title}
         />
       </ItemActions>
     </Item>

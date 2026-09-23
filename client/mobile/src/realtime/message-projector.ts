@@ -22,10 +22,13 @@ async function updateConversationFromMessage(server: AuthenticatedTarget, messag
     const isLatestMessage = message.seq >= conversation.lastMessageSeq
     const isNewMessage = message.seq > conversation.lastMessageSeq
     const fromCurrentUser = message.sender.type === "user" && message.sender.id === server.userId
-    const unreadCount = options.markRead ? 0 : options.received && isNewMessage && !fromCurrentUser ? conversation.unreadCount + 1 : conversation.unreadCount
+    const markRead = options.markRead || (options.received && fromCurrentUser)
+    const unreadCount = markRead
+      ? Math.max(0, Math.max(conversation.lastMessageSeq, message.seq) - Math.max(conversation.lastReadSeq, message.seq))
+      : options.received && isNewMessage && message.seq > conversation.lastReadSeq ? conversation.unreadCount + 1 : conversation.unreadCount
     return {
       ...(isLatestMessage ? { lastMessageAt: message.createdAt, lastMessageId: message.id, lastMessageSeq: message.seq, lastMessageSender: getLastMessageSender(conversation, message), lastMessageSummary: formatClientMessageBodySummary(message.body, () => undefined) } : {}),
-      ...(options.markRead ? { lastReadSeq: Math.max(conversation.lastReadSeq, message.seq) } : {}),
+      ...(markRead ? { lastReadSeq: Math.max(conversation.lastReadSeq, message.seq) } : {}),
       unreadCount,
     }
   })

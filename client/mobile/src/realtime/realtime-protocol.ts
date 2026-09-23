@@ -5,6 +5,7 @@ export const realtimeEvents = {
   conversationMemberMentioned: "conversation.member_mentioned",
   conversationMuteUpdated: "conversation.mute_updated",
   conversationPinUpdated: "conversation.pin_updated",
+  conversationReadUpdated: "conversation.read_updated",
   conversationRemoved: "conversation.removed",
   messageCreated: "message.created",
   messageChoiceUpdated: "message.choice_updated",

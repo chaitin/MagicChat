@@ -6,6 +6,7 @@ import {
   PlusSignIcon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
+import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -44,6 +45,15 @@ type ChartDraft = {
   axes: AxisDraft[]
   items: NamedValue[]
   series: SeriesDraft[]
+}
+
+class ChartValidationError extends Error {
+  constructor(
+    message: string,
+    readonly field: string,
+  ) {
+    super(message)
+  }
 }
 
 function newLabel(label = ""): LabelDraft {
@@ -121,6 +131,8 @@ export function SendChartMessageDialog({
   onSend: (body: SendRichMessageBody) => Promise<void>
 }) {
   const chartTypeId = useId()
+  const { showToast } = useAnimatedToast()
+  const formRef = useRef<HTMLFormElement>(null)
   const [initialDraft] = useState(() => exampleDraft("line"))
   const savedDrafts = useRef<Partial<Record<ChartType, ChartDraft>>>({})
   const [chartType, setChartType] = useState<ChartType>("line")
@@ -136,7 +148,7 @@ export function SendChartMessageDialog({
   const [dropTargetId, setDropTargetId] = useState<string | null>(null)
   const [series, setSeries] = useState<SeriesDraft[]>(initialDraft.series)
   const [sending, setSending] = useState(false)
-  const [error, setError] = useState("")
+  const [error, setError] = useState<ChartValidationError | null>(null)
   const dimensions = chartType === "radar" ? axes.length : labels.length
   const labelName = chartType === "bar" && direction === "horizontal" ? "Y 轴标签" : "X 轴标签"
 
@@ -166,7 +178,7 @@ export function SendChartMessageDialog({
     applyDraft(savedDrafts.current[next] ?? exampleDraft(next))
     setChartType(next)
     finishRowDrag()
-    setError("")
+    setError(null)
   }
 
   function reset() {
@@ -174,7 +186,7 @@ export function SendChartMessageDialog({
     setChartType("line")
     applyDraft(exampleDraft("line"))
     finishRowDrag()
-    setError("")
+    setError(null)
   }
 
   function updateDimension(kind: "labels" | "axes", add: boolean, index?: number) {
@@ -268,11 +280,11 @@ export function SendChartMessageDialog({
     moveRow(kind, rows[index].id, rows[to].id)
   }
 
-  function parseNumber(value: string, label: string) {
-    if (!value.trim()) throw new Error(`请填写${label}`)
+  function parseNumber(value: string, label: string, field: string) {
+    if (!value.trim()) throw new ChartValidationError(`请填写${label}`, field)
     const number = Number(value)
     if (!Number.isFinite(number) || Math.abs(number) > 1_000_000_000_000_000) {
-      throw new Error(`${label}必须是有效数值`)
+      throw new ChartValidationError(`${label}必须是有效数值`, field)
     }
     return number
   }
@@ -284,45 +296,66 @@ export function SendChartMessageDialog({
       title: title.trim(),
       description: description.trim(),
     }
+    if (!base.title) throw new ChartValidationError("图表标题不能为空", "title")
+    if (!base.description) throw new ChartValidationError("图表说明不能为空", "description")
     if (chartType === "pie") {
       const names = items.map((item) => item.name.trim())
-      if (names.some((name) => !name) || new Set(names).size !== names.length)
-        throw new Error("饼图分类名称不能为空且不能重复")
-      const values = items.map((item) => ({
+      const invalidName = names.findIndex((name, index) => !name || names.indexOf(name) !== index)
+      if (invalidName !== -1)
+        throw new ChartValidationError(
+          "饼图分类名称不能为空且不能重复",
+          `items-${invalidName}-name`,
+        )
+      const values = items.map((item, index) => ({
         name: item.name.trim(),
-        value: parseNumber(item.value, "饼图数值"),
+        value: parseNumber(item.value, "饼图数值", `items-${index}-value`),
       }))
-      if (values.some((item) => item.value <= 0)) throw new Error("饼图数值必须大于 0")
+      const invalidValue = values.findIndex((item) => item.value <= 0)
+      if (invalidValue !== -1)
+        throw new ChartValidationError("饼图数值必须大于 0", `items-${invalidValue}-value`)
       return { ...base, data: { items: values } }
     }
     const names = series.map((item) => item.name.trim())
-    if (names.some((name) => !name) || new Set(names).size !== names.length)
-      throw new Error("系列名称不能为空且不能重复")
-    const values = series.map((item) => ({
+    const invalidSeries = names.findIndex((name, index) => !name || names.indexOf(name) !== index)
+    if (invalidSeries !== -1)
+      throw new ChartValidationError("系列名称不能为空且不能重复", `series-${invalidSeries}-name`)
+    const values = series.map((item, seriesIndex) => ({
       name: item.name.trim(),
-      values: item.values.slice(0, dimensions).map((value) => parseNumber(value, "系列数值")),
+      values: item.values
+        .slice(0, dimensions)
+        .map((value, valueIndex) =>
+          parseNumber(value, "系列数值", `series-${seriesIndex}-value-${valueIndex}`),
+        ),
     }))
     if (chartType === "radar") {
-      const normalizedAxes = axes.map((axis) => ({
+      const normalizedAxes = axes.map((axis, index) => ({
         name: axis.name.trim(),
-        max: parseNumber(axis.max, "维度最大值"),
+        max: parseNumber(axis.max, "维度最大值", `axes-${index}-max`),
       }))
       const axisNames = normalizedAxes.map((axis) => axis.name)
-      if (
-        axisNames.some((name) => !name) ||
-        new Set(axisNames).size !== axisNames.length ||
-        normalizedAxes.some((axis) => axis.max <= 0)
+      const invalidAxis = axisNames.findIndex(
+        (name, index) => !name || axisNames.indexOf(name) !== index,
       )
-        throw new Error("维度名称不能为空或重复，最大值必须大于 0")
-      if (
-        values.some((item) =>
-          item.values.some((value, index) => value < 0 || value > normalizedAxes[index].max),
+      if (invalidAxis !== -1)
+        throw new ChartValidationError("维度名称不能为空或重复", `axes-${invalidAxis}-name`)
+      const invalidMax = normalizedAxes.findIndex((axis) => axis.max <= 0)
+      if (invalidMax !== -1)
+        throw new ChartValidationError("维度最大值必须大于 0", `axes-${invalidMax}-max`)
+      for (let seriesIndex = 0; seriesIndex < values.length; seriesIndex++) {
+        const invalidValue = values[seriesIndex].values.findIndex(
+          (value, index) => value < 0 || value > normalizedAxes[index].max,
         )
-      )
-        throw new Error("雷达图数值必须在 0 和对应维度最大值之间")
+        if (invalidValue !== -1)
+          throw new ChartValidationError(
+            "雷达图数值必须在 0 和对应维度最大值之间",
+            `series-${seriesIndex}-value-${invalidValue}`,
+          )
+      }
       return { ...base, data: { axes: normalizedAxes, series: values } }
     }
-    if (labels.some((label) => !label.label.trim())) throw new Error("请填写全部标签")
+    const invalidLabel = labels.findIndex((label) => !label.label.trim())
+    if (invalidLabel !== -1)
+      throw new ChartValidationError("请填写全部标签", `labels-${invalidLabel}`)
     const data = { labels: labels.map((label) => label.label.trim()), series: values }
     return { ...base, data: chartType === "bar" ? { ...data, direction, mode } : data }
   }
@@ -342,13 +375,22 @@ export function SendChartMessageDialog({
     if (sending) return
     try {
       const body = messageBody()
-      setError("")
+      setError(null)
       setSending(true)
       await onSend(body)
       reset()
       onOpenChange(false)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "发送图表消息失败")
+      showToast({
+        status: "error",
+        title: cause instanceof Error ? cause.message : "发送图表消息失败",
+      })
+      if (cause instanceof ChartValidationError) {
+        setError(cause)
+        formRef.current
+          ?.querySelector<HTMLInputElement>(`[data-chart-field="${cause.field}"]`)
+          ?.focus()
+      }
     } finally {
       setSending(false)
     }
@@ -368,7 +410,13 @@ export function SendChartMessageDialog({
           <DialogTitle>发送图表消息</DialogTitle>
           <DialogDescription className="sr-only">发送到 {conversationName}</DialogDescription>
         </DialogHeader>
-        <form className="grid min-h-0 gap-4" onSubmit={(event) => void submit(event)}>
+        <form
+          ref={formRef}
+          noValidate
+          className="grid min-h-0 gap-4"
+          onChangeCapture={() => setError(null)}
+          onSubmit={(event) => void submit(event)}
+        >
           <ScrollArea
             type="auto"
             className="-mr-5 -ml-1 min-w-0 max-h-[calc(85vh-11rem)] overflow-hidden"
@@ -404,8 +452,9 @@ export function SendChartMessageDialog({
                   ))}
                 </RadioGroup>
               </fieldset>
-              <Field label="标题">
+              <Field label="标题" error={error?.field === "title" ? error.message : undefined}>
                 <Input
+                  data-chart-field="title"
                   maxLength={16}
                   required
                   value={title}
@@ -413,8 +462,12 @@ export function SendChartMessageDialog({
                   placeholder="图表标题"
                 />
               </Field>
-              <Field label="说明">
+              <Field
+                label="说明"
+                error={error?.field === "description" ? error.message : undefined}
+              >
                 <Input
+                  data-chart-field="description"
                   maxLength={128}
                   required
                   value={description}
@@ -472,6 +525,7 @@ export function SendChartMessageDialog({
                       onKeyDown={handleRowKeyDown}
                     >
                       <Input
+                        data-chart-field={`items-${index}-name`}
                         aria-label={`分类 ${index + 1} 名称`}
                         placeholder="分类名称"
                         maxLength={64}
@@ -486,6 +540,7 @@ export function SendChartMessageDialog({
                         }
                       />
                       <Input
+                        data-chart-field={`items-${index}-value`}
                         aria-label={`分类 ${index + 1} 数值`}
                         className="w-28 shrink-0"
                         type="number"
@@ -511,6 +566,7 @@ export function SendChartMessageDialog({
                       />
                     </SortableChartRow>
                   ))}
+                  {error?.field.startsWith("items-") && <FieldError message={error.message} />}
                   <AddButton
                     label="添加分类"
                     disabled={items.length >= 5}
@@ -540,6 +596,7 @@ export function SendChartMessageDialog({
                             onKeyDown={handleRowKeyDown}
                           >
                             <Input
+                              data-chart-field={`axes-${index}-name`}
                               aria-label={`维度 ${index + 1} 名称`}
                               placeholder={`维度 ${index + 1}`}
                               maxLength={64}
@@ -556,6 +613,7 @@ export function SendChartMessageDialog({
                               }
                             />
                             <Input
+                              data-chart-field={`axes-${index}-max`}
                               aria-label={`维度 ${index + 1} 最大值`}
                               className="w-28 shrink-0"
                               type="number"
@@ -597,6 +655,7 @@ export function SendChartMessageDialog({
                             onKeyDown={handleRowKeyDown}
                           >
                             <Input
+                              data-chart-field={`labels-${index}`}
                               aria-label={`${labelName} ${index + 1}`}
                               placeholder={`${labelName} ${index + 1}`}
                               maxLength={64}
@@ -619,6 +678,9 @@ export function SendChartMessageDialog({
                             />
                           </SortableChartRow>
                         ))}
+                    {error?.field.startsWith(chartType === "radar" ? "axes-" : "labels-") && (
+                      <FieldError message={error.message} />
+                    )}
                     <AddButton
                       label={chartType === "radar" ? "添加维度" : `添加 ${labelName}`}
                       disabled={chartType === "radar" ? axes.length >= 12 : labels.length >= 100}
@@ -639,6 +701,7 @@ export function SendChartMessageDialog({
                       <div className="grid gap-2 rounded-md border p-3" key={seriesIndex}>
                         <div className="flex gap-2">
                           <Input
+                            data-chart-field={`series-${seriesIndex}-name`}
                             aria-label={`系列 ${seriesIndex + 1} 名称`}
                             placeholder={`系列 ${seriesIndex + 1} 名称`}
                             maxLength={64}
@@ -675,6 +738,7 @@ export function SendChartMessageDialog({
                               }
                             >
                               <Input
+                                data-chart-field={`series-${seriesIndex}-value-${valueIndex}`}
                                 type="number"
                                 step="any"
                                 required
@@ -702,6 +766,9 @@ export function SendChartMessageDialog({
                             </Field>
                           ))}
                         </div>
+                        {error?.field.startsWith(`series-${seriesIndex}-`) && (
+                          <FieldError message={error.message} />
+                        )}
                       </div>
                     ))}
                     <AddButton
@@ -735,11 +802,6 @@ export function SendChartMessageDialog({
                   )}
                 </div>
               </section>
-              {error && (
-                <p role="alert" className="text-sm text-destructive">
-                  {error}
-                </p>
-              )}
             </div>
           </ScrollArea>
           <DialogFooter>
@@ -757,7 +819,7 @@ export function SendChartMessageDialog({
             <Button
               type="submit"
               className="bg-xgui-brand text-primary-foreground hover:bg-xgui-brand-4"
-              disabled={sending || !title.trim() || !description.trim()}
+              disabled={sending}
             >
               {sending && (
                 <HugeiconsIcon icon={Loading03Icon} className="size-4 animate-spin" aria-hidden />
@@ -830,13 +892,26 @@ function SortableChartRow({
   )
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  error,
+  children,
+}: {
+  label: string
+  error?: string
+  children: React.ReactNode
+}) {
   return (
     <label className="grid min-w-0 gap-1.5 text-sm">
       {label}
       {children}
+      {error && <FieldError message={error} />}
     </label>
   )
+}
+
+function FieldError({ message }: { message: string }) {
+  return <span className="text-sm text-destructive">{message}</span>
 }
 
 function AddButton({

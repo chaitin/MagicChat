@@ -513,6 +513,8 @@ func (*conversationNotificationRecorder) PublishConversationRestored(context.Con
 
 func (*conversationNotificationRecorder) PublishConversationPinUpdated(context.Context, []string, ConversationPinEvent) {
 }
+func (*conversationNotificationRecorder) PublishConversationReadUpdated(context.Context, []string, ReadResult) {
+}
 
 func (*conversationNotificationRecorder) PublishConversationMuteUpdated(context.Context, []string, ConversationMuteEvent) {
 }

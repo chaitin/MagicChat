@@ -16,6 +16,7 @@ type NotificationPort interface {
 	PublishConversationMessage(context.Context, []string, Message)
 	PublishConversationMuteUpdated(context.Context, []string, ConversationMuteEvent)
 	PublishConversationPinUpdated(context.Context, []string, ConversationPinEvent)
+	PublishConversationReadUpdated(context.Context, []string, ReadResult)
 	PublishConversationRemoved(context.Context, []string, string)
 	PublishConversationRestored(context.Context, []string, string)
 	PublishTopicEvent(context.Context, []string, TopicEvent)

@@ -63,6 +63,23 @@ function setup(fetch: () => Promise<ClientConversation[]> = async () => []) {
   return { manager, store, notifications: () => notifications }
 }
 
+test("a delayed conversation snapshot cannot restore unread after a newer read cursor", async () => {
+  const { manager } = setup(async () => [conversation("c-1", { lastMessageSeq: 5, lastReadSeq: 2, unreadCount: 3 })])
+  await manager.upsert(target, conversation("c-1", { lastMessageSeq: 5, lastReadSeq: 2, unreadCount: 3 }))
+  await manager.patch(target, "c-1", { lastReadSeq: 5, unreadCount: 0 })
+  await manager.refresh(target)
+  const result = await manager.get(target, "c-1")
+  assert.equal(result?.lastReadSeq, 5)
+  assert.equal(result?.unreadCount, 0)
+})
+
+test("a stale snapshot cannot lose an unread realtime message", async () => {
+  const { manager } = setup(async () => [conversation("c-1", { lastMessageSeq: 4, lastReadSeq: 2, unreadCount: 2 })])
+  await manager.upsert(target, conversation("c-1", { lastMessageSeq: 5, lastReadSeq: 2, unreadCount: 3 }))
+  await manager.refresh(target)
+  assert.equal((await manager.get(target, "c-1"))?.unreadCount, 3)
+})
+
 test("HTTP batch merges 100 rows into 150 cached rows without deleting absences", async () => {
   const remote = Array.from({ length: 100 }, (_, index) =>
     conversation(`c-${index}`, { name: `remote-${index}` })

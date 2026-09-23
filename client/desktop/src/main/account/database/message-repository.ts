@@ -14,6 +14,14 @@ export class MessageRepository {
     )
   }
 
+  hasMessage(conversationId: string, id: string) {
+    return Boolean(
+      this.database
+        .prepare("SELECT 1 FROM messages WHERE conversation_id = ? AND id = ?")
+        .get(conversationId, id),
+    )
+  }
+
   upsertMessages(messages: StoredMessage[]) {
     const statement = this.database.prepare(`
       INSERT INTO messages (

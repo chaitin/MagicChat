@@ -37,7 +37,8 @@ export class AppSettingsManager {
     if (
       !isRecord(settings) ||
       typeof settings.soundEnabled !== "boolean" ||
-      typeof settings.desktopEnabled !== "boolean"
+      typeof settings.desktopEnabled !== "boolean" ||
+      typeof settings.showMessagePreview !== "boolean"
     ) {
       throw new AuthFailure("invalid_notification_settings", "通知设置不正确")
     }
@@ -46,6 +47,7 @@ export class AppSettingsManager {
       notifications: {
         soundEnabled: settings.soundEnabled,
         desktopEnabled: settings.desktopEnabled,
+        showMessagePreview: settings.showMessagePreview,
       },
     })
     return null

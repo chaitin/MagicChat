@@ -62,6 +62,11 @@ export function LoginPage({
   const [quitOpen, setQuitOpen] = useState(false)
   const [quitPending, setQuitPending] = useState(false)
   const [refreshingAll, setRefreshingAll] = useState(false)
+  const [notificationTarget, setNotificationTarget] = useState<{
+    targetId: string
+    conversationId: string
+    messageId: string
+  } | null>(null)
   const enterChat = useCallback(() => {
     setRefreshingAll(false)
     setScreen("chat")
@@ -94,6 +99,10 @@ export function LoginPage({
 
   useEffect(() => window.desktop?.onOpenSettings(() => setSettingsOpen(true)), [])
   useEffect(() => window.desktop?.onRequestQuit(() => setQuitOpen(true)), [])
+  useEffect(
+    () => window.desktop?.onOpenMessageNotification((event) => setNotificationTarget(event)),
+    [],
+  )
 
   useEffect(() => {
     onOrganizationNameChange(connection?.user ? connection.info.organizationName : "")
@@ -207,6 +216,10 @@ export function LoginPage({
             setRefreshingAll(true)
             setScreen("signing-in")
           }}
+          notificationTarget={
+            notificationTarget?.targetId === connection?.targetId ? notificationTarget : null
+          }
+          onNotificationHandled={() => setNotificationTarget(null)}
         />
         {traySettingsDialog}
         {quitConfirmDialog}

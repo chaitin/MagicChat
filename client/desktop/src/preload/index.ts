@@ -21,6 +21,8 @@ const bridge: DesktopBridge = {
   setTheme: (theme) => ipcRenderer.invoke(DESKTOP_CHANNELS.setTheme, theme),
   setNotificationSettings: (settings) =>
     ipcRenderer.invoke(DESKTOP_CHANNELS.setNotificationSettings, settings),
+  setActiveConversation: (input) =>
+    ipcRenderer.invoke(DESKTOP_CHANNELS.setActiveConversation, input),
   setShortcutSettings: (settings) =>
     ipcRenderer.invoke(DESKTOP_CHANNELS.setShortcutSettings, settings),
   setShortcutRecording: (recording) =>
@@ -39,6 +41,19 @@ const bridge: DesktopBridge = {
     const listener = () => callback()
     ipcRenderer.on(DESKTOP_CHANNELS.requestQuit, listener)
     return () => ipcRenderer.removeListener(DESKTOP_CHANNELS.requestQuit, listener)
+  },
+  onPlayMessageSound: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on(DESKTOP_CHANNELS.playMessageSound, listener)
+    return () => ipcRenderer.removeListener(DESKTOP_CHANNELS.playMessageSound, listener)
+  },
+  onOpenMessageNotification: (callback) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      value: { targetId: string; conversationId: string; messageId: string },
+    ) => callback(value)
+    ipcRenderer.on(DESKTOP_CHANNELS.openMessageNotification, listener)
+    return () => ipcRenderer.removeListener(DESKTOP_CHANNELS.openMessageNotification, listener)
   },
   windowControls: {
     platform,
@@ -73,6 +88,8 @@ const bridge: DesktopBridge = {
     searchLocal: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.searchLocal, input),
     listConversations: (targetId) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listConversations, targetId),
+    markConversationRead: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.markConversationRead, input),
     createGroupConversation: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.createGroupConversation, input),
     setConversationPinned: (input) =>

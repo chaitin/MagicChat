@@ -7,6 +7,7 @@ import {
   SquareMIcon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
+import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -40,6 +41,8 @@ export function SendChoiceMessageDialog({
   onSend: (body: SendRichMessageBody) => Promise<void>
 }) {
   const selectionId = useId()
+  const formRef = useRef<HTMLFormElement>(null)
+  const { showToast } = useAnimatedToast()
   const [content, setContent] = useState("")
   const [contentType, setContentType] = useState<"text" | "markdown">("text")
   const [selection, setSelection] = useState<"single" | "multiple">("single")
@@ -48,7 +51,7 @@ export function SendChoiceMessageDialog({
   const [draggingOptionId, setDraggingOptionId] = useState<string | null>(null)
   const [dropTargetId, setDropTargetId] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
-  const [error, setError] = useState("")
+  const [error, setError] = useState<{ field: string; message: string } | null>(null)
 
   function reset() {
     setContent("")
@@ -58,7 +61,7 @@ export function SendChoiceMessageDialog({
     draggedOptionId.current = null
     setDraggingOptionId(null)
     setDropTargetId(null)
-    setError("")
+    setError(null)
   }
 
   function moveOption(fromId: string, toId: string) {
@@ -121,17 +124,28 @@ export function SendChoiceMessageDialog({
   async function submit(event: React.SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
     if (sending) return
-    if (!content.trim() || options.some((option) => !option.label.trim())) {
-      setError("请填写选择内容和所有选项")
+    function validationError(field: string, message: string) {
+      setError({ field, message })
+      showToast({ status: "error", title: message })
+      formRef.current?.querySelector<HTMLElement>(`[data-choice-field="${field}"]`)?.focus()
+    }
+    if (!content.trim()) {
+      validationError("content", "请填写选择内容")
+      return
+    }
+    const emptyOption = options.find((option) => !option.label.trim())
+    if (emptyOption) {
+      validationError(`option-${emptyOption.id}`, "请填写所有选项")
       return
     }
     const labels = options.map((option) => option.label.trim())
-    if (labels.some((option) => /[\p{Cc}\u2028\u2029]/u.test(option))) {
-      setError("选项内容不能包含换行或控制字符")
+    const invalidOption = labels.findIndex((label) => /[\p{Cc}\u2028\u2029]/u.test(label))
+    if (invalidOption !== -1) {
+      validationError(`option-${options[invalidOption].id}`, "选项内容不能包含换行或控制字符")
       return
     }
     setSending(true)
-    setError("")
+    setError(null)
     try {
       await onSend({
         type: "choice",
@@ -143,7 +157,10 @@ export function SendChoiceMessageDialog({
       reset()
       onOpenChange(false)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "发送选择消息失败")
+      showToast({
+        status: "error",
+        title: cause instanceof Error ? cause.message : "发送选择消息失败",
+      })
     } finally {
       setSending(false)
     }
@@ -163,7 +180,13 @@ export function SendChoiceMessageDialog({
           <DialogTitle>发送选择消息</DialogTitle>
           <DialogDescription className="sr-only">发送到 {conversationName}</DialogDescription>
         </DialogHeader>
-        <form className="grid min-h-0 gap-4" onSubmit={(event) => void submit(event)}>
+        <form
+          ref={formRef}
+          noValidate
+          className="grid min-h-0 gap-4"
+          onChangeCapture={() => setError(null)}
+          onSubmit={(event) => void submit(event)}
+        >
           <ScrollArea
             type="auto"
             className="-mr-5 -ml-1 min-w-0 max-h-[calc(85vh-11rem)] overflow-hidden"
@@ -214,6 +237,7 @@ export function SendChoiceMessageDialog({
                 </div>
                 <Textarea
                   id={`${selectionId}-content`}
+                  data-choice-field="content"
                   className={contentType === "markdown" ? "font-mono" : undefined}
                   maxLength={5000}
                   required
@@ -221,60 +245,68 @@ export function SendChoiceMessageDialog({
                   onChange={(event) => setContent(event.target.value)}
                   placeholder="请输入问题或说明"
                 />
+                {error?.field === "content" && (
+                  <span className="text-sm text-destructive">{error.message}</span>
+                )}
               </div>
               <div className="grid gap-2">
                 <span className="text-sm">选项</span>
                 {options.map((option, index) => (
-                  <div
-                    className={cn(
-                      "flex items-center gap-2 rounded-md",
-                      draggingOptionId === option.id && "opacity-40",
-                      dropTargetId === option.id && "bg-muted",
+                  <div key={option.id} className="grid gap-1">
+                    <div
+                      className={cn(
+                        "flex items-center gap-2 rounded-md",
+                        draggingOptionId === option.id && "opacity-40",
+                        dropTargetId === option.id && "bg-muted",
+                      )}
+                      onDragOver={(event) => handleDragOver(event, option.id)}
+                      onDrop={(event) => handleDrop(event, option.id)}
+                    >
+                      <span
+                        role="button"
+                        tabIndex={sending ? -1 : 0}
+                        aria-disabled={sending}
+                        aria-label={`拖动选项 ${index + 1} 排序，或按上下方向键调整`}
+                        title="拖动排序，或按上下方向键调整"
+                        className="flex size-4 shrink-0 cursor-grab items-center justify-center text-muted-foreground hover:text-foreground focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:cursor-grabbing"
+                        draggable={!sending}
+                        onDragStart={(event) => startDrag(event, option.id)}
+                        onDragEnd={finishDrag}
+                        onKeyDown={(event) => handleHandleKeyDown(event, index)}
+                      >
+                        <HugeiconsIcon icon={DragDropVerticalIcon} className="size-4" aria-hidden />
+                      </span>
+                      <Input
+                        data-choice-field={`option-${option.id}`}
+                        aria-label={`选项 ${index + 1}`}
+                        maxLength={200}
+                        placeholder={`选项 ${index + 1}`}
+                        required
+                        value={option.label}
+                        onChange={(event) =>
+                          setOptions((current) =>
+                            current.map((item) =>
+                              item.id === option.id ? { ...item, label: event.target.value } : item,
+                            ),
+                          )
+                        }
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`删除选项 ${index + 1}`}
+                        disabled={options.length <= 2}
+                        onClick={() =>
+                          setOptions((current) => current.filter((item) => item.id !== option.id))
+                        }
+                      >
+                        <HugeiconsIcon icon={Delete02Icon} className="size-4" aria-hidden />
+                      </Button>
+                    </div>
+                    {error?.field === `option-${option.id}` && (
+                      <span className="ml-6 text-sm text-destructive">{error.message}</span>
                     )}
-                    key={option.id}
-                    onDragOver={(event) => handleDragOver(event, option.id)}
-                    onDrop={(event) => handleDrop(event, option.id)}
-                  >
-                    <span
-                      role="button"
-                      tabIndex={sending ? -1 : 0}
-                      aria-disabled={sending}
-                      aria-label={`拖动选项 ${index + 1} 排序，或按上下方向键调整`}
-                      title="拖动排序，或按上下方向键调整"
-                      className="flex size-4 shrink-0 cursor-grab items-center justify-center text-muted-foreground hover:text-foreground focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:cursor-grabbing"
-                      draggable={!sending}
-                      onDragStart={(event) => startDrag(event, option.id)}
-                      onDragEnd={finishDrag}
-                      onKeyDown={(event) => handleHandleKeyDown(event, index)}
-                    >
-                      <HugeiconsIcon icon={DragDropVerticalIcon} className="size-4" aria-hidden />
-                    </span>
-                    <Input
-                      aria-label={`选项 ${index + 1}`}
-                      maxLength={200}
-                      placeholder={`选项 ${index + 1}`}
-                      required
-                      value={option.label}
-                      onChange={(event) =>
-                        setOptions((current) =>
-                          current.map((item) =>
-                            item.id === option.id ? { ...item, label: event.target.value } : item,
-                          ),
-                        )
-                      }
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`删除选项 ${index + 1}`}
-                      disabled={options.length <= 2}
-                      onClick={() =>
-                        setOptions((current) => current.filter((item) => item.id !== option.id))
-                      }
-                    >
-                      <HugeiconsIcon icon={Delete02Icon} className="size-4" aria-hidden />
-                    </Button>
                   </div>
                 ))}
                 <Button
@@ -288,11 +320,6 @@ export function SendChoiceMessageDialog({
                   添加选项
                 </Button>
               </div>
-              {error && (
-                <p role="alert" className="text-sm text-destructive">
-                  {error}
-                </p>
-              )}
             </div>
           </ScrollArea>
           <DialogFooter>
@@ -310,9 +337,7 @@ export function SendChoiceMessageDialog({
             <Button
               type="submit"
               className="bg-xgui-brand text-primary-foreground hover:bg-xgui-brand-4"
-              disabled={
-                sending || !content.trim() || options.some((option) => !option.label.trim())
-              }
+              disabled={sending}
             >
               {sending && (
                 <HugeiconsIcon icon={Loading03Icon} className="size-4 animate-spin" aria-hidden />

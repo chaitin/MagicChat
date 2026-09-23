@@ -25,6 +25,27 @@ function conversation(id: string, overrides: Record<string, unknown> = {}) {
   }
 }
 
+test("消息序号和已读事件幂等推进，旧快照不会恢复未读", () => {
+  const database = new DatabaseSync(":memory:")
+  initializeAccountSchema(database)
+  const repository = new ConversationRepository(database)
+  repository.upsertCurrent([conversation("group-1", { lastMessageSeq: 4, lastReadSeq: 2, unreadCount: 2 })])
+  repository.applyMessageSeq("group-1", 5, false)
+  repository.applyMessageSeq("group-1", 5, false)
+  assert.equal(repository.list()[0].unreadCount, 3)
+  repository.applyReadSeq("group-1", 4)
+  repository.applyReadSeq("group-1", 2)
+  assert.equal(repository.list()[0].unreadCount, 1)
+  repository.upsertCurrent([conversation("group-1", { lastMessageSeq: 4, lastReadSeq: 2, unreadCount: 2 })])
+  assert.deepEqual(
+    [repository.list()[0].lastMessageSeq, repository.list()[0].lastReadSeq, repository.list()[0].unreadCount],
+    [5, 4, 1],
+  )
+  repository.applyMessageSeq("group-1", 6, true)
+  assert.equal(repository.list()[0].unreadCount, 0)
+  database.close()
+})
+
 test("会话仓储稳定读取最后一条消息", () => {
   const database = new DatabaseSync(":memory:")
   initializeAccountSchema(database)

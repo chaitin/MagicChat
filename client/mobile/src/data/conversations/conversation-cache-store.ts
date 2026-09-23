@@ -69,7 +69,8 @@ function monotonicNumber(current: unknown, incoming: unknown) {
 
 function mergeConversation(
   current: ClientConversation | null,
-  incoming: ClientConversation
+  incoming: ClientConversation,
+  fromSnapshot = false
 ): ClientConversation {
   if (!current) return incoming
 
@@ -85,6 +86,10 @@ function mergeConversation(
     merged.lastMessageId = current.lastMessageId
     merged.lastMessageSender = current.lastMessageSender
     merged.lastMessageSummary = current.lastMessageSummary
+  }
+  if (merged.lastReadSeq !== incoming.lastReadSeq ||
+    (fromSnapshot && merged.lastMessageSeq !== incoming.lastMessageSeq)) {
+    merged.unreadCount = Math.max(0, merged.lastMessageSeq - merged.lastReadSeq)
   }
   return merged
 }
@@ -158,7 +163,8 @@ export function createMemoryConversationCacheStore(): ConversationCacheStore {
         store.set(incoming.id, {
           conversation: mergeConversation(
             existing?.conversation ?? null,
-            incoming
+            incoming,
+            options.source === "http"
           ),
           observedAt: options.observedAt,
           tombstoneAt: null,
@@ -269,7 +275,8 @@ export function createSQLiteConversationCacheStore(injectedService?: DatabaseSer
           }
           const merged = mergeConversation(
             existing?.conversation ?? null,
-            incoming
+            incoming,
+            options.source === "http"
           )
           const tombstoneAt = null
           await transaction.run(

@@ -7,18 +7,21 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  Notification as SystemNotification,
   session,
   shell,
   Tray,
   type IpcMainInvokeEvent,
 } from "electron"
 import { ACCOUNT_DATA_CHANNELS } from "../shared/account-data"
-import { AuthFailure } from "../shared/auth"
+import { AuthFailure, isRecord } from "../shared/auth"
 import {
   DESKTOP_CHANNELS,
+  DEFAULT_NOTIFICATION_SETTINGS,
   EXTERNAL_LINKS,
   isSafeWebUrl,
   JIYING_HOMEPAGE,
+  type IncomingMessageNotification,
   type NotificationSettings,
   type ShortcutSettings,
   type StorageInfo,
@@ -29,6 +32,7 @@ import {
 import { MEDIA_CHANNELS } from "../shared/media"
 import { SCREENSHOT_CHANNELS, type ScreenshotSelection } from "../shared/screenshot"
 import { AuthController, authResult } from "./auth-controller"
+import { isMessageNotificationSuppressed } from "./account/message-notification-policy"
 import { registerAccountDataIpc } from "./ipc/register-account-data-ipc"
 import { registerAuthIpc } from "./ipc/register-auth-ipc"
 import { registerContactIpc } from "./ipc/register-contact-ipc"
@@ -220,10 +224,48 @@ if (hasSingleInstanceLock) {
 
 void app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return
+  if (process.platform === "win32") app.setAppUserModelId("chat.jiying.desktop.next")
+  let notificationSettings: NotificationSettings = DEFAULT_NOTIFICATION_SETTINGS
+  let activeConversation: { targetId: string; conversationId: string } | null = null
+  const activeNotifications = new Set<SystemNotification>()
+  function notifyIncomingMessage(event: IncomingMessageNotification) {
+    const window = mainWindow
+    if (isMessageNotificationSuppressed(event, activeConversation, window?.isFocused() ?? false)) {
+      return
+    }
+    if (notificationSettings.soundEnabled && window && !window.isDestroyed()) {
+      window.webContents.send(DESKTOP_CHANNELS.playMessageSound)
+    }
+    if (!notificationSettings.desktopEnabled || !SystemNotification.isSupported()) return
+    try {
+      const notification = new SystemNotification({
+        title: "即应",
+        body: notificationSettings.showMessagePreview
+          ? `${event.sender}：${event.summary}`
+          : "收到新消息",
+        silent: true,
+      })
+      activeNotifications.add(notification)
+      notification.on("close", () => activeNotifications.delete(notification))
+      notification.on("click", () => {
+        showMainWindow()
+        if (!auth.isActiveTarget(event.targetId)) return
+        mainWindow?.webContents.send(DESKTOP_CHANNELS.openMessageNotification, {
+          targetId: event.targetId,
+          conversationId: event.conversationId,
+          messageId: event.messageId,
+        })
+      })
+      notification.show()
+    } catch (error) {
+      console.warn("无法显示桌面通知", error)
+    }
+  }
   const auth = new AuthController(app.getPath("userData"), {
     onSyncStateChange: (event) =>
       mainWindow?.webContents.send(ACCOUNT_DATA_CHANNELS.syncStateChanged, event),
     onDataChanged: (event) => mainWindow?.webContents.send(ACCOUNT_DATA_CHANNELS.changed, event),
+    onIncomingMessage: notifyIncomingMessage,
     onConversationPresenceChanged: (event) =>
       mainWindow?.webContents.send(ACCOUNT_DATA_CHANNELS.conversationPresenceChanged, event),
     onMediaProgress: (event) =>
@@ -243,7 +285,9 @@ void app.whenReady().then(async () => {
   const selectedMessageFiles = new SelectedMessageFileStore(app.getPath("userData"))
   const shortcuts = new ShortcutManager(showMainWindow, () => screenshot.capture())
   try {
-    shortcuts.update((await auth.getAppSettings()).shortcuts)
+    const settings = await auth.getAppSettings()
+    notificationSettings = settings.notifications
+    shortcuts.update(settings.shortcuts)
   } catch (error) {
     console.warn("无法注册全局快捷键", error)
   }
@@ -466,6 +510,27 @@ void app.whenReady().then(async () => {
   })
   handleIpc(DESKTOP_CHANNELS.setNotificationSettings, async (input) => {
     await auth.setNotificationSettings(input as NotificationSettings)
+    notificationSettings = (await auth.getAppSettings()).notifications
+    return null
+  })
+  handleIpc(DESKTOP_CHANNELS.setActiveConversation, async (input) => {
+    if (
+      !isRecord(input) ||
+      typeof input.targetId !== "string" ||
+      !input.targetId ||
+      input.targetId.length > 128 ||
+      (input.conversationId !== null &&
+        (typeof input.conversationId !== "string" ||
+          !input.conversationId ||
+          input.conversationId.length > 128))
+    ) {
+      throw new AuthFailure("invalid_input", "当前对话参数不正确")
+    }
+    if (auth.isActiveTarget(input.targetId)) {
+      activeConversation = input.conversationId
+        ? { targetId: input.targetId, conversationId: input.conversationId }
+        : null
+    }
     return null
   })
   handleIpc(DESKTOP_CHANNELS.setShortcutSettings, async (input) => {

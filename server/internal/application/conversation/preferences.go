@@ -74,7 +74,7 @@ func (s *Service) Dismiss(ctx context.Context, cmd DismissCommand) (DismissResul
 	}
 
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		read, err := markReadTransaction(tx, accountID, conversationID, nil)
+		read, _, err := markReadTransaction(tx, accountID, conversationID, nil)
 		if err != nil {
 			return err
 		}

@@ -51,6 +51,8 @@ export function parseConversation(value: unknown, currentUserId: string): Stored
           isRecord(member) && member.type === "app" && member.id === builtinAssistantAppId,
       ),
     unreadCount: nonNegativeInteger(value.unread_count),
+    lastMessageSeq: nonNegativeInteger(value.last_message_seq),
+    lastReadSeq: nonNegativeInteger(value.last_read_seq),
     topic: parseConversationTopic(value),
     payload: value,
   }

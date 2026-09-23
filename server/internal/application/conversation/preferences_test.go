@@ -189,6 +189,8 @@ type preferenceNotificationRecorder struct {
 
 func (*preferenceNotificationRecorder) PublishConversationMessage(context.Context, []string, Message) {
 }
+func (*preferenceNotificationRecorder) PublishConversationReadUpdated(context.Context, []string, ReadResult) {
+}
 func (r *preferenceNotificationRecorder) PublishConversationMuteUpdated(_ context.Context, _ []string, event ConversationMuteEvent) {
 	r.muteEvents = append(r.muteEvents, event)
 }

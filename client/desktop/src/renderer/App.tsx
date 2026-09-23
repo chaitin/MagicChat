@@ -59,6 +59,17 @@ export function App() {
     document.title = windowTitle
   }, [windowTitle])
 
+  useEffect(() => {
+    let audio: HTMLAudioElement | null = null
+    return window.desktop?.onPlayMessageSound(() => {
+      audio ??= new Audio(
+        new URL("./assets/sounds/message-notification.ogg", document.baseURI).href,
+      )
+      audio.currentTime = 0
+      void audio.play().catch(() => undefined)
+    })
+  }, [])
+
   return (
     <AnimatedToastProvider>
       <div className="flex h-dvh flex-col overflow-hidden">

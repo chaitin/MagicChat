@@ -31,6 +31,12 @@ func (s *Server) PublishConversationPinUpdated(_ context.Context, userIDs []stri
 	}))
 }
 
+func (s *Server) PublishConversationReadUpdated(_ context.Context, userIDs []string, result conversationapp.ReadResult) {
+	s.realtime.SendToUsers(userIDs, realtime.NewEvent(realtime.EventConversationReadUpdated, conversationReadEventResponse{
+		ConversationID: result.ConversationID, LastReadSeq: result.LastReadSeq,
+	}))
+}
+
 func (s *Server) PublishConversationRemoved(_ context.Context, userIDs []string, conversationID string) {
 	s.realtime.SendToUsers(userIDs, realtimeConversationRemovedEvent(conversationID))
 }
@@ -79,6 +85,11 @@ type topicEventResponse struct {
 type conversationPinEventResponse struct {
 	ConversationID string `json:"conversation_id"`
 	Pinned         bool   `json:"pinned"`
+}
+
+type conversationReadEventResponse struct {
+	ConversationID string `json:"conversation_id"`
+	LastReadSeq    int64  `json:"last_read_seq"`
 }
 
 type conversationMuteEventResponse struct {

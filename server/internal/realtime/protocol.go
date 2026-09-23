@@ -21,6 +21,7 @@ const (
 	EventMessageChoiceUpdated    = "message.choice_updated"
 	EventConversationMuteUpdated = "conversation.mute_updated"
 	EventConversationPinUpdated  = "conversation.pin_updated"
+	EventConversationReadUpdated = "conversation.read_updated"
 	EventConversationRemoved     = "conversation.removed"
 	EventConversationRestored    = "conversation.restored"
 	EventTopicCreated            = "topic.created"

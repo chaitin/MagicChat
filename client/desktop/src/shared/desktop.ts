@@ -17,6 +17,29 @@ export const DEFAULT_SHORTCUTS: ShortcutSettings = {
 export type NotificationSettings = {
   soundEnabled: boolean
   desktopEnabled: boolean
+  showMessagePreview: boolean
+}
+export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+  soundEnabled: true,
+  desktopEnabled: true,
+  showMessagePreview: true,
+}
+
+export function normalizeNotificationSettings(value: unknown): NotificationSettings {
+  const stored =
+    value && typeof value === "object" ? (value as Partial<NotificationSettings>) : null
+  return {
+    soundEnabled: typeof stored?.soundEnabled === "boolean" ? stored.soundEnabled : true,
+    desktopEnabled: typeof stored?.desktopEnabled === "boolean" ? stored.desktopEnabled : true,
+    showMessagePreview: stored?.showMessagePreview === true,
+  }
+}
+export type IncomingMessageNotification = {
+  targetId: string
+  conversationId: string
+  messageId: string
+  sender: string
+  summary: string
 }
 export type AppSettings = {
   theme: ThemePreference
@@ -83,6 +106,9 @@ export const DESKTOP_CHANNELS = {
   windowToggleMaximize: "desktop-next:v1:window-toggle-maximize",
   windowClose: "desktop-next:v1:window-close",
   windowMaximizedChanged: "desktop-next:v1:window-maximized-changed",
+  playMessageSound: "desktop-next:v1:play-message-sound",
+  openMessageNotification: "desktop-next:v1:open-message-notification",
+  setActiveConversation: "desktop-next:v1:set-active-conversation",
 } as const
 
 export function isSafeWebUrl(value: unknown): value is string {
@@ -116,11 +142,19 @@ export interface DesktopBridge {
   getAppSettings(): Promise<AuthResult<AppSettings>>
   setTheme(theme: ThemePreference): Promise<AuthResult<null>>
   setNotificationSettings(settings: NotificationSettings): Promise<AuthResult<null>>
+  setActiveConversation(input: {
+    targetId: string
+    conversationId: string | null
+  }): Promise<AuthResult<null>>
   setShortcutSettings(settings: ShortcutSettings): Promise<AuthResult<null>>
   setShortcutRecording(recording: boolean): Promise<AuthResult<null>>
   onOpenSettings(callback: () => void): () => void
   onRequestSignOut(callback: () => void): () => void
   onRequestQuit(callback: () => void): () => void
+  onPlayMessageSound(callback: () => void): () => void
+  onOpenMessageNotification(
+    callback: (event: { targetId: string; conversationId: string; messageId: string }) => void,
+  ): () => void
   readonly windowControls: {
     readonly platform: DesktopPlatform
     getMaximized(): Promise<boolean>

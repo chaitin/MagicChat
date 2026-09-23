@@ -20,8 +20,8 @@ export class ConversationRepository {
       INSERT INTO conversations (
         id, type, name, member_count, avatar, avatar_type, avatar_id, created_at, last_message_at,
         last_message_summary, pinned, notification_muted, is_builtin_assistant,
-        unread_count, current, payload_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        unread_count, last_message_seq, last_read_seq, current, payload_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
       ON CONFLICT(id) DO UPDATE SET
         type = excluded.type,
         name = excluded.name,
@@ -35,7 +35,11 @@ export class ConversationRepository {
         pinned = excluded.pinned,
         notification_muted = excluded.notification_muted,
         is_builtin_assistant = excluded.is_builtin_assistant,
-        unread_count = excluded.unread_count,
+        last_message_seq = MAX(conversations.last_message_seq, excluded.last_message_seq),
+        last_read_seq = MAX(conversations.last_read_seq, excluded.last_read_seq),
+        unread_count = CASE WHEN MAX(conversations.last_message_seq, excluded.last_message_seq) = 0
+          THEN excluded.unread_count
+          ELSE MAX(0, MAX(conversations.last_message_seq, excluded.last_message_seq) - MAX(conversations.last_read_seq, excluded.last_read_seq)) END,
         current = 1,
         payload_json = excluded.payload_json
     `)
@@ -55,6 +59,8 @@ export class ConversationRepository {
         Number(conversation.notificationMuted),
         Number(conversation.isBuiltinAssistant),
         conversation.unreadCount,
+        conversation.lastMessageSeq ?? 0,
+        conversation.lastReadSeq ?? 0,
         JSON.stringify(conversation.payload),
       )
     }
@@ -78,6 +84,36 @@ export class ConversationRepository {
          WHERE id = ? AND current = 1`,
       )
       .run(createdAt, createdAt, conversationId)
+  }
+
+  applyMessageSeq(conversationId: string, seq: number, isMine: boolean) {
+    if (!Number.isSafeInteger(seq) || seq <= 0) return
+    this.database.prepare(`UPDATE conversations SET
+      last_message_seq = MAX(last_message_seq, ?),
+      last_read_seq = CASE WHEN ? THEN MAX(last_read_seq, ?) ELSE last_read_seq END,
+      unread_count = MAX(0, MAX(last_message_seq, ?) - CASE WHEN ? THEN MAX(last_read_seq, ?) ELSE last_read_seq END)
+      WHERE id = ? AND current = 1`).run(seq, Number(isMine), seq, seq, Number(isMine), seq, conversationId)
+  }
+
+  applyReadSeq(conversationId: string, seq: number) {
+    if (!Number.isSafeInteger(seq) || seq < 0) return false
+    return this.database.prepare(`UPDATE conversations SET
+      last_read_seq = MAX(last_read_seq, ?),
+      unread_count = MAX(0, last_message_seq - MAX(last_read_seq, ?))
+      WHERE id = ? AND current = 1`).run(seq, seq, conversationId).changes > 0
+  }
+
+  getReadSeq(conversationId: string) {
+    const row = this.database.prepare("SELECT last_read_seq FROM conversations WHERE id = ? AND current = 1")
+      .get(conversationId) as { last_read_seq: number } | undefined
+    return row?.last_read_seq
+  }
+
+  isMuted(conversationId: string) {
+    const row = this.database
+      .prepare("SELECT notification_muted FROM conversations WHERE id = ? AND current = 1")
+      .get(conversationId) as { notification_muted: number } | undefined
+    return row?.notification_muted === 1
   }
 
   setPinned(conversationId: string, pinned: boolean) {
@@ -116,6 +152,7 @@ export class ConversationRepository {
                 ), '') AS last_message_summary,
                 conversations.pinned, conversations.notification_muted,
                 conversations.is_builtin_assistant, conversations.unread_count,
+                conversations.last_message_seq, conversations.last_read_seq,
                 conversations.payload_json
          FROM conversations
          WHERE conversations.current = 1
@@ -143,6 +180,8 @@ export class ConversationRepository {
       notificationMuted: row.notification_muted === 1,
       isBuiltinAssistant: row.is_builtin_assistant === 1,
       unreadCount: Number(row.unread_count),
+      lastMessageSeq: Number(row.last_message_seq),
+      lastReadSeq: Number(row.last_read_seq),
       topic: parseConversationTopic(parsePayload({ payload_json: row.payload_json })),
     }))
   }

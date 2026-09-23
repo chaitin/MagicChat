@@ -167,6 +167,14 @@ describe("mergeConversationSnapshot", () => {
     )
   })
 
+  it("does not restore unread after a delayed snapshot", () => {
+    const previous = { ...createConversation("shared", "direct", "2026-07-02"), lastMessageSeq: 5, lastReadSeq: 5, unreadCount: 0 }
+    const stale = { ...previous, lastReadSeq: 2, unreadCount: 3 }
+    const result = mergeConversationSnapshot([previous], [stale])[0]
+    expect(result.lastReadSeq).toBe(5)
+    expect(result.unreadCount).toBe(0)
+  })
+
   it("keeps a newly opened direct conversation from an older snapshot", () => {
     const opened = createConversation("new-direct", "direct", "2026-07-03")
     expect(mergeConversationSnapshot([opened], [])).toContain(opened)

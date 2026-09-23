@@ -8,10 +8,12 @@ export function useChatData({
   targetId,
   userId,
   userName,
+  activeSection,
 }: {
   targetId: string
   userId: string
   userName: string
+  activeSection: string
 }) {
   const { showToast } = useAnimatedToast()
   const [conversations, setConversations] = useState<DesktopConversation[]>([])
@@ -27,6 +29,8 @@ export function useChatData({
   const [conversationRevision, setConversationRevision] = useState(0)
   const [messageRevision, setMessageRevision] = useState(0)
   const [contactRevision, setContactRevision] = useState(0)
+  const [focusRevision, setFocusRevision] = useState(0)
+  const readInFlightRef = useRef(new Set<string>())
   const [mentionLabels, setMentionLabels] = useState<Map<string, string>>(new Map())
   const [pendingReactionKeys, setPendingReactionKeys] = useState<Set<string>>(new Set())
   const [revokingMessageIds, setRevokingMessageIds] = useState<Set<string>>(new Set())
@@ -49,6 +53,35 @@ export function useChatData({
       (transientConversation?.id === selectedId ? transientConversation : null),
     [conversations, selectedId, transientConversation],
   )
+
+  useEffect(() => {
+    const refreshFocus = () => setFocusRevision((revision) => revision + 1)
+    document.addEventListener("visibilitychange", refreshFocus)
+    window.addEventListener("focus", refreshFocus)
+    return () => {
+      document.removeEventListener("visibilitychange", refreshFocus)
+      window.removeEventListener("focus", refreshFocus)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!window.desktop || !selectedId || activeSection !== "chat" || loadingMessages ||
+      !selected?.unreadCount || document.visibilityState !== "visible" || !document.hasFocus() ||
+      readInFlightRef.current.has(selectedId)) return
+    const upToSeq = Math.max(0, ...messages.filter((message) => message.conversationId === selectedId && !message.virtualType && message.deliveryStatus !== "sending")
+      .map((message) => message.seq))
+    if (upToSeq <= (selected.lastReadSeq ?? 0)) return
+    const conversationId = selectedId
+    readInFlightRef.current.add(conversationId)
+    void window.desktop.accountData.markConversationRead({ targetId, conversationId, upToSeq })
+      .then((result) => {
+        readInFlightRef.current.delete(conversationId)
+        if (result.ok) setFocusRevision((revision) => revision + 1)
+      })
+      .catch(() => {
+        readInFlightRef.current.delete(conversationId)
+      })
+  }, [activeSection, focusRevision, loadingMessages, messages, selected?.lastReadSeq, selected?.unreadCount, selectedId, targetId])
 
   const setSelectedId = useCallback((conversationId: string) => {
     setTransientConversation(null)

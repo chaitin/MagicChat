@@ -14,6 +14,8 @@ import {
 } from "../../shared/auth"
 import {
   DEFAULT_SHORTCUTS,
+  DEFAULT_NOTIFICATION_SETTINGS,
+  normalizeNotificationSettings,
   type NotificationSettings,
   type ShortcutSettings,
   type ThemePreference,
@@ -61,7 +63,7 @@ export function createDefaultAppConfig(): AppConfig {
     version: 1,
     theme: "system",
     shortcuts: { ...DEFAULT_SHORTCUTS },
-    notifications: { soundEnabled: true, desktopEnabled: true },
+    notifications: { ...DEFAULT_NOTIFICATION_SETTINGS },
     activeServerId: OFFICIAL_SERVER_ID,
     servers: [officialServer],
     serverLogins: {},
@@ -201,18 +203,7 @@ export class AppConfigStore {
         typeof stored.activeServerId === "string" && ids.has(stored.activeServerId)
           ? stored.activeServerId
           : OFFICIAL_SERVER_ID
-      const notifications = isRecord(stored.notifications)
-        ? {
-            soundEnabled:
-              typeof stored.notifications.soundEnabled === "boolean"
-                ? stored.notifications.soundEnabled
-                : true,
-            desktopEnabled:
-              typeof stored.notifications.desktopEnabled === "boolean"
-                ? stored.notifications.desktopEnabled
-                : true,
-          }
-        : { soundEnabled: true, desktopEnabled: true }
+      const notifications = normalizeNotificationSettings(stored.notifications)
       return {
         version: 1,
         theme,

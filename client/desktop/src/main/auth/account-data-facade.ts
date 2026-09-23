@@ -6,6 +6,7 @@ import type {
   DismissConversationInput,
   FriendRequestListInput,
   LocalSearchInput,
+  MarkConversationReadInput,
   MessageReactionUsersInput,
   OpenContactConversationInput,
   RetryMessageInput,
@@ -41,6 +42,11 @@ export class AccountDataFacade {
   async listConversations(targetId: string) {
     await this.ready(targetId)
     return this.requireRuntime().listConversations()
+  }
+
+  async markConversationRead(input: MarkConversationReadInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().markConversationRead(input.conversationId, input.upToSeq)
   }
 
   async createGroupConversation(input: CreateGroupConversationInput) {

@@ -71,7 +71,11 @@ export class ConversationManager {
   async applyRealtimeEvent(
     name: string,
     payload: unknown,
-  ): Promise<{ conversationIds: string[]; messages: boolean } | null> {
+  ): Promise<{
+    conversationIds: string[]
+    messages: boolean
+    notification?: { message: DesktopMessage; muted: boolean }
+  } | null> {
     if (name === "message.created" || name === "message.updated") {
       if (!isRecord(payload) || !isRecord(payload.message)) {
         throw new AuthFailure("invalid_realtime_event", "消息推送格式不正确")
@@ -81,20 +85,59 @@ export class ConversationManager {
         128,
         "message.conversation_id",
       )
+      const message = parseMessage(payload.message, conversationId)
+      const alreadyPresent = this.database.hasMessage(conversationId, message.id)
       if (!this.database.hasCurrentConversation(conversationId)) {
         await this.refresh()
-        return { conversationIds: [], messages: true }
+        return {
+          conversationIds: [],
+          messages: true,
+          notification:
+            name === "message.created" && !alreadyPresent &&
+            this.database.hasCurrentConversation(conversationId)
+              ? {
+                  message,
+                  muted:
+                    payload.notification_muted === true ||
+                    this.database.isConversationMuted(conversationId),
+                }
+              : undefined,
+        }
       }
-      const message = parseMessage(payload.message, conversationId)
       this.database.upsertMessages([message])
+      if (name === "message.created") {
+        this.database.applyConversationMessageSeq(
+          conversationId, message.seq, message.senderType === "user" && message.senderId === this.currentUserId,
+        )
+      }
       this.database.touchConversationActivity(conversationId, message.createdAt)
       const parentConversationId = this.updateTopicParentPreview(conversationId)
       return {
+        notification:
+          name === "message.created" && !alreadyPresent
+            ? {
+                message,
+                muted:
+                  payload.notification_muted === true ||
+                  this.database.isConversationMuted(conversationId),
+              }
+            : undefined,
         conversationIds: parentConversationId
           ? [conversationId, parentConversationId]
           : [conversationId],
         messages: true,
       }
+    }
+    if (name === "conversation.read_updated") {
+      const conversationId = conversationIdFromEvent(payload)
+      if (!isRecord(payload) || typeof payload.last_read_seq !== "number" ||
+        !Number.isSafeInteger(payload.last_read_seq) || payload.last_read_seq < 0) {
+        throw new AuthFailure("invalid_realtime_event", "会话已读推送格式不正确")
+      }
+      if (!this.database.applyConversationReadSeq(conversationId, payload.last_read_seq)) {
+        await this.refresh()
+      }
+      return { conversationIds: [conversationId], messages: false }
     }
     if (name === "conversation.pin_updated") {
       const event = parseConversationBooleanEvent(payload, "pinned")
@@ -150,6 +193,26 @@ export class ConversationManager {
       canSend: this.canSendMessages(conversation),
       canModerateMessages: this.canModerateMessages(conversation),
     }))
+  }
+
+  async markRead(conversationId: string, upToSeq: number) {
+    this.assertConversationId(conversationId)
+    if (!Number.isSafeInteger(upToSeq) || upToSeq <= 0) {
+      throw new AuthFailure("invalid_read_seq", "已读消息序号不正确")
+    }
+    const lastReadSeq = this.database.getConversationReadSeq(conversationId)
+    if (lastReadSeq === undefined) throw new AuthFailure("conversation_not_found", "对话不存在")
+    if (upToSeq <= lastReadSeq) return
+    const data = await this.client.post(
+      `/api/client/conversations/${encodeURIComponent(conversationId)}/read`,
+      { up_to_seq: upToSeq },
+    )
+    if (!isRecord(data) || data.conversation_id !== conversationId ||
+      typeof data.last_read_seq !== "number" || !Number.isSafeInteger(data.last_read_seq) ||
+      data.last_read_seq < 0) {
+      throw new AuthFailure("invalid_response", "会话已读响应格式不正确")
+    }
+    this.database.applyConversationReadSeq(conversationId, data.last_read_seq)
   }
 
   async setConversationPinned(conversationId: string, pinned: boolean) {

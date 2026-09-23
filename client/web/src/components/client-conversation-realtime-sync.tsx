@@ -4,6 +4,7 @@ import { matchPath, useLocation, useNavigate } from "react-router"
 import {
   normalizeConversationPinUpdatedEventPayload,
   normalizeConversationMuteUpdatedEventPayload,
+  normalizeConversationReadUpdatedEventPayload,
   normalizeConversationMemberMentionedEventPayload,
   normalizeConversationMemberChoiceReceivedEventPayload,
   normalizeConversationRemovedEventPayload,
@@ -34,6 +35,7 @@ export function ClientConversationRealtimeSync() {
     updateConversationLastChoiceSeq,
     updateConversationMuted,
     updateConversationPinned,
+    updateConversationLastReadSeq,
     updateMessageTopic,
   } = useClientData()
   const hasSeenRealtimeReadyRef = React.useRef(realtimeReady)
@@ -160,6 +162,17 @@ export function ClientConversationRealtimeSync() {
       }
     })
   }, [subscribeRealtimeEvent, updateConversationMuted])
+
+  React.useEffect(() => {
+    return subscribeRealtimeEvent("conversation.read_updated", (payload) => {
+      try {
+        const event = normalizeConversationReadUpdatedEventPayload(payload)
+        updateConversationLastReadSeq(event.conversationId, event.lastReadSeq)
+      } catch {
+        // Ignore malformed realtime events.
+      }
+    })
+  }, [subscribeRealtimeEvent, updateConversationLastReadSeq])
 
   React.useEffect(() => {
     return subscribeRealtimeEvent("conversation.pin_updated", (payload) => {

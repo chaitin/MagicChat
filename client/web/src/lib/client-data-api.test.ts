@@ -14,6 +14,7 @@ import {
   listConversationMessages,
   normalizeMessageCreatedEventPayload,
   normalizeConversationPinUpdatedEventPayload,
+  normalizeConversationReadUpdatedEventPayload,
   normalizeConversationMuteUpdatedEventPayload,
   normalizeClientMessageBody,
   resolveClientUsers,
@@ -425,6 +426,12 @@ describe("client data API", () => {
       "/api/client/conversations/conversation-1/pin",
       { credentials: "include", method: "DELETE" }
     )
+  })
+
+  it("validates read cursor realtime events", () => {
+    expect(normalizeConversationReadUpdatedEventPayload({ conversation_id: "conversation-1", last_read_seq: 3 }))
+      .toEqual({ conversationId: "conversation-1", lastReadSeq: 3 })
+    expect(() => normalizeConversationReadUpdatedEventPayload({ conversation_id: "conversation-1", last_read_seq: -1 })).toThrow()
   })
 
   it("normalizes conversation pin realtime events", () => {

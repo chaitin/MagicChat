@@ -18,6 +18,7 @@ import {
 import type { ServerCatalog } from "../../../../shared/auth"
 import { JIYING_HOMEPAGE, type ThemePreference } from "../../../../shared/desktop"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
+import { AvatarBadge } from "@/components/ui/avatar"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { Button as BeButton } from "@/components/motion/button/base"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
@@ -81,6 +82,7 @@ export function AppRail({
   catalog,
   isPreview,
   activeSection,
+  hasUnreadMessages,
   onSectionChange,
   onSignOut,
   onRequestQuit,
@@ -96,6 +98,7 @@ export function AppRail({
   catalog: ServerCatalog
   isPreview: boolean
   activeSection: AppSection
+  hasUnreadMessages: boolean
   onSectionChange: (section: AppSection) => void
   onSignOut: () => Promise<boolean>
   onRequestQuit: () => void
@@ -150,15 +153,21 @@ export function AppRail({
               variant="ghost"
               size="icon"
               className={cn(
-                "rounded-full hover:bg-foreground/10",
+                "relative rounded-full hover:bg-foreground/10",
                 active && "bg-xgui-brand text-background hover:bg-xgui-brand hover:text-background",
               )}
-              aria-label={item.label}
+              aria-label={item.id === "chat" && hasUnreadMessages ? "聊天，有未读消息" : item.label}
               aria-current={active ? "page" : undefined}
               title={item.label}
               onClick={() => onSectionChange(item.id)}
             >
               <HugeiconsIcon icon={item.icon} aria-hidden />
+              {item.id === "chat" && hasUnreadMessages && (
+                <AvatarBadge
+                  className="pointer-events-none top-0.5 right-0.5 bottom-auto size-2! bg-xgui-destructive"
+                  aria-hidden="true"
+                />
+              )}
             </BeButton>
           )
         })}

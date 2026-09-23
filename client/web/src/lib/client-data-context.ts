@@ -165,6 +165,10 @@ export type ClientDataContextValue = {
     conversationId: string,
     lastMentionedSeq: number
   ) => void
+  updateConversationLastReadSeq: (
+    conversationId: string,
+    lastReadSeq: number
+  ) => void
   updateMessageTopic?: (
     parentConversationId: string,
     sourceMessageId: string,

@@ -53,6 +53,22 @@ export class AccountDatabase {
     this.conversations.touchActivity(conversationId, createdAt)
   }
 
+  applyConversationMessageSeq(conversationId: string, seq: number, isMine: boolean) {
+    this.conversations.applyMessageSeq(conversationId, seq, isMine)
+  }
+
+  applyConversationReadSeq(conversationId: string, seq: number) {
+    return this.conversations.applyReadSeq(conversationId, seq)
+  }
+
+  getConversationReadSeq(conversationId: string) {
+    return this.conversations.getReadSeq(conversationId)
+  }
+
+  isConversationMuted(conversationId: string) {
+    return this.conversations.isMuted(conversationId)
+  }
+
   setConversationPinned(conversationId: string, pinned: boolean) {
     return this.conversations.setPinned(conversationId, pinned)
   }
@@ -71,6 +87,10 @@ export class AccountDatabase {
 
   upsertMessages(...args: Parameters<MessageRepository["upsertMessages"]>) {
     return this.messages.upsertMessages(...args)
+  }
+
+  hasMessage(conversationId: string, id: string) {
+    return this.messages.hasMessage(conversationId, id)
   }
 
   createOptimisticMessage(...args: Parameters<MessageRepository["createOptimisticMessage"]>) {

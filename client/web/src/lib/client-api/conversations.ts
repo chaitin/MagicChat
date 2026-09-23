@@ -249,6 +249,18 @@ export function normalizeConversationMuteUpdatedEventPayload(payload: unknown) {
   }
 }
 
+export function normalizeConversationReadUpdatedEventPayload(payload: unknown) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new ClientDataRequestError("会话已读推送格式不正确")
+  }
+  const event = payload as Record<string, unknown>
+  if (typeof event.conversation_id !== "string" || !event.conversation_id.trim() ||
+    typeof event.last_read_seq !== "number" || !Number.isSafeInteger(event.last_read_seq) || event.last_read_seq < 0) {
+    throw new ClientDataRequestError("会话已读推送格式不正确")
+  }
+  return { conversationId: event.conversation_id, lastReadSeq: event.last_read_seq }
+}
+
 export async function createDirectConversation(
   userId: string,
   fetcher: ClientDataFetch = fetch

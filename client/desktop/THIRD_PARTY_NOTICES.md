@@ -86,8 +86,11 @@ SOFTWARE.
 来源：
 
 - https://beui.dev/r/action-swap
+- https://beui.dev/r/switch.json
 
 `src/renderer/components/motion/action-swap.tsx` 摘取并适配 Action Swap 的 roll 文本与图标插槽，以及其弹簧参数；没有引入完整按钮或其他动画变体。增加静态的减少动态效果分支，并将动画层设为装饰内容，避免读屏重复读取。
+
+`src/renderer/components/motion/switch.tsx` 使用 beUI Switch，按项目格式调整代码排版，增加较小尺寸选项。
 
 MIT License
 

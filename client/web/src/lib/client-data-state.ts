@@ -498,8 +498,26 @@ export function mergeConversationSnapshot(
       .map((conversation) => [conversation.id, conversation])
   )
   for (const conversation of snapshot) {
-    if (!removedConversationIds.has(conversation.id))
+    if (removedConversationIds.has(conversation.id)) continue
+    const previous = byId.get(conversation.id)
+    if (!previous || (previous.lastMessageSeq <= conversation.lastMessageSeq && previous.lastReadSeq <= conversation.lastReadSeq)) {
       byId.set(conversation.id, conversation)
+      continue
+    }
+    const lastMessageSeq = Math.max(previous.lastMessageSeq, conversation.lastMessageSeq)
+    const lastReadSeq = Math.max(previous.lastReadSeq, conversation.lastReadSeq)
+    byId.set(conversation.id, {
+      ...conversation,
+      ...(previous.lastMessageSeq > conversation.lastMessageSeq ? {
+        lastMessageAt: previous.lastMessageAt,
+        lastMessageId: previous.lastMessageId,
+        lastMessageSender: previous.lastMessageSender,
+        lastMessageSummary: previous.lastMessageSummary,
+      } : {}),
+      lastMessageSeq,
+      lastReadSeq,
+      unreadCount: Math.max(0, lastMessageSeq - lastReadSeq),
+    })
   }
   return orderConversations(Array.from(byId.values()))
 }

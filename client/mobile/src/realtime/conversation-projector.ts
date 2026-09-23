@@ -4,7 +4,7 @@ import { conversationManager } from "@/data/conversations"
 import { messageManager } from "@/data/messages"
 import { queryKeys } from "@/data/query"
 import { realtimeEvents } from "./realtime-protocol"
-import { normalizeConversationChoiceReceivedPayload, normalizeConversationMentionedPayload, normalizeConversationMuteUpdatedPayload, normalizeConversationPinUpdatedPayload, normalizeConversationRemovedPayload } from "./realtime-payload"
+import { normalizeConversationChoiceReceivedPayload, normalizeConversationMentionedPayload, normalizeConversationMuteUpdatedPayload, normalizeConversationPinUpdatedPayload, normalizeConversationReadUpdatedPayload, normalizeConversationRemovedPayload } from "./realtime-payload"
 
 export async function projectRealtimeConversationEvent(queryClient: QueryClient, server: AuthenticatedTarget, event: string, payload: unknown) {
   if (event === realtimeEvents.conversationRemoved) {
@@ -28,6 +28,12 @@ export async function projectRealtimeConversationEvent(queryClient: QueryClient,
   } else if (event === realtimeEvents.conversationMuteUpdated) {
     const value = normalizeConversationMuteUpdatedPayload(payload); id = value.conversationId
     updated = await conversationManager.patch(server, id, { notificationMuted: value.muted })
+  } else if (event === realtimeEvents.conversationReadUpdated) {
+    const value = normalizeConversationReadUpdatedPayload(payload); id = value.conversationId
+    updated = await conversationManager.patch(server, id, (item) => {
+      const lastReadSeq = Math.max(item.lastReadSeq, value.lastReadSeq)
+      return { lastReadSeq, unreadCount: Math.max(0, item.lastMessageSeq - lastReadSeq) }
+    })
   } else return false
   if (!updated) void conversationManager.refresh(server).catch(() => undefined)
   return true

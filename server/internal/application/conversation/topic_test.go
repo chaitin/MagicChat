@@ -1089,6 +1089,8 @@ func (*topicConversationNotificationRecorder) PublishConversationRestored(contex
 
 func (*topicConversationNotificationRecorder) PublishConversationPinUpdated(context.Context, []string, ConversationPinEvent) {
 }
+func (*topicConversationNotificationRecorder) PublishConversationReadUpdated(context.Context, []string, ReadResult) {
+}
 
 func (*topicConversationNotificationRecorder) PublishConversationMuteUpdated(context.Context, []string, ConversationMuteEvent) {
 }

@@ -25,6 +25,7 @@ import type {
 } from "../shared/account-data"
 import {
   type AppSettings,
+  type IncomingMessageNotification,
   type NotificationSettings,
   type ShortcutSettings,
   type ThemePreference,
@@ -78,11 +79,13 @@ export class AuthController {
       onSyncStateChange: (event: AccountDataSyncEvent) => void
       onDataChanged: (event: AccountDataChangedEvent) => void
       onConversationPresenceChanged: (event: ConversationPresenceEvent) => void
+      onIncomingMessage: (event: IncomingMessageNotification) => void
       onMediaProgress: (event: MediaDownloadProgress) => void
     } = {
       onSyncStateChange: () => undefined,
       onDataChanged: () => undefined,
       onConversationPresenceChanged: () => undefined,
+      onIncomingMessage: () => undefined,
       onMediaProgress: () => undefined,
     },
   ) {
@@ -200,6 +203,10 @@ export class AuthController {
     return this.settings.get()
   }
 
+  isActiveTarget(targetId: string) {
+    return this.active?.targetId === targetId && Boolean(this.active.user)
+  }
+
   async initializeAccountData(targetId: string): Promise<null> {
     await this.initialized
     const active = this.requireTarget(targetId)
@@ -226,6 +233,10 @@ export class AuthController {
 
   listConversations(...args: Parameters<AccountDataFacade["listConversations"]>) {
     return this.accountData.listConversations(...args)
+  }
+
+  markConversationRead(...args: Parameters<AccountDataFacade["markConversationRead"]>) {
+    return this.accountData.markConversationRead(...args)
   }
 
   createGroupConversation(...args: Parameters<AccountDataFacade["createGroupConversation"]>) {
@@ -708,6 +719,7 @@ export class AuthController {
       onSyncStateChange: this.accountEvents.onSyncStateChange,
       onDataChanged: this.accountEvents.onDataChanged,
       onConversationPresenceChanged: this.accountEvents.onConversationPresenceChanged,
+      onIncomingMessage: this.accountEvents.onIncomingMessage,
       onMediaProgress: this.accountEvents.onMediaProgress,
     })
   }

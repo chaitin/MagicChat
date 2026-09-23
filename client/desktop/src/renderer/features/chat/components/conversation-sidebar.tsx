@@ -10,6 +10,7 @@ import {
 } from "@hugeicons/core-free-icons"
 import type { DesktopConversation, LocalSearchResult } from "../../../../shared/account-data"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
+import { Avatar, AvatarBadge } from "@/components/ui/avatar"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import { SidebarSearchHeader } from "@/components/sidebar-search-header"
@@ -35,6 +36,7 @@ import { formatMentionText, type MentionLabelResolver } from "@/lib/message-ment
 import { cn } from "@/lib/utils"
 import { groupConversationList } from "../conversation-list-order"
 import { canPinConversation } from "../conversation-action-policy"
+import { conversationUnreadIndicator } from "../conversation-unread"
 
 export function ConversationSidebar({
   conversations,
@@ -389,44 +391,47 @@ function ConversationListAvatar({
 }) {
   const isTopic = conversation.type === "topic"
   const sourceSender = isTopic ? conversation.topic?.sourceSender : undefined
+  const unreadIndicator = conversationUnreadIndicator(conversation)
   return (
     <div
       className={cn("flex shrink-0 items-center justify-center", isTopic ? "size-7" : "size-10")}
     >
-      {isTopic ? (
-        <div className="relative size-6">
-          <EntityAvatar
-            targetId={targetId}
-            type={conversation.avatarType}
-            id={conversation.avatarId}
-            theme={resolvedTheme}
-            size={24}
-            label={`${conversation.name}头像`}
-          />
-          {sourceSender && (
-            <span className="absolute -right-1 -bottom-1 flex rounded-full bg-background p-0.5 leading-none shadow-xs">
-              <EntityAvatar
-                targetId={targetId}
-                type={sourceSender.type}
-                id={sourceSender.id}
-                theme={resolvedTheme}
-                size={12}
-                label={`${sourceSender.name}头像`}
-                className="rounded-full"
-              />
-            </span>
-          )}
-        </div>
-      ) : (
+      <Avatar size={isTopic ? "sm" : "lg"} className="rounded-sm after:hidden">
         <EntityAvatar
           targetId={targetId}
           type={conversation.avatarType}
           id={conversation.avatarId}
           theme={resolvedTheme}
-          size={40}
+          size={isTopic ? 24 : 40}
           label={`${conversation.name}头像`}
         />
-      )}
+        {sourceSender && (
+          <span className="absolute -right-1 -bottom-1 flex rounded-full bg-background p-0.5 leading-none shadow-xs">
+            <EntityAvatar
+              targetId={targetId}
+              type={sourceSender.type}
+              id={sourceSender.id}
+              theme={resolvedTheme}
+              size={12}
+              label={`${sourceSender.name}头像`}
+              className="rounded-full"
+            />
+          </span>
+        )}
+        {unreadIndicator && (
+          <AvatarBadge
+            aria-label={unreadIndicator.label}
+            className={cn(
+              "top-0 right-0 bottom-auto translate-x-1/3 -translate-y-1/3 bg-xgui-destructive text-white",
+              unreadIndicator.text === null
+                ? "size-2!"
+                : "h-4! w-auto! min-w-4 px-1 text-[10px] leading-none font-medium",
+            )}
+          >
+            {unreadIndicator.text}
+          </AvatarBadge>
+        )}
+      </Avatar>
     </div>
   )
 }

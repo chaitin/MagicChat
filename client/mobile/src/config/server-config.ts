@@ -7,6 +7,6 @@ import {
 export const officialServer: ServerConfig = {
   id: OFFICIAL_SERVER_ID,
   isBuiltIn: true,
-  name: "即应官方服务器",
+  name: "演示服务器",
   url: appConfig.officialServerUrl,
 }

@@ -8,6 +8,7 @@ export const ACCOUNT_DATA_CHANNELS = {
   createGroupConversation: "desktop-next:v1:conversation-group-create",
   setConversationPinned: "desktop-next:v1:conversation-pin-set",
   setConversationMuted: "desktop-next:v1:conversation-mute-set",
+  markConversationRead: "desktop-next:v1:conversation-read-mark",
   dismissConversation: "desktop-next:v1:conversation-dismiss",
   listMessages: "desktop-next:v1:conversation-messages-list",
   loadBeforeMessages: "desktop-next:v1:conversation-messages-load-before",
@@ -112,6 +113,8 @@ export type DesktopConversation = {
   canSend?: boolean
   canModerateMessages?: boolean
   unreadCount: number
+  lastMessageSeq?: number
+  lastReadSeq?: number
   topic?: DesktopConversationTopic
 }
 
@@ -345,6 +348,12 @@ export type SetConversationMutedInput = {
   muted: boolean
 }
 
+export type MarkConversationReadInput = {
+  targetId: string
+  conversationId: string
+  upToSeq: number
+}
+
 export type DismissConversationInput = {
   targetId: string
   conversationId: string
@@ -537,6 +546,7 @@ export interface AccountDataBridge {
     input: SetConversationPinnedInput,
   ): Promise<AuthResult<DesktopConversation[]>>
   setConversationMuted(input: SetConversationMutedInput): Promise<AuthResult<DesktopConversation[]>>
+  markConversationRead(input: MarkConversationReadInput): Promise<AuthResult<null>>
   dismissConversation(input: DismissConversationInput): Promise<AuthResult<DesktopConversation[]>>
   listMessages(input: {
     targetId: string

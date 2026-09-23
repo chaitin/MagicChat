@@ -19,7 +19,7 @@ func (s *Service) MarkRead(ctx context.Context, cmd ReadCommand) (ReadResult, er
 	if cmd.UpToSeq != nil && *cmd.UpToSeq <= 0 {
 		return ReadResult{}, invalidRequest("up_to_seq 必须是正整数", nil)
 	}
-	result, err := s.markRead(s.db, cmd.AccountID, conversationID, cmd.UpToSeq)
+	result, changed, err := s.markRead(s.db.WithContext(ctx), cmd.AccountID, conversationID, cmd.UpToSeq)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return ReadResult{}, notFound("会话不存在", err)
 	}
@@ -29,63 +29,69 @@ func (s *Service) MarkRead(ctx context.Context, cmd ReadCommand) (ReadResult, er
 	if err != nil {
 		return ReadResult{}, internalError(err)
 	}
+	if changed && s.notifications != nil {
+		s.notifications.PublishConversationReadUpdated(ctx, []string{cmd.AccountID}, result)
+	}
 	return result, nil
 }
 
-func (s *Service) markRead(db *gorm.DB, userID, conversationID string, upToSeq *int64) (ReadResult, error) {
+func (s *Service) markRead(db *gorm.DB, userID, conversationID string, upToSeq *int64) (ReadResult, bool, error) {
 	var response ReadResult
+	var changed bool
 	err := db.Transaction(func(tx *gorm.DB) error {
 		var err error
-		response, err = markReadTransaction(tx, userID, conversationID, upToSeq)
+		response, changed, err = markReadTransaction(tx, userID, conversationID, upToSeq)
 		return err
 	})
-	return response, err
+	return response, changed, err
 }
 
-func markReadTransaction(tx *gorm.DB, userID, conversationID string, upToSeq *int64) (ReadResult, error) {
+func markReadTransaction(tx *gorm.DB, userID, conversationID string, upToSeq *int64) (ReadResult, bool, error) {
 	access, err := conversationaccess.Load(tx, conversationID, true)
 	if err != nil {
-		return ReadResult{}, err
+		return ReadResult{}, false, err
 	}
 	conversation := access.Conversation
 	if conversation.Status != store.ConversationStatusActive {
-		return ReadResult{}, ErrAccessDenied
+		return ReadResult{}, false, ErrAccessDenied
 	}
 	member, err := conversationaccess.RequireUserMember(tx, access, userID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ReadResult{}, ErrAccessDenied
+			return ReadResult{}, false, ErrAccessDenied
 		}
-		return ReadResult{}, err
+		return ReadResult{}, false, err
 	}
 	if !conversationaccess.TopicSourceVisibleToMember(access, member) {
-		return ReadResult{}, ErrAccessDenied
+		return ReadResult{}, false, ErrAccessDenied
 	}
 	if access.ParentConversation != nil && access.ParentConversation.Status != store.ConversationStatusActive {
-		return ReadResult{}, ErrAccessDenied
+		return ReadResult{}, false, ErrAccessDenied
 	}
 	targetSeq := conversation.LastMessageSeq
 	if upToSeq != nil && *upToSeq < targetSeq {
 		targetSeq = *upToSeq
 	}
+	previousReadSeq := member.LastReadSeq
 	if access.IsTopic() {
 		participant, err := conversationaccess.TopicParticipant(tx, conversationID, store.ConversationMemberTypeUser, userID)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return ReadResult{}, ErrAccessDenied
+				return ReadResult{}, false, ErrAccessDenied
 			}
-			return ReadResult{}, err
+			return ReadResult{}, false, err
 		}
+		previousReadSeq = participant.LastReadSeq
 		var targetMessageID *string
 		if targetSeq == conversation.LastMessageSeq {
 			targetMessageID = conversation.LastMessageID
 		}
 		if err := conversationaccess.AdvanceTopicParticipantReadSeq(tx, conversationID, store.ConversationMemberTypeUser, userID, targetSeq, targetMessageID, time.Now().UTC()); err != nil {
-			return ReadResult{}, err
+			return ReadResult{}, false, err
 		}
 		member.LastReadSeq = participant.LastReadSeq
 	} else if err := advanceReadSeq(tx, conversationID, userID, targetSeq); err != nil {
-		return ReadResult{}, err
+		return ReadResult{}, false, err
 	}
 	if targetSeq > member.LastReadSeq {
 		member.LastReadSeq = targetSeq
@@ -93,5 +99,5 @@ func markReadTransaction(tx *gorm.DB, userID, conversationID string, upToSeq *in
 	return ReadResult{
 		ConversationID: conversationID, LastReadSeq: member.LastReadSeq,
 		UnreadCount: unreadCount(conversation.LastMessageSeq, member.LastReadSeq),
-	}, nil
+	}, member.LastReadSeq > previousReadSeq, nil
 }

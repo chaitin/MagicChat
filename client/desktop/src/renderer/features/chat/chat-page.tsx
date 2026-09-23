@@ -14,6 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { AppRail, SectionPlaceholder, type AppSection } from "./components/app-navigation"
+import { hasUnmutedUnreadConversations } from "./conversation-unread"
 import { ClientAppDialog } from "../contacts/client-app-dialog"
 import { ContactsPage } from "../contacts/contacts-page"
 import { ChatHeader } from "./components/chat-header"
@@ -56,6 +57,8 @@ export function ChatPage({
   onRequestQuit,
   onCatalogChange,
   onRefresh,
+  notificationTarget,
+  onNotificationHandled,
 }: {
   targetId: string
   serverUrl: string
@@ -71,6 +74,8 @@ export function ChatPage({
   onRequestQuit: () => void
   onCatalogChange: (catalog: ServerCatalog) => void
   onRefresh: () => void
+  notificationTarget: { targetId: string; conversationId: string; messageId: string } | null
+  onNotificationHandled: () => void
 }) {
   const { showToast } = useAnimatedToast()
   const [activeSection, setActiveSection] = useState<AppSection>("chat")
@@ -117,7 +122,27 @@ export function ChatPage({
     revokeMessage,
     retryMessage,
     loadBeforeMessages,
-  } = useChatData({ targetId, userId, userName })
+  } = useChatData({ targetId, userId, userName, activeSection })
+  useEffect(() => {
+    if (!window.desktop) return
+    void window.desktop.setActiveConversation({
+      targetId,
+      conversationId: activeSection === "chat" ? (selected?.id ?? null) : null,
+    })
+    return () => {
+      void window.desktop?.setActiveConversation({ targetId, conversationId: null })
+    }
+  }, [activeSection, selected?.id, targetId])
+  useEffect(() => {
+    if (!notificationTarget || notificationTarget.targetId !== targetId) return
+    setActiveSection("chat")
+    setSelectedId(notificationTarget.conversationId)
+    setSearchMessageTarget({
+      conversationId: notificationTarget.conversationId,
+      messageId: notificationTarget.messageId,
+    })
+    onNotificationHandled()
+  }, [notificationTarget, targetId, setSelectedId, onNotificationHandled])
   const conversationStatus = useConversationStatus({
     targetId,
     conversation: selected,
@@ -381,6 +406,7 @@ export function ChatPage({
         catalog={catalog}
         isPreview={isPreview}
         activeSection={activeSection}
+        hasUnreadMessages={hasUnmutedUnreadConversations(conversations)}
         onSectionChange={setActiveSection}
         onSignOut={onSignOut}
         onRequestQuit={onRequestQuit}

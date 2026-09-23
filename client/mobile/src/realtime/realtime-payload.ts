@@ -46,6 +46,15 @@ export function normalizeConversationMuteUpdatedPayload(payload: unknown) {
   return { conversationId: value.conversation_id, muted: value.muted }
 }
 
+export function normalizeConversationReadUpdatedPayload(payload: unknown) {
+  const value = asRecord(payload)
+  if (!value || typeof value.conversation_id !== "string" || !value.conversation_id.trim() ||
+    typeof value.last_read_seq !== "number" || !Number.isSafeInteger(value.last_read_seq) || value.last_read_seq < 0) {
+    throw new Error("实时会话已读事件格式不正确")
+  }
+  return { conversationId: value.conversation_id, lastReadSeq: value.last_read_seq }
+}
+
 export function normalizeTopicEventPayload(payload: unknown) {
   const value = asRecord(payload)
   if (!value || typeof value.conversation_id !== "string" || typeof value.parent_conversation_id !== "string" || typeof value.source_message_id !== "string") throw new Error("实时话题事件格式不正确")

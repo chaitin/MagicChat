@@ -6,6 +6,7 @@ import {
   type CreateMessageTopicInput,
   type DismissConversationInput,
   type LocalSearchInput,
+  type MarkConversationReadInput,
   type MessageReactionUsersInput,
   type RetryMessageInput,
   type RevokeMessageInput,
@@ -42,6 +43,9 @@ export function registerAccountDataIpc({
   handle(ACCOUNT_DATA_CHANNELS.searchLocal, (input) => auth.searchLocal(input as LocalSearchInput))
   handle(ACCOUNT_DATA_CHANNELS.listConversations, (input) =>
     auth.listConversations(input as string),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.markConversationRead, (input) =>
+    auth.markConversationRead(input as MarkConversationReadInput),
   )
   handle(ACCOUNT_DATA_CHANNELS.createGroupConversation, (input) =>
     auth.createGroupConversation(input as CreateGroupConversationInput),

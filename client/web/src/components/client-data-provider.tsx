@@ -816,7 +816,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const applyConversationMessageToList = useCallback(
-    (message: ClientMessage, options: { countUnread?: boolean } = {}) => {
+    (message: ClientMessage, options: { countUnread?: boolean; markRead?: boolean } = {}) => {
       const conversationExists = conversationsRef.current.some(
         (conversation) => conversation.id === message.conversationId
       )
@@ -849,9 +849,10 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
             message
           ),
           lastMessageSummary: getMessageSummary(message),
-          unreadCount: shouldIncrementUnread
-            ? conversation.unreadCount + 1
-            : conversation.unreadCount,
+          lastReadSeq: options.markRead ? Math.max(conversation.lastReadSeq, message.seq) : conversation.lastReadSeq,
+          unreadCount: options.markRead
+            ? Math.max(0, Math.max(conversation.lastMessageSeq, message.seq) - Math.max(conversation.lastReadSeq, message.seq))
+            : shouldIncrementUnread ? conversation.unreadCount + 1 : conversation.unreadCount,
         }
 
         return orderConversations([
@@ -1151,6 +1152,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
       saveLatestCachedMessage(message)
       applyConversationMessageToList(message, {
         countUnread: !fromCurrentUser && !visibleInActiveConversation,
+        markRead: fromCurrentUser,
       })
     },
     [
@@ -1422,6 +1424,21 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     []
   )
 
+  const updateConversationLastReadSeq = useCallback(
+    (conversationId: string, lastReadSeq: number) => {
+      setConversations((current) => current.map((conversation) => {
+        if (conversation.id !== conversationId || lastReadSeq <= conversation.lastReadSeq) return conversation
+        const nextReadSeq = lastReadSeq
+        return {
+          ...conversation,
+          lastReadSeq: nextReadSeq,
+          unreadCount: Math.max(0, conversation.lastMessageSeq - nextReadSeq),
+        }
+      }))
+    },
+    []
+  )
+
   const updateConversationPinned = useCallback(
     (conversationId: string, pinned: boolean) => {
       if (!conversationId) {
@@ -1556,8 +1573,8 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
             conversation.id === result.conversationId
               ? {
                   ...conversation,
-                  lastReadSeq: result.lastReadSeq,
-                  unreadCount: result.unreadCount,
+                  lastReadSeq: Math.max(conversation.lastReadSeq, result.lastReadSeq),
+                  unreadCount: Math.max(0, conversation.lastMessageSeq - Math.max(conversation.lastReadSeq, result.lastReadSeq)),
                 }
               : conversation
           )
@@ -2073,6 +2090,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     updateConversationLastMessage,
     updateConversationLastMentionedSeq,
     updateConversationLastChoiceSeq,
+    updateConversationLastReadSeq,
     updateConversationPinned,
     updateConversationMuted,
     updateMessageTopic,
