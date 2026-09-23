@@ -67,6 +67,7 @@ export const MEDIA_CHANNELS = {
   ensureCached: "desktop-next:v1:media-ensure-cached",
   checkCached: "desktop-next:v1:media-check-cached",
   revealCached: "desktop-next:v1:media-reveal-cached",
+  copyImage: "desktop-next:v1:media-copy-image",
   openPreview: "desktop-next:v1:media-open-preview",
   downloadProgress: "desktop-next:v1:media-download-progress",
   previewInitialize: "desktop-next:v1:media-preview-initialize",
@@ -81,6 +82,7 @@ export interface MediaBridge {
   ensureCached(input: MediaCacheRequest): Promise<AuthResult<CachedMedia>>
   checkCached(input: MediaCacheRequest): Promise<AuthResult<CachedMedia | null>>
   revealCached(input: MediaRevealRequest): Promise<AuthResult<null>>
+  copyImage(input: MediaCacheRequest): Promise<AuthResult<null>>
   openPreview(input: MediaPreviewRequest): Promise<AuthResult<null>>
   onDownloadProgress(callback: (event: MediaDownloadProgress) => void): () => void
 }

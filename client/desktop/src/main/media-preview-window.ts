@@ -69,6 +69,11 @@ export class MediaPreviewWindow {
     window.on("unmaximize", sendMaximizedState)
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }))
     window.webContents.on("will-navigate", (event) => event.preventDefault())
+    window.webContents.on("before-input-event", (event, input) => {
+      if (input.type !== "keyDown" || input.key !== "Escape") return
+      event.preventDefault()
+      window.close()
+    })
 
     if (this.developmentUrl) {
       const url = new URL(this.developmentUrl)

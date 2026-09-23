@@ -1,5 +1,6 @@
+import { readFile, stat } from "node:fs/promises"
 import path from "node:path"
-import { shell } from "electron"
+import { clipboard, shell } from "electron"
 import { AuthFailure } from "../../shared/auth"
 import {
   MEDIA_CHANNELS,
@@ -8,6 +9,7 @@ import {
   type MediaRevealRequest,
 } from "../../shared/media"
 import type { AuthController } from "../auth-controller"
+import { decodePreviewImage } from "../media-preview-image-decoder"
 import type { MediaPreviewWindow } from "../media-preview-window"
 import type { IpcRegistrar } from "./register-account-data-ipc"
 
@@ -22,6 +24,44 @@ export function registerMediaIpc({
 }) {
   handle(MEDIA_CHANNELS.ensureCached, (input) => auth.ensureMediaCached(input as MediaCacheRequest))
   handle(MEDIA_CHANNELS.checkCached, (input) => auth.checkMediaCached(input as MediaCacheRequest))
+  handle(MEDIA_CHANNELS.copyImage, async (input) => {
+    const value = input as MediaCacheRequest | undefined
+    if (!value || value.category !== "image") {
+      throw new AuthFailure("invalid_media_copy", "图片复制请求不正确")
+    }
+    let filePath: string
+    let contentType: string
+    if (value.fileId.startsWith("outgoing:")) {
+      const outgoing = await auth.getOutgoingMedia(
+        value.targetId,
+        value.fileId.slice("outgoing:".length),
+      )
+      if (outgoing.category !== "image") {
+        throw new AuthFailure("unsupported_media_copy", "仅图片支持复制")
+      }
+      filePath = outgoing.filePath
+      contentType = outgoing.contentType
+    } else {
+      const cached = await auth.ensureMediaCached(value)
+      if (cached.category !== "image") {
+        throw new AuthFailure("unsupported_media_copy", "仅图片支持复制")
+      }
+      filePath = (await auth.getCachedMediaResource(value.targetId, cached.cacheKey)).filePath
+      contentType = cached.contentType
+    }
+    const file = await stat(filePath).catch(() => null)
+    if (!file?.isFile()) throw new AuthFailure("media_not_found", "图片文件不存在")
+    if (file.size > 20 * 1024 * 1024) {
+      throw new AuthFailure("media_too_large", "图片过大，无法复制")
+    }
+    const image = await decodePreviewImage(await readFile(filePath), contentType)
+    const { width, height } = image.getSize()
+    if (width * height > 25_000_000) {
+      throw new AuthFailure("media_too_large", "图片尺寸过大，无法复制")
+    }
+    clipboard.writeImage(image)
+    return null
+  })
   handle(MEDIA_CHANNELS.revealCached, async (input) => {
     const value = input as MediaRevealRequest | undefined
     if (!value || typeof value.targetId !== "string" || typeof value.cacheKey !== "string") {

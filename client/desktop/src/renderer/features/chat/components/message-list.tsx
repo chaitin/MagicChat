@@ -16,6 +16,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import type { MentionLabelResolver } from "@/lib/message-mentions"
 import { cn } from "@/lib/utils"
 import { MessageBodyRenderer } from "../message-body-renderer"
+import { MessageCopyMenu } from "../message-copy-menu"
 import { MessageReactionChips } from "../message-reaction-chips"
 import { MessageReactionPicker } from "../message-reaction-picker"
 import { TopicReplyPreview } from "../topic-reply-preview"
@@ -258,7 +259,10 @@ function MessageRow({
         <div
           className={cn("flex max-w-full items-end gap-1.5", message.isMine && "flex-row-reverse")}
         >
-          <div
+          <MessageCopyMenu
+            body={message.body}
+            summary={message.content}
+            targetId={targetId}
             className={cn(
               "group/bubble max-w-full rounded-xl text-sm leading-6",
               flushBubble ? "overflow-hidden p-0" : "px-3 py-2.5",
@@ -323,7 +327,7 @@ function MessageRow({
                 onOpen={() => onOpenTopic(message.topic!.conversationId)}
               />
             )}
-          </div>
+          </MessageCopyMenu>
           <MessageStatus
             message={message}
             onRetry={() => onRetryMessage(message)}

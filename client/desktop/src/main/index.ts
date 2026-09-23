@@ -439,7 +439,7 @@ void app.whenReady().then(async () => {
     return null
   })
   handleIpc(DESKTOP_CHANNELS.copyText, async (input) => {
-    if (typeof input !== "string" || !input || input.length > 4096) {
+    if (typeof input !== "string" || !input || input.length > 1_000_000) {
       throw new AuthFailure("invalid_clipboard_text", "复制内容不正确")
     }
     clipboard.writeText(input)

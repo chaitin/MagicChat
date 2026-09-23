@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { CollapsibleMessageContent } from "../collapsible-message-content"
+import { MessageCopyMenu } from "../message-copy-menu"
 import { ChartBody } from "./chart-body"
 import { FileBody, ImageBody, VideoBody, VoiceBody } from "./media-body"
 import { CardBody, ChoiceBody, LinkBody } from "./rich-body"
@@ -146,13 +147,18 @@ function ForwardBundleBody({
                   <span className="truncate font-medium text-foreground/80">{item.senderName}</span>
                   <span className="shrink-0">{formatDateTime(item.sentAt)}</span>
                 </div>
-                <div className="w-fit max-w-full rounded-md bg-zinc-100 p-3 dark:bg-zinc-800">
+                <MessageCopyMenu
+                  body={item.body}
+                  summary={item.summary}
+                  targetId={targetId}
+                  className="w-fit max-w-full rounded-md bg-muted p-3 hover:bg-xgui-background-6"
+                >
                   <MessageBodyContent
                     body={item.body}
                     targetId={targetId}
                     collapseLongContent={false}
                   />
-                </div>
+                </MessageCopyMenu>
               </div>
             ))}
           </div>

@@ -58,6 +58,7 @@ const bridge: DesktopBridge = {
     ensureCached: (input) => ipcRenderer.invoke(MEDIA_CHANNELS.ensureCached, input),
     checkCached: (input) => ipcRenderer.invoke(MEDIA_CHANNELS.checkCached, input),
     revealCached: (input) => ipcRenderer.invoke(MEDIA_CHANNELS.revealCached, input),
+    copyImage: (input) => ipcRenderer.invoke(MEDIA_CHANNELS.copyImage, input),
     openPreview: (input) => ipcRenderer.invoke(MEDIA_CHANNELS.openPreview, input),
     onDownloadProgress: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, value: MediaDownloadProgress) =>

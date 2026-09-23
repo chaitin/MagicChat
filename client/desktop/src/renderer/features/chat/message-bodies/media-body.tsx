@@ -66,10 +66,7 @@ export function ImageBody({
             onError={() => setImageFailed(true)}
           />
         ) : (
-          <MediaProgressOverlay
-            downloadedBytes={media.downloadedBytes}
-            totalBytes={media.totalBytes}
-          />
+          <ImageLoadingOverlay />
         )}
       </button>
       <MediaCaption body={body} flush={flush} />
@@ -300,6 +297,17 @@ function MediaCaption({
         <TextBody content={body.caption} />
       )}
     </div>
+  )
+}
+
+function ImageLoadingOverlay() {
+  return (
+    <span
+      className="absolute inset-0 flex items-center justify-center bg-black/35 text-white"
+      aria-label="图片加载中"
+    >
+      <HugeiconsIcon icon={Loading03Icon} className="size-6 animate-spin" aria-hidden />
+    </span>
   )
 }
 
