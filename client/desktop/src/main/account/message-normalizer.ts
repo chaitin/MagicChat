@@ -116,7 +116,7 @@ export function summarizeDesktopMessageBody(body: DesktopMessageBody): string {
     case "chart":
       return body.title
     case "forward_bundle":
-      return `[聊天记录] ${body.itemCount} 条消息`
+      return forwardBundleSummary(body)
     case "system_event":
       return body.summary
     case "revoked":
@@ -124,6 +124,13 @@ export function summarizeDesktopMessageBody(body: DesktopMessageBody): string {
     case "unsupported":
       return "暂不支持查看该消息"
   }
+}
+
+function forwardBundleSummary(body: Extract<DesktopMessageBody, { type: "forward_bundle" }>) {
+  const characters = Array.from(body.items[0]?.summary.trim() ?? "")
+  const preview =
+    characters.length <= 100 ? characters.join("") : `${characters.slice(0, 100).join("").trim()}…`
+  return `[聊天记录] ${body.itemCount} 条 - ${preview || "消息"}`
 }
 
 function normalizeBody(value: unknown, depth: number): DesktopMessageBody {

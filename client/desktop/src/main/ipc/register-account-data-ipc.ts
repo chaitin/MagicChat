@@ -3,6 +3,7 @@ import {
   ACCOUNT_DATA_CHANNELS,
   type AvatarRequest,
   type CreateGroupConversationInput,
+  type DismissConversationInput,
   type LocalSearchInput,
   type MessageReactionUsersInput,
   type RetryMessageInput,
@@ -11,6 +12,8 @@ import {
   type SendRichMessageInput,
   type SendTextMessageInput,
   type SendVideoMessageInput,
+  type SetConversationMutedInput,
+  type SetConversationPinnedInput,
   type SetMessageReactionInput,
   type SubmitChoiceResponseInput,
 } from "../../shared/account-data"
@@ -39,6 +42,15 @@ export function registerAccountDataIpc({
   )
   handle(ACCOUNT_DATA_CHANNELS.createGroupConversation, (input) =>
     auth.createGroupConversation(input as CreateGroupConversationInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.setConversationPinned, (input) =>
+    auth.setConversationPinned(input as SetConversationPinnedInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.setConversationMuted, (input) =>
+    auth.setConversationMuted(input as SetConversationMutedInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.dismissConversation, (input) =>
+    auth.dismissConversation(input as DismissConversationInput),
   )
   handle(ACCOUNT_DATA_CHANNELS.listMessages, (input) => {
     const value = input as { targetId?: string; conversationId?: string } | undefined

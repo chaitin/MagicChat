@@ -74,6 +74,12 @@ const bridge: DesktopBridge = {
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listConversations, targetId),
     createGroupConversation: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.createGroupConversation, input),
+    setConversationPinned: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.setConversationPinned, input),
+    setConversationMuted: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.setConversationMuted, input),
+    dismissConversation: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.dismissConversation, input),
     listMessages: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listMessages, input),
     loadBeforeMessages: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.loadBeforeMessages, input),

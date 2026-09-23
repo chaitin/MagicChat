@@ -6,6 +6,9 @@ export const ACCOUNT_DATA_CHANNELS = {
   searchLocal: "desktop-next:v1:account-data-search-local",
   listConversations: "desktop-next:v1:conversations-list",
   createGroupConversation: "desktop-next:v1:conversation-group-create",
+  setConversationPinned: "desktop-next:v1:conversation-pin-set",
+  setConversationMuted: "desktop-next:v1:conversation-mute-set",
+  dismissConversation: "desktop-next:v1:conversation-dismiss",
   listMessages: "desktop-next:v1:conversation-messages-list",
   loadBeforeMessages: "desktop-next:v1:conversation-messages-load-before",
   setMessageReaction: "desktop-next:v1:conversation-message-reaction-set",
@@ -295,6 +298,23 @@ export type CreateGroupConversationInput = {
   appIds: string[]
 }
 
+export type SetConversationPinnedInput = {
+  targetId: string
+  conversationId: string
+  pinned: boolean
+}
+
+export type SetConversationMutedInput = {
+  targetId: string
+  conversationId: string
+  muted: boolean
+}
+
+export type DismissConversationInput = {
+  targetId: string
+  conversationId: string
+}
+
 export type LocalSearchCategory = "all" | "contacts" | "apps" | "groups" | "messages"
 
 export type LocalSearchInput = {
@@ -449,6 +469,11 @@ export interface AccountDataBridge {
   createGroupConversation(
     input: CreateGroupConversationInput,
   ): Promise<AuthResult<DesktopConversation>>
+  setConversationPinned(
+    input: SetConversationPinnedInput,
+  ): Promise<AuthResult<DesktopConversation[]>>
+  setConversationMuted(input: SetConversationMutedInput): Promise<AuthResult<DesktopConversation[]>>
+  dismissConversation(input: DismissConversationInput): Promise<AuthResult<DesktopConversation[]>>
   listMessages(input: {
     targetId: string
     conversationId: string

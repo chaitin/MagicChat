@@ -226,6 +226,18 @@ export class AuthController {
     return this.accountData.createGroupConversation(...args)
   }
 
+  setConversationPinned(...args: Parameters<AccountDataFacade["setConversationPinned"]>) {
+    return this.accountData.setConversationPinned(...args)
+  }
+
+  setConversationMuted(...args: Parameters<AccountDataFacade["setConversationMuted"]>) {
+    return this.accountData.setConversationMuted(...args)
+  }
+
+  dismissConversation(...args: Parameters<AccountDataFacade["dismissConversation"]>) {
+    return this.accountData.dismissConversation(...args)
+  }
+
   listMessages(...args: Parameters<AccountDataFacade["listMessages"]>) {
     return this.accountData.listMessages(...args)
   }

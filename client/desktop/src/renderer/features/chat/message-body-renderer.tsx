@@ -14,6 +14,7 @@ export function MessageBodyRenderer({
   showChoiceResponseCounts = false,
   onChoiceRespond,
   flushMedia = false,
+  flushInteractiveCard = false,
 }: {
   body: DesktopMessageBody
   targetId: string
@@ -25,6 +26,7 @@ export function MessageBodyRenderer({
   showChoiceResponseCounts?: boolean
   onChoiceRespond?: (optionIds: string[]) => Promise<void>
   flushMedia?: boolean
+  flushInteractiveCard?: boolean
 }) {
   return (
     <MediaContext.Provider value={{ targetId, conversationName }}>
@@ -37,6 +39,7 @@ export function MessageBodyRenderer({
           showChoiceResponseCounts={showChoiceResponseCounts}
           onChoiceRespond={onChoiceRespond}
           flushMedia={flushMedia}
+          flushInteractiveCard={flushInteractiveCard}
           collapseLongContent
         />
       </MentionContext.Provider>

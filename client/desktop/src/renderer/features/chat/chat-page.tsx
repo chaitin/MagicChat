@@ -87,6 +87,9 @@ export function ChatPage({
     scrollToLatestMessage,
     resolveMentionLabel,
     setMessageReaction,
+    setConversationPinned,
+    setConversationMuted,
+    dismissConversation,
     submitChoiceResponse,
     applySentMessages,
     sendTextMessage,
@@ -309,6 +312,9 @@ export function ChatPage({
             targetId={targetId}
             resolvedTheme={resolvedTheme}
             mentionLabelResolver={resolveMentionLabel}
+            onSetPinned={setConversationPinned}
+            onSetMuted={setConversationMuted}
+            onDismiss={dismissConversation}
             onSelect={setSelectedId}
             onCreateGroup={() => void openActionDialog("group")}
             onCreateApp={() => void openActionDialog("app")}

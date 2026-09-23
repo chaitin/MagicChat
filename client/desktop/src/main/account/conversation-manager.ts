@@ -144,6 +144,59 @@ export class ConversationManager {
     return this.database.listConversations()
   }
 
+  async setConversationPinned(conversationId: string, pinned: boolean) {
+    this.assertConversationId(conversationId)
+    if (typeof pinned !== "boolean") {
+      throw new AuthFailure("invalid_conversation_pin", "会话置顶状态不正确")
+    }
+    const path = `/api/client/conversations/${encodeURIComponent(conversationId)}/pin`
+    const data = pinned ? await this.client.put(path, {}) : await this.client.delete(path)
+    if (
+      !isRecord(data) ||
+      data.conversation_id !== conversationId ||
+      typeof data.pinned !== "boolean"
+    ) {
+      throw new AuthFailure("invalid_response", "会话置顶响应格式不正确")
+    }
+    if (!this.database.setConversationPinned(conversationId, data.pinned)) {
+      throw new AuthFailure("conversation_not_found", "对话不存在")
+    }
+    return this.listConversations()
+  }
+
+  async setConversationMuted(conversationId: string, muted: boolean) {
+    this.assertConversationId(conversationId)
+    if (typeof muted !== "boolean") {
+      throw new AuthFailure("invalid_conversation_mute", "会话免打扰状态不正确")
+    }
+    const path = `/api/client/conversations/${encodeURIComponent(conversationId)}/mute`
+    const data = muted ? await this.client.put(path, {}) : await this.client.delete(path)
+    if (
+      !isRecord(data) ||
+      data.conversation_id !== conversationId ||
+      typeof data.muted !== "boolean"
+    ) {
+      throw new AuthFailure("invalid_response", "会话免打扰响应格式不正确")
+    }
+    if (!this.database.setConversationMuted(conversationId, data.muted)) {
+      throw new AuthFailure("conversation_not_found", "对话不存在")
+    }
+    return this.listConversations()
+  }
+
+  async dismissConversation(conversationId: string) {
+    this.assertConversationId(conversationId)
+    const data = await this.client.delete(
+      `/api/client/conversations/${encodeURIComponent(conversationId)}`,
+    )
+    if (!isRecord(data) || data.conversation_id !== conversationId) {
+      throw new AuthFailure("invalid_response", "删除对话响应格式不正确")
+    }
+    this.database.removeCurrentConversation(conversationId)
+    this.virtualMessages.delete(conversationId)
+    return this.listConversations()
+  }
+
   async createGroupConversation(input: { name: string; memberIds: string[]; appIds: string[] }) {
     const name = typeof input.name === "string" ? input.name.trim() : ""
     if (!name || name.length > 256) {

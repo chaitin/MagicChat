@@ -10,7 +10,15 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { cn } from "@/lib/utils"
 import { MarkdownBody, TextBody } from "./text-body"
 
-export function LinkBody({ title, url }: { title: string; url: string }) {
+export function LinkBody({
+  title,
+  url,
+  flush = false,
+}: {
+  title: string
+  url: string
+  flush?: boolean
+}) {
   const { showToast } = useAnimatedToast()
 
   async function openLink() {
@@ -27,25 +35,27 @@ export function LinkBody({ title, url }: { title: string; url: string }) {
   }
 
   return (
-    <div className="flex w-80 max-w-full items-center gap-3">
+    <button
+      type="button"
+      className={cn(
+        "flex w-80 max-w-full cursor-pointer items-center gap-3 text-left",
+        flush && "px-3 py-2.5",
+      )}
+      onClick={() => void openLink()}
+    >
       <HugeiconsIcon
         icon={ExternalLinkIcon}
         className="size-7 shrink-0 text-foreground"
         strokeWidth={1.5}
         aria-hidden
       />
-      <div className="min-w-0 flex-1">
-        <div className="truncate">{title}</div>
-        <button
-          type="button"
-          className="block max-w-full cursor-pointer truncate text-left text-xs text-muted-foreground group-hover/bubble:text-xgui-link"
-          title={url}
-          onClick={() => void openLink()}
-        >
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{title}</span>
+        <span className="block max-w-full truncate text-xs text-muted-foreground" title={url}>
           {url}
-        </button>
-      </div>
-    </div>
+        </span>
+      </span>
+    </button>
   )
 }
 

@@ -2,6 +2,7 @@ import type {
   AvatarRequest,
   ContactTargetInput,
   CreateGroupConversationInput,
+  DismissConversationInput,
   FriendRequestListInput,
   LocalSearchInput,
   MessageReactionUsersInput,
@@ -12,6 +13,8 @@ import type {
   SendRichMessageInput,
   SendTextMessageInput,
   SendVideoMessageInput,
+  SetConversationMutedInput,
+  SetConversationPinnedInput,
   SetMessageReactionInput,
   SubmitChoiceResponseInput,
   UpdateClientAppInput,
@@ -39,6 +42,21 @@ export class AccountDataFacade {
   async createGroupConversation(input: CreateGroupConversationInput) {
     await this.ready(input?.targetId)
     return this.requireRuntime().createGroupConversation(input)
+  }
+
+  async setConversationPinned(input: SetConversationPinnedInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().setConversationPinned(input.conversationId, input.pinned)
+  }
+
+  async setConversationMuted(input: SetConversationMutedInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().setConversationMuted(input.conversationId, input.muted)
+  }
+
+  async dismissConversation(input: DismissConversationInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().dismissConversation(input.conversationId)
   }
 
   async listMessages(targetId: string, conversationId: string) {

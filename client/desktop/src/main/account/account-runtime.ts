@@ -98,6 +98,33 @@ export class AccountRuntime {
     return conversation
   }
 
+  async setConversationPinned(conversationId: string, pinned: boolean) {
+    this.assertInitialized()
+    const conversations = await this.conversationManager!.setConversationPinned(
+      conversationId,
+      pinned,
+    )
+    this.notifyChanged(["conversations"], [conversationId])
+    return conversations
+  }
+
+  async setConversationMuted(conversationId: string, muted: boolean) {
+    this.assertInitialized()
+    const conversations = await this.conversationManager!.setConversationMuted(
+      conversationId,
+      muted,
+    )
+    this.notifyChanged(["conversations"], [conversationId])
+    return conversations
+  }
+
+  async dismissConversation(conversationId: string) {
+    this.assertInitialized()
+    const conversations = await this.conversationManager!.dismissConversation(conversationId)
+    this.notifyChanged(["conversations"], [conversationId])
+    return conversations
+  }
+
   listMessages(conversationId: string): DesktopMessage[] {
     this.assertInitialized()
     return this.conversationManager!.listMessages(conversationId)

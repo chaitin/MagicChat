@@ -146,7 +146,7 @@
   --secondary: var(--xgui-secondary-background);
   --secondary-foreground: var(--xgui-text-primary);
   --muted: var(--xgui-background-1);
-  --muted-foreground: var(--xgui-text-secondary);
+  --muted-foreground: #737373;
   --accent: var(--xgui-secondary-background);
   --accent-foreground: var(--xgui-text-primary);
   --destructive: var(--xgui-destructive);
@@ -219,7 +219,7 @@
   --secondary: var(--xgui-secondary-background);
   --secondary-foreground: var(--xgui-text-primary);
   --muted: var(--xgui-background-1);
-  --muted-foreground: var(--xgui-text-secondary);
+  --muted-foreground: #a3a3a3;
   --accent: var(--xgui-secondary-background);
   --accent-foreground: var(--xgui-text-primary);
   --destructive: var(--xgui-destructive);

@@ -187,6 +187,52 @@ export function useChatData({
     [pendingReactionKeys, showToast, targetId],
   )
 
+  const setConversationPinned = useCallback(
+    async (conversationId: string, pinned: boolean) => {
+      if (!window.desktop) throw new Error("桌面服务暂不可用")
+      const result = await window.desktop.accountData.setConversationPinned({
+        targetId,
+        conversationId,
+        pinned,
+      })
+      if (!result.ok) throw new Error(result.error.message)
+      setConversations(result.data)
+    },
+    [targetId],
+  )
+
+  const setConversationMuted = useCallback(
+    async (conversationId: string, muted: boolean) => {
+      if (!window.desktop) throw new Error("桌面服务暂不可用")
+      const result = await window.desktop.accountData.setConversationMuted({
+        targetId,
+        conversationId,
+        muted,
+      })
+      if (!result.ok) throw new Error(result.error.message)
+      setConversations(result.data)
+    },
+    [targetId],
+  )
+
+  const dismissConversation = useCallback(
+    async (conversationId: string) => {
+      if (!window.desktop) throw new Error("桌面服务暂不可用")
+      const result = await window.desktop.accountData.dismissConversation({
+        targetId,
+        conversationId,
+      })
+      if (!result.ok) throw new Error(result.error.message)
+      setConversations(result.data)
+      if (selectedIdRef.current === conversationId) {
+        setSelectedIdState(null)
+        setTransientConversation(null)
+        setMessages([])
+      }
+    },
+    [targetId],
+  )
+
   const submitChoiceResponse = useCallback(
     async (message: DesktopMessage, optionIds: string[]) => {
       if (!window.desktop) throw new Error("桌面服务暂不可用")
@@ -441,6 +487,9 @@ export function useChatData({
     scrollToLatestMessage,
     resolveMentionLabel,
     setMessageReaction,
+    setConversationPinned,
+    setConversationMuted,
+    dismissConversation,
     submitChoiceResponse,
     applySentMessages,
     sendTextMessage,

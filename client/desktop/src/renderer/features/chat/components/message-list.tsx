@@ -209,6 +209,8 @@ function MessageRow({
   }
 
   const flushMediaBubble = shouldFlushMediaBubble(message)
+  const flushInteractiveCardBubble = shouldFlushInteractiveCardBubble(message)
+  const flushBubble = flushMediaBubble || flushInteractiveCardBubble
   return (
     <article
       data-message-id={message.id}
@@ -259,10 +261,16 @@ function MessageRow({
           <div
             className={cn(
               "group/bubble max-w-full rounded-xl text-sm leading-6",
-              flushMediaBubble ? "overflow-hidden p-0" : "px-3 py-2.5",
+              flushBubble ? "overflow-hidden p-0" : "px-3 py-2.5",
               message.isMine
-                ? "rounded-tr-sm bg-xgui-brand-1 hover:bg-xgui-brand-6"
-                : "rounded-tl-sm bg-muted hover:bg-xgui-background-6",
+                ? cn(
+                    "rounded-tr-sm bg-xgui-brand-1",
+                    !flushInteractiveCardBubble && "hover:bg-xgui-brand-6",
+                  )
+                : cn(
+                    "rounded-tl-sm bg-muted",
+                    !flushInteractiveCardBubble && "hover:bg-xgui-background-6",
+                  ),
             )}
           >
             {message.replyTo && (
@@ -288,9 +296,10 @@ function MessageRow({
                   : (optionIds) => onSubmitChoice(message, optionIds)
               }
               flushMedia={flushMediaBubble}
+              flushInteractiveCard={flushInteractiveCardBubble}
             />
             {message.virtualType !== "topic_source" && message.reactions.length > 0 && (
-              <div className={cn("max-w-full min-w-0", flushMediaBubble && "mx-2 mb-2")}>
+              <div className={cn("max-w-full min-w-0", flushBubble && "mx-2 mb-2")}>
                 <MessageReactionChips
                   targetId={targetId}
                   conversationId={message.conversationId}
@@ -438,6 +447,14 @@ function formatMessageTime(value: string): string {
 function shouldFlushMediaBubble(message: DesktopMessage) {
   return (
     (message.body.type === "image" || message.body.type === "video") &&
+    !message.replyTo &&
+    !message.topic
+  )
+}
+
+function shouldFlushInteractiveCardBubble(message: DesktopMessage) {
+  return (
+    (message.body.type === "link" || message.body.type === "forward_bundle") &&
     !message.replyTo &&
     !message.topic
   )
