@@ -425,7 +425,7 @@ function ConversationListAvatar({
               "top-0 right-0 bottom-auto translate-x-1/3 -translate-y-1/3 bg-xgui-destructive text-white",
               unreadIndicator.text === null
                 ? "size-2!"
-                : "h-4! w-auto! min-w-4 px-1 text-[10px] leading-none font-medium",
+                : "h-4! w-auto! min-w-4 px-1 text-[10px] leading-4 font-medium",
             )}
           >
             {unreadIndicator.text}
