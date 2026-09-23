@@ -1,4 +1,11 @@
-import { Fragment, type RefObject } from "react"
+import {
+  Fragment,
+  forwardRef,
+  useRef,
+  type ComponentPropsWithoutRef,
+  type ReactNode,
+  type RefObject,
+} from "react"
 import {
   AlertCircleIcon,
   ArrowDown02Icon,
@@ -13,10 +20,15 @@ import { HugeiconsIcon, type HugeiconsIconProps } from "@/components/icons/hugei
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import type { MentionLabelResolver } from "@/lib/message-mentions"
+import { formatMentionText, type MentionLabelResolver } from "@/lib/message-mentions"
 import { cn } from "@/lib/utils"
+import {
+  canCreateDesktopMessageTopic,
+  canRevokeDesktopMessage,
+  getDesktopMessageEditableBody,
+} from "../message-actions"
 import { MessageBodyRenderer } from "../message-body-renderer"
-import { MessageCopyMenu } from "../message-copy-menu"
+import { MessageActionsDropdown, MessageCopyMenu } from "../message-copy-menu"
 import { MessageReactionChips } from "../message-reaction-chips"
 import { MessageReactionPicker } from "../message-reaction-picker"
 import { TopicReplyPreview } from "../topic-reply-preview"
@@ -32,8 +44,12 @@ export function MessageList({
   resolvedTheme,
   conversationName,
   showChoiceResponseCounts,
+  topicCreationEnabled,
+  revokeEnabled,
+  canModerateMessages,
   mentionLabelResolver,
   pendingReactionKeys,
+  revokingMessageIds,
   highlightedMessageId,
   newMessageCount,
   onViewportScroll,
@@ -42,8 +58,11 @@ export function MessageList({
   onSetReaction,
   onSubmitChoice,
   onOpenTopic,
+  onCreateTopic,
+  onReeditRevokedMessage,
+  onReplyMessage,
+  onRevokeMessage,
   onRetryMessage,
-  onPendingFeature,
 }: {
   messages: DesktopMessage[]
   loading: boolean
@@ -55,8 +74,12 @@ export function MessageList({
   resolvedTheme: "light" | "dark"
   conversationName: string
   showChoiceResponseCounts: boolean
+  topicCreationEnabled: boolean
+  revokeEnabled: boolean
+  canModerateMessages: boolean
   mentionLabelResolver: MentionLabelResolver
   pendingReactionKeys: Set<string>
+  revokingMessageIds: Set<string>
   highlightedMessageId: string | null
   newMessageCount: number
   onViewportScroll: (viewport: HTMLDivElement) => void
@@ -65,8 +88,11 @@ export function MessageList({
   onSetReaction: (message: DesktopMessage, text: string, reacted: boolean) => Promise<void>
   onSubmitChoice: (message: DesktopMessage, optionIds: string[]) => Promise<void>
   onOpenTopic: (conversationId: string) => void
+  onCreateTopic: (message: DesktopMessage) => void
+  onReeditRevokedMessage: (message: DesktopMessage) => void
+  onReplyMessage: (message: DesktopMessage) => void
+  onRevokeMessage: (message: DesktopMessage) => Promise<void>
   onRetryMessage: (message: DesktopMessage) => void
-  onPendingFeature: (label: string) => void
 }) {
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1">
@@ -122,14 +148,21 @@ export function MessageList({
                       resolvedTheme={resolvedTheme}
                       conversationName={conversationName}
                       showChoiceResponseCounts={showChoiceResponseCounts}
+                      topicCreationEnabled={topicCreationEnabled}
+                      revokeEnabled={revokeEnabled}
+                      canModerateMessages={canModerateMessages}
                       mentionLabelResolver={mentionLabelResolver}
                       pendingReactionKeys={pendingReactionKeys}
+                      revokingMessageIds={revokingMessageIds}
                       highlighted={message.id === highlightedMessageId}
                       onSetReaction={onSetReaction}
                       onSubmitChoice={onSubmitChoice}
                       onOpenTopic={onOpenTopic}
+                      onCreateTopic={onCreateTopic}
+                      onReeditRevokedMessage={onReeditRevokedMessage}
+                      onReplyMessage={onReplyMessage}
+                      onRevokeMessage={onRevokeMessage}
                       onRetryMessage={onRetryMessage}
-                      onPendingFeature={onPendingFeature}
                     />
                   </Fragment>
                 ))}
@@ -162,14 +195,21 @@ function MessageRow({
   resolvedTheme,
   conversationName,
   showChoiceResponseCounts,
+  topicCreationEnabled,
+  revokeEnabled,
+  canModerateMessages,
   mentionLabelResolver,
   pendingReactionKeys,
+  revokingMessageIds,
   highlighted,
   onSetReaction,
   onSubmitChoice,
   onOpenTopic,
+  onCreateTopic,
+  onReeditRevokedMessage,
+  onReplyMessage,
+  onRevokeMessage,
   onRetryMessage,
-  onPendingFeature,
 }: {
   message: DesktopMessage
   targetId: string
@@ -178,15 +218,24 @@ function MessageRow({
   resolvedTheme: "light" | "dark"
   conversationName: string
   showChoiceResponseCounts: boolean
+  topicCreationEnabled: boolean
+  revokeEnabled: boolean
+  canModerateMessages: boolean
   mentionLabelResolver: MentionLabelResolver
   pendingReactionKeys: Set<string>
+  revokingMessageIds: Set<string>
   highlighted: boolean
   onSetReaction: (message: DesktopMessage, text: string, reacted: boolean) => Promise<void>
   onSubmitChoice: (message: DesktopMessage, optionIds: string[]) => Promise<void>
   onOpenTopic: (conversationId: string) => void
+  onCreateTopic: (message: DesktopMessage) => void
+  onReeditRevokedMessage: (message: DesktopMessage) => void
+  onReplyMessage: (message: DesktopMessage) => void
+  onRevokeMessage: (message: DesktopMessage) => Promise<void>
   onRetryMessage: (message: DesktopMessage) => void
-  onPendingFeature: (label: string) => void
 }) {
+  const menuTriggerRef = useRef<HTMLDivElement>(null)
+
   if (message.body.type === "system_event") {
     return (
       <article
@@ -212,6 +261,24 @@ function MessageRow({
   const flushMediaBubble = shouldFlushMediaBubble(message)
   const flushInteractiveCardBubble = shouldFlushInteractiveCardBubble(message)
   const flushBubble = flushMediaBubble || flushInteractiveCardBubble
+  const replyAction =
+    !message.deliveryStatus &&
+    !message.virtualType &&
+    message.body.type !== "revoked" &&
+    message.body.type !== "unsupported"
+      ? () => onReplyMessage(message)
+      : undefined
+  const createTopicAction = canCreateDesktopMessageTopic(message, topicCreationEnabled, false)
+    ? () => onCreateTopic(message)
+    : undefined
+  const revokeAction = canRevokeDesktopMessage(
+    message,
+    revokeEnabled,
+    canModerateMessages,
+    revokingMessageIds.has(message.id),
+  )
+    ? () => onRevokeMessage(message)
+    : undefined
   return (
     <article
       data-message-id={message.id}
@@ -263,6 +330,11 @@ function MessageRow({
             body={message.body}
             summary={message.content}
             targetId={targetId}
+            menuTriggerRef={menuTriggerRef}
+            showEdit={message.isMine}
+            onReply={replyAction}
+            onCreateTopic={createTopicAction}
+            onRevoke={revokeAction}
             className={cn(
               "group/bubble max-w-full rounded-xl text-sm leading-6",
               flushBubble ? "overflow-hidden p-0" : "px-3 py-2.5",
@@ -282,7 +354,9 @@ function MessageRow({
                 <div className="truncate font-medium text-foreground/80">
                   {message.replyTo.author}
                 </div>
-                <div className="line-clamp-2 text-muted-foreground">{message.replyTo.summary}</div>
+                <div className="line-clamp-2 text-muted-foreground">
+                  {formatMentionText(message.replyTo.summary, mentionLabelResolver)}
+                </div>
               </div>
             )}
             <MessageBodyRenderer
@@ -294,6 +368,11 @@ function MessageRow({
               messageId={message.id}
               choice={message.choice}
               showChoiceResponseCounts={showChoiceResponseCounts}
+              onReeditRevoked={
+                getDesktopMessageEditableBody(message)
+                  ? () => onReeditRevokedMessage(message)
+                  : undefined
+              }
               onChoiceRespond={
                 message.virtualType === "topic_source"
                   ? undefined
@@ -332,7 +411,20 @@ function MessageRow({
             message={message}
             onRetry={() => onRetryMessage(message)}
             onSetReaction={(text) => onSetReaction(message, text, true)}
-            onPendingFeature={onPendingFeature}
+            moreMenu={
+              <MessageActionsDropdown
+                body={message.body}
+                summary={message.content}
+                targetId={targetId}
+                selectionContainerRef={menuTriggerRef}
+                showEdit={message.isMine}
+                onReply={replyAction}
+                onCreateTopic={createTopicAction}
+                onRevoke={revokeAction}
+              >
+                <MessageHoverActionButton label="更多操作" icon={MoreHorizontalIcon} />
+              </MessageActionsDropdown>
+            }
           />
         </div>
       </div>
@@ -356,12 +448,12 @@ function MessageStatus({
   message,
   onRetry,
   onSetReaction,
-  onPendingFeature,
+  moreMenu,
 }: {
   message: DesktopMessage
   onRetry: () => void
   onSetReaction: (text: string) => Promise<void>
-  onPendingFeature: (label: string) => void
+  moreMenu: ReactNode
 }) {
   if (message.deliveryStatus === "sending") {
     return (
@@ -407,36 +499,31 @@ function MessageStatus({
   return (
     <div className="mb-2 flex h-7 shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/message-row:opacity-100 focus-within:opacity-100 has-[[data-state=open]]:opacity-100">
       <MessageReactionPicker align={message.isMine ? "end" : "start"} onSelect={onSetReaction} />
-      <MessageHoverActionButton
-        label="更多操作"
-        icon={MoreHorizontalIcon}
-        onClick={() => onPendingFeature("消息更多操作")}
-      />
+      {moreMenu}
     </div>
   )
 }
 
-function MessageHoverActionButton({
-  label,
-  icon,
-  onClick,
-}: {
-  label: string
-  icon: HugeiconsIconProps["icon"]
-  onClick: () => void
-}) {
+const MessageHoverActionButton = forwardRef<
+  HTMLButtonElement,
+  ComponentPropsWithoutRef<"button"> & {
+    label: string
+    icon: HugeiconsIconProps["icon"]
+  }
+>(function MessageHoverActionButton({ label, icon, ...props }, ref) {
   return (
     <button
+      ref={ref}
       type="button"
       className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-xs outline-none transition-colors hover:text-xgui-brand focus-visible:ring-[3px] focus-visible:ring-ring/50"
       aria-label={label}
       title={label}
-      onClick={onClick}
+      {...props}
     >
       <HugeiconsIcon icon={icon} className="size-3.5" aria-hidden />
     </button>
   )
-}
+})
 
 function formatMessageTime(value: string): string {
   const date = new Date(value)

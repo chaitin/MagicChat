@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import type { DesktopConversation, DesktopMessage } from "../../../../shared/account-data"
+import { contiguousMessageSuffix } from "../../../../shared/message-window"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import type { MentionTarget } from "@/lib/message-mentions"
 
@@ -28,6 +29,7 @@ export function useChatData({
   const [contactRevision, setContactRevision] = useState(0)
   const [mentionLabels, setMentionLabels] = useState<Map<string, string>>(new Map())
   const [pendingReactionKeys, setPendingReactionKeys] = useState<Set<string>>(new Set())
+  const [revokingMessageIds, setRevokingMessageIds] = useState<Set<string>>(new Set())
   const [newMessageCount, setNewMessageCount] = useState(0)
   const realtimeRevisionRef = useRef(0)
   const loadingBeforeRef = useRef(false)
@@ -173,7 +175,7 @@ export function useChatData({
           })
           return
         }
-        setMessages(result.data)
+        setMessages((current) => retainMessageWindow(result.data, current))
       } catch {
         showToast({ status: "error", title: "更新表情失败" })
       } finally {
@@ -243,7 +245,9 @@ export function useChatData({
         optionIds,
       })
       if (!result.ok) throw new Error(result.error.message)
-      if (selectedIdRef.current === message.conversationId) setMessages(result.data)
+      if (selectedIdRef.current === message.conversationId) {
+        setMessages((current) => retainMessageWindow(result.data, current))
+      }
     },
     [targetId],
   )
@@ -252,22 +256,22 @@ export function useChatData({
     (conversationId: string, nextMessages: DesktopMessage[]) => {
       if (selectedIdRef.current !== conversationId) return
       scrollToBottomRef.current = true
-      setMessages(nextMessages)
+      setMessages((current) => retainMessageWindow(nextMessages, current))
     },
     [],
   )
 
   const sendTextMessage = useCallback(
-    (content: string, bodyType: "text" | "markdown" | "link") => {
+    (content: string, bodyType: "text" | "markdown" | "link", replyToMessageId?: string) => {
       const conversationId = selectedIdRef.current
       if (!conversationId || !window.desktop) return
       scrollToBottomRef.current = true
       void window.desktop.accountData
-        .sendTextMessage({ targetId, conversationId, content, bodyType })
+        .sendTextMessage({ targetId, conversationId, content, bodyType, replyToMessageId })
         .then((result) => {
           if (selectedIdRef.current !== conversationId) return
           if (result.ok) {
-            setMessages(result.data)
+            setMessages((current) => retainMessageWindow(result.data, current))
             return
           }
           showToast({
@@ -285,6 +289,55 @@ export function useChatData({
     [showToast, targetId],
   )
 
+  const createMessageTopic = useCallback(
+    async (message: DesktopMessage) => {
+      if (!window.desktop) throw new Error("桌面服务暂不可用")
+      const result = await window.desktop.accountData.createMessageTopic({
+        targetId,
+        conversationId: message.conversationId,
+        messageId: message.id,
+      })
+      if (!result.ok) throw new Error(result.error.message)
+      setConversations(result.data.conversations)
+      if (selectedIdRef.current === message.conversationId) {
+        setMessages((current) => retainMessageWindow(result.data.messages, current))
+      }
+      return result.data
+    },
+    [targetId],
+  )
+
+  const revokeMessage = useCallback(
+    async (message: DesktopMessage) => {
+      if (!window.desktop || revokingMessageIds.has(message.id)) return
+      setRevokingMessageIds((current) => new Set(current).add(message.id))
+      try {
+        const result = await window.desktop.accountData.revokeMessage({
+          targetId,
+          conversationId: message.conversationId,
+          messageId: message.id,
+        })
+        if (!result.ok) throw new Error(result.error.message)
+        if (selectedIdRef.current === message.conversationId) {
+          setMessages((current) => retainMessageWindow(result.data, current))
+        }
+      } catch (error) {
+        showToast({
+          status: "error",
+          title: "撤回消息失败",
+          description: error instanceof Error ? error.message : undefined,
+        })
+      } finally {
+        setRevokingMessageIds((current) => {
+          const next = new Set(current)
+          next.delete(message.id)
+          return next
+        })
+      }
+    },
+    [revokingMessageIds, showToast, targetId],
+  )
+
   const retryMessage = useCallback(
     (message: DesktopMessage) => {
       if (!window.desktop || !message.clientMessageId) return
@@ -298,7 +351,7 @@ export function useChatData({
         .then((result) => {
           if (selectedIdRef.current !== conversationId) return
           if (result.ok) {
-            setMessages(result.data)
+            setMessages((current) => retainMessageWindow(result.data, current))
             return
           }
           showToast({
@@ -334,7 +387,13 @@ export function useChatData({
       setLoadingMessages(true)
     }
     void window.desktop.accountData
-      .listMessages({ targetId, conversationId: selectedId })
+      .listMessages({
+        targetId,
+        conversationId: selectedId,
+        latestLimit: switchingConversation
+          ? 50
+          : Math.max(50, messagesRef.current.filter((message) => !message.virtualType).length),
+      })
       .then((result) => {
         if (cancelled) return
         if (result.ok) {
@@ -350,7 +409,8 @@ export function useChatData({
             }
           }
           setMessages(result.data)
-          setHasMoreBeforeMessages(result.data.length > 0 && result.data[0].seq > 1)
+          const oldestMessage = result.data.find((message) => !message.virtualType)
+          setHasMoreBeforeMessages(Boolean(oldestMessage && oldestMessage.seq > 1))
         } else {
           setMessages([])
           showToast({
@@ -423,10 +483,11 @@ export function useChatData({
   }, [loadingMessages, messages, selected])
 
   const loadBeforeMessages = useCallback(async () => {
+    const oldestMessage = messages.find((message) => !message.virtualType)
     if (
       !window.desktop ||
       !selectedId ||
-      messages.length === 0 ||
+      !oldestMessage ||
       !hasMoreBeforeMessages ||
       loadingBeforeRef.current
     ) {
@@ -445,7 +506,8 @@ export function useChatData({
       const result = await window.desktop.accountData.loadBeforeMessages({
         targetId,
         conversationId,
-        beforeSeq: messages[0].seq,
+        beforeSeq: oldestMessage.seq,
+        loadedCount: messages.filter((message) => !message.virtualType).length,
       })
       if (selectedIdRef.current !== conversationId) return
       if (!result.ok) {
@@ -479,6 +541,7 @@ export function useChatData({
     loadingMessages,
     loadingBeforeMessages,
     pendingReactionKeys,
+    revokingMessageIds,
     newMessageCount,
     historyRef,
     setSelectedId,
@@ -493,7 +556,18 @@ export function useChatData({
     submitChoiceResponse,
     applySentMessages,
     sendTextMessage,
+    createMessageTopic,
+    revokeMessage,
     retryMessage,
     loadBeforeMessages,
   }
+}
+
+function retainMessageWindow(next: DesktopMessage[], current: DesktopMessage[]) {
+  const visibleCount = Math.max(50, current.filter((message) => !message.virtualType).length)
+  const virtualMessages = next.filter((message) => message.virtualType)
+  const regularMessages = contiguousMessageSuffix(
+    next.filter((message) => !message.virtualType),
+  ).slice(-visibleCount)
+  return [...virtualMessages, ...regularMessages]
 }

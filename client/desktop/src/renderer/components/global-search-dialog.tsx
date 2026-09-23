@@ -13,7 +13,7 @@ import {
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia } from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { parseMentionTemplate, type MentionLabelResolver } from "@/lib/message-mentions"
+import { formatMentionText, type MentionLabelResolver } from "@/lib/message-mentions"
 import type {
   LocalSearchCategory,
   LocalSearchResponse,
@@ -314,12 +314,6 @@ function resultPresentation(result: LocalSearchResult, mentionLabelResolver: Men
     description: `${result.senderName || "成员"}：${formatMentionText(result.summary, mentionLabelResolver)}`,
     meta: formatSearchTime(result.createdAt),
   }
-}
-
-function formatMentionText(content: string, mentionLabelResolver: MentionLabelResolver) {
-  return parseMentionTemplate(content, mentionLabelResolver)
-    .map((part) => (part.type === "text" ? part.text : part.label))
-    .join("")
 }
 
 function SearchState({

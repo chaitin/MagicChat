@@ -125,7 +125,22 @@ export class MessageRepository {
     )
   }
 
-  listMessages(conversationId: string, currentUserId: string): DesktopMessage[] {
+  listMessages(
+    conversationId: string,
+    currentUserId: string,
+    latestLimit?: number,
+    beforeSeq?: number,
+  ): DesktopMessage[] {
+    const limit =
+      Number.isSafeInteger(latestLimit) && Number(latestLimit) > 0 ? latestLimit : undefined
+    const before = Number.isSafeInteger(beforeSeq) && Number(beforeSeq) > 0 ? beforeSeq : undefined
+    const parameters: Array<string | number> = [conversationId]
+    if (before !== undefined) parameters.push(before)
+    if (limit !== undefined) {
+      parameters.push(conversationId)
+      if (before !== undefined) parameters.push(before)
+      parameters.push(limit)
+    }
     const rows = this.database
       .prepare(
         `SELECT messages.id, messages.conversation_id, messages.seq, messages.created_at,
@@ -145,9 +160,21 @@ export class MessageRepository {
          LEFT JOIN contact_apps
            ON messages.sender_type = 'app' AND contact_apps.id = messages.sender_id
          WHERE messages.conversation_id = ?
+           ${before !== undefined ? "AND messages.seq < ?" : ""}
+           ${
+             limit !== undefined
+               ? `AND messages.id IN (
+                    SELECT id FROM messages
+                    WHERE conversation_id = ?
+                    ${before !== undefined ? "AND seq < ?" : ""}
+                    ORDER BY seq DESC, created_at DESC, id DESC
+                    LIMIT ?
+                  )`
+               : ""
+           }
          ORDER BY messages.seq ASC, messages.created_at ASC, messages.id ASC`,
       )
-      .all(conversationId) as Array<Record<string, unknown>>
+      .all(...parameters) as Array<Record<string, unknown>>
     return rows.map((row) => {
       const details = normalizeDesktopMessageDetails(parsePayload(row))
       return {
@@ -169,6 +196,33 @@ export class MessageRepository {
         ...details,
       }
     })
+  }
+
+  setMessageTopic(
+    conversationId: string,
+    messageId: string,
+    topic: { conversationId: string; archived: boolean },
+  ) {
+    const row = this.database
+      .prepare("SELECT payload_json FROM messages WHERE conversation_id = ? AND id = ? LIMIT 1")
+      .get(conversationId, messageId) as Record<string, unknown> | undefined
+    const payload = parsePayload(row)
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false
+    const result = this.database
+      .prepare("UPDATE messages SET payload_json = ? WHERE conversation_id = ? AND id = ?")
+      .run(
+        JSON.stringify({
+          ...payload,
+          topic: {
+            conversation_id: topic.conversationId,
+            archived: topic.archived,
+            recent_replies: [],
+          },
+        }),
+        conversationId,
+        messageId,
+      )
+    return result.changes > 0
   }
 
   updateMessageTopicRecentReplies(

@@ -37,6 +37,12 @@ export function parseMentionTemplate(content: string, resolveLabel: MentionLabel
   return parts.length > 0 ? parts : [{ type: "text" as const, text: content }]
 }
 
+export function formatMentionText(content: string, resolveLabel: MentionLabelResolver) {
+  return parseMentionTemplate(content, resolveLabel)
+    .map((part) => (part.type === "text" ? part.text : part.label))
+    .join("")
+}
+
 export function mentionClassName(type: MentionTarget["type"], id: string, currentUserId: string) {
   return type === "all" || (type === "user" && id.toLowerCase() === currentUserId.toLowerCase())
     ? "mx-0.5 font-medium text-amber-600 dark:text-amber-400"

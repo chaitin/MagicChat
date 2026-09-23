@@ -125,19 +125,33 @@ export class AccountRuntime {
     return conversations
   }
 
-  listMessages(conversationId: string): DesktopMessage[] {
+  listMessages(conversationId: string, latestLimit: number): DesktopMessage[] {
     this.assertInitialized()
-    return this.conversationManager!.listMessages(conversationId)
+    return this.conversationManager!.listMessages(conversationId, latestLimit)
   }
 
-  loadBeforeMessages(conversationId: string, beforeSeq: number): Promise<DesktopMessagePage> {
+  loadBeforeMessages(
+    conversationId: string,
+    beforeSeq: number,
+    loadedCount: number,
+  ): Promise<DesktopMessagePage> {
     this.assertInitialized()
-    return this.conversationManager!.loadBeforeMessages(conversationId, beforeSeq)
+    return this.conversationManager!.loadBeforeMessages(conversationId, beforeSeq, loadedCount)
   }
 
-  sendTextMessage(conversationId: string, content: string, bodyType: "text" | "markdown" | "link") {
+  sendTextMessage(
+    conversationId: string,
+    content: string,
+    bodyType: "text" | "markdown" | "link",
+    replyToMessageId?: string,
+  ) {
     this.assertInitialized()
-    return this.conversationManager!.sendTextMessage(conversationId, content, bodyType)
+    return this.conversationManager!.sendTextMessage(
+      conversationId,
+      content,
+      bodyType,
+      replyToMessageId,
+    )
   }
 
   async sendRichMessage(input: Omit<SendRichMessageInput, "targetId">) {
@@ -150,9 +164,10 @@ export class AccountRuntime {
   sendFileMessage(
     conversationId: string,
     file: { path: string; name: string; sizeBytes: number; temporary?: boolean },
+    replyToMessageId?: string,
   ) {
     this.assertInitialized()
-    return this.conversationManager!.sendFileMessage(conversationId, file)
+    return this.conversationManager!.sendFileMessage(conversationId, file, replyToMessageId)
   }
 
   sendImageMessage(
@@ -165,6 +180,7 @@ export class AccountRuntime {
       width: number
       height: number
       caption: string
+      replyToMessageId?: string
     },
   ) {
     this.assertInitialized()
@@ -180,6 +196,7 @@ export class AccountRuntime {
       contentType: "video/mp4" | "video/webm"
       temporary?: boolean
       caption: string
+      replyToMessageId?: string
     },
   ) {
     this.assertInitialized()
@@ -199,6 +216,20 @@ export class AccountRuntime {
   retryMessage(conversationId: string, clientMessageId: string) {
     this.assertInitialized()
     return this.conversationManager!.retryMessage(conversationId, clientMessageId)
+  }
+
+  async createMessageTopic(conversationId: string, messageId: string) {
+    this.assertInitialized()
+    const result = await this.conversationManager!.createMessageTopic(conversationId, messageId)
+    this.notifyChanged(["messages", "conversations"], [conversationId, result.conversation.id])
+    return result
+  }
+
+  async revokeMessage(conversationId: string, messageId: string) {
+    this.assertInitialized()
+    const messages = await this.conversationManager!.revokeMessage(conversationId, messageId)
+    this.notifyChanged(["messages", "conversations"], [conversationId])
+    return messages
   }
 
   listMessageReactionUsers(input: Omit<MessageReactionUsersInput, "targetId">) {

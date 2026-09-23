@@ -11,13 +11,17 @@ import { prepareImageMessage, type PreparedImageMessage } from "../image-message
 export function useAttachmentSender({
   targetId,
   selected,
+  replyToMessageId,
   focusComposer,
   onMessages,
+  onReplyConsumed,
 }: {
   targetId: string
   selected: DesktopConversation | null
+  replyToMessageId?: string
   focusComposer: () => void
   onMessages: (conversationId: string, messages: DesktopMessage[]) => void
+  onReplyConsumed: () => void
 }) {
   const { showToast } = useAnimatedToast()
   const [selectingFile, setSelectingFile] = useState(false)
@@ -84,6 +88,7 @@ export function useAttachmentSender({
         targetId,
         conversationId: pendingFile.conversationId,
         selectionToken: pendingFile.file.token,
+        replyToMessageId,
       })
       if (!result.ok) {
         showToast({
@@ -94,6 +99,7 @@ export function useAttachmentSender({
         return
       }
       onMessages(pendingFile.conversationId, result.data)
+      onReplyConsumed()
       setFileDialogOpen(false)
       setPendingFile(null)
       focusComposer()
@@ -102,7 +108,16 @@ export function useAttachmentSender({
     } finally {
       setSendingFile(false)
     }
-  }, [focusComposer, onMessages, pendingFile, sendingFile, showToast, targetId])
+  }, [
+    focusComposer,
+    onMessages,
+    onReplyConsumed,
+    pendingFile,
+    replyToMessageId,
+    sendingFile,
+    showToast,
+    targetId,
+  ])
 
   const selectMedia = useCallback(
     async (category: "image" | "video") => {
@@ -229,6 +244,7 @@ export function useAttachmentSender({
         width: pendingImage.prepared.width,
         height: pendingImage.prepared.height,
         caption: mediaCaption,
+        replyToMessageId,
       })
       if (!result.ok) {
         showToast({
@@ -239,6 +255,7 @@ export function useAttachmentSender({
         return
       }
       onMessages(pendingImage.conversationId, result.data)
+      onReplyConsumed()
       clearPendingImage()
       focusComposer()
     } catch (error) {
@@ -255,7 +272,9 @@ export function useAttachmentSender({
     focusComposer,
     mediaCaption,
     onMessages,
+    onReplyConsumed,
     pendingImage,
+    replyToMessageId,
     sendingMedia,
     showToast,
     targetId,
@@ -270,6 +289,7 @@ export function useAttachmentSender({
         conversationId: pendingVideo.conversationId,
         selectionToken: pendingVideo.selected.token,
         caption: mediaCaption,
+        replyToMessageId,
       })
       if (!result.ok) {
         showToast({
@@ -280,6 +300,7 @@ export function useAttachmentSender({
         return
       }
       onMessages(pendingVideo.conversationId, result.data)
+      onReplyConsumed()
       setPendingVideo(null)
       setMediaCaption("")
       focusComposer()
@@ -288,7 +309,17 @@ export function useAttachmentSender({
     } finally {
       setSendingMedia(null)
     }
-  }, [focusComposer, mediaCaption, onMessages, pendingVideo, sendingMedia, showToast, targetId])
+  }, [
+    focusComposer,
+    mediaCaption,
+    onMessages,
+    onReplyConsumed,
+    pendingVideo,
+    replyToMessageId,
+    sendingMedia,
+    showToast,
+    targetId,
+  ])
 
   useEffect(() => {
     const resourceUrl = pendingImage?.prepared.resourceUrl

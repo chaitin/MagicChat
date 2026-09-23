@@ -23,9 +23,13 @@ import {
   requiredString,
 } from "./conversation-parser"
 import { normalizeDesktopMessageChoiceState } from "./message-normalizer"
+import {
+  contiguousMessageSuffix,
+  isCompleteLocalPage,
+  MESSAGE_PAGE_SIZE,
+} from "../../shared/message-window"
 import { normalizeOutgoingRichMessageBody } from "./rich-message-input"
 import { OutgoingMessageService } from "./outgoing-message-service"
-
 export class ConversationManager {
   private readonly outgoingMessages: OutgoingMessageService
   private readonly virtualMessages = new Map<string, DesktopMessage[]>()
@@ -141,7 +145,11 @@ export class ConversationManager {
   }
 
   listConversations(): DesktopConversation[] {
-    return this.database.listConversations()
+    return this.database.listConversations().map((conversation) => ({
+      ...conversation,
+      canSend: this.canSendMessages(conversation),
+      canModerateMessages: this.canModerateMessages(conversation),
+    }))
   }
 
   async setConversationPinned(conversationId: string, pinned: boolean) {
@@ -254,11 +262,18 @@ export class ConversationManager {
     )
   }
 
-  listMessages(conversationId: string): DesktopMessage[] {
+  listMessages(conversationId: string, latestLimit?: number): DesktopMessage[] {
     this.assertConversationId(conversationId)
+    if (
+      latestLimit !== undefined &&
+      (!Number.isSafeInteger(latestLimit) || latestLimit < 1 || latestLimit > 10_000)
+    ) {
+      throw new AuthFailure("invalid_message_limit", "消息加载数量不正确")
+    }
+    const messages = this.database.listMessages(conversationId, this.currentUserId, latestLimit)
     return this.withVirtualMessages(
       conversationId,
-      this.database.listMessages(conversationId, this.currentUserId),
+      latestLimit === undefined ? messages : contiguousMessageSuffix(messages),
     )
   }
 
@@ -269,9 +284,19 @@ export class ConversationManager {
   async sendRichMessage(input: Omit<SendRichMessageInput, "targetId">) {
     this.assertConversationId(input.conversationId)
     const normalized = normalizeOutgoingRichMessageBody(input.body)
+    if (
+      input.replyToMessageId !== undefined &&
+      (!input.replyToMessageId || input.replyToMessageId.length > 128)
+    ) {
+      throw new AuthFailure("invalid_reply_message", "回复的消息不正确")
+    }
     const data = await this.client.post(
       `/api/client/conversations/${encodeURIComponent(input.conversationId)}/messages`,
-      { client_message_id: randomUUID(), body: normalized },
+      {
+        client_message_id: randomUUID(),
+        ...(input.replyToMessageId ? { reply_to_message_id: input.replyToMessageId } : {}),
+        body: normalized,
+      },
     )
     if (!isRecord(data) || !isRecord(data.message)) {
       throw new AuthFailure("invalid_response", "发送富消息响应格式不正确")
@@ -304,6 +329,58 @@ export class ConversationManager {
 
   retryMessage(...args: Parameters<OutgoingMessageService["retryMessage"]>) {
     return this.withVirtualMessages(args[0], this.outgoingMessages.retryMessage(...args))
+  }
+
+  async createMessageTopic(conversationId: string, messageId: string) {
+    this.assertConversationId(conversationId)
+    if (!messageId || messageId.length > 128) {
+      throw new AuthFailure("invalid_message", "消息不存在")
+    }
+    const data = await this.client.post(
+      `/api/client/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/topic`,
+      {},
+    )
+    if (!isRecord(data) || !isRecord(data.conversation)) {
+      throw new AuthFailure("invalid_response", "创建话题响应格式不正确")
+    }
+    const topicConversation = parseConversation(data.conversation, this.currentUserId)
+    if (topicConversation.type !== "topic" || !topicConversation.topic) {
+      throw new AuthFailure("invalid_response", "创建话题响应格式不正确")
+    }
+    this.database.upsertCurrentConversations([topicConversation])
+    this.database.setMessageTopic(conversationId, messageId, {
+      conversationId: topicConversation.id,
+      archived: topicConversation.topic.archived,
+    })
+    const conversations = this.listConversations()
+    return {
+      conversation:
+        conversations.find((conversation) => conversation.id === topicConversation.id) ??
+        topicConversation,
+      conversations,
+      messages: this.listMessages(conversationId),
+      created: data.created === true,
+    }
+  }
+
+  async revokeMessage(conversationId: string, messageId: string) {
+    this.assertConversationId(conversationId)
+    if (!messageId || messageId.length > 128) {
+      throw new AuthFailure("invalid_message", "消息不存在")
+    }
+    const data = await this.client.post(
+      `/api/client/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/revoke`,
+      {},
+    )
+    if (!isRecord(data) || !isRecord(data.message) || !isRecord(data.system_message)) {
+      throw new AuthFailure("invalid_response", "撤回消息响应格式不正确")
+    }
+    const message = parseMessage(data.message, conversationId)
+    const systemMessage = parseMessage(data.system_message, conversationId)
+    this.database.upsertMessages([message, systemMessage])
+    this.database.touchConversationActivity(conversationId, systemMessage.createdAt)
+    this.updateTopicParentPreview(conversationId)
+    return this.listMessages(conversationId)
   }
 
   close() {
@@ -424,17 +501,58 @@ export class ConversationManager {
     return this.listMessages(input.conversationId)
   }
 
-  async loadBeforeMessages(conversationId: string, beforeSeq: number): Promise<DesktopMessagePage> {
+  async loadBeforeMessages(
+    conversationId: string,
+    beforeSeq: number,
+    loadedCount: number,
+  ): Promise<DesktopMessagePage> {
     this.assertConversationId(conversationId)
     if (!Number.isSafeInteger(beforeSeq) || beforeSeq < 1) {
       throw new AuthFailure("invalid_message_cursor", "消息游标不正确")
     }
+    if (!Number.isSafeInteger(loadedCount) || loadedCount < 1 || loadedCount > 10_000) {
+      throw new AuthFailure("invalid_message_limit", "消息加载数量不正确")
+    }
+    const localMessages = this.database.listMessages(
+      conversationId,
+      this.currentUserId,
+      MESSAGE_PAGE_SIZE,
+      beforeSeq,
+    )
+    if (isCompleteLocalPage(localMessages, beforeSeq)) {
+      return {
+        messages: this.listMessages(conversationId, loadedCount + localMessages.length),
+        hasMoreBefore: localMessages[0].seq > 1,
+      }
+    }
     const page = await retryNetworkAction(() => this.fetchMessagePage(conversationId, beforeSeq))
-    this.database.upsertMessages(this.captureVirtualMessages(conversationId, page.messages))
+    const storedMessages = this.captureVirtualMessages(conversationId, page.messages)
+    this.database.upsertMessages(storedMessages)
     return {
-      messages: this.listMessages(conversationId),
+      messages: this.listMessages(conversationId, loadedCount + storedMessages.length),
       hasMoreBefore: page.hasMoreBefore,
     }
+  }
+
+  private canSendMessages(conversation: DesktopConversation) {
+    const payload = this.database.getConversationPayload(conversation.id)
+    return !isRecord(payload) || payload.can_send !== false
+  }
+
+  private canModerateMessages(conversation: DesktopConversation) {
+    const payload = this.database.getConversationPayload(conversation.id)
+    if (!isRecord(payload)) return false
+    const topic = isRecord(payload.topic) ? payload.topic : undefined
+    const groupConversation =
+      conversation.type === "group" ||
+      (conversation.type === "topic" && topic?.parent_conversation_type === "group")
+    if (!groupConversation || !Array.isArray(payload.members)) return false
+    const currentMember = payload.members.find(
+      (member) => isRecord(member) && member.type === "user" && member.id === this.currentUserId,
+    )
+    return (
+      isRecord(currentMember) && (currentMember.role === "owner" || currentMember.role === "admin")
+    )
   }
 
   private assertConversationId(conversationId: string) {
@@ -507,7 +625,7 @@ export class ConversationManager {
   }
 
   private async fetchMessagePage(conversationId: string, beforeSeq?: number) {
-    const search = new URLSearchParams({ limit: "20" })
+    const search = new URLSearchParams({ limit: String(MESSAGE_PAGE_SIZE) })
     if (beforeSeq !== undefined) search.set("before_seq", String(beforeSeq))
     const data = await this.client.get(
       `/api/client/conversations/${encodeURIComponent(conversationId)}/messages?${search}`,

@@ -2,13 +2,16 @@ import type {
   AvatarRequest,
   ContactTargetInput,
   CreateGroupConversationInput,
+  CreateMessageTopicInput,
   DismissConversationInput,
   FriendRequestListInput,
   LocalSearchInput,
   MessageReactionUsersInput,
   OpenContactConversationInput,
   RetryMessageInput,
+  RevokeMessageInput,
   SaveClientAppInput,
+  SendFileMessageInput,
   SendImageMessageInput,
   SendRichMessageInput,
   SendTextMessageInput,
@@ -59,14 +62,19 @@ export class AccountDataFacade {
     return this.requireRuntime().dismissConversation(input.conversationId)
   }
 
-  async listMessages(targetId: string, conversationId: string) {
+  async listMessages(targetId: string, conversationId: string, latestLimit: number) {
     await this.ready(targetId)
-    return this.requireRuntime().listMessages(conversationId)
+    return this.requireRuntime().listMessages(conversationId, latestLimit)
   }
 
-  async loadBeforeMessages(targetId: string, conversationId: string, beforeSeq: number) {
+  async loadBeforeMessages(
+    targetId: string,
+    conversationId: string,
+    beforeSeq: number,
+    loadedCount: number,
+  ) {
     await this.ready(targetId)
-    return this.requireRuntime().loadBeforeMessages(conversationId, beforeSeq)
+    return this.requireRuntime().loadBeforeMessages(conversationId, beforeSeq, loadedCount)
   }
 
   async sendTextMessage(input: SendTextMessageInput) {
@@ -75,6 +83,7 @@ export class AccountDataFacade {
       input.conversationId,
       input.content,
       input.bodyType,
+      input.replyToMessageId,
     )
   }
 
@@ -84,11 +93,11 @@ export class AccountDataFacade {
   }
 
   async sendFileMessage(
-    input: { targetId: string; conversationId: string },
+    input: Pick<SendFileMessageInput, "targetId" | "conversationId" | "replyToMessageId">,
     file: { path: string; name: string; sizeBytes: number; temporary?: boolean },
   ) {
     await this.ready(input?.targetId)
-    return this.requireRuntime().sendFileMessage(input.conversationId, file)
+    return this.requireRuntime().sendFileMessage(input.conversationId, file, input.replyToMessageId)
   }
 
   async sendImageMessage(input: SendImageMessageInput, image: { path: string; sizeBytes: number }) {
@@ -101,6 +110,7 @@ export class AccountDataFacade {
       width: input.width,
       height: input.height,
       caption: input.caption,
+      replyToMessageId: input.replyToMessageId,
     })
   }
 
@@ -118,12 +128,23 @@ export class AccountDataFacade {
     return this.requireRuntime().sendVideoMessage(input.conversationId, {
       ...video,
       caption: input.caption,
+      replyToMessageId: input.replyToMessageId,
     })
   }
 
   async retryMessage(input: RetryMessageInput) {
     await this.ready(input?.targetId)
     return this.requireRuntime().retryMessage(input.conversationId, input.clientMessageId)
+  }
+
+  async createMessageTopic(input: CreateMessageTopicInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().createMessageTopic(input.conversationId, input.messageId)
+  }
+
+  async revokeMessage(input: RevokeMessageInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().revokeMessage(input.conversationId, input.messageId)
   }
 
   async listMessageReactionUsers(input: MessageReactionUsersInput) {

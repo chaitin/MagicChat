@@ -9,6 +9,7 @@ import {
 import {
   ArrowUp02Icon,
   Attachment01Icon,
+  Cancel01Icon,
   Analytics01Icon,
   CheckmarkSquare02Icon,
   Image01Icon,
@@ -18,17 +19,21 @@ import {
   SquareMIcon,
   Video01Icon,
 } from "@hugeicons/core-free-icons"
+import type { DesktopMessageReplyTarget } from "../../../../shared/account-data"
 import { HugeiconsIcon, type HugeiconsIconProps } from "@/components/icons/hugeicons-icon"
 import { Button as BeButton } from "@/components/motion/button/base"
 import { InputGroup, InputGroupAddon, InputGroupTextarea } from "@/components/ui/input-group"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Toggle } from "@/components/ui/toggle"
+import { formatMentionText, type MentionLabelResolver } from "@/lib/message-mentions"
 import { cn } from "@/lib/utils"
 import { ExpressionPickerPanel } from "../expression-picker-panel"
 
 export function MessageComposer({
   composerRef,
   draft,
+  replyTarget,
+  mentionLabelResolver,
   markdownMode,
   selectingFile,
   sendingFile,
@@ -36,6 +41,7 @@ export function MessageComposer({
   sendingMedia,
   importingFile,
   onFiles,
+  onCancelReply,
   onDraftChange,
   onKeyDown,
   onMarkdownChange,
@@ -49,6 +55,8 @@ export function MessageComposer({
 }: {
   composerRef: RefObject<HTMLTextAreaElement | null>
   draft: string
+  replyTarget: DesktopMessageReplyTarget | null
+  mentionLabelResolver: MentionLabelResolver
   markdownMode: boolean
   selectingFile: boolean
   sendingFile: boolean
@@ -56,6 +64,7 @@ export function MessageComposer({
   sendingMedia: "image" | "video" | null
   importingFile: boolean
   onFiles: (files: File[]) => void
+  onCancelReply: () => void
   onDraftChange: (value: string) => void
   onKeyDown: KeyboardEventHandler<HTMLTextAreaElement>
   onMarkdownChange: (pressed: boolean) => void
@@ -107,7 +116,28 @@ export function MessageComposer({
   }
 
   return (
-    <footer className="shrink-0 bg-card px-4 pt-1 pb-4">
+    <footer className="flex shrink-0 flex-col gap-2 bg-card px-4 pt-1 pb-4">
+      {replyTarget && (
+        <div className="flex min-h-11 items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2">
+          <div className="min-w-0">
+            <div className="truncate text-xs font-medium">回复 {replyTarget.author}</div>
+            <div className="truncate text-xs text-muted-foreground">
+              {formatMentionText(replyTarget.summary, mentionLabelResolver)}
+            </div>
+          </div>
+          <BeButton
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-7 shrink-0"
+            aria-label="取消回复"
+            title="取消回复"
+            onClick={onCancelReply}
+          >
+            <HugeiconsIcon icon={Cancel01Icon} className="size-4" aria-hidden />
+          </BeButton>
+        </div>
+      )}
       <InputGroup
         className="bg-background"
         onDragEnter={enterFile}

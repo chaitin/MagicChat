@@ -24,6 +24,8 @@ export const ACCOUNT_DATA_CHANNELS = {
   sendImageMessage: "desktop-next:v1:conversation-message-image-send",
   sendVideoMessage: "desktop-next:v1:conversation-message-video-send",
   retryMessage: "desktop-next:v1:conversation-message-retry",
+  createMessageTopic: "desktop-next:v1:conversation-message-topic-create",
+  revokeMessage: "desktop-next:v1:conversation-message-revoke",
   getContacts: "desktop-next:v1:contacts-get",
   refreshContacts: "desktop-next:v1:contacts-refresh",
   searchContactUsers: "desktop-next:v1:contacts-users-search",
@@ -85,6 +87,8 @@ export type DesktopConversation = {
   pinned: boolean
   notificationMuted: boolean
   isBuiltinAssistant: boolean
+  canSend?: boolean
+  canModerateMessages?: boolean
   unreadCount: number
   topic?: DesktopConversationTopic
 }
@@ -150,8 +154,17 @@ export type DesktopMessageBody =
       }>
     }
   | { type: "system_event"; event: string; summary: string }
-  | { type: "revoked" }
+  | {
+      type: "revoked"
+      editableBody?: { type: "text" | "markdown"; content: string }
+    }
   | { type: "unsupported" }
+
+export type DesktopMessageReplyTarget = {
+  id: string
+  author: string
+  summary: string
+}
 
 export type DesktopMessage = {
   id: string
@@ -167,7 +180,7 @@ export type DesktopMessage = {
   clientMessageId: string
   deliveryStatus?: "sending" | "failed"
   body: DesktopMessageBody
-  replyTo?: { id: string; author: string; summary: string }
+  replyTo?: DesktopMessageReplyTarget
   reactions: Array<{
     text: string
     count: number
@@ -382,6 +395,7 @@ export type SendTextMessageInput = {
   conversationId: string
   content: string
   bodyType: "text" | "markdown" | "link"
+  replyToMessageId?: string
 }
 
 export type SendRichMessageBody =
@@ -392,6 +406,7 @@ export type SendRichMessageInput = {
   targetId: string
   conversationId: string
   body: SendRichMessageBody
+  replyToMessageId?: string
 }
 
 export type SelectedMessageFile = {
@@ -404,6 +419,7 @@ export type SendFileMessageInput = {
   targetId: string
   conversationId: string
   selectionToken: string
+  replyToMessageId?: string
 }
 
 export type ImportedMessageFile = SelectedMessageFile | SelectedMessageMedia
@@ -424,6 +440,7 @@ export type SendImageMessageInput = {
   width: number
   height: number
   caption: string
+  replyToMessageId?: string
 }
 
 export type SendVideoMessageInput = {
@@ -431,12 +448,32 @@ export type SendVideoMessageInput = {
   conversationId: string
   selectionToken: string
   caption: string
+  replyToMessageId?: string
 }
 
 export type RetryMessageInput = {
   targetId: string
   conversationId: string
   clientMessageId: string
+}
+
+export type CreateMessageTopicInput = {
+  targetId: string
+  conversationId: string
+  messageId: string
+}
+
+export type CreateMessageTopicResult = {
+  conversation: DesktopConversation
+  conversations: DesktopConversation[]
+  messages: DesktopMessage[]
+  created: boolean
+}
+
+export type RevokeMessageInput = {
+  targetId: string
+  conversationId: string
+  messageId: string
 }
 
 export type MessageReactionUsersInput = {
@@ -477,11 +514,13 @@ export interface AccountDataBridge {
   listMessages(input: {
     targetId: string
     conversationId: string
+    latestLimit: number
   }): Promise<AuthResult<DesktopMessage[]>>
   loadBeforeMessages(input: {
     targetId: string
     conversationId: string
     beforeSeq: number
+    loadedCount: number
   }): Promise<AuthResult<DesktopMessagePage>>
   sendTextMessage(input: SendTextMessageInput): Promise<AuthResult<DesktopMessage[]>>
   sendRichMessage(input: SendRichMessageInput): Promise<AuthResult<DesktopMessage[]>>
@@ -499,6 +538,8 @@ export interface AccountDataBridge {
   sendImageMessage(input: SendImageMessageInput): Promise<AuthResult<DesktopMessage[]>>
   sendVideoMessage(input: SendVideoMessageInput): Promise<AuthResult<DesktopMessage[]>>
   retryMessage(input: RetryMessageInput): Promise<AuthResult<DesktopMessage[]>>
+  createMessageTopic(input: CreateMessageTopicInput): Promise<AuthResult<CreateMessageTopicResult>>
+  revokeMessage(input: RevokeMessageInput): Promise<AuthResult<DesktopMessage[]>>
   setMessageReaction(input: SetMessageReactionInput): Promise<AuthResult<DesktopMessage[]>>
   submitChoiceResponse(input: SubmitChoiceResponseInput): Promise<AuthResult<DesktopMessage[]>>
   listMessageReactionUsers(

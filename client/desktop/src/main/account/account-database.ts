@@ -123,6 +123,10 @@ export class AccountDatabase {
     return this.messages.updateMessageChoice(...args)
   }
 
+  setMessageTopic(...args: Parameters<MessageRepository["setMessageTopic"]>) {
+    return this.messages.setMessageTopic(...args)
+  }
+
   updateMessageTopicRecentReplies(
     ...args: Parameters<MessageRepository["updateMessageTopicRecentReplies"]>
   ) {

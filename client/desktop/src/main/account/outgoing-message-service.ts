@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto"
 import { rm } from "node:fs/promises"
-import type { DesktopMessage } from "../../shared/account-data"
+import type { DesktopMessage, DesktopMessageReplyTarget } from "../../shared/account-data"
 import { AuthFailure, isRecord } from "../../shared/auth"
 import { normalizeSingleLinkMessageURL } from "../../shared/message-link"
 import { createLocalFileResponse } from "../local-file-response"
 import { AccountDatabase } from "./account-database"
 import { AuthenticatedClient } from "./authenticated-client"
 import { parseMessage } from "./conversation-parser"
+import { createOutgoingTextMessageRequest } from "./outgoing-message-payload"
 
 export class OutgoingMessageService {
   private readonly sending = new Set<string>()
@@ -24,6 +25,7 @@ export class OutgoingMessageService {
     conversationId: string,
     content: string,
     bodyType: "text" | "markdown" | "link",
+    replyToMessageId?: string,
   ): DesktopMessage[] {
     this.assertConversationId(conversationId)
     const normalized =
@@ -34,6 +36,7 @@ export class OutgoingMessageService {
     if (bodyType !== "text" && bodyType !== "markdown" && bodyType !== "link") {
       throw new AuthFailure("invalid_message_type", "消息类型不正确")
     }
+    const replyTo = this.resolveReplyTarget(conversationId, replyToMessageId)
     const clientMessageId = randomUUID()
     this.database.createOptimisticMessage({
       conversationId,
@@ -42,15 +45,17 @@ export class OutgoingMessageService {
       bodyType,
       senderId: this.currentUserId,
       senderName: this.currentUserName,
+      replyTo,
     })
     this.onMessagesChanged(conversationId)
-    this.deliverMessage(conversationId, clientMessageId, normalized, bodyType)
+    this.deliverMessage(conversationId, clientMessageId, normalized, bodyType, replyTo?.id)
     return this.database.listMessages(conversationId, this.currentUserId)
   }
 
   sendFileMessage(
     conversationId: string,
     file: { path: string; name: string; sizeBytes: number; temporary?: boolean },
+    replyToMessageId?: string,
   ): DesktopMessage[] {
     this.assertConversationId(conversationId)
     if (
@@ -63,6 +68,7 @@ export class OutgoingMessageService {
     ) {
       throw new AuthFailure("invalid_file", "文件不符合发送要求")
     }
+    const replyTo = this.resolveReplyTarget(conversationId, replyToMessageId)
     const clientMessageId = randomUUID()
     this.database.createOptimisticFileMessage({
       conversationId,
@@ -73,9 +79,16 @@ export class OutgoingMessageService {
       temporary: file.temporary,
       senderId: this.currentUserId,
       senderName: this.currentUserName,
+      replyTo,
     })
     this.onMessagesChanged(conversationId)
-    this.deliverFileMessage(conversationId, clientMessageId, file, file.temporary === true)
+    this.deliverFileMessage(
+      conversationId,
+      clientMessageId,
+      file,
+      file.temporary === true,
+      replyTo?.id,
+    )
     return this.database.listMessages(conversationId, this.currentUserId)
   }
 
@@ -89,6 +102,7 @@ export class OutgoingMessageService {
       width: number
       height: number
       caption: string
+      replyToMessageId?: string
     },
   ): DesktopMessage[] {
     this.assertConversationId(conversationId)
@@ -110,6 +124,7 @@ export class OutgoingMessageService {
     ) {
       throw new AuthFailure("invalid_image", "图片不符合发送要求")
     }
+    const replyTo = this.resolveReplyTarget(conversationId, image.replyToMessageId)
     const clientMessageId = randomUUID()
     this.database.createOptimisticImageMessage({
       conversationId,
@@ -119,9 +134,18 @@ export class OutgoingMessageService {
       caption,
       senderId: this.currentUserId,
       senderName: this.currentUserName,
+      replyTo,
     })
     this.onMessagesChanged(conversationId)
-    this.deliverMediaMessage("image", conversationId, clientMessageId, image, caption, true)
+    this.deliverMediaMessage(
+      "image",
+      conversationId,
+      clientMessageId,
+      image,
+      caption,
+      true,
+      replyTo?.id,
+    )
     return this.database.listMessages(conversationId, this.currentUserId)
   }
 
@@ -134,6 +158,7 @@ export class OutgoingMessageService {
       contentType: "video/mp4" | "video/webm"
       temporary?: boolean
       caption: string
+      replyToMessageId?: string
     },
   ): DesktopMessage[] {
     this.assertConversationId(conversationId)
@@ -149,6 +174,7 @@ export class OutgoingMessageService {
     ) {
       throw new AuthFailure("invalid_video", "视频不符合发送要求")
     }
+    const replyTo = this.resolveReplyTarget(conversationId, video.replyToMessageId)
     const clientMessageId = randomUUID()
     this.database.createOptimisticVideoMessage({
       conversationId,
@@ -158,6 +184,7 @@ export class OutgoingMessageService {
       caption,
       senderId: this.currentUserId,
       senderName: this.currentUserName,
+      replyTo,
     })
     this.onMessagesChanged(conversationId)
     this.deliverMediaMessage(
@@ -167,6 +194,7 @@ export class OutgoingMessageService {
       video,
       caption,
       video.temporary === true,
+      replyTo?.id,
     )
     return this.database.listMessages(conversationId, this.currentUserId)
   }
@@ -204,6 +232,7 @@ export class OutgoingMessageService {
           sizeBytes: message.sizeBytes,
         },
         message.temporary,
+        message.replyToMessageId,
       )
     } else if (message.bodyType === "image" || message.bodyType === "video") {
       this.deliverMediaMessage(
@@ -218,6 +247,7 @@ export class OutgoingMessageService {
         },
         message.caption,
         message.temporary,
+        message.replyToMessageId,
       )
     } else if (
       (message.bodyType === "text" ||
@@ -225,7 +255,13 @@ export class OutgoingMessageService {
         message.bodyType === "link") &&
       typeof message.content === "string"
     ) {
-      this.deliverMessage(conversationId, clientMessageId, message.content, message.bodyType)
+      this.deliverMessage(
+        conversationId,
+        clientMessageId,
+        message.content,
+        message.bodyType,
+        message.replyToMessageId,
+      )
     } else {
       throw new AuthFailure("message_not_found", "待发送消息不存在")
     }
@@ -242,14 +278,20 @@ export class OutgoingMessageService {
     clientMessageId: string,
     content: string,
     bodyType: "text" | "markdown" | "link",
+    replyToMessageId?: string,
   ) {
     if (this.closed || this.sending.has(clientMessageId)) return
     this.sending.add(clientMessageId)
     void this.client
-      .post(`/api/client/conversations/${encodeURIComponent(conversationId)}/messages`, {
-        client_message_id: clientMessageId,
-        body: bodyType === "link" ? { type: "link", url: content } : { type: bodyType, content },
-      })
+      .post(
+        `/api/client/conversations/${encodeURIComponent(conversationId)}/messages`,
+        createOutgoingTextMessageRequest({
+          clientMessageId,
+          content,
+          bodyType,
+          replyToMessageId,
+        }),
+      )
       .then((data) => {
         if (this.closed || !isRecord(data) || !isRecord(data.message)) {
           if (!this.closed) throw new AuthFailure("invalid_response", "发送消息响应格式不正确")
@@ -270,6 +312,33 @@ export class OutgoingMessageService {
       })
   }
 
+  private resolveReplyTarget(
+    conversationId: string,
+    replyToMessageId?: string,
+  ): DesktopMessageReplyTarget | undefined {
+    if (replyToMessageId === undefined) return undefined
+    if (!replyToMessageId || replyToMessageId.length > 128) {
+      throw new AuthFailure("invalid_reply_message", "回复的消息不正确")
+    }
+    const message = this.database
+      .listMessages(conversationId, this.currentUserId)
+      .find((candidate) => candidate.id === replyToMessageId)
+    if (
+      !message ||
+      message.deliveryStatus ||
+      message.body.type === "revoked" ||
+      message.body.type === "unsupported" ||
+      message.body.type === "system_event"
+    ) {
+      throw new AuthFailure("invalid_reply_message", "回复的消息不正确")
+    }
+    return {
+      id: message.id,
+      author: message.senderName || (message.isMine ? this.currentUserName : "未知用户"),
+      summary: message.content,
+    }
+  }
+
   private deliverMediaMessage(
     category: "image" | "video",
     conversationId: string,
@@ -277,10 +346,12 @@ export class OutgoingMessageService {
     file: { path: string; name: string; sizeBytes: number; contentType: string },
     caption: string,
     temporary: boolean,
+    replyToMessageId?: string,
   ) {
     if (this.closed || this.sending.has(clientMessageId)) return
     this.sending.add(clientMessageId)
     const fields: Record<string, string> = { client_message_id: clientMessageId }
+    if (replyToMessageId) fields.reply_to_message_id = replyToMessageId
     if (caption) {
       fields.caption = caption
       fields.caption_type = "text"
@@ -335,13 +406,17 @@ export class OutgoingMessageService {
     clientMessageId: string,
     file: { path: string; name: string; sizeBytes: number },
     temporary = false,
+    replyToMessageId?: string,
   ) {
     if (this.closed || this.sending.has(clientMessageId)) return
     this.sending.add(clientMessageId)
     void this.client
       .postFile(
         `/api/client/conversations/${encodeURIComponent(conversationId)}/messages/files`,
-        { client_message_id: clientMessageId },
+        {
+          client_message_id: clientMessageId,
+          ...(replyToMessageId ? { reply_to_message_id: replyToMessageId } : {}),
+        },
         file,
       )
       .then((data) => {

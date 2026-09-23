@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/context-menu"
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { parseMentionTemplate, type MentionLabelResolver } from "@/lib/message-mentions"
+import { formatMentionText, type MentionLabelResolver } from "@/lib/message-mentions"
 import { cn } from "@/lib/utils"
 import { groupConversationList } from "../conversation-list-order"
 import { canPinConversation } from "../conversation-action-policy"
@@ -438,9 +438,7 @@ function ConversationListAvatar({
 
 function formatConversationSummary(summary: string, mentionLabelResolver: MentionLabelResolver) {
   if (!summary) return "暂无消息"
-  return parseMentionTemplate(summary, mentionLabelResolver)
-    .map((part) => (part.type === "text" ? part.text : part.label))
-    .join("")
+  return formatMentionText(summary, mentionLabelResolver)
 }
 
 function formatConversationTime(value: string | null): string {

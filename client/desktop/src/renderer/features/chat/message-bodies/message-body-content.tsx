@@ -25,6 +25,7 @@ export function MessageBodyContent({
   choice,
   showChoiceResponseCounts = false,
   onChoiceRespond,
+  onReeditRevoked,
   flushMedia = false,
   flushInteractiveCard = false,
   collapseLongContent = false,
@@ -35,6 +36,7 @@ export function MessageBodyContent({
   choice?: DesktopMessageChoiceState
   showChoiceResponseCounts?: boolean
   onChoiceRespond?: (optionIds: string[]) => Promise<void>
+  onReeditRevoked?: () => void
   flushMedia?: boolean
   flushInteractiveCard?: boolean
   collapseLongContent?: boolean
@@ -85,7 +87,23 @@ export function MessageBodyContent({
     case "system_event":
       return <span>{body.summary}</span>
     case "revoked":
-      return <span className="text-muted-foreground">该消息已被撤回</span>
+      return body.editableBody && onReeditRevoked ? (
+        <button
+          type="button"
+          className="group/reedit grid cursor-pointer place-items-center rounded-sm p-0 text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-xgui-link/40"
+          aria-label="重新编辑"
+          onClick={onReeditRevoked}
+        >
+          <span className="col-start-1 row-start-1 whitespace-nowrap transition-opacity group-hover/bubble:opacity-0 group-focus-visible/reedit:opacity-0">
+            该消息已被撤回
+          </span>
+          <span className="col-start-1 row-start-1 whitespace-nowrap text-xgui-link opacity-0 transition-opacity group-hover/bubble:opacity-100 group-focus-visible/reedit:opacity-100">
+            重新编辑
+          </span>
+        </button>
+      ) : (
+        <span className="text-muted-foreground">该消息已被撤回</span>
+      )
     case "unsupported":
       return <span className="text-muted-foreground">暂不支持查看该消息</span>
   }

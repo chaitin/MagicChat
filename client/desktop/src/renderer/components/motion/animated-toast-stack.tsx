@@ -3,6 +3,7 @@
 
 import {
   Alert02Icon,
+  AlertCircleIcon,
   Cancel01Icon,
   CheckmarkCircle02Icon,
   InformationCircleIcon,
@@ -16,7 +17,7 @@ import { createPortal } from "react-dom"
 import { EASE_OUT } from "@/lib/ease"
 import { cn } from "@/lib/utils"
 
-export type ToastStatus = "neutral" | "info" | "loading" | "success" | "error"
+export type ToastStatus = "neutral" | "info" | "loading" | "success" | "warning" | "error"
 export type ToastPosition =
   | "top-left"
   | "top-center"
@@ -97,6 +98,7 @@ const STATUS_ICON = {
   info: InformationCircleIcon,
   loading: Loading03Icon,
   success: CheckmarkCircle02Icon,
+  warning: AlertCircleIcon,
   error: Alert02Icon,
 } as const
 
@@ -105,6 +107,7 @@ const STATUS_CLASS: Record<ToastStatus, string> = {
   info: "text-primary bg-primary/10",
   loading: "text-primary bg-primary/10",
   success: "text-emerald-600 bg-emerald-500/10 dark:text-emerald-400",
+  warning: "text-amber-600 bg-amber-500/10 dark:text-amber-400",
   error: "text-destructive bg-destructive/10",
 }
 

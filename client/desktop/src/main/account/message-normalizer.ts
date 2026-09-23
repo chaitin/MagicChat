@@ -11,7 +11,12 @@ export type DesktopMessageDetails = Pick<
 
 export function normalizeDesktopMessageDetails(payload: unknown): DesktopMessageDetails {
   const record = asRecord(payload)
-  const body = record?.revoked_at ? ({ type: "revoked" } as const) : normalizeBody(record?.body, 0)
+  const editableBody = normalizeBody(record?.editable_body, 0)
+  const body: DesktopMessageBody = record?.revoked_at
+    ? editableBody.type === "text" || editableBody.type === "markdown"
+      ? { type: "revoked", editableBody }
+      : { type: "revoked" }
+    : normalizeBody(record?.body, 0)
   const reply = asRecord(record?.reply_to)
   const replySender = asRecord(reply?.sender)
   const replyId = stringValue(reply?.id)

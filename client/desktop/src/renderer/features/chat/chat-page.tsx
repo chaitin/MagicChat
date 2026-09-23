@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react"
-import { FlashIcon } from "@hugeicons/core-free-icons"
+import { FlashIcon, Loading03Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { ContactProfileProvider } from "@/components/avatar/contact-profile-popover"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { AppRail, SectionPlaceholder, type AppSection } from "./components/app-navigation"
 import { ClientAppDialog } from "../contacts/client-app-dialog"
 import { ContactsPage } from "../contacts/contacts-page"
@@ -14,17 +24,21 @@ import { MessageList } from "./components/message-list"
 import { useAttachmentSender } from "./hooks/use-attachment-sender"
 import { useChatData } from "./hooks/use-chat-data"
 import { SendFileMessageDialog } from "./send-file-message-dialog"
+import { getDesktopMessageEditableBody } from "./message-actions"
 import { SendChoiceMessageDialog } from "./send-choice-message-dialog"
 import { SendChartMessageDialog } from "./send-chart-message-dialog"
 import { SendMediaMessageDialog } from "./send-media-message-dialog"
 import type {
   DesktopContactDirectory,
+  DesktopMessage,
+  DesktopMessageReplyTarget,
   LocalSearchResult,
   SendRichMessageBody,
 } from "../../../shared/account-data"
 import type { ServerCatalog } from "../../../shared/auth"
 import type { ThemePreference } from "../../../shared/desktop"
 import { normalizeSingleLinkMessageURL } from "../../../shared/message-link"
+import { formatMentionText } from "@/lib/message-mentions"
 
 export function ChatPage({
   targetId,
@@ -66,8 +80,11 @@ export function ChatPage({
     messageId: string
   } | null>(null)
   const [draft, setDraft] = useState("")
+  const [replyTarget, setReplyTarget] = useState<DesktopMessageReplyTarget | null>(null)
   const [markdownMode, setMarkdownMode] = useState(false)
   const [richDialog, setRichDialog] = useState<"choice" | "chart" | null>(null)
+  const [createTopicMessage, setCreateTopicMessage] = useState<DesktopMessage | null>(null)
+  const [creatingTopic, setCreatingTopic] = useState(false)
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const pendingComposerCursorRef = useRef<number | null>(null)
   const {
@@ -79,6 +96,7 @@ export function ChatPage({
     loadingMessages,
     loadingBeforeMessages,
     pendingReactionKeys,
+    revokingMessageIds,
     newMessageCount,
     historyRef,
     setSelectedId,
@@ -93,6 +111,8 @@ export function ChatPage({
     submitChoiceResponse,
     applySentMessages,
     sendTextMessage,
+    createMessageTopic,
+    revokeMessage,
     retryMessage,
     loadBeforeMessages,
   } = useChatData({ targetId, userId, userName })
@@ -138,6 +158,8 @@ export function ChatPage({
     })
   }, [])
 
+  const clearReplyTarget = useCallback(() => setReplyTarget(null), [])
+
   const {
     selectingFile,
     importingFile,
@@ -162,8 +184,10 @@ export function ChatPage({
   } = useAttachmentSender({
     targetId,
     selected,
+    replyToMessageId: replyTarget?.id,
     focusComposer,
     onMessages: applySentMessages,
+    onReplyConsumed: clearReplyTarget,
   })
 
   const sendDraft = useCallback(() => {
@@ -172,9 +196,10 @@ export function ChatPage({
     const link = normalizeSingleLinkMessageURL(content)
     const bodyType = link ? "link" : markdownMode ? "markdown" : "text"
     setDraft("")
+    setReplyTarget(null)
     focusComposer()
-    sendTextMessage(link ?? content, bodyType)
-  }, [draft, focusComposer, markdownMode, sendTextMessage])
+    sendTextMessage(link ?? content, bodyType, replyTarget?.id)
+  }, [draft, focusComposer, markdownMode, replyTarget, sendTextMessage])
 
   const sendRichMessage = useCallback(
     async (body: SendRichMessageBody) => {
@@ -183,12 +208,14 @@ export function ChatPage({
         targetId,
         conversationId: selectedId,
         body,
+        replyToMessageId: replyTarget?.id,
       })
       if (!result.ok) throw new Error(result.error.message)
       applySentMessages(selectedId, result.data)
+      clearReplyTarget()
       focusComposer()
     },
-    [applySentMessages, focusComposer, selectedId, targetId],
+    [applySentMessages, clearReplyTarget, focusComposer, replyTarget, selectedId, targetId],
   )
 
   const handleComposerKeyDown = useCallback(
@@ -209,6 +236,54 @@ export function ChatPage({
     [sendDraft],
   )
 
+  const confirmCreateTopic = useCallback(async () => {
+    if (!createTopicMessage || creatingTopic) return
+    setCreatingTopic(true)
+    try {
+      const result = await createMessageTopic(createTopicMessage)
+      setCreateTopicMessage(null)
+      showToast({
+        status: "success",
+        title: result.created ? "话题已创建" : "已打开现有话题",
+      })
+      openTopicConversation(result.conversation.id)
+    } catch (error) {
+      showToast({
+        status: "error",
+        title: "创建话题失败",
+        description: error instanceof Error ? error.message : undefined,
+      })
+    } finally {
+      setCreatingTopic(false)
+    }
+  }, [createMessageTopic, createTopicMessage, creatingTopic, openTopicConversation, showToast])
+
+  const reeditRevokedMessage = useCallback(
+    (message: DesktopMessage) => {
+      const editableBody = getDesktopMessageEditableBody(message)
+      if (!editableBody) return
+      const nextDraft = formatMentionText(editableBody.content, resolveMentionLabel)
+      setReplyTarget(null)
+      setDraft(nextDraft)
+      setMarkdownMode(editableBody.type === "markdown")
+      pendingComposerCursorRef.current = nextDraft.length
+      focusComposer()
+    },
+    [focusComposer, resolveMentionLabel],
+  )
+
+  const replyToMessage = useCallback(
+    (message: DesktopMessage) => {
+      setReplyTarget({
+        id: message.id,
+        author: message.senderName || (message.isMine ? userName : "未知用户"),
+        summary: message.content || "消息",
+      })
+      focusComposer()
+    },
+    [focusComposer, userName],
+  )
+
   const insertExpression = useCallback(
     (value: string) => {
       const composer = composerRef.current
@@ -223,6 +298,7 @@ export function ChatPage({
 
   useEffect(() => {
     setDraft("")
+    setReplyTarget(null)
     pendingComposerCursorRef.current = null
     if (selectedId) focusComposer()
   }, [focusComposer, selectedId])
@@ -353,8 +429,12 @@ export function ChatPage({
                     showChoiceResponseCounts={
                       selected.type === "group" || selected.type === "topic"
                     }
+                    topicCreationEnabled={selected.type !== "topic" && selected.canSend !== false}
+                    revokeEnabled={!selected.topic?.archived}
+                    canModerateMessages={Boolean(selected.canModerateMessages)}
                     mentionLabelResolver={resolveMentionLabel}
                     pendingReactionKeys={pendingReactionKeys}
+                    revokingMessageIds={revokingMessageIds}
                     highlightedMessageId={
                       searchMessageTarget?.conversationId === selected.id
                         ? searchMessageTarget.messageId
@@ -367,19 +447,28 @@ export function ChatPage({
                     onSetReaction={setMessageReaction}
                     onSubmitChoice={submitChoiceResponse}
                     onOpenTopic={openTopicConversation}
+                    onCreateTopic={setCreateTopicMessage}
+                    onReeditRevokedMessage={reeditRevokedMessage}
+                    onReplyMessage={replyToMessage}
+                    onRevokeMessage={revokeMessage}
                     onRetryMessage={retryMessage}
-                    onPendingFeature={(label) => showPendingFeature(showToast, label)}
                   />
 
                   <MessageComposer
                     composerRef={composerRef}
                     draft={draft}
+                    replyTarget={replyTarget}
+                    mentionLabelResolver={resolveMentionLabel}
                     markdownMode={markdownMode}
                     selectingFile={selectingFile}
                     sendingFile={sendingFile}
                     selectingMedia={selectingMedia}
                     sendingMedia={sendingMedia}
                     importingFile={importingFile}
+                    onCancelReply={() => {
+                      clearReplyTarget()
+                      focusComposer()
+                    }}
                     onFiles={(files) => {
                       if (files.length !== 1) {
                         showToast({ status: "error", title: "请每次发送一个文件" })
@@ -463,6 +552,36 @@ export function ChatPage({
           onAvatarChanged={() => undefined}
         />
       )}
+      <AlertDialog
+        open={Boolean(createTopicMessage)}
+        onOpenChange={(open) => {
+          if (!open && !creatingTopic) setCreateTopicMessage(null)
+        }}
+      >
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>创建话题</AlertDialogTitle>
+            <AlertDialogDescription>
+              将以这条消息作为起点创建一个独立话题，方便围绕它继续讨论。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={creatingTopic}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={creatingTopic}
+              onClick={(event) => {
+                event.preventDefault()
+                void confirmCreateTopic()
+              }}
+            >
+              {creatingTopic && (
+                <HugeiconsIcon icon={Loading03Icon} className="size-4 animate-spin" aria-hidden />
+              )}
+              确认创建
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <SendMediaMessageDialog
         category="image"
         caption={mediaCaption}

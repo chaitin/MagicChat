@@ -270,6 +270,14 @@ export class AuthController {
     return this.accountData.retryMessage(...args)
   }
 
+  createMessageTopic(...args: Parameters<AccountDataFacade["createMessageTopic"]>) {
+    return this.accountData.createMessageTopic(...args)
+  }
+
+  revokeMessage(...args: Parameters<AccountDataFacade["revokeMessage"]>) {
+    return this.accountData.revokeMessage(...args)
+  }
+
   listMessageReactionUsers(...args: Parameters<AccountDataFacade["listMessageReactionUsers"]>) {
     return this.accountData.listMessageReactionUsers(...args)
   }

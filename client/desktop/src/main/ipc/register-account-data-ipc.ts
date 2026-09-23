@@ -3,10 +3,12 @@ import {
   ACCOUNT_DATA_CHANNELS,
   type AvatarRequest,
   type CreateGroupConversationInput,
+  type CreateMessageTopicInput,
   type DismissConversationInput,
   type LocalSearchInput,
   type MessageReactionUsersInput,
   type RetryMessageInput,
+  type RevokeMessageInput,
   type SendFileMessageInput,
   type SendImageMessageInput,
   type SendRichMessageInput,
@@ -53,8 +55,14 @@ export function registerAccountDataIpc({
     auth.dismissConversation(input as DismissConversationInput),
   )
   handle(ACCOUNT_DATA_CHANNELS.listMessages, (input) => {
-    const value = input as { targetId?: string; conversationId?: string } | undefined
-    return auth.listMessages(value?.targetId ?? "", value?.conversationId ?? "")
+    const value = input as
+      | { targetId?: string; conversationId?: string; latestLimit?: number }
+      | undefined
+    return auth.listMessages(
+      value?.targetId ?? "",
+      value?.conversationId ?? "",
+      value?.latestLimit ?? 50,
+    )
   })
   handle(ACCOUNT_DATA_CHANNELS.selectMessageFile, async (input) => {
     const mainWindow = getMainWindow()
@@ -151,6 +159,12 @@ export function registerAccountDataIpc({
   handle(ACCOUNT_DATA_CHANNELS.retryMessage, (input) =>
     auth.retryMessage(input as RetryMessageInput),
   )
+  handle(ACCOUNT_DATA_CHANNELS.createMessageTopic, (input) =>
+    auth.createMessageTopic(input as CreateMessageTopicInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.revokeMessage, (input) =>
+    auth.revokeMessage(input as RevokeMessageInput),
+  )
   handle(ACCOUNT_DATA_CHANNELS.setMessageReaction, (input) =>
     auth.setMessageReaction(input as SetMessageReactionInput),
   )
@@ -162,12 +176,18 @@ export function registerAccountDataIpc({
   )
   handle(ACCOUNT_DATA_CHANNELS.loadBeforeMessages, (input) => {
     const value = input as
-      | { targetId?: string; conversationId?: string; beforeSeq?: number }
+      | {
+          targetId?: string
+          conversationId?: string
+          beforeSeq?: number
+          loadedCount?: number
+        }
       | undefined
     return auth.loadBeforeMessages(
       value?.targetId ?? "",
       value?.conversationId ?? "",
       value?.beforeSeq ?? 0,
+      value?.loadedCount ?? 0,
     )
   })
   handle(ACCOUNT_DATA_CHANNELS.getContacts, (input) => auth.getContacts(input as string))

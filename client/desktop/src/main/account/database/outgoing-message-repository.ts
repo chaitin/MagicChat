@@ -1,5 +1,5 @@
 import type { DatabaseSync } from "node:sqlite"
-import type { DesktopMessageBody } from "../../../shared/account-data"
+import type { DesktopMessageBody, DesktopMessageReplyTarget } from "../../../shared/account-data"
 import type { StoredMessage } from "./message-repository"
 
 export class OutgoingMessageRepository {
@@ -15,6 +15,7 @@ export class OutgoingMessageRepository {
     bodyType: "text" | "markdown" | "link"
     senderId: string
     senderName: string
+    replyTo?: DesktopMessageReplyTarget
   }) {
     const seqRow = this.database
       .prepare("SELECT COALESCE(MAX(seq), 0) AS seq FROM messages WHERE conversation_id = ?")
@@ -34,6 +35,16 @@ export class OutgoingMessageRepository {
       sender: { id: input.senderId, type: "user", name: input.senderName },
       seq,
       body,
+      ...(input.replyTo
+        ? {
+            reply_to_message_id: input.replyTo.id,
+            reply_to: {
+              id: input.replyTo.id,
+              summary: input.replyTo.summary,
+              sender: { name: input.replyTo.author },
+            },
+          }
+        : {}),
       reactions: [],
     }
     this.upsertMessages([
@@ -51,6 +62,7 @@ export class OutgoingMessageRepository {
         clientMessageId: input.clientMessageId,
         deliveryStatus: "sending",
         body,
+        replyTo: input.replyTo,
         reactions: [],
         payload,
       },
@@ -73,6 +85,7 @@ export class OutgoingMessageRepository {
     temporary?: boolean
     senderId: string
     senderName: string
+    replyTo?: DesktopMessageReplyTarget
   }) {
     const seqRow = this.database
       .prepare("SELECT COALESCE(MAX(seq), 0) AS seq FROM messages WHERE conversation_id = ?")
@@ -99,6 +112,7 @@ export class OutgoingMessageRepository {
         name: input.name,
         size_bytes: input.sizeBytes,
       },
+      ...replyPayload(input.replyTo),
       reactions: [],
       local_file_path: input.filePath,
       local_file_temporary: input.temporary === true,
@@ -118,6 +132,7 @@ export class OutgoingMessageRepository {
         clientMessageId: input.clientMessageId,
         deliveryStatus: "sending",
         body,
+        replyTo: input.replyTo,
         reactions: [],
         payload,
       },
@@ -143,6 +158,7 @@ export class OutgoingMessageRepository {
     caption: string
     senderId: string
     senderName: string
+    replyTo?: DesktopMessageReplyTarget
   }) {
     const body = {
       type: "image" as const,
@@ -179,6 +195,7 @@ export class OutgoingMessageRepository {
     temporary?: boolean
     senderId: string
     senderName: string
+    replyTo?: DesktopMessageReplyTarget
   }) {
     const body = {
       type: "video" as const,
@@ -230,12 +247,12 @@ export class OutgoingMessageRepository {
       )
       .get(conversationId, clientMessageId) as Record<string, unknown> | undefined
     if (!row) return undefined
+    const parsedPayload = parsePayload(row)
+    const payload =
+      parsedPayload && typeof parsedPayload === "object" && !Array.isArray(parsedPayload)
+        ? (parsedPayload as Record<string, unknown>)
+        : undefined
     if (row.body_type === "file" || row.body_type === "image" || row.body_type === "video") {
-      const parsedPayload = parsePayload(row)
-      const payload =
-        parsedPayload && typeof parsedPayload === "object" && !Array.isArray(parsedPayload)
-          ? (parsedPayload as Record<string, unknown>)
-          : undefined
       const filePath = typeof payload?.local_file_path === "string" ? payload.local_file_path : ""
       const body =
         payload?.body && typeof payload.body === "object" && !Array.isArray(payload.body)
@@ -267,6 +284,10 @@ export class OutgoingMessageRepository {
               : "",
         caption: typeof body?.caption === "string" ? body.caption : "",
         temporary: payload?.local_file_temporary === true || row.body_type === "image",
+        replyToMessageId:
+          typeof payload?.reply_to_message_id === "string"
+            ? payload.reply_to_message_id
+            : undefined,
         status: String(row.delivery_status),
       }
     }
@@ -279,6 +300,8 @@ export class OutgoingMessageRepository {
     return {
       content: String(row.content),
       bodyType,
+      replyToMessageId:
+        typeof payload?.reply_to_message_id === "string" ? payload.reply_to_message_id : undefined,
       status: String(row.delivery_status),
     }
   }
@@ -347,6 +370,7 @@ export class OutgoingMessageRepository {
     content: string
     summary: string
     temporary?: boolean
+    replyTo?: DesktopMessageReplyTarget
   }) {
     const seqRow = this.database
       .prepare("SELECT COALESCE(MAX(seq), 0) AS seq FROM messages WHERE conversation_id = ?")
@@ -362,6 +386,7 @@ export class OutgoingMessageRepository {
       sender: { id: input.senderId, type: "user", name: input.senderName },
       seq,
       body: input.payloadBody,
+      ...replyPayload(input.replyTo),
       reactions: [],
       local_file_path: input.filePath,
       local_file_name: input.name,
@@ -384,6 +409,7 @@ export class OutgoingMessageRepository {
         clientMessageId: input.clientMessageId,
         deliveryStatus: "sending",
         body: input.body,
+        replyTo: input.replyTo,
         reactions: [],
         payload,
       },
@@ -396,6 +422,19 @@ export class OutgoingMessageRepository {
       )
       .run(createdAt, input.summary, input.conversationId)
   }
+}
+
+function replyPayload(replyTo?: DesktopMessageReplyTarget) {
+  return replyTo
+    ? {
+        reply_to_message_id: replyTo.id,
+        reply_to: {
+          id: replyTo.id,
+          summary: replyTo.summary,
+          sender: { name: replyTo.author },
+        },
+      }
+    : {}
 }
 
 function parsePayload(row: Record<string, unknown> | undefined): unknown {

@@ -13,6 +13,7 @@ export function MessageBodyRenderer({
   choice,
   showChoiceResponseCounts = false,
   onChoiceRespond,
+  onReeditRevoked,
   flushMedia = false,
   flushInteractiveCard = false,
 }: {
@@ -25,6 +26,7 @@ export function MessageBodyRenderer({
   choice?: DesktopMessageChoiceState
   showChoiceResponseCounts?: boolean
   onChoiceRespond?: (optionIds: string[]) => Promise<void>
+  onReeditRevoked?: () => void
   flushMedia?: boolean
   flushInteractiveCard?: boolean
 }) {
@@ -38,6 +40,7 @@ export function MessageBodyRenderer({
           choice={choice}
           showChoiceResponseCounts={showChoiceResponseCounts}
           onChoiceRespond={onChoiceRespond}
+          onReeditRevoked={onReeditRevoked}
           flushMedia={flushMedia}
           flushInteractiveCard={flushInteractiveCard}
           collapseLongContent
