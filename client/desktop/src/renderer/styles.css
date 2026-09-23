@@ -95,6 +95,8 @@
 }
 
 :root {
+  --desktop-titlebar-height: 2rem;
+  --desktop-content-center-y: calc(50% + 1rem);
   --radius: 0.625rem;
   --xgui-active-mask: rgba(0, 0, 0, 0.2);
   --xgui-background-0: #ededed;

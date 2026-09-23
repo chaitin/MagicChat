@@ -42,7 +42,10 @@ export function WindowTitleBar({
   }, [controls])
 
   return (
-    <header className="relative z-50 flex h-8 shrink-0 items-center bg-xgui-background-6 [-webkit-app-region:drag]">
+    <header
+      data-window-title-bar
+      className="pointer-events-auto relative z-[60] flex h-(--desktop-titlebar-height) shrink-0 items-center bg-xgui-background-6 [-webkit-app-region:drag]"
+    >
       {title ? (
         <div className="pointer-events-none min-w-0 flex-1 truncate px-12 text-center text-xs font-medium text-foreground">
           {title}
