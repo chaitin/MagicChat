@@ -1,5 +1,6 @@
 import { Camera, Images, Paperclip } from "lucide-react-native"
-import { Pressable, StyleSheet, Text } from "react-native"
+import { Pressable, StyleSheet } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { Button, ScrollView, SizableText, XStack, YStack } from "tamagui"
 

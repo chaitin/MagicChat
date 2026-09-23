@@ -5,9 +5,9 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   useWindowDimensions,
 } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { YStack } from "tamagui"
 

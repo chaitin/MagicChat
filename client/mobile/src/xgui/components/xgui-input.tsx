@@ -5,13 +5,13 @@ import { forwardRef, useRef } from "react"
 import {
   Pressable,
   StyleSheet,
-  Text,
-  TextInput,
   View,
   type StyleProp,
+  type TextInput as NativeTextInput,
   type TextInputProps,
   type ViewStyle,
 } from "react-native"
+import { Text, TextInput } from "@/components/mi-sans-text"
 
 import { useXGUITheme } from "@/xgui/theme/use-xgui-theme"
 
@@ -27,7 +27,7 @@ export type XGUIInputProps = Omit<
   trailing?: ReactNode
 }
 
-export const XGUIInput = forwardRef<TextInput, XGUIInputProps>(
+export const XGUIInput = forwardRef<NativeTextInput, XGUIInputProps>(
   function XGUIInput(
     {
       clearable = false,
@@ -45,7 +45,7 @@ export const XGUIInput = forwardRef<TextInput, XGUIInputProps>(
     ref
   ) {
     const { colors } = useXGUITheme()
-    const inputRef = useRef<TextInput>(null)
+    const inputRef = useRef<NativeTextInput>(null)
     const showClear =
       clearable &&
       !disabled &&
@@ -114,8 +114,8 @@ export const XGUIInput = forwardRef<TextInput, XGUIInputProps>(
 )
 
 function assignForwardedRef(
-  ref: ForwardedRef<TextInput>,
-  instance: TextInput | null
+  ref: ForwardedRef<NativeTextInput>,
+  instance: NativeTextInput | null
 ) {
   if (typeof ref === "function") {
     ref(instance)

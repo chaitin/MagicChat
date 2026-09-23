@@ -6,7 +6,8 @@ import {
 } from "expo-camera"
 import { type Href, useIsFocused, useRouter } from "expo-router"
 import { useEffect, useRef, useState } from "react"
-import { StyleSheet, Text, View } from "react-native"
+import { StyleSheet, View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 
 import { AppHeader } from "@/components/navigation/app-header"
 import { MediaPermissionSettingsDialog } from "@/components/permissions/media-permission-settings-dialog"

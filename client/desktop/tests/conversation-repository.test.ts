@@ -102,6 +102,47 @@ test("会话列表保留历史普通会话并过滤长期无活动的已读话�
   database.close()
 })
 
+test("已读后的旧话题仅在仍被选中时留在列表，移除后不再显示", () => {
+  const database = new DatabaseSync(":memory:")
+  initializeAccountSchema(database)
+  const repository = new ConversationRepository(database)
+  const now = new Date("2026-09-22T12:00:00.000Z")
+  repository.upsertCurrent([
+    conversation("old-topic", {
+      type: "topic",
+      lastMessageAt: "2026-09-22T11:00:00.000Z",
+      lastMessageSeq: 1,
+      lastReadSeq: 0,
+      unreadCount: 1,
+    }),
+  ])
+  assert.deepEqual(
+    repository.list(now).map((item) => item.id),
+    ["old-topic"],
+  )
+
+  repository.applyReadSeq("old-topic", 1)
+  assert.deepEqual(
+    repository.list(now).map((item) => item.id),
+    [],
+  )
+  assert.deepEqual(
+    repository.list(now, "old-topic").map((item) => item.id),
+    ["old-topic"],
+  )
+  assert.deepEqual(
+    repository.list(now, "another-topic").map((item) => item.id),
+    [],
+  )
+
+  repository.removeCurrent("old-topic")
+  assert.deepEqual(
+    repository.list(now, "old-topic").map((item) => item.id),
+    [],
+  )
+  database.close()
+})
+
 test("会话仓储解析话题父会话和发起人", () => {
   const database = new DatabaseSync(":memory:")
   initializeAccountSchema(database)

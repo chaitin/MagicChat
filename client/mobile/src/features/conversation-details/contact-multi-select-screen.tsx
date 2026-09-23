@@ -1,6 +1,7 @@
 import { Check, ChevronLeft } from "lucide-react-native"
 import { useMemo, useState } from "react"
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native"
+import { FlatList, Pressable, StyleSheet, View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { PageHeader } from "@/components/navigation/page-header"

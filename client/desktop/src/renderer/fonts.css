@@ -4,26 +4,25 @@
 @import "@fontsource/jetbrains-mono/600.css";
 @import "@fontsource/jetbrains-mono/700.css";
 
-/* 官方原始 TTF，未做裁剪或格式转换。许可见 public/licenses/harmonyos-sans.txt。 */
 @font-face {
-  font-family: "HarmonyOS Sans SC";
-  src: url("./assets/fonts/harmonyos-sans/HarmonyOS_Sans_SC_Regular.ttf") format("truetype");
+  font-family: "MiSans";
+  src: url("../../../../assets/fonts/misans/MiSans-Regular.woff2") format("woff2");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
 }
 
 @font-face {
-  font-family: "HarmonyOS Sans SC";
-  src: url("./assets/fonts/harmonyos-sans/HarmonyOS_Sans_SC_Medium.ttf") format("truetype");
+  font-family: "MiSans";
+  src: url("../../../../assets/fonts/misans/MiSans-Medium.woff2") format("woff2");
   font-style: normal;
   font-weight: 500;
   font-display: swap;
 }
 
 @font-face {
-  font-family: "HarmonyOS Sans SC";
-  src: url("./assets/fonts/harmonyos-sans/HarmonyOS_Sans_SC_Bold.ttf") format("truetype");
+  font-family: "MiSans";
+  src: url("../../../../assets/fonts/misans/MiSans-Bold.woff2") format("woff2");
   font-style: normal;
   font-weight: 700;
   font-display: swap;

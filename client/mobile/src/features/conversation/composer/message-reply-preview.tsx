@@ -1,7 +1,8 @@
 // Tabler exposes per-icon runtime entry points without per-icon declarations.
 // eslint-disable-next-line import/no-unresolved
 import IconCircleXFilled from "@tabler/icons-react-native/IconCircleXFilled"
-import { Pressable, StyleSheet, Text } from "react-native"
+import { Pressable, StyleSheet } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 import { XStack } from "tamagui"
 
 import { useXGUITheme } from "@/xgui"

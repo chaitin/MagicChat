@@ -1,6 +1,7 @@
 import { Check } from "lucide-react-native"
 import { useRef, useState } from "react"
-import { Pressable, StyleSheet, Text, View } from "react-native"
+import { Pressable, StyleSheet, View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 import { Paragraph, YStack } from "tamagui"
 
 import type {

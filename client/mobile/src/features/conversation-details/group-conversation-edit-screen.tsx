@@ -1,7 +1,8 @@
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { ChevronLeft } from "lucide-react-native"
 import { useState } from "react"
-import { StyleSheet, Text, View } from "react-native"
+import { StyleSheet, View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 import { YStack } from "tamagui"
 
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"

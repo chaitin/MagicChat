@@ -1,10 +1,10 @@
 import {
   StyleSheet,
-  Text,
   View,
   type StyleProp,
   type ViewStyle,
 } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 
 import { useXGUITheme } from "@/xgui/theme/use-xgui-theme"
 

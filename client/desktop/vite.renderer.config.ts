@@ -27,5 +27,10 @@ export default defineConfig({
     },
   ],
   resolve: { alias: { "@": path.join(directory, "src/renderer") } },
-  server: { host: "127.0.0.1", port: 20110, strictPort: true },
+  server: {
+    host: "127.0.0.1",
+    port: 20110,
+    strictPort: true,
+    fs: { allow: [directory, path.resolve(directory, "../../assets")] },
+  },
 })

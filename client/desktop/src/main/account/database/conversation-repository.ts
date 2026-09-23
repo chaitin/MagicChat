@@ -136,7 +136,7 @@ export class ConversationRepository {
     this.database.prepare("UPDATE conversations SET current = 0 WHERE id = ?").run(conversationId)
   }
 
-  list(now = new Date()): DesktopConversation[] {
+  list(now = new Date(), selectedConversationId: string | null = null): DesktopConversation[] {
     const topicActivityCutoff = new Date(now.getTime() - 30 * 60 * 1000).toISOString()
     const rows = this.database
       .prepare(
@@ -160,12 +160,13 @@ export class ConversationRepository {
              conversations.type <> 'topic'
              OR conversations.unread_count > 0
              OR COALESCE(conversations.last_message_at, conversations.created_at) >= ?
+             OR conversations.id = ?
            )
          ORDER BY conversations.is_builtin_assistant DESC, conversations.pinned DESC,
                   COALESCE(conversations.last_message_at, conversations.created_at, '') DESC,
                   conversations.name ASC`,
       )
-      .all(topicActivityCutoff) as Array<Record<string, unknown>>
+      .all(topicActivityCutoff, selectedConversationId) as Array<Record<string, unknown>>
     return rows.map((row) => ({
       id: String(row.id),
       type: String(row.type),

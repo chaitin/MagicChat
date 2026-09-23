@@ -1,7 +1,8 @@
 // eslint-disable-next-line import/no-unresolved
 import IconChevronRight from "@tabler/icons-react-native/IconChevronRight"
 import { useRouter } from "expo-router"
-import { Pressable, StyleSheet, Text, View } from "react-native"
+import { Pressable, StyleSheet, View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 
 import { useServers } from "@/providers/server-provider"
 import { useXGUITheme } from "@/xgui"

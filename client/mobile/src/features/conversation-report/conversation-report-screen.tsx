@@ -5,10 +5,9 @@ import {
   BackHandler,
   Pressable,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from "react-native"
+import { Text, TextInput } from "@/components/mi-sans-text"
 import { YStack } from "tamagui"
 
 import { AppAvatar } from "@/components/avatar/app-avatar"

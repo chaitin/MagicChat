@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from "react-native"
+import { StyleSheet, View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 
 import { useXGUITheme } from "@/xgui/theme/use-xgui-theme"
 

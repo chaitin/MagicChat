@@ -1,11 +1,11 @@
 import type { ReactNode } from "react"
 import {
   StyleSheet,
-  Text,
   View,
   type StyleProp,
   type ViewStyle,
 } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 
 import { XGUILoadingIcon } from "@/xgui/components/xgui-loading-icon"
 import { useXGUITheme } from "@/xgui/theme/use-xgui-theme"

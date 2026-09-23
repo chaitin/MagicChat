@@ -6,6 +6,7 @@ import {
   type CreateMessageTopicInput,
   type DismissConversationInput,
   type LocalSearchInput,
+  type ListConversationsInput,
   type MarkConversationReadInput,
   type MessageReactionUsersInput,
   type RetryMessageInput,
@@ -42,7 +43,7 @@ export function registerAccountDataIpc({
   handle(ACCOUNT_DATA_CHANNELS.refreshAll, (input) => auth.refreshAll(input as string))
   handle(ACCOUNT_DATA_CHANNELS.searchLocal, (input) => auth.searchLocal(input as LocalSearchInput))
   handle(ACCOUNT_DATA_CHANNELS.listConversations, (input) =>
-    auth.listConversations(input as string),
+    auth.listConversations(input as ListConversationsInput),
   )
   handle(ACCOUNT_DATA_CHANNELS.markConversationRead, (input) =>
     auth.markConversationRead(input as MarkConversationReadInput),

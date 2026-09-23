@@ -4,12 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   FlatList,
   StyleSheet,
-  Text,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type ViewToken,
 } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 import {
   SizableText,
   XStack,

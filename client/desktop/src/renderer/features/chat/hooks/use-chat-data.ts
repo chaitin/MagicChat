@@ -143,7 +143,10 @@ export function useChatData({
     async function loadConversations() {
       if (!window.desktop || !targetId) return
       try {
-        const result = await window.desktop.accountData.listConversations(targetId)
+        const result = await window.desktop.accountData.listConversations({
+          targetId,
+          selectedConversationId: selectedId,
+        })
         if (cancelled) return
         if (result.ok) setConversations(result.data)
         else
@@ -158,7 +161,7 @@ export function useChatData({
     return () => {
       cancelled = true
     }
-  }, [conversationRevision, showToast, targetId])
+  }, [conversationRevision, selectedId, showToast, targetId])
 
   useEffect(() => {
     if (!window.desktop || !targetId) return
@@ -231,7 +234,7 @@ export function useChatData({
         pinned,
       })
       if (!result.ok) throw new Error(result.error.message)
-      setConversations(result.data)
+      setConversationRevision((revision) => revision + 1)
     },
     [targetId],
   )
@@ -245,7 +248,7 @@ export function useChatData({
         muted,
       })
       if (!result.ok) throw new Error(result.error.message)
-      setConversations(result.data)
+      setConversationRevision((revision) => revision + 1)
     },
     [targetId],
   )
@@ -258,12 +261,12 @@ export function useChatData({
         conversationId,
       })
       if (!result.ok) throw new Error(result.error.message)
-      setConversations(result.data)
       if (selectedIdRef.current === conversationId) {
         setSelectedIdState(null)
         setTransientConversation(null)
         setMessages([])
       }
+      setConversationRevision((revision) => revision + 1)
     },
     [targetId],
   )

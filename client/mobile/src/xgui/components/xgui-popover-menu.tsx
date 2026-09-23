@@ -12,9 +12,9 @@ import {
   Dimensions,
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import Svg, { Path } from "react-native-svg"
 import { Portal } from "tamagui"

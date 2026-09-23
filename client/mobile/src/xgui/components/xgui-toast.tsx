@@ -8,7 +8,8 @@ import {
   useRef,
   useState,
 } from "react"
-import { Modal, StyleSheet, Text, View } from "react-native"
+import { Modal, StyleSheet, View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 import Svg, { Path } from "react-native-svg"
 
 import { XGUILoadingIcon } from "@/xgui/components/xgui-loading-icon"

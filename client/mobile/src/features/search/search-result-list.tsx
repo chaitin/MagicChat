@@ -1,5 +1,6 @@
 import { useMemo } from "react"
-import { SectionList, StyleSheet, Text, View } from "react-native"
+import { SectionList, StyleSheet, View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 
 import { ContentState } from "@/components/feedback/content-state"
 import type {

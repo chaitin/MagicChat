@@ -1,6 +1,7 @@
 import type { Icon as TablerIcon } from "@tabler/icons-react-native"
 import type { ReactNode } from "react"
-import { Pressable, StyleSheet, Text, View } from "react-native"
+import { Pressable, StyleSheet, View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { XGUIBadge } from "@/xgui/components/xgui-badge"

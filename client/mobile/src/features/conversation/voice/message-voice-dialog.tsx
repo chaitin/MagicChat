@@ -1,6 +1,7 @@
 import { Mic } from "lucide-react-native"
 import { useCallback } from "react"
-import { StyleSheet, Text, View } from "react-native"
+import { StyleSheet, View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 
 import type { PreparedClientVoiceMessage } from "@/data/messages/message-upload"
 import { formatVoiceDuration } from "@/domain/messages/message-presenter"

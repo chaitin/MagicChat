@@ -2,10 +2,10 @@ import { createContext, type ReactNode, useContext } from "react"
 import {
   Pressable,
   StyleSheet,
-  Text,
   View,
   type ViewProps,
 } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 
 import { useXGUITheme } from "@/xgui/theme/use-xgui-theme"
 

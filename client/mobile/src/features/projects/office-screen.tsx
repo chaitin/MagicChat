@@ -13,7 +13,8 @@ import IconFileText from "@tabler/icons-react-native/IconFileText"
 // eslint-disable-next-line import/no-unresolved
 import IconTarget from "@tabler/icons-react-native/IconTarget"
 import { useRouter, type Href } from "expo-router"
-import { PixelRatio, Pressable, StyleSheet, Text, View } from "react-native"
+import { PixelRatio, Pressable, StyleSheet, View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
 import type { XGUIColors } from "@/xgui/theme/colors"

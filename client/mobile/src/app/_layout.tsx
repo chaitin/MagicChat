@@ -1,4 +1,5 @@
 import { Stack, usePathname } from "expo-router"
+import { useFonts } from "expo-font"
 import * as SplashScreen from "expo-splash-screen"
 import { useEffect, useState } from "react"
 
@@ -11,9 +12,14 @@ const MINIMUM_SPLASH_TIME_MS = 500
 void SplashScreen.preventAutoHideAsync().catch(() => undefined)
 
 export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({
+    "MiSans-Regular": require("../../assets/fonts/misans/MiSans-Regular.ttf"),
+    "MiSans-Medium": require("../../assets/fonts/misans/MiSans-Medium.ttf"),
+    "MiSans-Bold": require("../../assets/fonts/misans/MiSans-Bold.ttf"),
+  })
   return (
     <AppProviders>
-      <NativeSplashController />
+      <NativeSplashController fontsReady={fontsLoaded || Boolean(fontError)} />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="init" />
@@ -31,7 +37,7 @@ export default function RootLayout() {
   )
 }
 
-function NativeSplashController() {
+function NativeSplashController({ fontsReady }: { fontsReady: boolean }) {
   const pathname = usePathname()
   const { isAuthenticated, isHydrated: isAuthHydrated } = useAuth()
   const { isHydrated: areServersHydrated } = useServers()
@@ -47,6 +53,7 @@ function NativeSplashController() {
 
   useEffect(() => {
     if (
+      !fontsReady ||
       !isAuthHydrated ||
       !areServersHydrated ||
       !minimumTimeElapsed ||
@@ -66,6 +73,7 @@ function NativeSplashController() {
 
     void SplashScreen.hideAsync().catch(() => undefined)
   }, [
+    fontsReady,
     areServersHydrated,
     isAuthenticated,
     isAuthHydrated,

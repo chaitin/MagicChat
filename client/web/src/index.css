@@ -5,13 +5,36 @@
 @import "@fontsource/jetbrains-mono/500.css";
 @import "@fontsource/jetbrains-mono/600.css";
 @import "@fontsource/jetbrains-mono/700.css";
-@import "harmonyos-sans-sc-webfont-splitted";
+
+@font-face {
+    font-family: "MiSans";
+    src: url("../../../assets/fonts/misans/MiSans-Regular.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "MiSans";
+    src: url("../../../assets/fonts/misans/MiSans-Medium.woff2") format("woff2");
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "MiSans";
+    src: url("../../../assets/fonts/misans/MiSans-Bold.woff2") format("woff2");
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: "HarmonyOS Sans SC", "HarmonyOS Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --font-sans: "MiSans", "PingFang SC", "Microsoft YaHei", sans-serif;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -88,7 +111,7 @@
 }
 
 @theme {
-    --font-mono: "JetBrains Mono", "HarmonyOS Sans SC", "HarmonyOS Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --font-mono: "JetBrains Mono", "MiSans", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 :root {

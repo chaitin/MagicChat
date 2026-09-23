@@ -1,6 +1,7 @@
 import { FileText } from "lucide-react-native"
 import { useRef, useState } from "react"
-import { Image, StyleSheet, Text, View } from "react-native"
+import { Image, StyleSheet, View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 import { useVideoPlayer, VideoView } from "expo-video"
 
 import type { PreparedClientMessageUpload } from "@/data/messages/message-upload"

@@ -15,9 +15,9 @@ import {
   Keyboard,
   Platform,
   StyleSheet,
-  Text,
   useWindowDimensions,
 } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 import {
   type TamaguiElement,
   XStack,

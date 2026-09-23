@@ -5,6 +5,7 @@ import type {
   CreateMessageTopicInput,
   DismissConversationInput,
   FriendRequestListInput,
+  ListConversationsInput,
   LocalSearchInput,
   MarkConversationReadInput,
   MessageReactionUsersInput,
@@ -24,6 +25,7 @@ import type {
   SubmitChoiceResponseInput,
   UpdateClientAppInput,
 } from "../../shared/account-data"
+import { AuthFailure } from "../../shared/auth"
 import type { MediaCacheRequest } from "../../shared/media"
 import type { AccountRuntime } from "../account/account-runtime"
 
@@ -39,9 +41,16 @@ export class AccountDataFacade {
     return this.requireRuntime().searchLocal(input)
   }
 
-  async listConversations(targetId: string) {
-    await this.ready(targetId)
-    return this.requireRuntime().listConversations()
+  async listConversations(input: ListConversationsInput) {
+    await this.ready(input?.targetId)
+    const selectedId = input.selectedConversationId
+    if (
+      selectedId != null &&
+      (typeof selectedId !== "string" || !selectedId || selectedId.length > 128)
+    ) {
+      throw new AuthFailure("invalid_conversation_id", "对话 ID 不正确")
+    }
+    return this.requireRuntime().listConversations(selectedId ?? null)
   }
 
   async markConversationRead(input: MarkConversationReadInput) {

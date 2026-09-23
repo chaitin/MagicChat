@@ -92,9 +92,9 @@ export class AccountRuntime {
     return this.searchManager!.search(input)
   }
 
-  listConversations(): DesktopConversation[] {
+  listConversations(selectedConversationId: string | null = null): DesktopConversation[] {
     this.assertInitialized()
-    return this.conversationManager!.listConversations()
+    return this.conversationManager!.listConversations(selectedConversationId)
   }
 
   async markConversationRead(conversationId: string, upToSeq: number) {

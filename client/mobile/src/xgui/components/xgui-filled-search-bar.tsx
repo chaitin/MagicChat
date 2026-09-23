@@ -1,12 +1,11 @@
 import {
   Pressable,
   StyleSheet,
-  Text,
-  TextInput,
   View,
   type NativeSyntheticEvent,
   type TextInputSubmitEditingEventData,
 } from "react-native"
+import { Text, TextInput } from "@/components/mi-sans-text"
 import Svg, { Path } from "react-native-svg"
 
 import { useXGUITheme } from "@/xgui/theme/use-xgui-theme"

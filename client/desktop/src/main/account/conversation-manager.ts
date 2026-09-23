@@ -187,8 +187,8 @@ export class ConversationManager {
     return null
   }
 
-  listConversations(): DesktopConversation[] {
-    return this.database.listConversations().map((conversation) => ({
+  listConversations(selectedConversationId: string | null = null): DesktopConversation[] {
+    return this.database.listConversations(selectedConversationId).map((conversation) => ({
       ...conversation,
       canSend: this.canSendMessages(conversation),
       canModerateMessages: this.canModerateMessages(conversation),

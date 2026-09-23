@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router"
-import { Text, View } from "react-native"
+import { View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 
 import { AppHeader } from "@/components/navigation/app-header"
 import { useAddGroupConversationMembers } from "@/data/conversations/conversation-hooks"

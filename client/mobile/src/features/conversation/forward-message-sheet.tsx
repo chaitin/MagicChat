@@ -1,6 +1,7 @@
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query"
 import { useCallback, useMemo, useState } from "react"
-import { FlatList, Keyboard, StyleSheet, Text, View } from "react-native"
+import { FlatList, Keyboard, StyleSheet, View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 
 import { AppAvatar } from "@/components/avatar/app-avatar"
 import type { ClientConversation } from "@/core/models"

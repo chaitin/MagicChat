@@ -436,6 +436,7 @@ function createClientDataContextValue(
     setGroupConversationPublic: vi.fn(),
     syncLoadedConversationMessages: vi.fn(),
     updateConversationLastChoiceSeq: vi.fn(),
+    updateConversationLastReadSeq: vi.fn(),
     updateConversationLastMentionedSeq: vi.fn(),
     updateConversationLastMessage: vi.fn(),
     updateConversationPinned: vi.fn(),

@@ -81,8 +81,8 @@ export class AccountDatabase {
     this.conversations.removeCurrent(conversationId)
   }
 
-  listConversations(): DesktopConversation[] {
-    return this.conversations.list()
+  listConversations(selectedConversationId: string | null = null): DesktopConversation[] {
+    return this.conversations.list(new Date(), selectedConversationId)
   }
 
   upsertMessages(...args: Parameters<MessageRepository["upsertMessages"]>) {

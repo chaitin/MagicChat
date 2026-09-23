@@ -348,6 +348,11 @@ export type SetConversationMutedInput = {
   muted: boolean
 }
 
+export type ListConversationsInput = {
+  targetId: string
+  selectedConversationId?: string | null
+}
+
 export type MarkConversationReadInput = {
   targetId: string
   conversationId: string
@@ -538,7 +543,7 @@ export interface AccountDataBridge {
   initialize(targetId: string): Promise<AuthResult<null>>
   refreshAll(targetId: string): Promise<AuthResult<null>>
   searchLocal(input: LocalSearchInput): Promise<AuthResult<LocalSearchResponse>>
-  listConversations(targetId: string): Promise<AuthResult<DesktopConversation[]>>
+  listConversations(input: ListConversationsInput): Promise<AuthResult<DesktopConversation[]>>
   createGroupConversation(
     input: CreateGroupConversationInput,
   ): Promise<AuthResult<DesktopConversation>>

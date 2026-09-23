@@ -38,6 +38,7 @@ export default defineConfig({
     clientVersionManifestPlugin(clientBuildCommit),
   ],
   server: {
+    fs: { allow: [__dirname, path.resolve(__dirname, "../../assets")] },
     allowedHosts: ["maosite.cc"],
     port: 20070,
     proxy: {

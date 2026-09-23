@@ -1,6 +1,7 @@
 import * as Haptics from "expo-haptics"
 import { useCallback, useRef } from "react"
-import { Platform, Pressable, StyleSheet, Text } from "react-native"
+import { Platform, Pressable, StyleSheet } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 import ReanimatedSwipeable, {
   type SwipeableMethods,
 } from "react-native-gesture-handler/ReanimatedSwipeable"

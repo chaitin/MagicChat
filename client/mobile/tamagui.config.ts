@@ -1,6 +1,6 @@
 import { createV5Theme, defaultConfig } from "@tamagui/config/v5"
 import { animationsReactNative } from "@tamagui/config/v5-rn"
-import { createTamagui } from "tamagui"
+import { createFont, createTamagui } from "tamagui"
 
 import { xguiColors } from "./src/xgui/theme/colors"
 
@@ -28,8 +28,27 @@ const darkTealHalfStepColors = {
   color12: "hsla(163, 69%, 81%, 1)",
 } as const
 
+const miSansFaces = {
+  400: { normal: "MiSans-Regular" },
+  500: { normal: "MiSans-Medium" },
+  700: { normal: "MiSans-Bold" },
+}
+
 export const tamaguiConfig = createTamagui({
   ...defaultConfig,
+  fonts: {
+    ...defaultConfig.fonts,
+    body: createFont({
+      ...defaultConfig.fonts.body,
+      family: "MiSans-Regular",
+      face: miSansFaces,
+    }),
+    heading: createFont({
+      ...defaultConfig.fonts.heading,
+      family: "MiSans-Regular",
+      face: miSansFaces,
+    }),
+  },
   animations: animationsReactNative,
   themes: {
     ...themes,

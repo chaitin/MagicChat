@@ -13,10 +13,10 @@ import {
   Linking,
   Pressable,
   StyleSheet,
-  Text,
-  TextInput,
   View,
+  type TextInput as NativeTextInput,
 } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 import { YStack } from "tamagui"
 
 import { ApiRequestError } from "@/data/api-client"
@@ -93,9 +93,9 @@ export function LoginForm({
   const requestEmailCodeMutation = useRequestEmailCodeMutation(server)
   const toast = useXGUIToast()
   const { colors } = useXGUITheme()
-  const accountInputRef = useRef<TextInput>(null)
-  const emailCodeInputRef = useRef<TextInput>(null)
-  const passwordInputRef = useRef<TextInput>(null)
+  const accountInputRef = useRef<NativeTextInput>(null)
+  const emailCodeInputRef = useRef<NativeTextInput>(null)
+  const passwordInputRef = useRef<NativeTextInput>(null)
   const serverKey = `${server.id}\n${server.url}`
   const [formState, setFormState] = useState<LoginFormState>({
     account: "",

@@ -2,11 +2,11 @@ import type { ReactNode } from "react"
 import {
   Pressable,
   StyleSheet,
-  Text,
   View,
   type StyleProp,
   type ViewStyle,
 } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 import Svg, { Path } from "react-native-svg"
 
 import type { XGUIColors } from "@/xgui/theme/colors"

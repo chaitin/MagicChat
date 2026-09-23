@@ -2,13 +2,13 @@ import type { ReactNode } from "react"
 import {
   Pressable,
   StyleSheet,
-  Text,
   View,
   type PressableProps,
   type StyleProp,
   type TextStyle,
   type ViewStyle,
 } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 
 import { XGUILoadingIcon } from "@/xgui/components/xgui-loading-icon"
 import type { XGUIColors } from "@/xgui/theme/colors"

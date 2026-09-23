@@ -14,9 +14,9 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 
 import { AppHeader } from "@/components/navigation/app-header"
 import {

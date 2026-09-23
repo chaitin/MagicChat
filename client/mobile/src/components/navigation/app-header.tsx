@@ -1,6 +1,7 @@
 import { ChevronLeft, Menu } from "lucide-react-native"
 import type { ComponentProps, ReactNode, Ref } from "react"
-import { Text, type View } from "react-native"
+import { type View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { XStack, YStack } from "tamagui"
 
