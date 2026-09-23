@@ -1,4 +1,5 @@
 import {
+  DotIcon,
   FolderAttachmentIcon,
   MessageMultiple02Icon,
   Settings02Icon,
@@ -9,16 +10,19 @@ import { EntityAvatar } from "@/components/avatar/entity-avatar"
 import { ContactProfilePopover } from "@/components/avatar/contact-profile-popover"
 import { HugeiconsIcon, type HugeiconsIconProps } from "@/components/icons/hugeicons-icon"
 import { Button as BeButton } from "@/components/motion/button/base"
+import { Loader } from "@/components/motion/loader"
 
 export function ChatHeader({
   conversation,
   targetId,
   resolvedTheme,
+  status,
   onPendingFeature,
 }: {
   conversation: DesktopConversation
   targetId: string
   resolvedTheme: "light" | "dark"
+  status?: string
   onPendingFeature: (label: string) => void
 }) {
   const avatar = (
@@ -60,9 +64,24 @@ export function ChatHeader({
       ) : (
         avatar
       )}
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <h2 className="truncate text-sm">{conversation.name}</h2>
-        <p className="text-xs text-muted-foreground">{conversationDescription(conversation)}</p>
+        <p className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+          <span className="truncate">{conversationDescription(conversation)}</span>
+          {status && (
+            <>
+              <HugeiconsIcon icon={DotIcon} className="size-3 shrink-0" aria-hidden />
+              <span className="shrink-0">{status}</span>
+              <Loader
+                variant="metaballs"
+                size={14}
+                speed={0.8}
+                label={status}
+                className="shrink-0 text-muted-foreground opacity-60"
+              />
+            </>
+          )}
+        </p>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1">
         {conversation.type !== "topic" && (

@@ -9,6 +9,7 @@ import {
   type MessageReactionUsersInput,
   type RetryMessageInput,
   type RevokeMessageInput,
+  type SendConversationStatusInput,
   type SendFileMessageInput,
   type SendImageMessageInput,
   type SendRichMessageInput,
@@ -164,6 +165,9 @@ export function registerAccountDataIpc({
   )
   handle(ACCOUNT_DATA_CHANNELS.revokeMessage, (input) =>
     auth.revokeMessage(input as RevokeMessageInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.sendConversationStatus, (input) =>
+    auth.sendConversationStatus(input as SendConversationStatusInput),
   )
   handle(ACCOUNT_DATA_CHANNELS.setMessageReaction, (input) =>
     auth.setMessageReaction(input as SetMessageReactionInput),

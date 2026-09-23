@@ -18,7 +18,11 @@ import {
   type SignInResult,
   type ThirdPartySignInInput,
 } from "../shared/auth"
-import type { AccountDataChangedEvent, AccountDataSyncEvent } from "../shared/account-data"
+import type {
+  AccountDataChangedEvent,
+  AccountDataSyncEvent,
+  ConversationPresenceEvent,
+} from "../shared/account-data"
 import {
   type AppSettings,
   type NotificationSettings,
@@ -73,10 +77,12 @@ export class AuthController {
     private readonly accountEvents: {
       onSyncStateChange: (event: AccountDataSyncEvent) => void
       onDataChanged: (event: AccountDataChangedEvent) => void
+      onConversationPresenceChanged: (event: ConversationPresenceEvent) => void
       onMediaProgress: (event: MediaDownloadProgress) => void
     } = {
       onSyncStateChange: () => undefined,
       onDataChanged: () => undefined,
+      onConversationPresenceChanged: () => undefined,
       onMediaProgress: () => undefined,
     },
   ) {
@@ -276,6 +282,10 @@ export class AuthController {
 
   revokeMessage(...args: Parameters<AccountDataFacade["revokeMessage"]>) {
     return this.accountData.revokeMessage(...args)
+  }
+
+  sendConversationStatus(...args: Parameters<AccountDataFacade["sendConversationStatus"]>) {
+    return this.accountData.sendConversationStatus(...args)
   }
 
   listMessageReactionUsers(...args: Parameters<AccountDataFacade["listMessageReactionUsers"]>) {
@@ -697,6 +707,7 @@ export class AuthController {
       token: active.credential.token,
       onSyncStateChange: this.accountEvents.onSyncStateChange,
       onDataChanged: this.accountEvents.onDataChanged,
+      onConversationPresenceChanged: this.accountEvents.onConversationPresenceChanged,
       onMediaProgress: this.accountEvents.onMediaProgress,
     })
   }

@@ -8,6 +8,7 @@ import type {
   AccountDataDomain,
   AccountDataSyncEvent,
   AvatarResult,
+  ConversationPresenceEvent,
   CreateGroupConversationInput,
   DesktopContactDirectory,
   DesktopConversation,
@@ -32,6 +33,7 @@ import { AuthenticatedClient } from "./authenticated-client"
 import { ClientAppManager } from "./client-app-manager"
 import { ContactManager } from "./contact-manager"
 import { ConversationManager } from "./conversation-manager"
+import { parseConversationPresenceEvent } from "./conversation-presence"
 import { MediaManager } from "./media-manager"
 import { ProjectManager } from "./project-manager"
 import { RealtimeManager, type RealtimeEvent } from "./realtime-manager"
@@ -65,6 +67,7 @@ export class AccountRuntime {
       token: string
       onSyncStateChange: (event: AccountDataSyncEvent) => void
       onDataChanged: (event: AccountDataChangedEvent) => void
+      onConversationPresenceChanged: (event: ConversationPresenceEvent) => void
       onMediaProgress: (event: MediaDownloadProgress) => void
     },
   ) {}
@@ -230,6 +233,24 @@ export class AccountRuntime {
     const messages = await this.conversationManager!.revokeMessage(conversationId, messageId)
     this.notifyChanged(["messages", "conversations"], [conversationId])
     return messages
+  }
+
+  async sendConversationStatus(conversationId: string) {
+    this.assertInitialized()
+    const conversation = this.conversationManager!.listConversations().find(
+      (candidate) => candidate.id === conversationId,
+    )
+    if (
+      !conversation ||
+      (conversation.type !== "direct" && conversation.type !== "app") ||
+      conversation.canSend === false
+    ) {
+      throw new AuthFailure("unsupported_conversation_status", "当前对话不支持输入状态")
+    }
+    await this.realtimeManager!.sendRequest("conversation.status", {
+      conversation_id: conversationId,
+      status: "正在输入",
+    })
   }
 
   listMessageReactionUsers(input: Omit<MessageReactionUsersInput, "targetId">) {
@@ -522,6 +543,17 @@ export class AccountRuntime {
   }
 
   private async applyRealtimeEvent(event: RealtimeEvent) {
+    const presenceEvent = parseConversationPresenceEvent(
+      this.input.targetId,
+      event.name,
+      event.payload,
+    )
+    if (event.name === "conversation.status" && !presenceEvent) {
+      throw new AuthFailure("invalid_realtime_event", "输入状态推送格式不正确")
+    }
+    if (presenceEvent) this.input.onConversationPresenceChanged(presenceEvent)
+    if (event.name === "conversation.status") return
+
     const conversationChange = await this.conversationManager!.applyRealtimeEvent(
       event.name,
       event.payload,

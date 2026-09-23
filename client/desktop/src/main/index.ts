@@ -224,6 +224,8 @@ void app.whenReady().then(async () => {
     onSyncStateChange: (event) =>
       mainWindow?.webContents.send(ACCOUNT_DATA_CHANNELS.syncStateChanged, event),
     onDataChanged: (event) => mainWindow?.webContents.send(ACCOUNT_DATA_CHANNELS.changed, event),
+    onConversationPresenceChanged: (event) =>
+      mainWindow?.webContents.send(ACCOUNT_DATA_CHANNELS.conversationPresenceChanged, event),
     onMediaProgress: (event) =>
       mainWindow?.webContents.send(MEDIA_CHANNELS.downloadProgress, event),
   })
@@ -231,6 +233,7 @@ void app.whenReady().then(async () => {
     path.join(__dirname, "../preload/mediaPreview.cjs"),
     path.join(__dirname, "../renderer/index.html"),
     !app.isPackaged ? process.env.ELECTRON_RENDERER_URL : undefined,
+    () => mainWindow,
   )
   const screenshot = new ScreenshotManager(
     path.join(__dirname, "../preload/screenshot.cjs"),

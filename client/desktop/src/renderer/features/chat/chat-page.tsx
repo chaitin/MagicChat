@@ -23,6 +23,7 @@ import { MessageComposer } from "./components/message-composer"
 import { MessageList } from "./components/message-list"
 import { useAttachmentSender } from "./hooks/use-attachment-sender"
 import { useChatData } from "./hooks/use-chat-data"
+import { useConversationStatus } from "./hooks/use-conversation-status"
 import { SendFileMessageDialog } from "./send-file-message-dialog"
 import { getDesktopMessageEditableBody } from "./message-actions"
 import { SendChoiceMessageDialog } from "./send-choice-message-dialog"
@@ -80,6 +81,7 @@ export function ChatPage({
     messageId: string
   } | null>(null)
   const [draft, setDraft] = useState("")
+  const [composerFocused, setComposerFocused] = useState(false)
   const [replyTarget, setReplyTarget] = useState<DesktopMessageReplyTarget | null>(null)
   const [markdownMode, setMarkdownMode] = useState(false)
   const [richDialog, setRichDialog] = useState<"choice" | "chart" | null>(null)
@@ -116,6 +118,12 @@ export function ChatPage({
     retryMessage,
     loadBeforeMessages,
   } = useChatData({ targetId, userId, userName })
+  const conversationStatus = useConversationStatus({
+    targetId,
+    conversation: selected,
+    draft,
+    focused: activeSection === "chat" && composerFocused,
+  })
 
   useEffect(() => {
     if (
@@ -413,6 +421,7 @@ export function ChatPage({
                     conversation={selected}
                     targetId={targetId}
                     resolvedTheme={resolvedTheme}
+                    status={conversationStatus}
                     onPendingFeature={(label) => showPendingFeature(showToast, label)}
                   />
 
@@ -476,7 +485,9 @@ export function ChatPage({
                       }
                       void importFile(files[0])
                     }}
+                    onDraftBlur={() => setComposerFocused(false)}
                     onDraftChange={setDraft}
+                    onDraftFocus={() => setComposerFocused(true)}
                     onKeyDown={handleComposerKeyDown}
                     onMarkdownChange={(pressed) => {
                       setMarkdownMode(pressed)

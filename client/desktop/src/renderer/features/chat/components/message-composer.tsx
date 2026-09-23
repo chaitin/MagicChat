@@ -42,7 +42,9 @@ export function MessageComposer({
   importingFile,
   onFiles,
   onCancelReply,
+  onDraftBlur,
   onDraftChange,
+  onDraftFocus,
   onKeyDown,
   onMarkdownChange,
   onRestoreFocus,
@@ -65,7 +67,9 @@ export function MessageComposer({
   importingFile: boolean
   onFiles: (files: File[]) => void
   onCancelReply: () => void
+  onDraftBlur: () => void
   onDraftChange: (value: string) => void
+  onDraftFocus: () => void
   onKeyDown: KeyboardEventHandler<HTMLTextAreaElement>
   onMarkdownChange: (pressed: boolean) => void
   onRestoreFocus: () => void
@@ -154,7 +158,9 @@ export function MessageComposer({
           value={draft}
           placeholder={markdownMode ? "输入 Markdown 消息" : "输入消息"}
           className="max-h-48 min-h-24"
+          onBlur={onDraftBlur}
           onChange={(event) => onDraftChange(event.target.value)}
+          onFocus={onDraftFocus}
           onKeyDown={onKeyDown}
           onPaste={pasteFile}
         />

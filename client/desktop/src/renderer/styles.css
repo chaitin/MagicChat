@@ -7,9 +7,8 @@
 @custom-variant hover (&:hover);
 
 @theme inline {
-  --font-sans:
-    "HarmonyOS Sans SC", "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
-  --font-emoji: "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  --font-sans: "HarmonyOS Sans SC", "Noto Color Emoji", sans-serif;
+  --font-emoji: "Noto Color Emoji", sans-serif;
   --font-serif: "HarmonyOS Sans SC", sans-serif;
   --font-mono:
     "JetBrains Mono", "HarmonyOS Sans SC", "HarmonyOS Sans", "PingFang SC", "Microsoft YaHei",
@@ -95,8 +94,8 @@
 }
 
 :root {
-  --desktop-titlebar-height: 2rem;
-  --desktop-content-center-y: calc(50% + 1rem);
+  --desktop-titlebar-height: 2.5rem;
+  --desktop-content-center-y: calc(50% + 1.25rem);
   --radius: 0.625rem;
   --xgui-active-mask: rgba(0, 0, 0, 0.2);
   --xgui-background-0: #ededed;

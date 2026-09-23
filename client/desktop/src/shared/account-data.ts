@@ -26,6 +26,8 @@ export const ACCOUNT_DATA_CHANNELS = {
   retryMessage: "desktop-next:v1:conversation-message-retry",
   createMessageTopic: "desktop-next:v1:conversation-message-topic-create",
   revokeMessage: "desktop-next:v1:conversation-message-revoke",
+  sendConversationStatus: "desktop-next:v1:conversation-status-send",
+  conversationPresenceChanged: "desktop-next:v1:conversation-presence-changed",
   getContacts: "desktop-next:v1:contacts-get",
   refreshContacts: "desktop-next:v1:contacts-refresh",
   searchContactUsers: "desktop-next:v1:contacts-users-search",
@@ -60,6 +62,26 @@ export type AccountDataChangedEvent = {
   domains: AccountDataDomain[]
   conversationIds: string[]
 }
+
+export type ConversationPresenceSender = {
+  id: string
+  type: "user" | "app"
+}
+
+export type ConversationPresenceEvent =
+  | {
+      targetId: string
+      name: "conversation.status"
+      conversationId: string
+      status: string
+      sender: ConversationPresenceSender
+    }
+  | {
+      targetId: string
+      name: "message.created"
+      conversationId: string
+      sender: ConversationPresenceSender
+    }
 
 export type AvatarType = "user" | "group" | "topic" | "app" | "project"
 export type AvatarRequest = {
@@ -476,6 +498,11 @@ export type RevokeMessageInput = {
   messageId: string
 }
 
+export type SendConversationStatusInput = {
+  targetId: string
+  conversationId: string
+}
+
 export type MessageReactionUsersInput = {
   targetId: string
   conversationId: string
@@ -540,6 +567,7 @@ export interface AccountDataBridge {
   retryMessage(input: RetryMessageInput): Promise<AuthResult<DesktopMessage[]>>
   createMessageTopic(input: CreateMessageTopicInput): Promise<AuthResult<CreateMessageTopicResult>>
   revokeMessage(input: RevokeMessageInput): Promise<AuthResult<DesktopMessage[]>>
+  sendConversationStatus(input: SendConversationStatusInput): Promise<AuthResult<void>>
   setMessageReaction(input: SetMessageReactionInput): Promise<AuthResult<DesktopMessage[]>>
   submitChoiceResponse(input: SubmitChoiceResponseInput): Promise<AuthResult<DesktopMessage[]>>
   listMessageReactionUsers(
@@ -573,4 +601,5 @@ export interface AccountDataBridge {
   invalidateAvatar(input: Omit<AvatarRequest, "theme">): Promise<AuthResult<null>>
   onSyncStateChange(callback: (event: AccountDataSyncEvent) => void): () => void
   onChanged(callback: (event: AccountDataChangedEvent) => void): () => void
+  onConversationPresenceChanged(callback: (event: ConversationPresenceEvent) => void): () => void
 }

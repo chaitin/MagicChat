@@ -1,7 +1,8 @@
-import { BrowserWindow, type WebContents } from "electron"
+import { BrowserWindow, screen, type WebContents } from "electron"
 import { DESKTOP_CHANNELS, type ThemePreference } from "../shared/desktop"
 import { MEDIA_CHANNELS, type MediaPreviewPayload } from "../shared/media"
 import { AuthFailure } from "../shared/auth"
+import { centerWindowWithinWorkArea } from "./window-position"
 
 export type MediaPreviewSource =
   | { targetId: string; kind: "cached"; cacheKey: string }
@@ -16,7 +17,8 @@ export class MediaPreviewWindow {
   constructor(
     private readonly preloadPath: string,
     private readonly rendererPath: string,
-    private readonly developmentUrl?: string,
+    private readonly developmentUrl: string | undefined,
+    private readonly getMainWindow: () => BrowserWindow | null,
   ) {}
 
   open(payload: MediaPreviewPayload, source: MediaPreviewSource) {
@@ -32,11 +34,20 @@ export class MediaPreviewWindow {
       return
     }
 
-    const window = new BrowserWindow({
+    const mainWindow = this.getMainWindow()
+    const mainBounds =
+      mainWindow && !mainWindow.isDestroyed()
+        ? mainWindow.getBounds()
+        : screen.getPrimaryDisplay().workArea
+    const workArea = screen.getDisplayMatching(mainBounds).workArea
+    const initialBounds = centerWindowWithinWorkArea(mainBounds, workArea, {
       width: 960,
       height: 720,
-      minWidth: 560,
-      minHeight: 420,
+    })
+    const window = new BrowserWindow({
+      ...initialBounds,
+      minWidth: Math.min(560, initialBounds.width),
+      minHeight: Math.min(420, initialBounds.height),
       title: windowTitle,
       ...(process.platform === "darwin"
         ? {

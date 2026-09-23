@@ -11,6 +11,7 @@ import type {
   RetryMessageInput,
   RevokeMessageInput,
   SaveClientAppInput,
+  SendConversationStatusInput,
   SendFileMessageInput,
   SendImageMessageInput,
   SendRichMessageInput,
@@ -145,6 +146,11 @@ export class AccountDataFacade {
   async revokeMessage(input: RevokeMessageInput) {
     await this.ready(input?.targetId)
     return this.requireRuntime().revokeMessage(input.conversationId, input.messageId)
+  }
+
+  async sendConversationStatus(input: SendConversationStatusInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().sendConversationStatus(input.conversationId)
   }
 
   async listMessageReactionUsers(input: MessageReactionUsersInput) {

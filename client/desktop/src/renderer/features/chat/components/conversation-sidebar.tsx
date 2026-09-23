@@ -300,12 +300,7 @@ function ConversationGroup({
                   />
                   <ItemContent className="w-0 min-w-0">
                     <div className="flex min-w-0 items-center gap-2">
-                      <div
-                        className={cn(
-                          "min-w-0 flex-1 truncate leading-snug font-medium",
-                          conversation.type === "topic" ? "text-xs" : "text-sm",
-                        )}
-                      >
+                      <div className="min-w-0 flex-1 truncate text-sm leading-snug font-medium">
                         {conversation.name}
                       </div>
                       <span className="shrink-0 text-xs font-normal text-muted-foreground">

@@ -16,6 +16,18 @@ export type RealtimeEvent = {
 
 export type RealtimeState = "loading" | "ready"
 
+type PendingRequest = {
+  resolve: (payload: unknown) => void
+  reject: (error: unknown) => void
+}
+
+type RealtimeResponse = {
+  replyTo: string
+  ok: boolean
+  payload: unknown
+  errorMessage: string
+}
+
 export class RealtimeManager {
   private socket?: WebSocket
   private reconnectTimer?: NodeJS.Timeout
@@ -29,6 +41,7 @@ export class RealtimeManager {
   private overflowed = false
   private eventQueue = Promise.resolve()
   private readyWaiters: Array<{ resolve: () => void; reject: (error: unknown) => void }> = []
+  private pendingRequests = new Map<string, PendingRequest>()
 
   constructor(
     private readonly options: {
@@ -57,6 +70,25 @@ export class RealtimeManager {
     return new Promise((resolve, reject) => this.readyWaiters.push({ resolve, reject }))
   }
 
+  sendRequest(method: string, payload: unknown): Promise<unknown> {
+    const socket = this.socket
+    if (!this.ready || !socket || socket.readyState !== WebSocket.OPEN) {
+      return Promise.reject(new AuthFailure("realtime_unavailable", "实时连接未建立"))
+    }
+    const id = randomUUID()
+    const message = JSON.stringify({ v: 1, kind: "request", id, method, payload })
+    return new Promise((resolve, reject) => {
+      this.pendingRequests.set(id, { resolve, reject })
+      socket.send(message, (error) => {
+        if (!error) return
+        const pending = this.pendingRequests.get(id)
+        if (!pending) return
+        this.pendingRequests.delete(id)
+        pending.reject(new AuthFailure("realtime_request", "发送实时请求失败"))
+      })
+    })
+  }
+
   close() {
     if (!this.running) return
     this.running = false
@@ -69,7 +101,9 @@ export class RealtimeManager {
     const socket = this.socket
     this.socket = undefined
     if (socket && socket.readyState !== WebSocket.CLOSED) socket.close()
-    this.rejectReadyWaiters(new AuthFailure("realtime_closed", "实时连接已关闭"))
+    const error = new AuthFailure("realtime_closed", "实时连接已关闭")
+    this.rejectReadyWaiters(error)
+    this.rejectPendingRequests(error)
   }
 
   private connect() {
@@ -107,6 +141,10 @@ export class RealtimeManager {
   private handleMessage(socket: WebSocket, generation: number, data: RawData) {
     const envelope = parseEnvelope(data)
     if (!envelope || !this.isCurrent(socket, generation)) return
+    if ("replyTo" in envelope) {
+      this.handleResponse(envelope)
+      return
+    }
     if (envelope.name === READY_EVENT) {
       if (!this.synchronizing && !this.ready) void this.synchronize(socket, generation)
       return
@@ -162,6 +200,7 @@ export class RealtimeManager {
     this.clearHeartbeatTimer()
     this.synchronizing = false
     this.bufferedEvents = []
+    this.rejectPendingRequests(new AuthFailure("realtime_closed", "实时连接已断开"))
     this.setLoading()
     if (!this.running) return
     const delaySeconds = Math.min(++this.reconnectAttempt, 30)
@@ -186,6 +225,20 @@ export class RealtimeManager {
     this.socket = undefined
     if (socket && socket.readyState !== WebSocket.CLOSED) socket.terminate()
     this.rejectReadyWaiters(error)
+    this.rejectPendingRequests(error)
+  }
+
+  private handleResponse(response: RealtimeResponse) {
+    const pending = this.pendingRequests.get(response.replyTo)
+    if (!pending) return
+    this.pendingRequests.delete(response.replyTo)
+    if (response.ok) pending.resolve(response.payload)
+    else pending.reject(new AuthFailure("realtime_request", response.errorMessage))
+  }
+
+  private rejectPendingRequests(error: unknown) {
+    for (const pending of this.pendingRequests.values()) pending.reject(error)
+    this.pendingRequests.clear()
   }
 
   private isCurrent(socket: WebSocket, generation: number) {
@@ -228,22 +281,28 @@ function buildRealtimeWebSocketUrl(serverUrl: string) {
   return url.toString()
 }
 
-function parseEnvelope(data: RawData): RealtimeEvent | null {
+function parseEnvelope(data: RawData): RealtimeEvent | RealtimeResponse | null {
   let value: unknown
   try {
     value = JSON.parse(rawDataText(data))
   } catch {
     return null
   }
-  if (
-    !isRecord(value) ||
-    value.v !== 1 ||
-    value.kind !== "event" ||
-    typeof value.event !== "string" ||
-    !value.event
-  ) {
-    return null
+  if (!isRecord(value) || value.v !== 1) return null
+  if (value.kind === "response") {
+    if (typeof value.reply_to !== "string" || !value.reply_to || typeof value.ok !== "boolean") {
+      return null
+    }
+    const error = isRecord(value.error) ? value.error : undefined
+    return {
+      replyTo: value.reply_to,
+      ok: value.ok,
+      payload: value.payload,
+      errorMessage:
+        typeof error?.message === "string" && error.message ? error.message : "实时请求失败",
+    }
   }
+  if (value.kind !== "event" || typeof value.event !== "string" || !value.event) return null
   return {
     id: typeof value.id === "string" && value.id ? value.id : randomUUID(),
     cursor: Number.isSafeInteger(value.cursor) ? Number(value.cursor) : null,

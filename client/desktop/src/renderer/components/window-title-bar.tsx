@@ -100,7 +100,7 @@ function WindowButton({
       type="button"
       aria-label={label}
       title={label}
-      className={`flex h-8 w-9 items-center justify-center text-muted-foreground outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50 ${destructive ? "hover:bg-destructive hover:text-white focus-visible:bg-destructive focus-visible:text-white" : "hover:bg-foreground/10 hover:text-foreground"}`}
+      className={`flex h-full w-9 items-center justify-center text-muted-foreground outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50 ${destructive ? "hover:bg-destructive hover:text-white focus-visible:bg-destructive focus-visible:text-white" : "hover:bg-foreground/10 hover:text-foreground"}`}
       onClick={onClick}
     >
       {children}

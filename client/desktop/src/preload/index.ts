@@ -115,6 +115,8 @@ const bridge: DesktopBridge = {
     createMessageTopic: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.createMessageTopic, input),
     revokeMessage: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.revokeMessage, input),
+    sendConversationStatus: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.sendConversationStatus, input),
     setMessageReaction: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.setMessageReaction, input),
     submitChoiceResponse: (input) =>
@@ -162,6 +164,13 @@ const bridge: DesktopBridge = {
         callback(value)
       ipcRenderer.on(ACCOUNT_DATA_CHANNELS.changed, listener)
       return () => ipcRenderer.removeListener(ACCOUNT_DATA_CHANNELS.changed, listener)
+    },
+    onConversationPresenceChanged: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, value: Parameters<typeof callback>[0]) =>
+        callback(value)
+      ipcRenderer.on(ACCOUNT_DATA_CHANNELS.conversationPresenceChanged, listener)
+      return () =>
+        ipcRenderer.removeListener(ACCOUNT_DATA_CHANNELS.conversationPresenceChanged, listener)
     },
   },
   auth: {
