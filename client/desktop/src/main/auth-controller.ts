@@ -235,6 +235,34 @@ export class AuthController {
     return this.accountData.listConversations(...args)
   }
 
+  listLocalTopics(...args: Parameters<AccountDataFacade["listLocalTopics"]>) {
+    return this.accountData.listLocalTopics(...args)
+  }
+
+  listLocalAttachments(...args: Parameters<AccountDataFacade["listLocalAttachments"]>) {
+    return this.accountData.listLocalAttachments(...args)
+  }
+
+  getLocalMessageContext(...args: Parameters<AccountDataFacade["getLocalMessageContext"]>) {
+    return this.accountData.getLocalMessageContext(...args)
+  }
+
+  listLocalMessagesAfter(...args: Parameters<AccountDataFacade["listLocalMessagesAfter"]>) {
+    return this.accountData.listLocalMessagesAfter(...args)
+  }
+
+  getConversationInfo(...args: Parameters<AccountDataFacade["getConversationInfo"]>) {
+    return this.accountData.getConversationInfo(...args)
+  }
+
+  addGroupMembers(...args: Parameters<AccountDataFacade["addGroupMembers"]>) {
+    return this.accountData.addGroupMembers(...args)
+  }
+
+  manageGroup(...args: Parameters<AccountDataFacade["manageGroup"]>) {
+    return this.accountData.manageGroup(...args)
+  }
+
   markConversationRead(...args: Parameters<AccountDataFacade["markConversationRead"]>) {
     return this.accountData.markConversationRead(...args)
   }
@@ -341,6 +369,10 @@ export class AuthController {
 
   fetchTemporaryFile(...args: Parameters<AccountDataFacade["fetchTemporaryFile"]>) {
     return this.accountData.fetchTemporaryFile(...args)
+  }
+
+  resolveUserNames(...args: Parameters<AccountDataFacade["resolveUserNames"]>) {
+    return this.accountData.resolveUserNames(...args)
   }
 
   getContacts(...args: Parameters<AccountDataFacade["getContacts"]>) {

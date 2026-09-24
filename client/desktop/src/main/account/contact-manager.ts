@@ -75,6 +75,19 @@ export class ContactManager {
     return false
   }
 
+  async resolveUserNames(userIds: string[]) {
+    if (
+      !Array.isArray(userIds) ||
+      userIds.length < 1 ||
+      userIds.length > 100 ||
+      userIds.some((id) => typeof id !== "string" || !id || id.length > 128)
+    ) {
+      throw new AuthFailure("invalid_user_ids", "用户列表不正确")
+    }
+    const users = await this.resolveUsers(Array.from(new Set(userIds)), false)
+    return users.map((user) => ({ id: user.id, name: user.nickname || user.name }))
+  }
+
   getDirectory(): DesktopContactDirectory {
     return this.database.getContacts()
   }
@@ -203,14 +216,14 @@ export class ContactManager {
     }
   }
 
-  private async resolveUsers(userIds: string[]): Promise<StoredContactUser[]> {
+  private async resolveUsers(userIds: string[], requireAll = true): Promise<StoredContactUser[]> {
     const data = await this.client.post("/api/client/users/resolve", { user_ids: userIds })
     if (!isRecord(data) || !Array.isArray(data.users)) {
       throw new AuthFailure("invalid_response", "通讯录用户响应格式不正确")
     }
     const users = data.users.map(parseUser)
     const resolvedIds = new Set(users.map((user) => user.id))
-    if (userIds.some((id) => !resolvedIds.has(id))) {
+    if (requireAll && userIds.some((id) => !resolvedIds.has(id))) {
       throw new AuthFailure("invalid_response", "通讯录用户资料不完整")
     }
     return users

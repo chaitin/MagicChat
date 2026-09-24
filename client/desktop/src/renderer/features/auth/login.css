@@ -39,6 +39,40 @@
     display: none;
   }
 
+  .auth-background-fallback {
+    --auth-water-base: #ededed;
+    --auth-water-highlight: #ffffff;
+
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    background-color: var(--auth-water-base);
+    background-image:
+      radial-gradient(ellipse 60% 46% at 18% 25%, var(--auth-water-highlight), transparent 85%),
+      radial-gradient(ellipse 55% 40% at 75% 70%, var(--auth-water-highlight), transparent 80%);
+    background-size: 135% 135%;
+    pointer-events: none;
+    animation: auth-water-fallback 12s ease-in-out infinite alternate;
+  }
+
+  .auth-background-fallback[data-theme="dark"] {
+    --auth-water-base: #111111;
+    --auth-water-highlight: #2c2c2c;
+  }
+
+  @keyframes auth-water-fallback {
+    from {
+      background-position:
+        0% 0%,
+        100% 100%;
+    }
+    to {
+      background-position:
+        100% 75%,
+        0% 25%;
+    }
+  }
+
   .settings-sidebar [data-slot="sidebar-menu-button"] {
     background-color: transparent !important;
   }

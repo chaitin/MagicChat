@@ -1,6 +1,7 @@
 import type { DatabaseSync } from "node:sqlite"
 import type { DesktopConversation } from "../../../shared/account-data"
 import { parseConversationTopic } from "../conversation-topic.ts"
+import { parseConversationMembers } from "../conversation-members.ts"
 
 export type StoredConversation = DesktopConversation & { avatar: string; payload: unknown }
 
@@ -167,7 +168,36 @@ export class ConversationRepository {
                   conversations.name ASC`,
       )
       .all(topicActivityCutoff, selectedConversationId) as Array<Record<string, unknown>>
-    return rows.map((row) => ({
+    return rows.map((row) => this.mapRow(row))
+  }
+
+  listTopics(parentId: string, offset: number, keyword = "") {
+    const rows = this.database
+      .prepare(
+        `SELECT c.id, c.type, c.name, c.member_count, c.avatar_type, c.avatar_id,
+                c.created_at, c.last_message_at,
+                COALESCE((SELECT content FROM messages WHERE conversation_id = c.id
+                  ORDER BY seq DESC, created_at DESC, id DESC LIMIT 1), '') AS last_message_summary,
+                c.pinned, c.notification_muted, c.is_builtin_assistant, c.unread_count,
+                c.last_message_seq, c.last_read_seq, c.payload_json
+         FROM conversations c
+         WHERE c.type = 'topic' AND c.current = 1
+           AND json_valid(c.payload_json)
+           AND json_extract(c.payload_json, '$.topic.parent_conversation_id') = ?
+           AND (? = '' OR instr(lower(c.name), lower(?)) > 0)
+         ORDER BY COALESCE(c.last_message_at, c.created_at) DESC, c.id DESC
+         LIMIT 51 OFFSET ?`,
+      )
+      .all(parentId, keyword, keyword, offset) as Array<Record<string, unknown>>
+    return {
+      items: rows.slice(0, 50).map((row) => this.mapRow(row)),
+      nextOffset: rows.length > 50 ? offset + 50 : null,
+    }
+  }
+
+  private mapRow(row: Record<string, unknown>): DesktopConversation {
+    const payload = parsePayload({ payload_json: row.payload_json })
+    return {
       id: String(row.id),
       type: String(row.type),
       name: String(row.name),
@@ -183,8 +213,9 @@ export class ConversationRepository {
       unreadCount: Number(row.unread_count),
       lastMessageSeq: Number(row.last_message_seq),
       lastReadSeq: Number(row.last_read_seq),
-      topic: parseConversationTopic(parsePayload({ payload_json: row.payload_json })),
-    }))
+      topic: parseConversationTopic(payload),
+      members: parseConversationMembers(payload),
+    }
   }
 
   getPayload(conversationId: string): unknown {

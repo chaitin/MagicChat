@@ -1,14 +1,16 @@
 import type { DatabaseSync } from "node:sqlite"
-import type { DesktopMessage } from "../../../shared/account-data"
-import { normalizeDesktopMessageDetails } from "../message-normalizer"
-import { OutgoingMessageRepository } from "./outgoing-message-repository"
+import type { DesktopLocalAttachment, DesktopMessage } from "../../../shared/account-data"
+import { normalizeDesktopMessageDetails } from "../message-normalizer.ts"
+import { OutgoingMessageRepository } from "./outgoing-message-repository.ts"
 
 export type StoredMessage = DesktopMessage & { payload: unknown }
 
 export class MessageRepository {
+  private readonly database: DatabaseSync
   private readonly outgoing: OutgoingMessageRepository
 
-  constructor(private readonly database: DatabaseSync) {
+  constructor(database: DatabaseSync) {
+    this.database = database
     this.outgoing = new OutgoingMessageRepository(database, (messages) =>
       this.upsertMessages(messages),
     )
@@ -20,6 +22,34 @@ export class MessageRepository {
         .prepare("SELECT 1 FROM messages WHERE conversation_id = ? AND id = ?")
         .get(conversationId, id),
     )
+  }
+
+  listAttachments(conversationId: string, offset: number, keyword = "") {
+    const nameFilter = keyword
+      ? `AND instr(lower(CASE WHEN json_valid(payload_json)
+          THEN coalesce(json_extract(payload_json, '$.body.name'), '文件')
+          ELSE '文件' END), lower(?)) > 0`
+      : ""
+    const rows = this.database
+      .prepare(
+        `
+      SELECT id, created_at, payload_json FROM messages
+      WHERE conversation_id = ? AND body_type = 'file' AND seq > 0
+        AND delivery_status = '' ${nameFilter}
+      ORDER BY seq DESC, created_at DESC, id DESC LIMIT 51 OFFSET ?
+    `,
+      )
+      .all(...(keyword ? [conversationId, keyword, offset] : [conversationId, offset])) as Array<
+      Record<string, unknown>
+    >
+    const items: DesktopLocalAttachment[] = []
+    for (const row of rows.slice(0, 50)) {
+      const body = normalizeDesktopMessageDetails(parsePayload(row)).body
+      if (body.type === "file" && body.fileId) {
+        items.push({ id: String(row.id), createdAt: String(row.created_at), body })
+      }
+    }
+    return { items, nextOffset: rows.length > 50 ? offset + 50 : null }
   }
 
   upsertMessages(messages: StoredMessage[]) {
@@ -133,20 +163,56 @@ export class MessageRepository {
     )
   }
 
+  getMessageSeq(conversationId: string, messageId: string): number | null {
+    const row = this.database
+      .prepare("SELECT seq FROM messages WHERE conversation_id = ? AND id = ? AND seq > 0")
+      .get(conversationId, messageId) as { seq: number } | undefined
+    return row?.seq ?? null
+  }
+
+  getAttachmentMessageSeq(conversationId: string, messageId: string): number | null {
+    const row = this.database
+      .prepare(
+        "SELECT seq FROM messages WHERE conversation_id = ? AND id = ? AND body_type = 'file' AND seq > 0",
+      )
+      .get(conversationId, messageId) as { seq: number } | undefined
+    return row?.seq ?? null
+  }
+
+  hasMessagesBefore(conversationId: string, seq: number) {
+    return Boolean(
+      this.database
+        .prepare("SELECT 1 FROM messages WHERE conversation_id = ? AND seq > 0 AND seq < ? LIMIT 1")
+        .get(conversationId, seq),
+    )
+  }
+
+  hasMessagesAfter(conversationId: string, seq: number) {
+    return Boolean(
+      this.database
+        .prepare("SELECT 1 FROM messages WHERE conversation_id = ? AND seq > ? LIMIT 1")
+        .get(conversationId, seq),
+    )
+  }
+
   listMessages(
     conversationId: string,
     currentUserId: string,
     latestLimit?: number,
     beforeSeq?: number,
+    afterSeq?: number,
   ): DesktopMessage[] {
     const limit =
       Number.isSafeInteger(latestLimit) && Number(latestLimit) > 0 ? latestLimit : undefined
     const before = Number.isSafeInteger(beforeSeq) && Number(beforeSeq) > 0 ? beforeSeq : undefined
+    const after = Number.isSafeInteger(afterSeq) && Number(afterSeq) > 0 ? afterSeq : undefined
     const parameters: Array<string | number> = [conversationId]
     if (before !== undefined) parameters.push(before)
+    if (after !== undefined) parameters.push(after)
     if (limit !== undefined) {
       parameters.push(conversationId)
       if (before !== undefined) parameters.push(before)
+      if (after !== undefined) parameters.push(after)
       parameters.push(limit)
     }
     const rows = this.database
@@ -169,13 +235,15 @@ export class MessageRepository {
            ON messages.sender_type = 'app' AND contact_apps.id = messages.sender_id
          WHERE messages.conversation_id = ?
            ${before !== undefined ? "AND messages.seq < ?" : ""}
+           ${after !== undefined ? "AND messages.seq > ?" : ""}
            ${
              limit !== undefined
                ? `AND messages.id IN (
                     SELECT id FROM messages
                     WHERE conversation_id = ?
                     ${before !== undefined ? "AND seq < ?" : ""}
-                    ORDER BY seq DESC, created_at DESC, id DESC
+                    ${after !== undefined ? "AND seq > ?" : ""}
+                    ORDER BY seq ${after !== undefined ? "ASC" : "DESC"}, created_at ${after !== undefined ? "ASC" : "DESC"}, id ${after !== undefined ? "ASC" : "DESC"}
                     LIMIT ?
                   )`
                : ""

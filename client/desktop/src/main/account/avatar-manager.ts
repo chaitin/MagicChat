@@ -43,6 +43,7 @@ export class AvatarManager {
 
   getAvatar(request: Omit<AvatarRequest, "targetId">): Promise<AvatarResult> {
     validateReference(request.type, request.id)
+    if (request.cacheOnly === true) return this.resolveCachedAvatar(request)
     const key = `${request.type}:${request.id}:${request.theme}`
     const existing = this.inFlight.get(key)
     if (existing) return existing
@@ -89,6 +90,28 @@ export class AvatarManager {
     const record = this.database.getAvatarCacheByResourceKey(resourceKey)
     if (!record) throw new AuthFailure("avatar_not_found", "头像资源不存在")
     return record
+  }
+
+  private async resolveCachedAvatar(
+    request: Omit<AvatarRequest, "targetId">,
+  ): Promise<AvatarResult> {
+    const descriptor =
+      request.type === "project"
+        ? undefined
+        : await this.resolveDescriptor(request.type, request.id)
+    const type = descriptor?.type ?? fallbackTypeFor(request.type)
+    const id = descriptor?.id ?? request.id
+    const cacheTypes =
+      type === "group" && !descriptor?.avatarUrl
+        ? [`group-composite-v${compositeStyleVersion}-${request.theme}`, "group"]
+        : [type]
+    for (const cacheType of cacheTypes) {
+      const cached = this.database.getAvatarCache(cacheType, id)
+      if (cached && (await fileExists(this.localPath(cached.localFile)))) {
+        return { status: "ready", type, resourceUrl: resourceUrl(cached) }
+      }
+    }
+    return { status: "fallback", type }
   }
 
   private async resolveAvatar(request: Omit<AvatarRequest, "targetId">): Promise<AvatarResult> {

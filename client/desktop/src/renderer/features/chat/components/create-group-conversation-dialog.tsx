@@ -2,6 +2,7 @@ import { useId, useMemo, useState, type FormEvent } from "react"
 import { Loader2, Search } from "lucide-react"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -16,7 +17,7 @@ import { Input } from "@/components/ui/input"
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Skeleton } from "@/components/ui/skeleton"
 import type {
   DesktopContactApp,
   DesktopContactUser,
@@ -31,6 +32,7 @@ export function CreateGroupConversationDialog({
   theme,
   contacts,
   apps,
+  loading,
   onClose,
   onCreated,
 }: {
@@ -39,27 +41,28 @@ export function CreateGroupConversationDialog({
   theme: "light" | "dark"
   contacts: DesktopContactUser[]
   apps: DesktopContactApp[]
+  loading: boolean
   onClose: () => void
   onCreated: (conversation: DesktopConversation) => void
 }) {
   const { showToast } = useAnimatedToast()
   const nameId = useId()
-  const searchId = useId()
   const [name, setName] = useState("新建群聊")
-  const [tab, setTab] = useState<"users" | "apps">("users")
   const [keyword, setKeyword] = useState("")
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [creating, setCreating] = useState(false)
   const candidates = useMemo(() => {
     const query = keyword.trim().toLocaleLowerCase()
-    const source: Candidate[] =
-      tab === "apps"
-        ? apps
-        : contacts.filter((contact) => contact.id.toLowerCase() !== currentUserId.toLowerCase())
+    const source: Candidate[] = [
+      ...contacts.filter((contact) => contact.id.toLowerCase() !== currentUserId.toLowerCase()),
+      ...apps,
+    ]
     if (!query) return source
     return source.filter((candidate) => candidateSearchText(candidate).includes(query))
-  }, [apps, contacts, currentUserId, keyword, tab])
-  const canCreate = Boolean(name.trim()) && !creating
+  }, [apps, contacts, currentUserId, keyword])
+  const canCreate = Boolean(name.trim()) && !loading && !creating
+  const selectedUserCount = [...selected].filter((key) => key.startsWith("user:")).length
+  const selectedAppCount = selected.size - selectedUserCount
 
   function toggle(candidate: Candidate, checked: boolean | "indeterminate") {
     const key = candidateKey(candidate)
@@ -117,46 +120,37 @@ export function CreateGroupConversationDialog({
               onChange={(event) => setName(event.target.value)}
             />
           </div>
-          <Tabs
-            value={tab}
-            onValueChange={(value) => {
-              setKeyword("")
-              setTab(value === "apps" ? "apps" : "users")
-            }}
-          >
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger disabled={creating} value="users">
-                成员
-              </TabsTrigger>
-              <TabsTrigger disabled={creating} value="apps">
-                应用
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
           <div className="grid gap-2">
-            <Label htmlFor={searchId}>{tab === "apps" ? "选择应用" : "选择成员"}</Label>
             <div className="relative">
               <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 className="pl-8"
-                id={searchId}
+                aria-label="搜索成员或应用"
                 type="search"
                 value={keyword}
-                disabled={creating}
-                placeholder={tab === "apps" ? "搜索应用" : "搜索联系人"}
+                disabled={loading || creating}
+                placeholder="搜索成员或应用"
                 onChange={(event) => setKeyword(event.target.value)}
               />
             </div>
           </div>
           <ScrollArea
-            className="h-64 rounded-md border"
+            className="-mt-2 h-64 rounded-md border"
             viewportClassName="[&>div]:block! [&>div]:w-full!"
+            aria-busy={loading}
           >
-            {candidates.length ? (
-              <ItemGroup
-                className="gap-1! p-2"
-                aria-label={tab === "apps" ? "群聊应用" : "群聊成员"}
-              >
+            {loading ? (
+              <div className="grid gap-2 p-3" role="status" aria-label="正在加载群聊成员和应用">
+                {Array.from({ length: 10 }, (_, index) => (
+                  <div className="flex items-center gap-3" key={index} aria-hidden="true">
+                    <Skeleton className="size-6 shrink-0 rounded-sm" />
+                    <Skeleton className="h-4 flex-1" />
+                    <Skeleton className="size-4 shrink-0 rounded-sm" />
+                  </div>
+                ))}
+              </div>
+            ) : candidates.length ? (
+              <ItemGroup className="gap-1! p-2" aria-label="群聊成员和应用">
                 {candidates.map((candidate) => {
                   const key = candidateKey(candidate)
                   const checkboxId = `create-group-${key}`
@@ -165,7 +159,8 @@ export function CreateGroupConversationDialog({
                     <Item
                       asChild
                       size="sm"
-                      className="cursor-pointer px-2 py-1 hover:bg-muted"
+                      className="cursor-pointer px-2 py-1 hover:bg-muted data-[selected=true]:bg-xgui-background-0 data-[selected=true]:hover:bg-xgui-background-0"
+                      data-selected={selected.has(key)}
                       key={key}
                     >
                       <Label htmlFor={checkboxId} role="listitem">
@@ -178,7 +173,12 @@ export function CreateGroupConversationDialog({
                           label={displayName}
                         />
                         <ItemContent className="min-w-0">
-                          <span className="truncate text-sm">{displayName}</span>
+                          <span className="flex min-w-0 items-center gap-2 text-sm">
+                            <span className="truncate">{displayName}</span>
+                            {candidate.avatarType === "app" && (
+                              <Badge variant="outline">应用</Badge>
+                            )}
+                          </span>
                         </ItemContent>
                         <Checkbox
                           id={checkboxId}
@@ -194,18 +194,23 @@ export function CreateGroupConversationDialog({
               </ItemGroup>
             ) : (
               <div className="px-3 py-8 text-center text-sm text-muted-foreground">
-                {tab === "apps" ? "没有匹配的应用" : "没有匹配的联系人"}
+                没有匹配的成员或应用
               </div>
             )}
           </ScrollArea>
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={creating} onClick={onClose}>
-              取消
-            </Button>
-            <Button type="submit" disabled={!canCreate}>
-              {creating && <Loader2 aria-hidden className="animate-spin" />}
-              创建
-            </Button>
+          <DialogFooter className="flex-row items-center justify-between sm:justify-between">
+            <span className="shrink-0 text-sm text-foreground" aria-live="polite">
+              已选择 {selectedUserCount} 人{selectedAppCount > 0 && `、${selectedAppCount} 个应用`}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" disabled={creating} onClick={onClose}>
+                取消
+              </Button>
+              <Button type="submit" disabled={!canCreate}>
+                {creating && <Loader2 aria-hidden className="animate-spin" />}
+                创建
+              </Button>
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>

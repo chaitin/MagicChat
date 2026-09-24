@@ -4,6 +4,7 @@ import type {
   DesktopMessage,
   DesktopMessagePage,
   DesktopMessageReactionUser,
+  ManageGroupInput,
   MessageReactionUsersInput,
   SendRichMessageInput,
   SetMessageReactionInput,
@@ -268,6 +269,125 @@ export class ConversationManager {
     return this.listConversations()
   }
 
+  listLocalTopics(conversationId: string, offset: number, keyword: string) {
+    this.assertCurrentConversation(conversationId)
+    return this.database.listLocalTopics(conversationId, offset, keyword)
+  }
+
+  listLocalAttachments(conversationId: string, offset: number, keyword: string) {
+    this.assertCurrentConversation(conversationId)
+    return this.database.listLocalAttachments(conversationId, offset, keyword)
+  }
+
+  getConversationInfo(conversationId: string) {
+    this.assertConversationId(conversationId)
+    if (
+      !this.database.listConversations(conversationId).some((item) => item.id === conversationId)
+    ) {
+      throw new AuthFailure("conversation_not_found", "对话不存在")
+    }
+    const payload = this.database.getConversationPayload(conversationId)
+    if (!isRecord(payload)) throw new AuthFailure("invalid_conversation", "会话信息不可用")
+    return {
+      announcement: typeof payload.announcement === "string" ? payload.announcement : "",
+      visibility: typeof payload.visibility === "string" ? payload.visibility : "private",
+      members: Array.isArray(payload.members) ? payload.members.filter(isRecord).flatMap((member) => {
+        if (typeof member.id !== "string" || !member.id || member.id.length > 128 ||
+          (member.type !== undefined && member.type !== "user" && member.type !== "app")) return []
+        return [{
+          id: member.id,
+          type: member.type === "app" ? "app" as const : "user" as const,
+          name: (typeof member.nickname === "string" && member.nickname) ||
+            (typeof member.name === "string" && member.name) || member.id,
+          role: member.role === "owner" || member.role === "admin" ? member.role : "member",
+        }]
+      }) : [],
+    }
+  }
+
+  async addGroupMembers(input: { conversationId: string; memberIds: string[]; appIds: string[] }) {
+    this.assertCurrentConversation(input.conversationId, "group")
+    const data = await this.client.post(
+      `/api/client/conversations/${encodeURIComponent(input.conversationId)}/members`,
+      { member_ids: validEntityIds(input.memberIds, "群聊成员"),
+        app_ids: validEntityIds(input.appIds, "群聊应用") },
+    )
+    if (!isRecord(data) || !isRecord(data.conversation)) {
+      throw new AuthFailure("invalid_response", "添加群聊成员响应格式不正确")
+    }
+    const conversation = parseConversation(data.conversation, this.currentUserId)
+    if (conversation.id !== input.conversationId) {
+      throw new AuthFailure("invalid_response", "添加群聊成员响应格式不正确")
+    }
+    this.database.upsertCurrentConversations([conversation])
+    if (isRecord(data.message)) {
+      this.database.upsertMessages([parseMessage(data.message, input.conversationId)])
+    }
+    return this.database.listConversations(input.conversationId).find((item) => item.id === input.conversationId)!
+  }
+
+  async manageGroup(input: ManageGroupInput) {
+    const id = input.conversationId
+    this.assertCurrentConversation(id, "group")
+    const groupPath = `/api/client/conversations/groups/${encodeURIComponent(id)}`
+    let data: unknown
+    switch (input.action) {
+      case "name":
+      case "announcement": {
+        const value = input.value.trim()
+        if ((input.action === "name" && (!value || Array.from(value).length > 50)) ||
+          (input.action === "announcement" && Array.from(value).length > 200)) {
+          throw new AuthFailure("invalid_group_value", "群聊信息不正确")
+        }
+        data = await this.client.patch(`${groupPath}/${input.action}`, { [input.action]: value })
+        break
+      }
+      case "public":
+      case "private":
+      case "leave":
+        data = await this.client.post(`${groupPath}/${input.action}`, {})
+        break
+      case "dissolve":
+        data = await this.client.delete(groupPath)
+        break
+      case "remove-member": {
+        if (typeof input.memberId !== "string" || !input.memberId || input.memberId.length > 128 ||
+          (input.memberType !== "user" && input.memberType !== "app")) {
+          throw new AuthFailure("invalid_member", "群成员不正确")
+        }
+        const member = encodeURIComponent(input.memberId)
+        data = await this.client.delete(`${groupPath}/members/${input.memberType === "app" ? "app/" : ""}${member}`)
+        break
+      }
+      default:
+        throw new AuthFailure("invalid_group_action", "群聊操作不正确")
+    }
+    if (input.action === "leave" || input.action === "dissolve") {
+      if (!isRecord(data) || data.conversation_id !== id) {
+        throw new AuthFailure("invalid_response", "群聊操作响应格式不正确")
+      }
+      this.database.removeCurrentConversation(id)
+      return null
+    }
+    if (!isRecord(data) || !isRecord(data.conversation)) {
+      throw new AuthFailure("invalid_response", "群聊操作响应格式不正确")
+    }
+    const conversation = parseConversation(data.conversation, this.currentUserId)
+    if (conversation.id !== id) throw new AuthFailure("invalid_response", "群聊操作响应格式不正确")
+    this.database.upsertCurrentConversations([conversation])
+    if (isRecord(data.message)) this.database.upsertMessages([parseMessage(data.message, id)])
+    return this.database.listConversations(id).find((item) => item.id === id)!
+  }
+
+  private assertCurrentConversation(conversationId: string, type?: string) {
+    this.assertConversationId(conversationId)
+    const conversation = this.database.listConversations(conversationId)
+      .find((item) => item.id === conversationId)
+    if (!conversation || (type && conversation.type !== type) || conversation.type === "topic") {
+      throw new AuthFailure("conversation_not_found", "对话不存在")
+    }
+  }
+
   async createGroupConversation(input: { name: string; memberIds: string[]; appIds: string[] }) {
     const name = typeof input.name === "string" ? input.name.trim() : ""
     if (!name || name.length > 256) {
@@ -323,6 +443,42 @@ export class ConversationManager {
       entityId,
       this.database.getConversationPayload(entityId),
     )
+  }
+
+  getLocalMessageContext(conversationId: string, messageId: string) {
+    this.assertCurrentConversation(conversationId)
+    if (typeof messageId !== "string" || !messageId || messageId.length > 128) {
+      throw new AuthFailure("invalid_message", "消息不存在")
+    }
+    const seq = this.database.getMessageSeq(conversationId, messageId)
+    if (seq === null) throw new AuthFailure("message_not_found", "本地消息不存在")
+    const before = this.database.listMessages(conversationId, this.currentUserId, 20, seq)
+    const target = this.database.listMessages(
+      conversationId, this.currentUserId, 1, Math.min(Number.MAX_SAFE_INTEGER, seq + 1),
+    )
+    const after = this.database.listMessages(conversationId, this.currentUserId, 20, undefined, seq)
+    const messages = [...before, ...target, ...after]
+    const first = messages[0]
+    const last = messages.at(-1)
+    return {
+      messages,
+      hasMoreBefore: Boolean(first && this.database.hasMessagesBefore(conversationId, first.seq)),
+      hasMoreAfter: Boolean(last && this.database.hasMessagesAfter(conversationId, last.seq)),
+    }
+  }
+
+  listLocalMessagesAfter(conversationId: string, afterSeq: number) {
+    this.assertCurrentConversation(conversationId)
+    if (!Number.isSafeInteger(afterSeq) || afterSeq <= 0) {
+      throw new AuthFailure("invalid_message_seq", "消息序号不正确")
+    }
+    const rows = this.database.listMessages(conversationId, this.currentUserId, 51, undefined, afterSeq)
+    const messages = rows.slice(0, 50)
+    return {
+      messages,
+      hasMoreBefore: Boolean(messages[0] && this.database.hasMessagesBefore(conversationId, messages[0].seq)),
+      hasMoreAfter: rows.length > 50,
+    }
   }
 
   listMessages(conversationId: string, latestLimit?: number): DesktopMessage[] {
@@ -619,7 +775,7 @@ export class ConversationManager {
   }
 
   private assertConversationId(conversationId: string) {
-    if (!conversationId || conversationId.length > 128) {
+    if (typeof conversationId !== "string" || !conversationId || conversationId.length > 128) {
       throw new AuthFailure("invalid_conversation", "会话不存在")
     }
   }

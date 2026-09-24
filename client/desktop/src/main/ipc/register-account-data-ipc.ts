@@ -1,6 +1,13 @@
 import type { BrowserWindow } from "electron"
 import {
   ACCOUNT_DATA_CHANNELS,
+  type AddGroupMembersInput,
+  type ConversationTargetInput,
+  type LocalAttachmentPageInput,
+  type LocalMessageContextInput,
+  type LocalMessagesAfterInput,
+  type LocalConversationPageInput,
+  type ManageGroupInput,
   type AvatarRequest,
   type CreateGroupConversationInput,
   type CreateMessageTopicInput,
@@ -9,6 +16,7 @@ import {
   type ListConversationsInput,
   type MarkConversationReadInput,
   type MessageReactionUsersInput,
+  type ResolveUserNamesInput,
   type RetryMessageInput,
   type RevokeMessageInput,
   type SendConversationStatusInput,
@@ -44,6 +52,27 @@ export function registerAccountDataIpc({
   handle(ACCOUNT_DATA_CHANNELS.searchLocal, (input) => auth.searchLocal(input as LocalSearchInput))
   handle(ACCOUNT_DATA_CHANNELS.listConversations, (input) =>
     auth.listConversations(input as ListConversationsInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.listLocalTopics, (input) =>
+    auth.listLocalTopics(input as LocalConversationPageInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.listLocalAttachments, (input) =>
+    auth.listLocalAttachments(input as LocalAttachmentPageInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.getLocalMessageContext, (input) =>
+    auth.getLocalMessageContext(input as LocalMessageContextInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.listLocalMessagesAfter, (input) =>
+    auth.listLocalMessagesAfter(input as LocalMessagesAfterInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.getConversationInfo, (input) =>
+    auth.getConversationInfo(input as ConversationTargetInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.addGroupMembers, (input) =>
+    auth.addGroupMembers(input as AddGroupMembersInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.manageGroup, (input) =>
+    auth.manageGroup(input as ManageGroupInput),
   )
   handle(ACCOUNT_DATA_CHANNELS.markConversationRead, (input) =>
     auth.markConversationRead(input as MarkConversationReadInput),
@@ -199,6 +228,9 @@ export function registerAccountDataIpc({
       value?.loadedCount ?? 0,
     )
   })
+  handle(ACCOUNT_DATA_CHANNELS.resolveUserNames, (input) =>
+    auth.resolveUserNames(input as ResolveUserNamesInput),
+  )
   handle(ACCOUNT_DATA_CHANNELS.getContacts, (input) => auth.getContacts(input as string))
   handle(ACCOUNT_DATA_CHANNELS.getAvatar, (input) => auth.getAvatar(input as AvatarRequest))
   handle(ACCOUNT_DATA_CHANNELS.invalidateAvatar, (input) =>

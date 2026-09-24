@@ -5,6 +5,13 @@ export const ACCOUNT_DATA_CHANNELS = {
   refreshAll: "desktop-next:v1:account-data-refresh-all",
   searchLocal: "desktop-next:v1:account-data-search-local",
   listConversations: "desktop-next:v1:conversations-list",
+  listLocalTopics: "desktop-next:v1:conversation-topics-local-list",
+  listLocalAttachments: "desktop-next:v1:conversation-attachments-local-list",
+  getLocalMessageContext: "desktop-next:v1:message-context-local-get",
+  listLocalMessagesAfter: "desktop-next:v1:messages-after-local-list",
+  getConversationInfo: "desktop-next:v1:conversation-info-get",
+  addGroupMembers: "desktop-next:v1:conversation-members-add",
+  manageGroup: "desktop-next:v1:conversation-group-manage",
   createGroupConversation: "desktop-next:v1:conversation-group-create",
   setConversationPinned: "desktop-next:v1:conversation-pin-set",
   setConversationMuted: "desktop-next:v1:conversation-mute-set",
@@ -15,6 +22,7 @@ export const ACCOUNT_DATA_CHANNELS = {
   setMessageReaction: "desktop-next:v1:conversation-message-reaction-set",
   submitChoiceResponse: "desktop-next:v1:conversation-message-choice-submit",
   listMessageReactionUsers: "desktop-next:v1:conversation-message-reaction-users-list",
+  resolveUserNames: "desktop-next:v1:user-names-resolve",
   sendTextMessage: "desktop-next:v1:conversation-message-text-send",
   sendRichMessage: "desktop-next:v1:conversation-message-rich-send",
   selectMessageFile: "desktop-next:v1:conversation-message-file-select",
@@ -90,6 +98,7 @@ export type AvatarRequest = {
   type: AvatarType
   id: string
   theme: "light" | "dark"
+  cacheOnly?: boolean
 }
 export type AvatarResult = {
   status: "ready" | "fallback"
@@ -102,6 +111,7 @@ export type DesktopConversation = {
   type: string
   name: string
   memberCount: number
+  members?: DesktopConversationMember[]
   avatarType: AvatarType
   avatarId: string
   createdAt: string
@@ -118,15 +128,39 @@ export type DesktopConversation = {
   topic?: DesktopConversationTopic
 }
 
+export type DesktopConversationMember = {
+  id: string
+  type: "user" | "app"
+  name: string
+  nickname: string
+  email: string
+  phone: string
+}
+
 export type DesktopConversationTopic = {
   archived: boolean
   parentConversationId: string
+  sourceMessageId?: string
+  parentConversationType?: string
   participating: boolean
   sourceSender: {
     id: string
     name: string
     type: "user" | "app"
   }
+}
+
+export type DesktopConversationInfo = {
+  announcement: string
+  visibility: string
+  members: Array<{ id: string; type: "user" | "app"; name: string; role: string }>
+}
+
+export type DesktopLocalPage<T> = { items: T[]; nextOffset: number | null }
+export type DesktopLocalAttachment = {
+  id: string
+  createdAt: string
+  body: Extract<DesktopMessageBody, { type: "file" }>
 }
 
 export type DesktopMessageBody =
@@ -240,6 +274,8 @@ export type DesktopMessageReactionUser = {
   name: string
 }
 
+export type ResolveUserNamesInput = { targetId: string; userIds: string[] }
+
 export type DesktopMessagePage = {
   messages: DesktopMessage[]
   hasMoreBefore: boolean
@@ -335,6 +371,27 @@ export type CreateGroupConversationInput = {
   memberIds: string[]
   appIds: string[]
 }
+
+export type ConversationTargetInput = { targetId: string; conversationId: string }
+export type LocalConversationPageInput = ConversationTargetInput & { offset?: number; keyword?: string }
+export type LocalAttachmentPageInput = LocalConversationPageInput
+export type LocalMessageContextInput = ConversationTargetInput & { messageId: string }
+export type LocalMessagesAfterInput = ConversationTargetInput & { afterSeq: number }
+export type DesktopLocalMessageWindow = {
+  messages: DesktopMessage[]
+  hasMoreBefore: boolean
+  hasMoreAfter: boolean
+}
+export type AddGroupMembersInput = ConversationTargetInput & {
+  memberIds: string[]
+  appIds: string[]
+}
+
+export type ManageGroupInput = ConversationTargetInput & (
+  | { action: "name" | "announcement"; value: string }
+  | { action: "public" | "private" | "leave" | "dissolve" }
+  | { action: "remove-member"; memberId: string; memberType: "user" | "app" }
+)
 
 export type SetConversationPinnedInput = {
   targetId: string
@@ -544,6 +601,13 @@ export interface AccountDataBridge {
   refreshAll(targetId: string): Promise<AuthResult<null>>
   searchLocal(input: LocalSearchInput): Promise<AuthResult<LocalSearchResponse>>
   listConversations(input: ListConversationsInput): Promise<AuthResult<DesktopConversation[]>>
+  listLocalTopics(input: LocalConversationPageInput): Promise<AuthResult<DesktopLocalPage<DesktopConversation>>>
+  listLocalAttachments(input: LocalAttachmentPageInput): Promise<AuthResult<DesktopLocalPage<DesktopLocalAttachment>>>
+  getLocalMessageContext(input: LocalMessageContextInput): Promise<AuthResult<DesktopLocalMessageWindow>>
+  listLocalMessagesAfter(input: LocalMessagesAfterInput): Promise<AuthResult<DesktopLocalMessageWindow>>
+  getConversationInfo(input: ConversationTargetInput): Promise<AuthResult<DesktopConversationInfo>>
+  addGroupMembers(input: AddGroupMembersInput): Promise<AuthResult<DesktopConversation>>
+  manageGroup(input: ManageGroupInput): Promise<AuthResult<DesktopConversation | null>>
   createGroupConversation(
     input: CreateGroupConversationInput,
   ): Promise<AuthResult<DesktopConversation>>
@@ -588,6 +652,7 @@ export interface AccountDataBridge {
   listMessageReactionUsers(
     input: MessageReactionUsersInput,
   ): Promise<AuthResult<DesktopMessageReactionUser[]>>
+  resolveUserNames(input: ResolveUserNamesInput): Promise<AuthResult<DesktopMessageReactionUser[]>>
   getContacts(targetId: string): Promise<AuthResult<DesktopContactDirectory>>
   refreshContacts(targetId: string): Promise<AuthResult<DesktopContactDirectory>>
   searchContactUsers(input: {

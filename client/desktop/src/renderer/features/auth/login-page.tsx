@@ -62,6 +62,15 @@ export function LoginPage({
   const [quitOpen, setQuitOpen] = useState(false)
   const [quitPending, setQuitPending] = useState(false)
   const [refreshingAll, setRefreshingAll] = useState(false)
+  const [supportsWebGL] = useState(() => {
+    try {
+      const context = document.createElement("canvas").getContext("webgl2")
+      context?.getExtension("WEBGL_lose_context")?.loseContext()
+      return Boolean(context)
+    } catch {
+      return false
+    }
+  })
   const [notificationTarget, setNotificationTarget] = useState<{
     targetId: string
     conversationId: string
@@ -186,7 +195,7 @@ export function LoginPage({
   if (screen === "startup") {
     return (
       <>
-        <AuthBackground theme={resolvedTheme}>
+        <AuthBackground theme={resolvedTheme} supportsWebGL={supportsWebGL}>
           <SigningInPage loadingOnly />
         </AuthBackground>
         {traySettingsDialog}
@@ -230,7 +239,7 @@ export function LoginPage({
   if (screen === "servers") {
     return (
       <>
-        <AuthBackground theme={resolvedTheme}>
+        <AuthBackground theme={resolvedTheme} supportsWebGL={supportsWebGL}>
           <ServerSelectPage
             catalog={catalog}
             loading={loading}
@@ -255,7 +264,7 @@ export function LoginPage({
   if (screen === "signing-in") {
     return (
       <>
-        <AuthBackground theme={resolvedTheme}>
+        <AuthBackground theme={resolvedTheme} supportsWebGL={supportsWebGL}>
           <SigningInPage
             targetId={connection?.targetId ?? ""}
             refreshAll={refreshingAll}
@@ -271,7 +280,7 @@ export function LoginPage({
 
   return (
     <>
-      <AuthBackground theme={resolvedTheme}>
+      <AuthBackground theme={resolvedTheme} supportsWebGL={supportsWebGL}>
         <main className="login-page login-page--shader">
           <div className="auth-surface auth-surface--shader grid min-h-full grid-rows-[1fr_auto] gap-4 p-6 text-foreground md:p-10">
             <div className="flex items-center justify-center">
@@ -367,20 +376,26 @@ export function LoginPage({
 function AuthBackground({
   children,
   theme,
+  supportsWebGL,
 }: {
   children: ReactNode
   theme: Exclude<ThemePreference, "system">
+  supportsWebGL: boolean
 }) {
   return (
     <div className="relative isolate h-full overflow-hidden bg-background">
-      <ShaderBackground
-        variant="water"
-        speed={1}
-        colorBack={theme === "dark" ? "#111111" : "#ededed"}
-        colorHighlight={theme === "dark" ? "#2c2c2c" : "#ffffff"}
-        className="pointer-events-none absolute inset-0 z-0"
-        aria-hidden
-      />
+      {supportsWebGL ? (
+        <ShaderBackground
+          variant="water"
+          speed={1}
+          colorBack={theme === "dark" ? "#111111" : "#ededed"}
+          colorHighlight={theme === "dark" ? "#2c2c2c" : "#ffffff"}
+          className="pointer-events-none absolute inset-0 z-0"
+          aria-hidden
+        />
+      ) : (
+        <div className="auth-background-fallback" data-theme={theme} aria-hidden />
+      )}
       <div className="relative z-10 h-full">{children}</div>
     </div>
   )

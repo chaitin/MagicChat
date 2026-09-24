@@ -150,13 +150,31 @@ function ReactionUsersPopover({
         messageId,
         text: reaction.text,
       })
-      .then((result) => {
+      .then(async (result) => {
         if (requestVersionRef.current !== requestVersion) return
-        if (!result.ok) {
-          setError(result.error.message)
-          return
+        if (!result.ok) throw new Error(result.error.message)
+        const missing = result.data.filter(
+          (user) => !user.name && !resolveLabel({ type: "user", id: user.id }),
+        )
+        const batches: string[][] = []
+        for (let index = 0; index < missing.length; index += 100) {
+          batches.push(missing.slice(index, index + 100).map((user) => user.id))
         }
-        setUsers(result.data.map((user) => resolvedUser(user, resolveLabel)))
+        const resolved = await Promise.all(
+          batches.map(async (userIds) => {
+            const names = await window.desktop!.accountData.resolveUserNames({ targetId, userIds })
+            if (!names.ok) throw new Error(names.error.message)
+            return names.data
+          }),
+        )
+        if (requestVersionRef.current !== requestVersion) return
+        const names = new Map(resolved.flat().map((user) => [user.id.toLowerCase(), user.name]))
+        setUsers(
+          result.data.map((user) => ({
+            ...user,
+            name: names.get(user.id.toLowerCase()) || user.name,
+          })),
+        )
       })
       .catch(() => {
         if (requestVersionRef.current === requestVersion) setError("加载参与者失败")
@@ -195,7 +213,7 @@ function ReactionUsersPopover({
             <div className="grid gap-0.5">
               {users.map((user) => (
                 <div key={user.id} className="truncate rounded-md px-2 py-2 text-sm">
-                  {user.name}
+                  {resolvedUser(user, resolveLabel).name}
                 </div>
               ))}
             </div>

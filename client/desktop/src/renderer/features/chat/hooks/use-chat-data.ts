@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import type { DesktopConversation, DesktopMessage } from "../../../../shared/account-data"
-import { contiguousMessageSuffix } from "../../../../shared/message-window"
+import {
+  advanceLocalMessageGap,
+  contiguousMessageSuffix,
+  mergeLocalMessageWindows,
+  type MessageGap,
+} from "../../../../shared/message-window"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import type { MentionTarget } from "@/lib/message-mentions"
 
@@ -26,17 +31,37 @@ export function useChatData({
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [loadingBeforeMessages, setLoadingBeforeMessages] = useState(false)
   const [hasMoreBeforeMessages, setHasMoreBeforeMessages] = useState(false)
+  const [hasMoreAfterMessages, setHasMoreAfterMessages] = useState(false)
+  const [messageGap, setMessageGap] = useState<MessageGap | null>(null)
+  const [loadingGap, setLoadingGap] = useState(false)
+  const loadingGapRef = useRef(false)
   const [conversationRevision, setConversationRevision] = useState(0)
   const [messageRevision, setMessageRevision] = useState(0)
   const [contactRevision, setContactRevision] = useState(0)
   const [focusRevision, setFocusRevision] = useState(0)
   const readInFlightRef = useRef(new Set<string>())
   const [mentionLabels, setMentionLabels] = useState<Map<string, string>>(new Map())
+  const [resolvedReactionNames, setResolvedReactionNames] = useState<{
+    targetId: string
+    names: Map<string, string>
+  } | null>(null)
+  const requestedReactionIds = useRef({ targetId, ids: new Set<string>() })
+  if (requestedReactionIds.current.targetId !== targetId) {
+    requestedReactionIds.current = { targetId, ids: new Set() }
+  }
+  const [onlineContacts, setOnlineContacts] = useState<{
+    targetId: string
+    keys: ReadonlySet<string>
+  } | null>(null)
   const [pendingReactionKeys, setPendingReactionKeys] = useState<Set<string>>(new Set())
   const [revokingMessageIds, setRevokingMessageIds] = useState<Set<string>>(new Set())
   const [newMessageCount, setNewMessageCount] = useState(0)
   const realtimeRevisionRef = useRef(0)
   const loadingBeforeRef = useRef(false)
+  const loadingAfterRef = useRef(false)
+  const messageWindowRevisionRef = useRef(0)
+  const locatingWindowRef = useRef<number | null>(null)
+  const browsingOlderWindowRef = useRef(false)
   const prependSnapshotRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null)
   const scrollToBottomRef = useRef(true)
   const isAtBottomRef = useRef(true)
@@ -175,19 +200,78 @@ export function useChatData({
       for (const app of result.data.apps) {
         labels.set(`app:${app.id.toLowerCase()}`, app.name)
       }
+      const keys = new Set<string>()
+      for (const user of result.data.users) {
+        if (user.online) keys.add(`user:${user.id.toLowerCase()}`)
+      }
+      for (const app of result.data.apps) {
+        if (app.online) keys.add(`app:${app.id.toLowerCase()}`)
+      }
       setMentionLabels(labels)
+      setOnlineContacts({ targetId, keys })
     })
     return () => {
       cancelled = true
     }
   }, [contactRevision, targetId, userId, userName])
 
+  useEffect(() => {
+    if (!window.desktop) return
+    const ids = new Set<string>()
+    for (const message of messages) {
+      for (const reaction of message.reactions) {
+        for (const user of reaction.users) {
+          if (user.id && !requestedReactionIds.current.ids.has(user.id.toLowerCase())) {
+            ids.add(user.id.toLowerCase())
+          }
+        }
+      }
+    }
+    const pending = [...ids]
+    for (let index = 0; index < pending.length; index += 100) {
+      const batch = pending.slice(index, index + 100)
+      batch.forEach((id) => requestedReactionIds.current.ids.add(id))
+      void window.desktop.accountData
+        .resolveUserNames({ targetId, userIds: batch })
+        .then((result) => {
+          if (requestedReactionIds.current.targetId !== targetId) return
+          if (!result.ok) throw new Error(result.error.message)
+          setResolvedReactionNames((current) => {
+            const names = new Map(current?.targetId === targetId ? current.names : [])
+            for (const user of result.data) {
+              if (user.name) names.set(user.id.toLowerCase(), user.name)
+            }
+            return { targetId, names }
+          })
+        })
+        .catch(() => {
+          if (requestedReactionIds.current.targetId === targetId) {
+            batch.forEach((id) => requestedReactionIds.current.ids.delete(id))
+          }
+        })
+    }
+  }, [messages, targetId])
+
   const resolveMentionLabel = useCallback(
-    (target: MentionTarget) =>
-      target.type === "all"
-        ? undefined
-        : mentionLabels.get(`${target.type}:${target.id.toLowerCase()}`),
-    [mentionLabels],
+    (target: MentionTarget) => {
+      if (target.type === "all") return undefined
+      const members = selected?.members?.length
+        ? selected.members
+        : conversations.find((item) => item.id === selected?.topic?.parentConversationId)?.members
+      const member = members?.find(
+        (item) => item.type === target.type && item.id.toLowerCase() === target.id.toLowerCase(),
+      )
+      const memberName =
+        member && (member.type === "app" ? member.name : member.nickname.trim() || member.name)
+      if (memberName) return memberName
+      const contactName = mentionLabels.get(`${target.type}:${target.id.toLowerCase()}`)
+      if (contactName) return contactName
+      if (target.type === "user" && resolvedReactionNames?.targetId === targetId) {
+        return resolvedReactionNames.names.get(target.id.toLowerCase())
+      }
+      return undefined
+    },
+    [conversations, mentionLabels, resolvedReactionNames, selected, targetId],
   )
 
   const setMessageReaction = useCallback(
@@ -415,13 +499,21 @@ export function useChatData({
     const switchingConversation = loadedConversationIdRef.current !== selectedId
     loadedConversationIdRef.current = selectedId
     if (switchingConversation) {
+      browsingOlderWindowRef.current = false
+      messageWindowRevisionRef.current++
+      locatingWindowRef.current = null
       scrollToBottomRef.current = true
       isAtBottomRef.current = true
       setNewMessageCount(0)
       prependSnapshotRef.current = null
       setHasMoreBeforeMessages(false)
+      setHasMoreAfterMessages(false)
+      setMessageGap(null)
       setLoadingMessages(true)
+    } else if (browsingOlderWindowRef.current) {
+      return
     }
+    const revision = messageWindowRevisionRef.current
     void window.desktop.accountData
       .listMessages({
         targetId,
@@ -431,7 +523,12 @@ export function useChatData({
           : Math.max(50, messagesRef.current.filter((message) => !message.virtualType).length),
       })
       .then((result) => {
-        if (cancelled) return
+        if (
+          cancelled ||
+          selectedIdRef.current !== selectedId ||
+          messageWindowRevisionRef.current !== revision
+        )
+          return
         if (result.ok) {
           if (!switchingConversation) {
             const previous = messagesRef.current
@@ -447,6 +544,8 @@ export function useChatData({
           setMessages(result.data)
           const oldestMessage = result.data.find((message) => !message.virtualType)
           setHasMoreBeforeMessages(Boolean(oldestMessage && oldestMessage.seq > 1))
+          setHasMoreAfterMessages(false)
+          setMessageGap(null)
         } else {
           setMessages([])
           showToast({
@@ -457,7 +556,11 @@ export function useChatData({
         }
       })
       .catch(() => {
-        if (!cancelled) {
+        if (
+          !cancelled &&
+          selectedIdRef.current === selectedId &&
+          messageWindowRevisionRef.current === revision
+        ) {
           setMessages([])
           showToast({ status: "error", title: "无法读取聊天记录" })
         }
@@ -472,25 +575,171 @@ export function useChatData({
 
   const updateHistoryScrollPosition = useCallback((viewport: HTMLDivElement) => {
     const atBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= 48
-    isAtBottomRef.current = atBottom
-    if (atBottom) setNewMessageCount(0)
+    isAtBottomRef.current = !browsingOlderWindowRef.current && atBottom
+    if (atBottom && !browsingOlderWindowRef.current) setNewMessageCount(0)
   }, [])
+
+  const jumpToLocalMessage = useCallback(
+    async (messageId: string) => {
+      const conversationId = selectedIdRef.current
+      if (!window.desktop || !conversationId) throw new Error("会话不可用")
+      const revision = ++messageWindowRevisionRef.current
+      locatingWindowRef.current = revision
+      try {
+        const [result, latest] = await Promise.all([
+          window.desktop.accountData.getLocalMessageContext({
+            targetId,
+            conversationId,
+            messageId,
+          }),
+          window.desktop.accountData.listMessages({ targetId, conversationId, latestLimit: 50 }),
+        ])
+        if (
+          selectedIdRef.current !== conversationId ||
+          messageWindowRevisionRef.current !== revision
+        )
+          return false
+        if (!result.ok) throw new Error(result.error.message)
+        if (!latest.ok) throw new Error(latest.error.message)
+        if (!result.data.messages.some((message) => message.id === messageId)) {
+          throw new Error("本地消息不存在")
+        }
+        const visible = messagesRef.current.filter(
+          (message) => message.conversationId === conversationId,
+        )
+        const currentAndLatest = mergeLocalMessageWindows(visible, latest.data)
+        const recent =
+          visible.length && !browsingOlderWindowRef.current && !currentAndLatest.gap
+            ? currentAndLatest.messages
+            : latest.data
+        const { messages: merged, gap } = mergeLocalMessageWindows(result.data.messages, recent)
+        browsingOlderWindowRef.current = result.data.hasMoreAfter
+        scrollToBottomRef.current = false
+        isAtBottomRef.current = false
+        prependSnapshotRef.current = null
+        setNewMessageCount(0)
+        setMessages(merged)
+        setMessageGap(gap)
+        setHasMoreBeforeMessages(result.data.hasMoreBefore)
+        setHasMoreAfterMessages(result.data.hasMoreAfter)
+        return true
+      } finally {
+        if (locatingWindowRef.current === revision) locatingWindowRef.current = null
+      }
+    },
+    [targetId],
+  )
+
+  const loadAfterMessages = useCallback(async () => {
+    const conversationId = selectedIdRef.current
+    const last = messagesRef.current.filter((message) => message.seq > 0).at(-1)
+    if (
+      !window.desktop ||
+      !conversationId ||
+      !last ||
+      !hasMoreAfterMessages ||
+      browsingOlderWindowRef.current ||
+      locatingWindowRef.current !== null ||
+      loadingAfterRef.current
+    )
+      return
+    loadingAfterRef.current = true
+    const revision = messageWindowRevisionRef.current
+    try {
+      const result = await window.desktop.accountData.listLocalMessagesAfter({ targetId, conversationId, afterSeq: last.seq })
+      if (selectedIdRef.current !== conversationId || messageWindowRevisionRef.current !== revision) return
+      if (!result.ok) throw new Error(result.error.message)
+      isAtBottomRef.current = false
+      setMessages((current) => {
+        const ids = new Set(current.map((message) => message.id))
+        return [...current, ...result.data.messages.filter((message) => !ids.has(message.id))]
+      })
+      browsingOlderWindowRef.current = result.data.hasMoreAfter
+      setHasMoreAfterMessages(result.data.hasMoreAfter)
+    } catch (error) {
+      if (selectedIdRef.current === conversationId) {
+        showToast({ status: "error", title: error instanceof Error ? error.message : "无法加载后续消息" })
+      }
+    } finally {
+      loadingAfterRef.current = false
+    }
+  }, [hasMoreAfterMessages, showToast, targetId])
+
+  const loadMessageGap = useCallback(async () => {
+    const conversationId = selectedIdRef.current
+    const gap = messageGap
+    if (
+      !window.desktop ||
+      !conversationId ||
+      !gap ||
+      gap.unavailable ||
+      locatingWindowRef.current !== null ||
+      loadingGapRef.current
+    )
+      return
+    loadingGapRef.current = true
+    setLoadingGap(true)
+    const revision = messageWindowRevisionRef.current
+    try {
+      const result = await window.desktop.accountData.listLocalMessagesAfter({
+        targetId,
+        conversationId,
+        afterSeq: gap.afterSeq,
+      })
+      if (selectedIdRef.current !== conversationId || messageWindowRevisionRef.current !== revision)
+        return
+      if (!result.ok) throw new Error(result.error.message)
+      setMessages((current) => mergeLocalMessageWindows(current, result.data.messages).messages)
+      setMessageGap(advanceLocalMessageGap(gap, result.data.messages))
+    } catch (error) {
+      if (
+        selectedIdRef.current === conversationId &&
+        messageWindowRevisionRef.current === revision
+      ) {
+        showToast({
+          status: "error",
+          title: error instanceof Error ? error.message : "无法读取本地消息",
+        })
+      }
+    } finally {
+      loadingGapRef.current = false
+      setLoadingGap(false)
+    }
+  }, [messageGap, showToast, targetId])
 
   const scrollToLatestMessage = useCallback(() => {
     const viewport = historyRef.current
     if (!viewport) return
+    if (hasMoreAfterMessages && selectedId && window.desktop) {
+      const conversationId = selectedId
+      const revision = ++messageWindowRevisionRef.current
+      void window.desktop.accountData.listMessages({ targetId, conversationId, latestLimit: 50 })
+        .then((result) => {
+          if (selectedIdRef.current !== conversationId || messageWindowRevisionRef.current !== revision) return
+          if (!result.ok) throw new Error(result.error.message)
+          browsingOlderWindowRef.current = false
+          scrollToBottomRef.current = true
+          setMessages(result.data)
+          setHasMoreBeforeMessages((result.data.find((message) => message.seq > 0)?.seq ?? 0) > 1)
+          setHasMoreAfterMessages(false)
+          setMessageGap(null)
+          setNewMessageCount(0)
+        })
+        .catch((error: unknown) => showToast({ status: "error", title: error instanceof Error ? error.message : "无法读取聊天记录" }))
+      return
+    }
     viewport.scrollTop = viewport.scrollHeight
     isAtBottomRef.current = true
     scrollToBottomRef.current = false
     setNewMessageCount(0)
-  }, [])
+  }, [hasMoreAfterMessages, selectedId, showToast, targetId])
 
   useEffect(() => {
     const viewport = historyRef.current
     const content = viewport?.firstElementChild
     if (!viewport || !content || typeof ResizeObserver === "undefined") return
     const observer = new ResizeObserver(() => {
-      if (isAtBottomRef.current || scrollToBottomRef.current) {
+      if (!browsingOlderWindowRef.current && (isAtBottomRef.current || scrollToBottomRef.current)) {
         viewport.scrollTop = viewport.scrollHeight
       }
     })
@@ -519,12 +768,13 @@ export function useChatData({
   }, [loadingMessages, messages, selected])
 
   const loadBeforeMessages = useCallback(async () => {
-    const oldestMessage = messages.find((message) => !message.virtualType)
+    const oldestMessage = messages.find((message) => !message.virtualType && message.seq > 0)
     if (
       !window.desktop ||
       !selectedId ||
       !oldestMessage ||
       !hasMoreBeforeMessages ||
+      locatingWindowRef.current !== null ||
       loadingBeforeRef.current
     ) {
       return
@@ -532,6 +782,8 @@ export function useChatData({
     const viewport = historyRef.current
     if (!viewport) return
     const conversationId = selectedId
+    const revision = messageWindowRevisionRef.current
+    const localWindow = browsingOlderWindowRef.current
     loadingBeforeRef.current = true
     setLoadingBeforeMessages(true)
     prependSnapshotRef.current = {
@@ -539,13 +791,20 @@ export function useChatData({
       scrollTop: viewport.scrollTop,
     }
     try {
-      const result = await window.desktop.accountData.loadBeforeMessages({
-        targetId,
-        conversationId,
-        beforeSeq: oldestMessage.seq,
-        loadedCount: messages.filter((message) => !message.virtualType).length,
-      })
-      if (selectedIdRef.current !== conversationId) return
+      const result = localWindow
+        ? await window.desktop.accountData.getLocalMessageContext({
+            targetId,
+            conversationId,
+            messageId: oldestMessage.id,
+          })
+        : await window.desktop.accountData.loadBeforeMessages({
+            targetId,
+            conversationId,
+            beforeSeq: oldestMessage.seq,
+            loadedCount: messages.filter((message) => !message.virtualType).length,
+          })
+      if (selectedIdRef.current !== conversationId || messageWindowRevisionRef.current !== revision)
+        return
       if (!result.ok) {
         prependSnapshotRef.current = null
         showToast({
@@ -555,10 +814,17 @@ export function useChatData({
         })
         return
       }
-      setMessages(result.data.messages)
+      setMessages((current) =>
+        localWindow
+          ? mergeLocalMessageWindows(result.data.messages, current).messages
+          : result.data.messages,
+      )
       setHasMoreBeforeMessages(result.data.hasMoreBefore)
     } catch {
-      if (selectedIdRef.current === conversationId) {
+      if (
+        selectedIdRef.current === conversationId &&
+        messageWindowRevisionRef.current === revision
+      ) {
         prependSnapshotRef.current = null
         showToast({ status: "error", title: "无法加载更早消息" })
       }
@@ -579,12 +845,19 @@ export function useChatData({
     pendingReactionKeys,
     revokingMessageIds,
     newMessageCount,
+    hasMoreAfterMessages,
+    messageGap,
+    loadingGap,
     historyRef,
     setSelectedId,
     openTopicConversation,
     updateHistoryScrollPosition,
     scrollToLatestMessage,
+    jumpToLocalMessage,
+    loadAfterMessages,
+    loadMessageGap,
     resolveMentionLabel,
+    onlineContactKeys: onlineContacts?.targetId === targetId ? onlineContacts.keys : null,
     setMessageReaction,
     setConversationPinned,
     setConversationMuted,

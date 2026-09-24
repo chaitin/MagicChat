@@ -1,14 +1,22 @@
 import type {
+  AddGroupMembersInput,
   AvatarRequest,
+  ConversationTargetInput,
   ContactTargetInput,
   CreateGroupConversationInput,
   CreateMessageTopicInput,
   DismissConversationInput,
   FriendRequestListInput,
   ListConversationsInput,
+  LocalAttachmentPageInput,
+  LocalMessageContextInput,
+  LocalMessagesAfterInput,
+  LocalConversationPageInput,
   LocalSearchInput,
+  ManageGroupInput,
   MarkConversationReadInput,
   MessageReactionUsersInput,
+  ResolveUserNamesInput,
   OpenContactConversationInput,
   RetryMessageInput,
   RevokeMessageInput,
@@ -28,6 +36,14 @@ import type {
 import { AuthFailure } from "../../shared/auth"
 import type { MediaCacheRequest } from "../../shared/media"
 import type { AccountRuntime } from "../account/account-runtime"
+
+function localOffset(value: unknown) {
+  if (value === undefined) return 0
+  if (!Number.isSafeInteger(value) || (value as number) < 0 || (value as number) > 1_000_000) {
+    throw new AuthFailure("invalid_offset", "历史记录分页参数不正确")
+  }
+  return value as number
+}
 
 export class AccountDataFacade {
   constructor(
@@ -51,6 +67,61 @@ export class AccountDataFacade {
       throw new AuthFailure("invalid_conversation_id", "对话 ID 不正确")
     }
     return this.requireRuntime().listConversations(selectedId ?? null)
+  }
+
+  async listLocalTopics(input: LocalConversationPageInput) {
+    await this.ready(input?.targetId)
+    if (
+      input.keyword !== undefined &&
+      (typeof input.keyword !== "string" || input.keyword.length > 128)
+    ) {
+      throw new AuthFailure("invalid_query", "话题标题关键词不正确")
+    }
+    return this.requireRuntime().listLocalTopics(
+      input.conversationId,
+      localOffset(input.offset),
+      input.keyword?.trim() ?? "",
+    )
+  }
+
+  async listLocalAttachments(input: LocalAttachmentPageInput) {
+    await this.ready(input?.targetId)
+    if (
+      input.keyword !== undefined &&
+      (typeof input.keyword !== "string" || input.keyword.length > 128)
+    ) {
+      throw new AuthFailure("invalid_query", "文件名关键词不正确")
+    }
+    return this.requireRuntime().listLocalAttachments(
+      input.conversationId,
+      localOffset(input.offset),
+      input.keyword?.trim() ?? "",
+    )
+  }
+
+  async getLocalMessageContext(input: LocalMessageContextInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().getLocalMessageContext(input.conversationId, input.messageId)
+  }
+
+  async listLocalMessagesAfter(input: LocalMessagesAfterInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().listLocalMessagesAfter(input.conversationId, input.afterSeq)
+  }
+
+  async getConversationInfo(input: ConversationTargetInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().getConversationInfo(input.conversationId)
+  }
+
+  async addGroupMembers(input: AddGroupMembersInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().addGroupMembers(input)
+  }
+
+  async manageGroup(input: ManageGroupInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().manageGroup(input)
   }
 
   async markConversationRead(input: MarkConversationReadInput) {
@@ -223,6 +294,11 @@ export class AccountDataFacade {
     return this.requireRuntime().fetchTemporaryFile(fileId, range)
   }
 
+  async resolveUserNames(input: ResolveUserNamesInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().resolveUserNames(input.userIds)
+  }
+
   async getContacts(targetId: string) {
     await this.ready(targetId)
     return this.requireRuntime().getContacts()
@@ -302,6 +378,7 @@ export class AccountDataFacade {
       type: request.type,
       id: request.id,
       theme: request.theme,
+      cacheOnly: request.cacheOnly === true,
     })
   }
 

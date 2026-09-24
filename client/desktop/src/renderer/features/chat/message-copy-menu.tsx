@@ -1,4 +1,4 @@
-import { useRef, type ReactNode, type RefObject } from "react"
+import { useRef, useState, type ReactNode, type RefObject } from "react"
 import {
   Copy01Icon,
   Edit02Icon,
@@ -56,6 +56,7 @@ export function MessageCopyMenu({
   const internalTriggerRef = useRef<HTMLDivElement>(null)
   const triggerRef = menuTriggerRef ?? internalTriggerRef
   const selectedCopyTextRef = useRef("")
+  const [menuOpen, setMenuOpen] = useState(false)
   const copyMessage = useMessageCopy(body, summary, targetId)
 
   function captureSelectedCopyText(event: React.MouseEvent) {
@@ -70,10 +71,11 @@ export function MessageCopyMenu({
   }
 
   return (
-    <ContextMenu>
+    <ContextMenu onOpenChange={setMenuOpen}>
       <ContextMenuTrigger asChild>
         <div
           ref={triggerRef}
+          data-menu-open={menuOpen ? "" : undefined}
           className={cn("select-text", className)}
           onContextMenu={captureSelectedCopyText}
         >

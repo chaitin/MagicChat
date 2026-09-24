@@ -4,6 +4,7 @@ import type { StoredConversation, StoredMessage } from "./account-database"
 import type { AvatarDescriptor, AvatarMemberDescriptor } from "./avatar-types"
 import { normalizeDesktopMessageDetails, summarizeDesktopMessageBody } from "./message-normalizer"
 import { parseConversationTopic } from "./conversation-topic"
+import { parseConversationMembers } from "./conversation-members"
 
 const builtinAssistantAppId = "00000000-0000-0000-0000-000000000001"
 
@@ -35,6 +36,7 @@ export function parseConversation(value: unknown, currentUserId: string): Stored
     type,
     name,
     memberCount: type === "group" ? nonNegativeInteger(value.member_count) : 0,
+    members: parseConversationMembers(value),
     avatar: optionalString(value.avatar, 4_096),
     avatarType: avatarIdentity.type,
     avatarId: avatarIdentity.id,

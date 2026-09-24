@@ -3,10 +3,13 @@ import type { DesktopMessageBody, DesktopMessageReplyTarget } from "../../../sha
 import type { StoredMessage } from "./message-repository"
 
 export class OutgoingMessageRepository {
-  constructor(
-    private readonly database: DatabaseSync,
-    private readonly upsertMessages: (messages: StoredMessage[]) => void,
-  ) {}
+  private readonly database: DatabaseSync
+  private readonly upsertMessages: (messages: StoredMessage[]) => void
+
+  constructor(database: DatabaseSync, upsertMessages: (messages: StoredMessage[]) => void) {
+    this.database = database
+    this.upsertMessages = upsertMessages
+  }
 
   createOptimisticMessage(input: {
     conversationId: string

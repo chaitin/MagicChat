@@ -88,6 +88,13 @@ const bridge: DesktopBridge = {
     searchLocal: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.searchLocal, input),
     listConversations: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listConversations, input),
+    listLocalTopics: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listLocalTopics, input),
+    listLocalAttachments: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listLocalAttachments, input),
+    getLocalMessageContext: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getLocalMessageContext, input),
+    listLocalMessagesAfter: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listLocalMessagesAfter, input),
+    getConversationInfo: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getConversationInfo, input),
+    addGroupMembers: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.addGroupMembers, input),
+    manageGroup: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.manageGroup, input),
     markConversationRead: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.markConversationRead, input),
     createGroupConversation: (input) =>
@@ -140,6 +147,7 @@ const bridge: DesktopBridge = {
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.submitChoiceResponse, input),
     listMessageReactionUsers: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listMessageReactionUsers, input),
+    resolveUserNames: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.resolveUserNames, input),
     getContacts: (targetId) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getContacts, targetId),
     refreshContacts: (targetId) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.refreshContacts, targetId),

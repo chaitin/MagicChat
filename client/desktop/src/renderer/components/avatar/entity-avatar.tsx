@@ -27,6 +27,7 @@ export function EntityAvatar({
   label,
   className,
   imageBackgroundClassName = "bg-xgui-background-1",
+  cacheOnly = false,
 }: {
   targetId: string
   type: AvatarType
@@ -36,11 +37,12 @@ export function EntityAvatar({
   label?: string
   className?: string
   imageBackgroundClassName?: string
+  cacheOnly?: boolean
 }) {
   const defaultFallbackType = type === "topic" ? "group" : type
   const [result, setResult] = useState<AvatarResult | null>(null)
   const retryCount = useRef(0)
-  const referenceKey = `${targetId}:${type}:${id}:${theme}`
+  const referenceKey = `${targetId}:${type}:${id}:${theme}:${cacheOnly}`
   const currentReference = useRef(referenceKey)
   currentReference.current = referenceKey
 
@@ -53,7 +55,7 @@ export function EntityAvatar({
       return
     }
     void window.desktop.accountData
-      .getAvatar({ targetId, type, id, theme })
+      .getAvatar({ targetId, type, id, theme, ...(cacheOnly ? { cacheOnly: true } : {}) })
       .then((response) => {
         if (cancelled) return
         setResult(response.ok ? response.data : { status: "fallback", type: defaultFallbackType })
@@ -64,11 +66,11 @@ export function EntityAvatar({
     return () => {
       cancelled = true
     }
-  }, [defaultFallbackType, id, targetId, theme, type])
+  }, [cacheOnly, defaultFallbackType, id, targetId, theme, type])
 
   async function retryAfterRenderFailure() {
     const failedReference = referenceKey
-    if (!window.desktop || retryCount.current >= 1) {
+    if (!window.desktop || cacheOnly || retryCount.current >= 1) {
       setResult((current) => ({
         status: "fallback",
         type: current?.type ?? defaultFallbackType,

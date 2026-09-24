@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { FlashIcon, Loading03Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { ContactProfileProvider } from "@/components/avatar/contact-profile-popover"
@@ -40,7 +40,15 @@ import type {
 import type { ServerCatalog } from "../../../shared/auth"
 import type { ThemePreference } from "../../../shared/desktop"
 import { normalizeSingleLinkMessageURL } from "../../../shared/message-link"
-import { formatMentionText } from "@/lib/message-mentions"
+import {
+  createDraftFromMessage,
+  createDraftMentionTemplate,
+  createMentionCandidates,
+  insertDraftMention,
+  syncDraftMentions,
+  type DraftMention,
+  type MentionCandidate,
+} from "./conversation-mentions"
 
 export function ChatPage({
   targetId,
@@ -81,11 +89,13 @@ export function ChatPage({
   const [activeSection, setActiveSection] = useState<AppSection>("chat")
   const [actionDialog, setActionDialog] = useState<"group" | "app" | null>(null)
   const [actionDirectory, setActionDirectory] = useState<DesktopContactDirectory | null>(null)
+  const actionRequestRef = useRef(0)
   const [searchMessageTarget, setSearchMessageTarget] = useState<{
     conversationId: string
     messageId: string
   } | null>(null)
   const [draft, setDraft] = useState("")
+  const [draftMentions, setDraftMentions] = useState<DraftMention[]>([])
   const [composerFocused, setComposerFocused] = useState(false)
   const [replyTarget, setReplyTarget] = useState<DesktopMessageReplyTarget | null>(null)
   const [markdownMode, setMarkdownMode] = useState(false)
@@ -94,6 +104,7 @@ export function ChatPage({
   const [creatingTopic, setCreatingTopic] = useState(false)
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const pendingComposerCursorRef = useRef<number | null>(null)
+  const locatingSearchRef = useRef<string | null>(null)
   const {
     conversations,
     messages,
@@ -105,12 +116,19 @@ export function ChatPage({
     pendingReactionKeys,
     revokingMessageIds,
     newMessageCount,
+    hasMoreAfterMessages,
+    messageGap,
+    loadingGap,
     historyRef,
     setSelectedId,
     openTopicConversation,
     updateHistoryScrollPosition,
     scrollToLatestMessage,
+    jumpToLocalMessage,
+    loadAfterMessages,
+    loadMessageGap,
     resolveMentionLabel,
+    onlineContactKeys,
     setMessageReaction,
     setConversationPinned,
     setConversationMuted,
@@ -123,6 +141,10 @@ export function ChatPage({
     retryMessage,
     loadBeforeMessages,
   } = useChatData({ targetId, userId, userName, activeSection })
+  const mentionCandidates = useMemo(
+    () => createMentionCandidates(selected, conversations),
+    [selected, conversations],
+  )
   useEffect(() => {
     if (!window.desktop) return
     void window.desktop.setActiveConversation({
@@ -155,8 +177,38 @@ export function ChatPage({
       !searchMessageTarget ||
       activeSection !== "chat" ||
       selectedId !== searchMessageTarget.conversationId ||
+      selected?.id !== selectedId ||
       loadingMessages
     ) {
+      return
+    }
+    if (
+      !messages.some(
+        (message) =>
+          message.conversationId === selectedId && message.id === searchMessageTarget.messageId,
+      )
+    ) {
+      const key = `${selectedId}\0${searchMessageTarget.messageId}`
+      if (locatingSearchRef.current !== key) {
+        locatingSearchRef.current = key
+        void jumpToLocalMessage(searchMessageTarget.messageId)
+          .catch((error: unknown) => {
+            if (locatingSearchRef.current !== key) return
+            showToast({
+              status: "error",
+              title: error instanceof Error ? error.message : "无法定位消息",
+            })
+            setSearchMessageTarget((current) =>
+              current?.conversationId === selectedId &&
+              current.messageId === searchMessageTarget.messageId
+                ? null
+                : current,
+            )
+          })
+          .finally(() => {
+            if (locatingSearchRef.current === key) locatingSearchRef.current = null
+          })
+      }
       return
     }
     let clearHighlightTimer: number | undefined
@@ -170,13 +222,23 @@ export function ChatPage({
         setSearchMessageTarget((current) =>
           current?.messageId === searchMessageTarget.messageId ? null : current,
         )
-      }, 1600)
+      }, 3000)
     })
     return () => {
       window.cancelAnimationFrame(frame)
       if (clearHighlightTimer !== undefined) window.clearTimeout(clearHighlightTimer)
     }
-  }, [activeSection, historyRef, loadingMessages, messages, searchMessageTarget, selectedId])
+  }, [
+    activeSection,
+    historyRef,
+    jumpToLocalMessage,
+    loadingMessages,
+    messages,
+    searchMessageTarget,
+    selectedId,
+    selected?.id,
+    showToast,
+  ])
 
   const focusComposer = useCallback(() => {
     requestAnimationFrame(() => {
@@ -224,15 +286,35 @@ export function ChatPage({
   })
 
   const sendDraft = useCallback(() => {
-    const content = draft.trim()
+    const content = createDraftMentionTemplate(draft, draftMentions).trim()
     if (!content) return
     const link = normalizeSingleLinkMessageURL(content)
     const bodyType = link ? "link" : markdownMode ? "markdown" : "text"
     setDraft("")
+    setDraftMentions([])
     setReplyTarget(null)
     focusComposer()
     sendTextMessage(link ?? content, bodyType, replyTarget?.id)
-  }, [draft, focusComposer, markdownMode, replyTarget, sendTextMessage])
+  }, [draft, draftMentions, focusComposer, markdownMode, replyTarget, sendTextMessage])
+
+  const changeDraft = useCallback(
+    (value: string) => {
+      setDraftMentions((current) => syncDraftMentions(current, draft, value))
+      setDraft(value)
+    },
+    [draft],
+  )
+
+  const insertMention = useCallback(
+    (candidate: MentionCandidate, start: number, end: number) => {
+      const inserted = insertDraftMention(draft, draftMentions, candidate, start, end)
+      setDraft(inserted.value)
+      setDraftMentions(inserted.mentions)
+      pendingComposerCursorRef.current = inserted.cursor
+      focusComposer()
+    },
+    [draft, draftMentions, focusComposer],
+  )
 
   const sendRichMessage = useCallback(
     async (body: SendRichMessageBody) => {
@@ -295,11 +377,12 @@ export function ChatPage({
     (message: DesktopMessage) => {
       const editableBody = getDesktopMessageEditableBody(message)
       if (!editableBody) return
-      const nextDraft = formatMentionText(editableBody.content, resolveMentionLabel)
+      const restored = createDraftFromMessage(editableBody.content, resolveMentionLabel)
       setReplyTarget(null)
-      setDraft(nextDraft)
+      setDraft(restored.text)
+      setDraftMentions(restored.mentions)
       setMarkdownMode(editableBody.type === "markdown")
-      pendingComposerCursorRef.current = nextDraft.length
+      pendingComposerCursorRef.current = restored.text.length
       focusComposer()
     },
     [focusComposer, resolveMentionLabel],
@@ -324,6 +407,7 @@ export function ChatPage({
       const selectionEnd = composer?.selectionEnd ?? selectionStart
       const nextDraft = `${draft.slice(0, selectionStart)}${value}${draft.slice(selectionEnd)}`
       pendingComposerCursorRef.current = selectionStart + value.length
+      setDraftMentions((current) => syncDraftMentions(current, draft, nextDraft))
       setDraft(nextDraft)
     },
     [draft],
@@ -331,6 +415,7 @@ export function ChatPage({
 
   useEffect(() => {
     setDraft("")
+    setDraftMentions([])
     setReplyTarget(null)
     pendingComposerCursorRef.current = null
     if (selectedId) focusComposer()
@@ -379,12 +464,18 @@ export function ChatPage({
   const openActionDialog = useCallback(
     async (dialog: "group" | "app") => {
       if (!window.desktop) return
+      const requestId = ++actionRequestRef.current
+      setActionDirectory(null)
+      if (dialog === "group") setActionDialog(dialog)
       try {
         const result = await window.desktop.accountData.getContacts(targetId)
+        if (requestId !== actionRequestRef.current) return
         if (!result.ok) throw new Error(result.error.message)
         setActionDirectory(result.data)
         setActionDialog(dialog)
       } catch (error) {
+        if (requestId !== actionRequestRef.current) return
+        setActionDialog(null)
         showToast({
           status: "error",
           title: error instanceof Error ? error.message : "无法读取通讯录",
@@ -393,6 +484,12 @@ export function ChatPage({
     },
     [showToast, targetId],
   )
+
+  const closeActionDialog = useCallback(() => {
+    actionRequestRef.current += 1
+    setActionDialog(null)
+    setActionDirectory(null)
+  }, [])
 
   return (
     <main className="flex h-full min-h-0 overflow-hidden bg-background text-foreground">
@@ -448,7 +545,25 @@ export function ChatPage({
                     targetId={targetId}
                     resolvedTheme={resolvedTheme}
                     status={conversationStatus}
-                    onPendingFeature={(label) => showPendingFeature(showToast, label)}
+                    onlineContactKeys={onlineContactKeys}
+                    currentUserId={userId}
+                    onLocateMessage={async (messageId) => {
+                      try {
+                        const located = await jumpToLocalMessage(messageId)
+                        if (located)
+                          setSearchMessageTarget({ conversationId: selected.id, messageId })
+                        return located
+                      } catch (error) {
+                        showToast({
+                          status: "error",
+                          title: error instanceof Error ? error.message : "无法定位消息",
+                        })
+                        return false
+                      }
+                    }}
+                    onConversationRemoved={() =>
+                      setSelectedId(conversations.find((item) => item.id !== selected.id)?.id ?? "")
+                    }
                   />
 
                   <MessageList
@@ -476,9 +591,18 @@ export function ChatPage({
                         : null
                     }
                     newMessageCount={newMessageCount}
+                    hasMoreAfterMessages={hasMoreAfterMessages}
+                    messageGap={messageGap}
+                    loadingGap={loadingGap}
+                    onReachGap={() => void loadMessageGap()}
                     onViewportScroll={updateHistoryScrollPosition}
                     onScrollToBottom={scrollToLatestMessage}
-                    onReachTop={() => void loadBeforeMessages()}
+                    onReachTop={() => {
+                      if (!searchMessageTarget) void loadBeforeMessages()
+                    }}
+                    onReachBottom={() => {
+                      if (!searchMessageTarget) void loadAfterMessages()
+                    }}
                     onSetReaction={setMessageReaction}
                     onSubmitChoice={submitChoiceResponse}
                     onOpenTopic={openTopicConversation}
@@ -490,8 +614,12 @@ export function ChatPage({
                   />
 
                   <MessageComposer
+                    key={selectedId}
                     composerRef={composerRef}
                     draft={draft}
+                    mentionCandidates={mentionCandidates}
+                    targetId={targetId}
+                    resolvedTheme={resolvedTheme}
                     replyTarget={replyTarget}
                     mentionLabelResolver={resolveMentionLabel}
                     markdownMode={markdownMode}
@@ -512,7 +640,8 @@ export function ChatPage({
                       void importFile(files[0])
                     }}
                     onDraftBlur={() => setComposerFocused(false)}
-                    onDraftChange={setDraft}
+                    onDraftChange={changeDraft}
+                    onInsertMention={insertMention}
                     onDraftFocus={() => setComposerFocused(true)}
                     onKeyDown={handleComposerKeyDown}
                     onMarkdownChange={(pressed) => {
@@ -560,16 +689,17 @@ export function ChatPage({
       ) : (
         <SectionPlaceholder section={activeSection} />
       )}
-      {actionDialog === "group" && actionDirectory && (
+      {actionDialog === "group" && (
         <CreateGroupConversationDialog
           targetId={targetId}
           currentUserId={userId}
           theme={resolvedTheme}
-          contacts={actionDirectory.users}
-          apps={actionDirectory.apps}
-          onClose={() => setActionDialog(null)}
+          contacts={actionDirectory?.users ?? []}
+          apps={actionDirectory?.apps ?? []}
+          loading={!actionDirectory}
+          onClose={closeActionDialog}
           onCreated={(conversation) => {
-            setActionDialog(null)
+            closeActionDialog()
             setSelectedId(conversation.id)
             setActiveSection("chat")
           }}
@@ -584,7 +714,7 @@ export function ChatPage({
           theme={resolvedTheme}
           users={actionDirectory.users}
           credentials={null}
-          onClose={() => setActionDialog(null)}
+          onClose={closeActionDialog}
           onChanged={() => undefined}
           onAvatarChanged={() => undefined}
         />
@@ -675,11 +805,4 @@ export function ChatPage({
       />
     </main>
   )
-}
-
-function showPendingFeature(
-  showToast: ReturnType<typeof useAnimatedToast>["showToast"],
-  label: string,
-) {
-  showToast({ status: "info", title: `${label}功能将在下一阶段接入` })
 }

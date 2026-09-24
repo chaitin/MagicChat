@@ -143,6 +143,62 @@ test("已读后的旧话题仅在仍被选中时留在列表，移除后不再�
   database.close()
 })
 
+test("历史话题只从本地当前会话读取，包含侧栏隐藏的旧话题", () => {
+  const database = new DatabaseSync(":memory:")
+  initializeAccountSchema(database)
+  const repository = new ConversationRepository(database)
+  const topic = (id: string, parent: string) =>
+    conversation(id, {
+      type: "topic",
+      payload: {
+        type: "topic",
+        topic: {
+          parent_conversation_id: parent,
+          source_message_id: `${id}-source`,
+          source_sender: { id: "alice", type: "user", name: "Alice" },
+        },
+      },
+    })
+  repository.upsertCurrent([conversation("group-1"), topic("old", "group-1"),
+    topic("other", "group-2")])
+  assert.deepEqual(repository.list(new Date("2026-09-22T12:00:00Z")).map((item) => item.id), ["group-1"])
+  assert.deepEqual(repository.listTopics("group-1", 0).items.map((item) => item.id), ["old"])
+  assert.equal(repository.listTopics("group-1", 0).items[0]?.topic?.sourceMessageId, "old-source")
+  repository.removeCurrent("old")
+  assert.deepEqual(repository.listTopics("group-1", 0).items, [])
+  repository.upsertCurrent(Array.from({ length: 51 }, (_, index) => topic(`topic-${index}`, "group-1")))
+  const firstPage = repository.listTopics("group-1", 0)
+  assert.equal(firstPage.items.length, 50)
+  assert.equal(firstPage.nextOffset, 50)
+  assert.equal(repository.listTopics("group-1", firstPage.nextOffset!).items.length, 1)
+  const matching = repository.listTopics("group-1", 0, "TOPIC-5")
+  assert.deepEqual(matching.items.map((item) => item.id).sort(), ["topic-5", "topic-50"].sort())
+  assert.equal(matching.nextOffset, null)
+  assert.equal(repository.listTopics("group-1", 0, "topic-").nextOffset, 50)
+  assert.equal(repository.listTopics("group-1", 50, "topic-").items.length, 1)
+  assert.equal(repository.listTopics("group-2", 0, "topic-").items.length, 0)
+  assert.equal(repository.listTopics("group-1", 0, "%").items.length, 0)
+  database.close()
+})
+
+test("群成员从本地会话快照恢复为提及候选", () => {
+  const database = new DatabaseSync(":memory:")
+  initializeAccountSchema(database)
+  const repository = new ConversationRepository(database)
+  repository.upsertCurrent([
+    conversation("group-members", {
+      payload: {
+        members: [
+          { id: "00000000-0000-0000-0000-000000000011", type: "user", name: "张三", nickname: "小张" },
+          { id: "00000000-0000-0000-0000-000000000012", type: "app", name: "助手" },
+        ],
+      },
+    }),
+  ])
+  assert.deepEqual(repository.list()[0].members?.map((member) => member.nickname || member.name), ["小张", "助手"])
+  database.close()
+})
+
 test("会话仓储解析话题父会话和发起人", () => {
   const database = new DatabaseSync(":memory:")
   initializeAccountSchema(database)
@@ -158,6 +214,7 @@ test("会话仓储解析话题父会话和发起人", () => {
         topic: {
           archived: false,
           parent_conversation_id: "parent-1",
+          source_message_id: "original-message-1",
           participating: true,
           source_sender: { id: "user-1", name: "Alice", type: "user" },
         },
@@ -168,6 +225,7 @@ test("会话仓储解析话题父会话和发起人", () => {
   assert.deepEqual(repository.list()[0].topic, {
     archived: false,
     parentConversationId: "parent-1",
+    sourceMessageId: "original-message-1",
     participating: true,
     sourceSender: { id: "user-1", name: "Alice", type: "user" },
   })

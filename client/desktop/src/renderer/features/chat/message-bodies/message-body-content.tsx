@@ -169,7 +169,7 @@ function ForwardBundleBody({
                   body={item.body}
                   summary={item.summary}
                   targetId={targetId}
-                  className="w-fit max-w-full rounded-md bg-muted p-3 hover:bg-xgui-background-6"
+                  className="w-fit max-w-full rounded-md bg-muted p-3 hover:bg-xgui-background-6 data-menu-open:bg-xgui-background-6"
                 >
                   <MessageBodyContent
                     body={item.body}

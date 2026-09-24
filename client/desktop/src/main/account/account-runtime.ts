@@ -16,6 +16,7 @@ import type {
   DesktopMessagePage,
   FriendRequestListInput,
   LocalSearchInput,
+  ManageGroupInput,
   MessageReactionUsersInput,
   OpenContactConversationInput,
   SaveClientAppInput,
@@ -104,6 +105,35 @@ export class AccountRuntime {
     return null
   }
 
+  listLocalTopics(conversationId: string, offset: number, keyword: string) {
+    this.assertInitialized()
+    return this.conversationManager!.listLocalTopics(conversationId, offset, keyword)
+  }
+
+  listLocalAttachments(conversationId: string, offset: number, keyword: string) {
+    this.assertInitialized()
+    return this.conversationManager!.listLocalAttachments(conversationId, offset, keyword)
+  }
+
+  getConversationInfo(conversationId: string) {
+    this.assertInitialized()
+    return this.conversationManager!.getConversationInfo(conversationId)
+  }
+
+  async addGroupMembers(input: { conversationId: string; memberIds: string[]; appIds: string[] }) {
+    this.assertInitialized()
+    const conversation = await this.conversationManager!.addGroupMembers(input)
+    this.notifyChanged(["conversations", "messages"], [input.conversationId])
+    return conversation
+  }
+
+  async manageGroup(input: ManageGroupInput) {
+    this.assertInitialized()
+    const conversation = await this.conversationManager!.manageGroup(input)
+    this.notifyChanged(["conversations", "messages"], [input.conversationId])
+    return conversation
+  }
+
   async createGroupConversation(input: CreateGroupConversationInput) {
     this.assertInitialized()
     const conversation = await this.conversationManager!.createGroupConversation(input)
@@ -136,6 +166,16 @@ export class AccountRuntime {
     const conversations = await this.conversationManager!.dismissConversation(conversationId)
     this.notifyChanged(["conversations"], [conversationId])
     return conversations
+  }
+
+  getLocalMessageContext(conversationId: string, messageId: string) {
+    this.assertInitialized()
+    return this.conversationManager!.getLocalMessageContext(conversationId, messageId)
+  }
+
+  listLocalMessagesAfter(conversationId: string, afterSeq: number) {
+    this.assertInitialized()
+    return this.conversationManager!.listLocalMessagesAfter(conversationId, afterSeq)
   }
 
   listMessages(conversationId: string, latestLimit: number): DesktopMessage[] {
@@ -339,6 +379,11 @@ export class AccountRuntime {
       credentials: "omit",
       signal,
     })
+  }
+
+  resolveUserNames(userIds: string[]) {
+    this.assertInitialized()
+    return this.contactManager!.resolveUserNames(userIds)
   }
 
   getContacts(): DesktopContactDirectory {

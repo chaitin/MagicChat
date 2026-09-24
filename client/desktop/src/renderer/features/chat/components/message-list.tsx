@@ -14,6 +14,7 @@ import {
   UploadCircle01Icon,
 } from "@hugeicons/core-free-icons"
 import type { DesktopMessage } from "../../../../shared/account-data"
+import type { MessageGap } from "../../../../shared/message-window"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
 import { ContactProfilePopover } from "@/components/avatar/contact-profile-popover"
 import { HugeiconsIcon, type HugeiconsIconProps } from "@/components/icons/hugeicons-icon"
@@ -52,9 +53,14 @@ export function MessageList({
   revokingMessageIds,
   highlightedMessageId,
   newMessageCount,
+  hasMoreAfterMessages,
+  messageGap,
+  loadingGap,
+  onReachGap,
   onViewportScroll,
   onScrollToBottom,
   onReachTop,
+  onReachBottom,
   onSetReaction,
   onSubmitChoice,
   onOpenTopic,
@@ -82,9 +88,14 @@ export function MessageList({
   revokingMessageIds: Set<string>
   highlightedMessageId: string | null
   newMessageCount: number
+  hasMoreAfterMessages: boolean
+  messageGap: MessageGap | null
+  loadingGap: boolean
+  onReachGap: () => void
   onViewportScroll: (viewport: HTMLDivElement) => void
   onScrollToBottom: () => void
   onReachTop: () => void
+  onReachBottom: () => void
   onSetReaction: (message: DesktopMessage, text: string, reacted: boolean) => Promise<void>
   onSubmitChoice: (message: DesktopMessage, optionIds: string[]) => Promise<void>
   onOpenTopic: (conversationId: string) => void
@@ -94,6 +105,8 @@ export function MessageList({
   onRevokeMessage: (message: DesktopMessage) => Promise<void>
   onRetryMessage: (message: DesktopMessage) => void
 }) {
+  const gapRef = useRef<HTMLDivElement>(null)
+  const gapAutoArmedRef = useRef(true)
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1">
       <ScrollArea
@@ -103,7 +116,28 @@ export function MessageList({
         viewportRef={historyRef}
         onViewportScroll={(event) => {
           onViewportScroll(event.currentTarget)
+          const gap = gapRef.current?.getBoundingClientRect()
+          const viewport = event.currentTarget.getBoundingClientRect()
+          if (!gap || gap.bottom < viewport.top - 80 || gap.top > viewport.bottom + 80) {
+            gapAutoArmedRef.current = true
+          } else if (
+            messageGap &&
+            !messageGap.unavailable &&
+            !loadingGap &&
+            gapAutoArmedRef.current
+          ) {
+            gapAutoArmedRef.current = false
+            onReachGap()
+          }
           if (event.currentTarget.scrollTop <= 80) onReachTop()
+          if (
+            hasMoreAfterMessages &&
+            event.currentTarget.scrollHeight -
+              event.currentTarget.scrollTop -
+              event.currentTarget.clientHeight <=
+              80
+          )
+            onReachBottom()
         }}
         className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
         viewportClassName="overflow-x-hidden [&>div]:block! [&>div]:w-full! [&>div]:min-w-0!"
@@ -135,6 +169,33 @@ export function MessageList({
               <div className="flex w-full flex-col gap-5">
                 {messages.map((message, index) => (
                   <Fragment key={message.id}>
+                    {message.seq > 0 &&
+                      messages[index - 1]?.seq > 0 &&
+                      message.seq > messages[index - 1].seq + 1 &&
+                      message.seq !== messageGap?.beforeSeq && (
+                        <div className="text-center text-xs text-muted-foreground">
+                          中间消息未保存在本地
+                        </div>
+                      )}
+                    {messageGap && message.seq === messageGap.beforeSeq && (
+                      <div
+                        ref={gapRef}
+                        className="flex justify-center py-2 text-xs text-muted-foreground"
+                      >
+                        {messageGap.unavailable ? (
+                          <span>中间消息未保存在本地</span>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={loadingGap}
+                            onClick={onReachGap}
+                            className="rounded-full border border-border px-3 py-1 hover:text-foreground disabled:opacity-60"
+                          >
+                            {loadingGap ? "正在加载中间消息" : "中间还有消息，点击加载"}
+                          </button>
+                        )}
+                      </div>
+                    )}
                     {shouldShowMessageTimeMarker(messages[index - 1], message) && (
                       <div className="text-center text-xs text-muted-foreground">
                         {formatMessageTime(message.createdAt)}
@@ -171,7 +232,7 @@ export function MessageList({
           )}
         </div>
       </ScrollArea>
-      {newMessageCount > 0 && (
+      {(newMessageCount > 0 || hasMoreAfterMessages) && (
         <Button
           type="button"
           variant="outline"
@@ -180,7 +241,7 @@ export function MessageList({
           onClick={onScrollToBottom}
         >
           <HugeiconsIcon icon={ArrowDown02Icon} className="size-4" aria-hidden />
-          {newMessageCount} 条新消息
+          {hasMoreAfterMessages ? "回到最新消息" : `${newMessageCount} 条新消息`}
         </Button>
       )}
     </div>
@@ -238,14 +299,11 @@ function MessageRow({
 
   if (message.body.type === "system_event") {
     return (
-      <article
-        data-message-id={message.id}
-        className={cn(
-          "flex justify-center rounded-lg transition-colors duration-300",
-          highlighted && "bg-xgui-background-1",
-        )}
-      >
-        <Badge variant="secondary">
+      <article data-message-id={message.id} className="flex justify-center">
+        <Badge
+          variant="secondary"
+          className={cn(highlighted && "ring-2 ring-xgui-yellow/60 message-highlight-flash")}
+        >
           <MessageBodyRenderer
             body={message.body}
             targetId={targetId}
@@ -283,8 +341,7 @@ function MessageRow({
     <article
       data-message-id={message.id}
       className={cn(
-        "group/message-row flex items-start gap-2 rounded-lg transition-colors duration-300",
-        highlighted && "bg-xgui-background-1",
+        "group/message-row flex items-start gap-2",
         message.isMine ? "justify-end" : "justify-start",
       )}
     >
@@ -337,16 +394,11 @@ function MessageRow({
             onRevoke={revokeAction}
             className={cn(
               "group/bubble max-w-full rounded-xl text-sm leading-6",
+              highlighted && "ring-2 ring-xgui-yellow/60 message-highlight-flash",
               flushBubble ? "overflow-hidden p-0" : "px-3 py-2.5",
               message.isMine
-                ? cn(
-                    "rounded-tr-sm bg-xgui-brand-1",
-                    !flushInteractiveCardBubble && "hover:bg-xgui-brand-6",
-                  )
-                : cn(
-                    "rounded-tl-sm bg-muted",
-                    !flushInteractiveCardBubble && "hover:bg-xgui-background-6",
-                  ),
+                ? "rounded-tr-sm bg-xgui-brand-1 hover:bg-xgui-brand-6 data-menu-open:bg-xgui-brand-6"
+                : "rounded-tl-sm bg-muted hover:bg-xgui-background-6 data-menu-open:bg-xgui-background-6",
             )}
           >
             {message.replyTo && (

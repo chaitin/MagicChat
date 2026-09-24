@@ -286,6 +286,47 @@
   min-height: 0;
   overflow: hidden;
 }
+
+.message-highlight-flash {
+  animation: message-highlight-flash 3s ease-in-out forwards;
+}
+
+@keyframes message-highlight-flash {
+  0% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-yellow) 60%, transparent);
+  }
+  10% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-orange) 54%, transparent);
+  }
+  20% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-yellow) 48%, transparent);
+  }
+  30% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-orange) 42%, transparent);
+  }
+  40% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-yellow) 36%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-orange) 30%, transparent);
+  }
+  60% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-yellow) 24%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-orange) 18%, transparent);
+  }
+  80% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-yellow) 12%, transparent);
+  }
+  90% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-orange) 6%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-yellow) 0%, transparent);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

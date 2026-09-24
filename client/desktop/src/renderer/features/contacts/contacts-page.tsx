@@ -272,10 +272,13 @@ export function ContactsPage({
                                       {entrySummary(entry)}
                                     </span>
                                   </ItemContent>
-                                  {"online" in entry && entry.online && (
+                                  {"online" in entry && (
                                     <span
-                                      className="size-2 rounded-full bg-xgui-green"
-                                      aria-label="在线"
+                                      className={cn(
+                                        "size-2 shrink-0 rounded-full",
+                                        entry.online ? "bg-xgui-green" : "bg-xgui-foreground-4",
+                                      )}
+                                      aria-label={entry.online ? "在线" : "离线"}
                                     />
                                   )}
                                 </button>

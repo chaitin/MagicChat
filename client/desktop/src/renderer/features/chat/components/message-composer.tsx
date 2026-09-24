@@ -1,9 +1,13 @@
 import {
+  useEffect,
+  useId,
+  useMemo,
   useRef,
   useState,
   type ClipboardEvent,
   type DragEvent,
   type KeyboardEventHandler,
+  type KeyboardEvent,
   type RefObject,
 } from "react"
 import {
@@ -28,10 +32,19 @@ import { Toggle } from "@/components/ui/toggle"
 import { formatMentionText, type MentionLabelResolver } from "@/lib/message-mentions"
 import { cn } from "@/lib/utils"
 import { ExpressionPickerPanel } from "../expression-picker-panel"
+import {
+  filterMentionCandidates,
+  getMentionTrigger,
+  type MentionCandidate,
+} from "../conversation-mentions"
+import { MentionCandidateMenu } from "./mention-candidate-menu"
 
 export function MessageComposer({
   composerRef,
   draft,
+  mentionCandidates,
+  targetId,
+  resolvedTheme,
   replyTarget,
   mentionLabelResolver,
   markdownMode,
@@ -44,6 +57,7 @@ export function MessageComposer({
   onCancelReply,
   onDraftBlur,
   onDraftChange,
+  onInsertMention,
   onDraftFocus,
   onKeyDown,
   onMarkdownChange,
@@ -57,6 +71,9 @@ export function MessageComposer({
 }: {
   composerRef: RefObject<HTMLTextAreaElement | null>
   draft: string
+  mentionCandidates: MentionCandidate[]
+  targetId: string
+  resolvedTheme: "light" | "dark"
   replyTarget: DesktopMessageReplyTarget | null
   mentionLabelResolver: MentionLabelResolver
   markdownMode: boolean
@@ -69,6 +86,7 @@ export function MessageComposer({
   onCancelReply: () => void
   onDraftBlur: () => void
   onDraftChange: (value: string) => void
+  onInsertMention: (candidate: MentionCandidate, start: number, end: number) => void
   onDraftFocus: () => void
   onKeyDown: KeyboardEventHandler<HTMLTextAreaElement>
   onMarkdownChange: (pressed: boolean) => void
@@ -82,6 +100,58 @@ export function MessageComposer({
 }) {
   const [dragging, setDragging] = useState(false)
   const dragDepth = useRef(0)
+  const menuId = useId()
+  const [mentionTrigger, setMentionTrigger] = useState<ReturnType<typeof getMentionTrigger>>(null)
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
+  const filteredCandidates = useMemo(
+    () => filterMentionCandidates(mentionCandidates, mentionTrigger?.query ?? ""),
+    [mentionCandidates, mentionTrigger?.query],
+  )
+  useEffect(() => {
+    if (!draft) setMentionTrigger(null)
+  }, [draft])
+
+  function updateMentionTrigger(value: string, cursor: number) {
+    setMentionTrigger(mentionCandidates.length ? getMentionTrigger(value, cursor) : null)
+    setSelectedMentionIndex(0)
+  }
+
+  function insertCandidate(candidate: MentionCandidate) {
+    const cursor = composerRef.current?.selectionStart ?? draft.length
+    const trigger = getMentionTrigger(draft, cursor)
+    if (!trigger) return
+    onInsertMention(candidate, trigger.start, cursor)
+    setMentionTrigger(null)
+    setSelectedMentionIndex(0)
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return
+    if (mentionTrigger && event.key === "Escape") {
+      event.preventDefault()
+      setMentionTrigger(null)
+      return
+    }
+    if (mentionTrigger && filteredCandidates.length) {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault()
+        setSelectedMentionIndex(
+          (current) =>
+            (current + (event.key === "ArrowDown" ? 1 : -1) + filteredCandidates.length) %
+            filteredCandidates.length,
+        )
+        return
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault()
+        insertCandidate(
+          filteredCandidates[Math.min(selectedMentionIndex, filteredCandidates.length - 1)],
+        )
+        return
+      }
+    }
+    onKeyDown(event)
+  }
 
   function enterFile(event: DragEvent<HTMLElement>) {
     if (!event.dataTransfer.types.includes("Files")) return
@@ -120,7 +190,7 @@ export function MessageComposer({
   }
 
   return (
-    <footer className="flex shrink-0 flex-col gap-2 bg-card px-4 pt-1 pb-4">
+    <footer className="relative flex shrink-0 flex-col gap-2 bg-card px-4 pt-1 pb-4">
       {replyTarget && (
         <div className="flex min-h-11 items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2">
           <div className="min-w-0">
@@ -156,12 +226,25 @@ export function MessageComposer({
         <InputGroupTextarea
           ref={composerRef}
           value={draft}
+          role="combobox"
+          aria-expanded={Boolean(mentionTrigger && filteredCandidates.length)}
+          aria-controls={mentionTrigger && filteredCandidates.length ? menuId : undefined}
+          aria-autocomplete="list"
           placeholder={markdownMode ? "输入 Markdown 消息" : "输入消息"}
           className="max-h-48 min-h-24"
-          onBlur={onDraftBlur}
-          onChange={(event) => onDraftChange(event.target.value)}
+          onBlur={() => {
+            setMentionTrigger(null)
+            onDraftBlur()
+          }}
+          onChange={(event) => {
+            onDraftChange(event.target.value)
+            updateMentionTrigger(event.target.value, event.target.selectionStart)
+          }}
           onFocus={onDraftFocus}
-          onKeyDown={onKeyDown}
+          onKeyDown={handleKeyDown}
+          onSelect={(event) =>
+            updateMentionTrigger(event.currentTarget.value, event.currentTarget.selectionStart)
+          }
           onPaste={pasteFile}
         />
         <InputGroupAddon align="block-end" className="justify-between gap-2">
@@ -234,6 +317,16 @@ export function MessageComposer({
           </div>
         )}
       </InputGroup>
+      {mentionTrigger && filteredCandidates.length > 0 && (
+        <MentionCandidateMenu
+          id={menuId}
+          candidates={filteredCandidates}
+          selectedIndex={Math.min(selectedMentionIndex, filteredCandidates.length - 1)}
+          targetId={targetId}
+          theme={resolvedTheme}
+          onSelect={insertCandidate}
+        />
+      )}
     </footer>
   )
 }

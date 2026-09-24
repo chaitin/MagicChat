@@ -40,6 +40,7 @@
     "katex": "^0.18.7",
     "lucide-react": "^1.45.0",
     "motion": "13.2.0",
+    "pinyin-pro": "^3.29.4",
     "radix-ui": "^1.6.7",
     "react": "19.2.6",
     "react-day-picker": "^10.0.1",

@@ -85,6 +85,14 @@ export class AccountDatabase {
     return this.conversations.list(new Date(), selectedConversationId)
   }
 
+  listLocalTopics(parentId: string, offset: number, keyword = "") {
+    return this.conversations.listTopics(parentId, offset, keyword)
+  }
+
+  listLocalAttachments(conversationId: string, offset: number, keyword = "") {
+    return this.messages.listAttachments(conversationId, offset, keyword)
+  }
+
   upsertMessages(...args: Parameters<MessageRepository["upsertMessages"]>) {
     return this.messages.upsertMessages(...args)
   }
@@ -133,6 +141,22 @@ export class AccountDatabase {
 
   updateMessageReactions(...args: Parameters<MessageRepository["updateMessageReactions"]>) {
     return this.messages.updateMessageReactions(...args)
+  }
+
+  getMessageSeq(...args: Parameters<MessageRepository["getMessageSeq"]>) {
+    return this.messages.getMessageSeq(...args)
+  }
+
+  getAttachmentMessageSeq(...args: Parameters<MessageRepository["getAttachmentMessageSeq"]>) {
+    return this.messages.getAttachmentMessageSeq(...args)
+  }
+
+  hasMessagesBefore(...args: Parameters<MessageRepository["hasMessagesBefore"]>) {
+    return this.messages.hasMessagesBefore(...args)
+  }
+
+  hasMessagesAfter(...args: Parameters<MessageRepository["hasMessagesAfter"]>) {
+    return this.messages.hasMessagesAfter(...args)
   }
 
   listMessages(...args: Parameters<MessageRepository["listMessages"]>) {

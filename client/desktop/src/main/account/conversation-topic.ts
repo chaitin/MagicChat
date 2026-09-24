@@ -4,6 +4,8 @@ export function parseConversationTopic(value: unknown): DesktopConversation["top
   if (!isRecord(value) || value.type !== "topic" || !isRecord(value.topic)) return undefined
   const sourceSender = isRecord(value.topic.source_sender) ? value.topic.source_sender : undefined
   const parentConversationId = optionalString(value.topic.parent_conversation_id, 128)
+  const sourceMessageId = optionalString(value.topic.source_message_id, 128)
+  const parentConversationType = optionalString(value.topic.parent_conversation_type, 32)
   const sourceSenderId = optionalString(sourceSender?.id, 128)
   const sourceSenderType =
     sourceSender?.type === "user" ? "user" : sourceSender?.type === "app" ? "app" : null
@@ -11,6 +13,8 @@ export function parseConversationTopic(value: unknown): DesktopConversation["top
   return {
     archived: value.topic.archived === true,
     parentConversationId,
+    ...(sourceMessageId ? { sourceMessageId } : {}),
+    ...(parentConversationType ? { parentConversationType } : {}),
     participating: value.topic.participating === true,
     sourceSender: {
       id: sourceSenderId,
