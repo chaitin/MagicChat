@@ -385,6 +385,8 @@ type InviteCandidate = {
   searchText: string
 }
 
+const inviteNameCollator = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" })
+
 function inviteKey(type: InviteCandidate["type"], id: string) {
   return `${type}:${id.toLowerCase()}`
 }
@@ -459,9 +461,12 @@ function InviteMembers(props: PanelProps) {
       }
     }
     return [...available.values()].sort((left, right) => {
-      const leftExisting = left.type === "user" && existing.has(inviteKey(left.type, left.id))
-      const rightExisting = right.type === "user" && existing.has(inviteKey(right.type, right.id))
-      return Number(rightExisting) - Number(leftExisting)
+      const leftExisting = existing.has(inviteKey(left.type, left.id))
+      const rightExisting = existing.has(inviteKey(right.type, right.id))
+      return (
+        Number(rightExisting) - Number(leftExisting) ||
+        inviteNameCollator.compare(left.name, right.name)
+      )
     })
   }, [canInviteApps, currentUserId, directory, existing, info])
   const visible = candidates.filter((candidate) =>
