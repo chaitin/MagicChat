@@ -9,6 +9,7 @@ import { useEffect, useState } from "react"
 import type { DesktopConversation } from "../../../../shared/account-data"
 import { ConversationHeaderPanel, type HeaderPanel } from "./conversation-header-panel"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
+import { Avatar, AvatarBadge } from "@/components/ui/avatar"
 import { ContactProfilePopover } from "@/components/avatar/contact-profile-popover"
 import { HugeiconsIcon, type HugeiconsIconProps } from "@/components/icons/hugeicons-icon"
 import { Button as BeButton } from "@/components/motion/button/base"
@@ -37,16 +38,6 @@ export function ChatHeader({
   const [panel, setPanel] = useState<{ conversationId: string; kind: HeaderPanel } | null>(null)
   useEffect(() => setPanel(null), [conversation.id])
   const openPanel = (kind: HeaderPanel) => setPanel({ conversationId: conversation.id, kind })
-  const avatar = (
-    <EntityAvatar
-      targetId={targetId}
-      type={conversation.avatarType}
-      id={conversation.avatarId}
-      theme={resolvedTheme}
-      size={36}
-      label={`${conversation.name}头像`}
-    />
-  )
   const profileType =
     conversation.type === "group" || conversation.type === "app"
       ? conversation.type
@@ -64,6 +55,24 @@ export function ChatHeader({
   const online =
     (profileType === "user" || profileType === "app") &&
     onlineContactKeys?.has(`${profileType}:${profileId.toLowerCase()}`)
+  const avatar = (
+    <Avatar className="size-9! rounded-sm after:hidden">
+      <EntityAvatar
+        targetId={targetId}
+        type={conversation.avatarType}
+        id={conversation.avatarId}
+        theme={resolvedTheme}
+        size={36}
+        label={`${conversation.name}头像`}
+      />
+      {(profileType === "user" || profileType === "app") && (
+        <AvatarBadge
+          className={cn("size-2.5!", online ? "bg-xgui-green" : "bg-muted-foreground")}
+          aria-label={online ? "在线" : "离线"}
+        />
+      )}
+    </Avatar>
+  )
   return (
     <>
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-xgui-background-1 px-4">
@@ -83,15 +92,6 @@ export function ChatHeader({
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
             <h2 className="min-w-0 truncate text-sm">{conversation.name}</h2>
-            {(profileType === "user" || profileType === "app") && (
-              <span
-                className={cn(
-                  "size-2 shrink-0 rounded-full",
-                  online ? "bg-xgui-green" : "bg-xgui-foreground-4",
-                )}
-                aria-label={online ? "在线" : "离线"}
-              />
-            )}
           </div>
           <p className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
             <span className="truncate">{conversationDescription(conversation)}</span>
