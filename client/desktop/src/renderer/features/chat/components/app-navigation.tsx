@@ -15,7 +15,7 @@ import {
   UserIcon,
   UserSquareIcon,
 } from "@hugeicons/core-free-icons"
-import type { ServerCatalog } from "../../../../shared/auth"
+import type { AuthUser, ServerCatalog } from "../../../../shared/auth"
 import { JIYING_HOMEPAGE, type ThemePreference } from "../../../../shared/desktop"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
 import { AvatarBadge } from "@/components/ui/avatar"
@@ -23,6 +23,7 @@ import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { Button as BeButton } from "@/components/motion/button/base"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import { SettingsDialog } from "@/components/settings-dialog"
+import { ProfileSettingsDialog } from "./profile-settings-dialog"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -74,6 +75,7 @@ export function SectionPlaceholder({ section }: { section: Exclude<AppSection, "
 
 export function AppRail({
   targetId,
+  serverUrl,
   userId,
   userName,
   userEmail,
@@ -85,11 +87,13 @@ export function AppRail({
   hasUnreadMessages,
   onSectionChange,
   onSignOut,
+  onUserUpdated,
   onRequestQuit,
   onThemeChange,
   onCatalogChange,
 }: {
   targetId: string
+  serverUrl: string
   userId: string
   userName: string
   userEmail: string
@@ -101,6 +105,7 @@ export function AppRail({
   hasUnreadMessages: boolean
   onSectionChange: (section: AppSection) => void
   onSignOut: () => Promise<boolean>
+  onUserUpdated: (user: AuthUser) => void
   onRequestQuit: () => void
   onThemeChange: (theme: ThemePreference) => void
   onCatalogChange: (catalog: ServerCatalog) => void
@@ -135,6 +140,8 @@ export function AppRail({
     <aside className="flex w-14 shrink-0 flex-col items-center bg-xgui-background-6 py-3">
       <AccountMenu
         targetId={targetId}
+        serverUrl={serverUrl}
+        onUserUpdated={onUserUpdated}
         userId={userId}
         userName={userName}
         userEmail={userEmail}
@@ -210,21 +217,26 @@ export function AppRail({
 
 function AccountMenu({
   targetId,
+  serverUrl,
   userId,
   userName,
   userEmail,
   resolvedTheme,
   onSignOut,
+  onUserUpdated,
   onRequestQuit,
 }: {
   targetId: string
+  serverUrl: string
   userId: string
   userName: string
   userEmail: string
   resolvedTheme: "light" | "dark"
   onSignOut: () => Promise<boolean>
+  onUserUpdated: (user: AuthUser) => void
   onRequestQuit: () => void
 }) {
+  const [profileOpen, setProfileOpen] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [logoutPending, setLogoutPending] = useState(false)
 
@@ -279,7 +291,7 @@ function AccountMenu({
               {userEmail || "未设置"}
             </span>
           </div>
-          <DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setProfileOpen(true)}>
             <HugeiconsIcon icon={UserIcon} className="size-4" aria-hidden />
             个人资料
           </DropdownMenuItem>
@@ -298,6 +310,18 @@ function AccountMenu({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <ProfileSettingsDialog
+        open={profileOpen}
+        onOpenChange={setProfileOpen}
+        targetId={targetId}
+        serverUrl={serverUrl}
+        userId={userId}
+        userName={userName}
+        userEmail={userEmail}
+        theme={resolvedTheme}
+        onUserUpdated={onUserUpdated}
+      />
 
       <AlertDialog
         open={logoutOpen}

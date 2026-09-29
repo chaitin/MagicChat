@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { AnimatedToastProvider } from "@/components/motion/animated-toast-provider"
 import { WindowTitleBar } from "@/components/window-title-bar"
 import { LoginPage } from "@/features/auth/login-page"
+import { UpdateProvider } from "./update-provider"
 import type { ThemePreference } from "../shared/desktop"
 
 export type Theme = ThemePreference
@@ -72,19 +73,21 @@ export function App() {
 
   return (
     <AnimatedToastProvider>
-      <div className="flex h-dvh flex-col overflow-hidden">
-        <WindowTitleBar brandTitle={windowTitle} />
-        <div className="min-h-0 flex-1">
-          <div className="app-shell">
-            <LoginPage
-              theme={theme}
-              resolvedTheme={resolvedTheme}
-              onThemeChange={changeTheme}
-              onOrganizationNameChange={changeOrganizationName}
-            />
+      <UpdateProvider>
+        <div className="flex h-dvh flex-col overflow-hidden">
+          <WindowTitleBar brandTitle={windowTitle} />
+          <div className="min-h-0 flex-1">
+            <div className="app-shell">
+              <LoginPage
+                theme={theme}
+                resolvedTheme={resolvedTheme}
+                onThemeChange={changeTheme}
+                onOrganizationNameChange={changeOrganizationName}
+              />
+            </div>
           </div>
         </div>
-      </div>
+      </UpdateProvider>
     </AnimatedToastProvider>
   )
 }

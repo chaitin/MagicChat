@@ -11,6 +11,16 @@ export function conversationUnreadIndicator(
   }
 }
 
+export function hasUnreadMention(
+  conversation: Pick<DesktopConversation, "unreadCount" | "lastReadSeq" | "lastMentionedSeq">,
+): boolean {
+  return (
+    conversation.unreadCount > 0 &&
+    Number.isSafeInteger(conversation.lastMentionedSeq) &&
+    (conversation.lastMentionedSeq ?? 0) > (conversation.lastReadSeq ?? 0)
+  )
+}
+
 export function hasUnmutedUnreadConversations(
   conversations: ReadonlyArray<Pick<DesktopConversation, "unreadCount" | "notificationMuted">>,
 ): boolean {

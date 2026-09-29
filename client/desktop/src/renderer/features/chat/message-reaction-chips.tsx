@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react"
 import { Loading03Icon } from "@hugeicons/core-free-icons"
 import type { DesktopMessage, DesktopMessageReactionUser } from "../../../shared/account-data"
+import { ContactProfilePopover } from "@/components/avatar/contact-profile-popover"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { MentionLabelResolver } from "@/lib/message-mentions"
@@ -98,7 +99,14 @@ function ReactionParticipantSummary({
       {users.map((user, index) => (
         <span className="inline-flex min-w-0 items-center" key={user.id}>
           {index > 0 && <span>,&nbsp;</span>}
-          <span className="min-w-0 max-w-full break-all whitespace-normal">{user.name}</span>
+          <ContactProfilePopover
+            type="user"
+            id={user.id}
+            fallbackName={user.name}
+            triggerClassName="min-w-0 max-w-full text-left"
+          >
+            <span className="min-w-0 max-w-full break-all whitespace-normal">{user.name}</span>
+          </ContactProfilePopover>
         </span>
       ))}
       {hasMoreUsers && (
@@ -212,8 +220,15 @@ function ReactionUsersPopover({
           ) : (
             <div className="grid gap-0.5">
               {users.map((user) => (
-                <div key={user.id} className="truncate rounded-md px-2 py-2 text-sm">
-                  {resolvedUser(user, resolveLabel).name}
+                <div key={user.id} className="rounded-md px-2 py-2 text-sm">
+                  <ContactProfilePopover
+                    type="user"
+                    id={user.id}
+                    fallbackName={resolvedUser(user, resolveLabel).name}
+                    triggerClassName="max-w-full text-left"
+                  >
+                    <span className="block truncate">{resolvedUser(user, resolveLabel).name}</span>
+                  </ContactProfilePopover>
                 </div>
               ))}
             </div>

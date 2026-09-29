@@ -207,7 +207,7 @@ export function ClientAppDialog({
             if (!resetting) setResetOpen(open)
           }}
         >
-          <AlertDialogContent>
+          <AlertDialogContent size="sm">
             <AlertDialogHeader>
               <AlertDialogTitle>重置连接密钥</AlertDialogTitle>
               <AlertDialogDescription>

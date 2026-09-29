@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron"
 import { ACCOUNT_DATA_CHANNELS } from "../shared/account-data"
-import { DESKTOP_CHANNELS, type DesktopBridge } from "../shared/desktop"
+import { DESKTOP_CHANNELS, type DesktopBridge, type UpdateProgress } from "../shared/desktop"
 import { AUTH_CHANNELS } from "../shared/auth"
 import { MEDIA_CHANNELS, type MediaDownloadProgress } from "../shared/media"
 
@@ -12,7 +12,15 @@ const bridge: DesktopBridge = {
   openExternalLink: (url) => ipcRenderer.invoke(DESKTOP_CHANNELS.openExternalLink, url),
   openWebLink: (url) => ipcRenderer.invoke(DESKTOP_CHANNELS.openWebLink, url),
   copyText: (text) => ipcRenderer.invoke(DESKTOP_CHANNELS.copyText, text),
+  captureScreenshot: () => ipcRenderer.invoke(DESKTOP_CHANNELS.captureScreenshot),
   checkForUpdates: () => ipcRenderer.invoke(DESKTOP_CHANNELS.checkForUpdates),
+  downloadUpdate: () => ipcRenderer.invoke(DESKTOP_CHANNELS.downloadUpdate),
+  installUpdate: () => ipcRenderer.invoke(DESKTOP_CHANNELS.installUpdate),
+  onUpdateProgress: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, value: UpdateProgress) => callback(value)
+    ipcRenderer.on(DESKTOP_CHANNELS.updateProgress, listener)
+    return () => ipcRenderer.removeListener(DESKTOP_CHANNELS.updateProgress, listener)
+  },
   getSystemInfo: () => ipcRenderer.invoke(DESKTOP_CHANNELS.getSystemInfo),
   getStorageInfo: () => ipcRenderer.invoke(DESKTOP_CHANNELS.getStorageInfo),
   openStorageDirectory: () => ipcRenderer.invoke(DESKTOP_CHANNELS.openStorageDirectory),
@@ -85,16 +93,31 @@ const bridge: DesktopBridge = {
   accountData: {
     initialize: (targetId) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.initialize, targetId),
     refreshAll: (targetId) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.refreshAll, targetId),
+    getProfile: (targetId) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getProfile, targetId),
+    updateProfile: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.updateProfile, input),
+    uploadProfileAvatar: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.uploadProfileAvatar, input),
     searchLocal: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.searchLocal, input),
     listConversations: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listConversations, input),
     listLocalTopics: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listLocalTopics, input),
-    listLocalAttachments: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listLocalAttachments, input),
-    getLocalMessageContext: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getLocalMessageContext, input),
-    listLocalMessagesAfter: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listLocalMessagesAfter, input),
-    getConversationInfo: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getConversationInfo, input),
+    listLocalAttachments: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listLocalAttachments, input),
+    getLocalMessageContext: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getLocalMessageContext, input),
+    listLocalMessagesAfter: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listLocalMessagesAfter, input),
+    getConversationInfo: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getConversationInfo, input),
     addGroupMembers: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.addGroupMembers, input),
     manageGroup: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.manageGroup, input),
+    uploadGroupAvatar: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.uploadGroupAvatar, input),
+    listBindableProjects: (targetId) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listBindableProjects, targetId),
+    bindConversationProject: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.bindConversationProject, input),
+    archiveTopic: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.archiveTopic, input),
     markConversationRead: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.markConversationRead, input),
     createGroupConversation: (input) =>

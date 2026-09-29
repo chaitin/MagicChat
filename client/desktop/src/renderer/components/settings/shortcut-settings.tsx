@@ -155,6 +155,7 @@ function ShortcutItem({
           type="button"
           variant={recording ? "primary" : "outline"}
           size="sm"
+          className={recording ? "font-sans" : "font-mono"}
           disabled={disabled}
           onClick={onRecord}
         >

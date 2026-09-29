@@ -92,8 +92,8 @@
 }
 
 :root {
-  --desktop-titlebar-height: 2.5rem;
-  --desktop-content-center-y: calc(50% + 1.25rem);
+  --desktop-titlebar-height: 2.25rem;
+  --desktop-content-center-y: calc(50% + 1.125rem);
   --radius: 0.625rem;
   --xgui-active-mask: rgba(0, 0, 0, 0.2);
   --xgui-background-0: #ededed;
@@ -102,14 +102,14 @@
   --xgui-background-3: #f7f7f7;
   --xgui-background-4: #4c4c4c;
   --xgui-background-5: #ffffff;
-  --xgui-background-6: #e3e3e3;
+  --xgui-background-6: #f2f2f2;
   --xgui-blue: #10aeff;
   --xgui-brand: #07c160;
   --xgui-brand-1: #a8e8c5;
   --xgui-brand-2: #38cd7f;
   --xgui-brand-4: #06ae56;
   --xgui-brand-5: #059a4c;
-  --xgui-brand-6: #95ddb5;
+  --xgui-brand-6: #9fe3bd;
   --xgui-destructive: #fa5151;
   --xgui-foreground-0-half: rgba(0, 0, 0, 0.9);
   --xgui-foreground-2: rgba(0, 0, 0, 0.3);
@@ -175,14 +175,14 @@
   --xgui-background-3: #202020;
   --xgui-background-4: #404040;
   --xgui-background-5: #2c2c2c;
-  --xgui-background-6: #2a2a2a;
+  --xgui-background-6: #212121;
   --xgui-blue: #10aeff;
   --xgui-brand: #07c160;
   --xgui-brand-1: #02351a;
   --xgui-brand-2: #059a4c;
   --xgui-brand-4: #20c770;
   --xgui-brand-5: #38cd7f;
-  --xgui-brand-6: #03421f;
+  --xgui-brand-6: #03391c;
   --xgui-destructive: #fa5151;
   --xgui-foreground-0-half: rgba(255, 255, 255, 0.6);
   --xgui-foreground-2: rgba(255, 255, 255, 0.3);
@@ -288,42 +288,15 @@
 }
 
 .message-highlight-flash {
-  animation: message-highlight-flash 3s ease-in-out forwards;
+  animation: message-highlight-flash 2s linear forwards;
 }
 
 @keyframes message-highlight-flash {
   0% {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-yellow) 60%, transparent);
-  }
-  10% {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-orange) 54%, transparent);
-  }
-  20% {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-yellow) 48%, transparent);
-  }
-  30% {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-orange) 42%, transparent);
-  }
-  40% {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-yellow) 36%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-orange) 30%, transparent);
-  }
-  60% {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-yellow) 24%, transparent);
-  }
-  70% {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-orange) 18%, transparent);
-  }
-  80% {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-yellow) 12%, transparent);
-  }
-  90% {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-orange) 6%, transparent);
+    box-shadow: 0 0 0 2px var(--xgui-orange);
   }
   100% {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-yellow) 0%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xgui-orange) 0%, transparent);
   }
 }
 

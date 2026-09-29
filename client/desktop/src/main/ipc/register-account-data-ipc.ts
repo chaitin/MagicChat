@@ -2,6 +2,7 @@ import type { BrowserWindow } from "electron"
 import {
   ACCOUNT_DATA_CHANNELS,
   type AddGroupMembersInput,
+  type BindConversationProjectInput,
   type ConversationTargetInput,
   type LocalAttachmentPageInput,
   type LocalMessageContextInput,
@@ -29,6 +30,9 @@ import {
   type SetConversationPinnedInput,
   type SetMessageReactionInput,
   type SubmitChoiceResponseInput,
+  type UploadGroupAvatarInput,
+  type UpdateProfileInput,
+  type UploadProfileAvatarInput,
 } from "../../shared/account-data"
 import { AuthFailure } from "../../shared/auth"
 import type { AuthController } from "../auth-controller"
@@ -49,6 +53,13 @@ export function registerAccountDataIpc({
 }) {
   handle(ACCOUNT_DATA_CHANNELS.initialize, (input) => auth.initializeAccountData(input as string))
   handle(ACCOUNT_DATA_CHANNELS.refreshAll, (input) => auth.refreshAll(input as string))
+  handle(ACCOUNT_DATA_CHANNELS.getProfile, (input) => auth.getProfile(input as string))
+  handle(ACCOUNT_DATA_CHANNELS.updateProfile, (input) =>
+    auth.updateProfile(input as UpdateProfileInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.uploadProfileAvatar, (input) =>
+    auth.uploadProfileAvatar(input as UploadProfileAvatarInput),
+  )
   handle(ACCOUNT_DATA_CHANNELS.searchLocal, (input) => auth.searchLocal(input as LocalSearchInput))
   handle(ACCOUNT_DATA_CHANNELS.listConversations, (input) =>
     auth.listConversations(input as ListConversationsInput),
@@ -71,8 +82,18 @@ export function registerAccountDataIpc({
   handle(ACCOUNT_DATA_CHANNELS.addGroupMembers, (input) =>
     auth.addGroupMembers(input as AddGroupMembersInput),
   )
-  handle(ACCOUNT_DATA_CHANNELS.manageGroup, (input) =>
-    auth.manageGroup(input as ManageGroupInput),
+  handle(ACCOUNT_DATA_CHANNELS.manageGroup, (input) => auth.manageGroup(input as ManageGroupInput))
+  handle(ACCOUNT_DATA_CHANNELS.uploadGroupAvatar, (input) =>
+    auth.uploadGroupAvatar(input as UploadGroupAvatarInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.listBindableProjects, (input) =>
+    auth.listBindableProjects(input as string),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.bindConversationProject, (input) =>
+    auth.bindConversationProject(input as BindConversationProjectInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.archiveTopic, (input) =>
+    auth.archiveTopic(input as ConversationTargetInput),
   )
   handle(ACCOUNT_DATA_CHANNELS.markConversationRead, (input) =>
     auth.markConversationRead(input as MarkConversationReadInput),

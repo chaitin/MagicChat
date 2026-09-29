@@ -32,14 +32,19 @@ export function Switch({
   const reduce = useReducedMotion()
   const [isPressed, setIsPressed] = useState(false)
   const [isPointer, setIsPointer] = useState(false)
+  const thumbX = checked ? (size === "sm" ? 16 : 20) : 0
 
   // Disabled shake feedback when pressed.
   useEffect(() => {
     if (!thumbRef.current || reduce) return
     if (disabled && isPressed) {
-      animate(thumbRef.current, { x: [0, -2, 2, -1, 0] }, { delay: 0.2, duration: 0.6 })
+      animate(
+        thumbRef.current,
+        { x: [thumbX, thumbX - 2, thumbX + 2, thumbX - 1, thumbX] },
+        { delay: 0.2, duration: 0.6 },
+      )
     }
-  }, [disabled, isPressed, reduce])
+  }, [disabled, isPressed, reduce, thumbX])
 
   const squish = !disabled && isPointer && isPressed && !reduce
 
@@ -67,13 +72,13 @@ export function Switch({
             size === "sm" ? "h-5 w-9 px-0.5" : "h-7 w-12 px-1",
             "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
             "disabled:cursor-not-allowed disabled:opacity-60",
-            checked ? "justify-end bg-primary" : "justify-start bg-muted-foreground/60",
+            checked ? "bg-primary" : "bg-muted-foreground/60",
           )}
         >
           <motion.div
             ref={thumbRef}
-            layout
-            animate={{ scale: squish ? 0.9 : 1 }}
+            initial={false}
+            animate={{ x: thumbX, scale: squish ? 0.9 : 1 }}
             className={cn(
               "pointer-events-none block rounded-full bg-background shadow-md",
               size === "sm" ? "size-4" : "size-5",

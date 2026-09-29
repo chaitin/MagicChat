@@ -336,6 +336,9 @@ export class OutgoingMessageService {
       id: message.id,
       author: message.senderName || (message.isMine ? this.currentUserName : "未知用户"),
       summary: message.content,
+      ...(message.senderId && (message.senderType === "user" || message.senderType === "app")
+        ? { senderId: message.senderId, senderType: message.senderType }
+        : {}),
     }
   }
 

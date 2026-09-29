@@ -48,6 +48,7 @@ export function LoginPage({
     loading,
     isPreview,
     accept,
+    acceptUser,
     acceptCatalog,
     connect,
     clearError,
@@ -211,7 +212,8 @@ export function LoginPage({
           targetId={connection?.targetId ?? ""}
           serverUrl={connection?.server.url ?? ""}
           userId={connection?.user?.id ?? ""}
-          userName={connection?.user?.name ?? "我"}
+          userName={connection?.user?.nickname?.trim() || connection?.user?.name || "我"}
+          onUserUpdated={acceptUser}
           userEmail={connection?.user?.email ?? ""}
           resolvedTheme={resolvedTheme}
           theme={theme}

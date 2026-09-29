@@ -48,23 +48,51 @@ export function EntityAvatar({
 
   useEffect(() => {
     let cancelled = false
+    let generation = 0
     retryCount.current = 0
-    setResult(null)
     if (!window.desktop || !targetId || !id) {
       setResult({ status: "fallback", type: defaultFallbackType })
       return
     }
-    void window.desktop.accountData
-      .getAvatar({ targetId, type, id, theme, ...(cacheOnly ? { cacheOnly: true } : {}) })
-      .then((response) => {
-        if (cancelled) return
-        setResult(response.ok ? response.data : { status: "fallback", type: defaultFallbackType })
-      })
-      .catch(() => {
-        if (!cancelled) setResult({ status: "fallback", type: defaultFallbackType })
-      })
+    function refresh() {
+      const current = ++generation
+      setResult(null)
+      void window
+        .desktop!.accountData.getAvatar({
+          targetId,
+          type,
+          id,
+          theme,
+          ...(cacheOnly ? { cacheOnly: true } : {}),
+        })
+        .then((response) => {
+          if (cancelled || current !== generation) return
+          setResult(response.ok ? response.data : { status: "fallback", type: defaultFallbackType })
+        })
+        .catch(() => {
+          if (!cancelled && current === generation) {
+            setResult({ status: "fallback", type: defaultFallbackType })
+          }
+        })
+    }
+    refresh()
+    const unsubscribe =
+      (type === "user" || type === "group") && !cacheOnly
+        ? window.desktop.accountData.onChanged((event) => {
+            if (
+              event.targetId === targetId &&
+              ((event.avatarChange?.type === type && event.avatarChange.id === id) ||
+                (type === "group" &&
+                  event.domains.includes("contacts") &&
+                  event.conversationIds.includes(id)))
+            ) {
+              refresh()
+            }
+          })
+        : undefined
     return () => {
       cancelled = true
+      unsubscribe?.()
     }
   }, [cacheOnly, defaultFallbackType, id, targetId, theme, type])
 

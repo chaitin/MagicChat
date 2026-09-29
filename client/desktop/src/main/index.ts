@@ -46,7 +46,8 @@ import {
 } from "./protocols/resource-protocols"
 import { ScreenshotManager } from "./screenshot-manager"
 import { ShortcutManager } from "./shortcut-manager"
-import { checkForUpdates, isTrustedReleaseUrl } from "./update-service"
+import { isTrustedReleaseUrl } from "./update-service"
+import { UpdateManager, updateCacheDirectory } from "./update-manager"
 
 // WSLg 不会稳定继承 Windows 的 DPI，且硬件视频合成可能只播放声音而显示黑屏。
 if (!app.isPackaged && process.platform === "linux" && process.env.WSL_DISTRO_NAME) {
@@ -228,6 +229,9 @@ void app.whenReady().then(async () => {
   let notificationSettings: NotificationSettings = DEFAULT_NOTIFICATION_SETTINGS
   let activeConversation: { targetId: string; conversationId: string } | null = null
   const activeNotifications = new Set<SystemNotification>()
+  const updates = new UpdateManager(updateCacheDirectory(app.getPath("userData")), (progress) => {
+    mainWindow?.webContents.send(DESKTOP_CHANNELS.updateProgress, progress)
+  })
   function notifyIncomingMessage(event: IncomingMessageNotification) {
     const window = mainWindow
     if (isMessageNotificationSuppressed(event, activeConversation, window?.isFocused() ?? false)) {
@@ -391,13 +395,19 @@ void app.whenReady().then(async () => {
     if (!screenshot.ownsSender(event.sender)) {
       throw new AuthFailure("untrusted_sender", "截图请求来源不受信任")
     }
-    return screenshot.getPayload()
+    return screenshot.getPayload(event.sender)
+  })
+  ipcMain.handle(SCREENSHOT_CHANNELS.activate, (event) => {
+    if (!screenshot.ownsSender(event.sender)) {
+      throw new AuthFailure("untrusted_sender", "截图请求来源不受信任")
+    }
+    screenshot.activate(event.sender)
   })
   ipcMain.handle(SCREENSHOT_CHANNELS.complete, (event, input: unknown) => {
     if (!screenshot.ownsSender(event.sender)) {
       throw new AuthFailure("untrusted_sender", "截图请求来源不受信任")
     }
-    screenshot.complete(input as ScreenshotSelection)
+    screenshot.complete(event.sender, input as ScreenshotSelection)
   })
   ipcMain.handle(SCREENSHOT_CHANNELS.cancel, (event) => {
     if (!screenshot.ownsSender(event.sender)) {
@@ -492,7 +502,15 @@ void app.whenReady().then(async () => {
     clipboard.writeText(input)
     return null
   })
-  handleIpc(DESKTOP_CHANNELS.checkForUpdates, () => checkForUpdates())
+  handleIpc(DESKTOP_CHANNELS.checkForUpdates, () => updates.check())
+  handleIpc(DESKTOP_CHANNELS.downloadUpdate, async () => {
+    await updates.download()
+    return null
+  })
+  handleIpc(DESKTOP_CHANNELS.installUpdate, async () => {
+    await updates.install()
+    return null
+  })
   handleIpc(DESKTOP_CHANNELS.getSystemInfo, async () => getSystemInfo())
   handleIpc(DESKTOP_CHANNELS.getStorageInfo, async () => getStorageInfo())
   handleIpc(DESKTOP_CHANNELS.openStorageDirectory, async () => {
@@ -502,6 +520,10 @@ void app.whenReady().then(async () => {
   })
   handleIpc(DESKTOP_CHANNELS.calculateStorageUsage, async () => calculateStorageUsage())
   handleIpc(DESKTOP_CHANNELS.getAppSettings, () => auth.getAppSettings())
+  handleIpc(DESKTOP_CHANNELS.captureScreenshot, async () => {
+    await screenshot.capture()
+    return null
+  })
   handleIpc(DESKTOP_CHANNELS.setTheme, async (input) => {
     const theme = input as ThemePreference
     await auth.setTheme(theme)

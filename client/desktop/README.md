@@ -44,7 +44,7 @@ pnpm dev:web
 - 全界面使用内置 MiSans Regular/Medium/Bold 原始 WOFF2，不依赖系统字体或外部字体 CDN；代码块继续使用 JetBrains Mono。MiSans 来源和文件哈希见 `THIRD_PARTY_NOTICES.md`，发布前需核对字体分发授权。
 - 默认窗口 1280 × 900，最小窗口 760 × 560（逻辑像素）；使用操作系统原生标题栏及最小化/最大化/关闭按钮，不在 Renderer 自绘窗口框架。原生标题使用“即应”，由操作系统字体绘制，内置 MiSans 只作用于页面内容。
 
-**尚未实现聊天、消息数据库、多账号列表、第三方登录或自动更新。** Electron 使用独立的 `jiying-desktop-next` 用户数据目录，不读取旧客户端数据。
+**尚未实现聊天、消息数据库、多账号列表或第三方登录。** Electron 使用独立的 `jiying-desktop-next` 用户数据目录，不读取旧客户端数据。
 
 ## 认证与数据边界
 
@@ -99,3 +99,9 @@ pnpm dev
 ```
 
 Windows 预览安装包输出到被 Git 忽略的 `dist/Jiying-Desktop-Preview-*-win-x64.exe`。它未做代码签名，仅用于本机体验，不能作为正式发布包。
+
+## 桌面更新
+
+Windows、macOS 和 Linux 共用官网 `/releases/version.json`，按 `windows`、`macos`、`linux-amd`、`linux-arm` 字段的 `build` 检查更新。桌面条目只需 `build`、`version` 和 `url`；下载时限制 HTTPS 来源和安装包大小，检查响应长度与平台文件格式，不要求哈希字段。应先上传各平台安装包，最后更新 `version.json`，且发布 build 必须大于已发布客户端 build。
+
+启动时自动检查一次；“关于”页可手动检查。有新版时用户确认下载并查看进度，再自行完成安装：Windows 打开 NSIS，macOS 打开 DMG，Linux 打开已下载 AppImage 的目录供用户替换原文件。开发模式下不应测试真实安装操作。`pnpm pack:mac` 需要在 macOS 上执行；`pnpm pack:linux` 在 Linux 上执行。上述本地预览包不等同于经过平台签名、公证及真机验收的正式安装包。

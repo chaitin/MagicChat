@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react"
+import { useState } from "react"
 
-const storageKey = "jiying-desktop:expression-picker:usage"
-const frequentLimit = 8
+const storageKey = "jiying-desktop:expression-picker:recent"
+const previousStorageKey = "jiying-desktop:expression-picker:usage"
+const recentLimit = 10
 
 const expressions = [
   ["😂", "笑哭"],
@@ -24,6 +25,12 @@ const expressions = [
   ["🤭", "偷笑"],
   ["😜", "眨眼吐舌"],
   ["🙃", "倒脸"],
+  ["😌", "释然"],
+  ["😇", "天使"],
+  ["🤠", "牛仔"],
+  ["🤓", "书呆子"],
+  ["🫢", "捂嘴"],
+  ["🫣", "偷看"],
   ["😋", "好吃"],
   ["🤪", "滑稽"],
   ["😎", "酷"],
@@ -42,6 +49,10 @@ const expressions = [
   ["😢", "哭"],
   ["😔", "沮丧"],
   ["🥲", "含泪微笑"],
+  ["😵‍💫", "晕头转向"],
+  ["🤢", "恶心"],
+  ["🤒", "生病"],
+  ["😷", "口罩"],
   ["😮‍💨", "叹气"],
   ["😳", "脸红"],
   ["😡", "愤怒"],
@@ -61,33 +72,38 @@ const expressions = [
   ["🤝", "握手"],
   ["👎", "踩"],
   ["👋", "挥手"],
+  ["🙌", "欢呼"],
+  ["👐", "张开双手"],
+  ["🤘", "摇滚"],
   ["👀", "关注"],
   ["❤️", "爱心"],
   ["🫶", "爱心手势"],
+  ["💔", "心碎"],
+  ["💯", "满分"],
+  ["🌟", "星星"],
   ["🔥", "火"],
   ["🎉", "庆祝礼花"],
   ["✅", "完成"],
   ["❌", "错误"],
 ] as const
 
-const defaultFrequent = ["😂", "😊", "😭", "👍", "❤️", "👏", "🙏", "🎉"]
-
-type Usage = { value: string; count: number; lastUsedAt: number }
+const expressionValues: ReadonlySet<string> = new Set(expressions.map(([value]) => value))
 
 export function ExpressionPickerPanel({ onSelect }: { onSelect: (value: string) => void }) {
-  const [usage, setUsage] = useState<Usage[]>(readUsage)
-  const frequent = useMemo(() => frequentExpressions(usage), [usage])
+  const [recent, setRecent] = useState<string[]>(readRecent)
 
   function select(value: string) {
-    const nextUsage = updateUsage(usage, value)
-    setUsage(nextUsage)
-    writeUsage(nextUsage)
+    const nextRecent = [value, ...recent.filter((item) => item !== value)].slice(0, recentLimit)
+    setRecent(nextRecent)
+    writeRecent(nextRecent)
     onSelect(value)
   }
 
   return (
-    <div className="w-80 space-y-4">
-      <ExpressionSection label="常用" values={frequent} onSelect={select} />
+    <div className="w-max space-y-4">
+      {recent.length > 0 && (
+        <ExpressionSection label="最近使用" values={recent} onSelect={select} />
+      )}
       <ExpressionSection
         label="所有表情"
         values={expressions.map(([value]) => value)}
@@ -109,14 +125,14 @@ function ExpressionSection({
   return (
     <section aria-label={label}>
       <h3 className="mb-2 text-xs font-medium text-muted-foreground">{label}</h3>
-      <div className="grid grid-cols-8 gap-1">
+      <div className="grid grid-cols-[repeat(10,1.75rem)] gap-0.5">
         {values.map((value) => {
           const label = expressions.find(([candidate]) => candidate === value)?.[1] ?? value
           return (
             <button
               key={`${label}-${value}`}
               type="button"
-              className="inline-flex size-8 items-center justify-center rounded-md text-lg hover:bg-accent"
+              className="inline-flex size-7 items-center justify-center rounded-md text-sm hover:bg-accent"
               aria-label={label}
               title={label}
               onClick={() => onSelect(value)}
@@ -132,47 +148,36 @@ function ExpressionSection({
   )
 }
 
-function frequentExpressions(usage: Usage[]) {
-  const used = usage
-    .slice()
-    .sort((left, right) => right.count - left.count || right.lastUsedAt - left.lastUsedAt)
-    .map((item) => item.value)
-    .filter((value) => expressions.some(([candidate]) => candidate === value))
-  return [...new Set([...used, ...defaultFrequent, ...expressions.map(([value]) => value)])].slice(
-    0,
-    frequentLimit,
-  )
-}
-
-function updateUsage(usage: Usage[], value: string) {
-  const previous = usage.find((item) => item.value === value)
-  return [
-    { value, count: (previous?.count ?? 0) + 1, lastUsedAt: Date.now() },
-    ...usage.filter((item) => item.value !== value),
-  ].slice(0, 64)
-}
-
-function readUsage(): Usage[] {
+function readRecent(): string[] {
   try {
-    const value: unknown = JSON.parse(localStorage.getItem(storageKey) || "[]")
-    if (!Array.isArray(value)) return []
-    return value.flatMap((item) =>
-      item &&
-      typeof item === "object" &&
-      typeof (item as Usage).value === "string" &&
-      typeof (item as Usage).count === "number" &&
-      typeof (item as Usage).lastUsedAt === "number"
-        ? [item as Usage]
-        : [],
+    const saved = localStorage.getItem(storageKey)
+    if (saved !== null) return normalizeRecent(JSON.parse(saved))
+    const previous: unknown = JSON.parse(localStorage.getItem(previousStorageKey) || "[]")
+    if (!Array.isArray(previous)) return []
+    return normalizeRecent(
+      previous.map((item) =>
+        item && typeof item === "object" && "value" in item ? item.value : null,
+      ),
     )
   } catch {
     return []
   }
 }
 
-function writeUsage(usage: Usage[]) {
+function normalizeRecent(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return [
+    ...new Set(
+      value.filter(
+        (item): item is string => typeof item === "string" && expressionValues.has(item),
+      ),
+    ),
+  ].slice(0, recentLimit)
+}
+
+function writeRecent(recent: string[]) {
   try {
-    localStorage.setItem(storageKey, JSON.stringify(usage))
+    localStorage.setItem(storageKey, JSON.stringify(recent))
   } catch {
     // Selecting an expression should still work if storage is unavailable.
   }

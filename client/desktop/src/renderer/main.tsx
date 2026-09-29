@@ -1,11 +1,9 @@
-import { StrictMode } from "react"
+import { StrictMode, Suspense, lazy } from "react"
 import { createRoot } from "react-dom/client"
-import { MotionConfig } from "motion/react"
-import { AnimatedToastProvider } from "./components/motion/animated-toast-provider"
-import { App } from "./App"
-import { MediaPreviewPage } from "./features/media-preview/media-preview-page"
 import { ScreenshotOverlay } from "./screenshot-overlay"
 import "./styles.css"
+
+const AppPages = lazy(() => import("./app-pages").then(({ AppPages }) => ({ default: AppPages })))
 
 const root = document.getElementById("root")
 if (!root) throw new Error("页面根节点不存在")
@@ -15,16 +13,12 @@ const mediaPreviewMode = window.location.hash === "#/media-preview"
 
 createRoot(root).render(
   <StrictMode>
-    <MotionConfig reducedMotion="user">
-      {screenshotMode ? (
-        <ScreenshotOverlay />
-      ) : mediaPreviewMode ? (
-        <AnimatedToastProvider>
-          <MediaPreviewPage />
-        </AnimatedToastProvider>
-      ) : (
-        <App />
-      )}
-    </MotionConfig>
+    {screenshotMode ? (
+      <ScreenshotOverlay />
+    ) : (
+      <Suspense fallback={null}>
+        <AppPages mediaPreviewMode={mediaPreviewMode} />
+      </Suspense>
+    )}
   </StrictMode>,
 )

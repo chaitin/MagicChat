@@ -2,17 +2,29 @@ import {
   BrowserWindow,
   clipboard,
   desktopCapturer,
+  nativeImage,
   screen,
   type NativeImage,
   type WebContents,
 } from "electron"
 import { AuthFailure } from "../shared/auth"
-import type { ScreenshotPayload, ScreenshotSelection } from "../shared/screenshot"
+import {
+  SCREENSHOT_CHANNELS,
+  type ScreenshotPayload,
+  type ScreenshotSelection,
+} from "../shared/screenshot"
+import { validEditedPng, validScreenshotSelection } from "./screenshot-policy"
+import { matchScreenshotSources } from "./screenshot-sources"
+import { captureWindowsDisplays } from "./screenshot-windows"
 
 export class ScreenshotManager {
-  private overlay: BrowserWindow | null = null
-  private image: NativeImage | null = null
-  private payload: ScreenshotPayload | null = null
+  private readonly overlays = new Map<
+    WebContents,
+    { window: BrowserWindow; image: NativeImage; payload: ScreenshotPayload }
+  >()
+  private generation = 0
+  private activeSender: WebContents | null = null
+  private finishSession: (() => void) | null = null
 
   constructor(
     private readonly preloadPath: string,
@@ -21,99 +33,161 @@ export class ScreenshotManager {
   ) {}
 
   async capture() {
-    this.destroyOverlay()
-    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-    const thumbnailSize = {
-      width: Math.max(1, Math.round(display.bounds.width * display.scaleFactor)),
-      height: Math.max(1, Math.round(display.bounds.height * display.scaleFactor)),
-    }
-    const sources = await desktopCapturer.getSources({
-      types: ["screen"],
-      thumbnailSize,
-      fetchWindowIcons: false,
-    })
-    const source =
-      sources.find((candidate) => candidate.display_id === String(display.id)) ??
-      (sources.length === 1 ? sources[0] : undefined)
-    if (!source || source.thumbnail.isEmpty()) {
-      throw new AuthFailure("screenshot_unavailable", "无法获取当前屏幕画面")
-    }
-
-    this.image = source.thumbnail
-    const imageSize = this.image.getSize()
-    const payload: ScreenshotPayload = {
-      imageUrl: this.image.toDataURL(),
-      imageWidth: imageSize.width,
-      imageHeight: imageSize.height,
-    }
-    this.payload = payload
-    const overlay = new BrowserWindow({
-      x: display.bounds.x,
-      y: display.bounds.y,
-      width: display.bounds.width,
-      height: display.bounds.height,
-      frame: false,
-      show: false,
-      resizable: false,
-      movable: false,
-      minimizable: false,
-      maximizable: false,
-      fullscreenable: false,
-      skipTaskbar: true,
-      alwaysOnTop: true,
-      backgroundColor: "#000000",
-      webPreferences: {
-        preload: this.preloadPath,
-        contextIsolation: true,
-        sandbox: true,
-        nodeIntegration: false,
-        webSecurity: true,
-      },
-    })
-    this.overlay = overlay
-    overlay.setAlwaysOnTop(true, "screen-saver")
-    overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-    overlay.removeMenu()
-    overlay.webContents.setWindowOpenHandler(() => ({ action: "deny" }))
-    overlay.webContents.on("will-navigate", (event) => event.preventDefault())
-    overlay.on("closed", () => {
-      if (this.overlay === overlay) {
-        this.overlay = null
-        this.image = null
-        this.payload = null
-      }
-    })
-    overlay.webContents.once("did-finish-load", () => {
-      if (this.overlay !== overlay || overlay.isDestroyed()) return
-      overlay.show()
-      overlay.focus()
-    })
-
-    if (this.developmentUrl) {
-      const url = new URL(this.developmentUrl)
-      url.hash = "/screenshot"
-      await overlay.loadURL(url.href)
+    this.destroyOverlays()
+    const generation = this.generation
+    const displays = screen.getAllDisplays()
+    const cursorDisplay = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+    const windowsCapture = await captureWindowsDisplays(displays)
+    if (generation !== this.generation) return
+    let images: NativeImage[]
+    if (process.platform === "win32" && windowsCapture.pngs.size === displays.length) {
+      images = displays.map((display) =>
+        nativeImage.createFromBuffer(windowsCapture.pngs.get(display.id)!),
+      )
     } else {
-      await overlay.loadFile(this.rendererPath, { hash: "/screenshot" })
+      const thumbnailSize = {
+        width: Math.max(
+          1,
+          ...displays.map((display) => Math.round(display.bounds.width * display.scaleFactor)),
+        ),
+        height: Math.max(
+          1,
+          ...displays.map((display) => Math.round(display.bounds.height * display.scaleFactor)),
+        ),
+      }
+      const sources = await desktopCapturer.getSources({
+        types: ["screen"],
+        thumbnailSize,
+        fetchWindowIcons: false,
+      })
+      if (generation !== this.generation) return
+      const matched = matchScreenshotSources(displays, sources)
+      if (!matched) {
+        const displayIds = displays.map((display) => display.id).join(",")
+        const sourceIds = sources.map((source) => source.display_id || "空").join(",")
+        throw new AuthFailure(
+          "screenshot_unavailable",
+          `屏幕对应失败（显示器 ID：${displayIds || "无"}；截图 ID：${sourceIds || "无"}）`,
+        )
+      }
+      images = matched.map((source) => source.thumbnail)
+    }
+    const emptyIndex = images.findIndex((image) => image.isEmpty())
+    if (emptyIndex >= 0) {
+      throw new AuthFailure("screenshot_unavailable", `第 ${emptyIndex + 1} 块屏幕返回空画面`)
+    }
+
+    try {
+      const windows = displays.map((display, index) => {
+        const image = images[index]
+        const imageSize = image.getSize()
+        const capturedPng = windowsCapture.pngs.get(display.id)
+        const payload: ScreenshotPayload = {
+          imageUrl: capturedPng
+            ? `data:image/png;base64,${capturedPng.toString("base64")}`
+            : image.toDataURL(),
+          imageWidth: imageSize.width,
+          imageHeight: imageSize.height,
+          windows: windowsCapture.windows.get(display.id) ?? [],
+        }
+        const window = new BrowserWindow({
+          x: display.bounds.x,
+          y: display.bounds.y,
+          width: display.bounds.width,
+          height: display.bounds.height,
+          frame: false,
+          show: false,
+          fullscreen: process.platform === "win32",
+          resizable: false,
+          movable: false,
+          minimizable: false,
+          maximizable: false,
+          fullscreenable: process.platform === "win32",
+          skipTaskbar: true,
+          alwaysOnTop: true,
+          backgroundColor: "#000000",
+          webPreferences: {
+            preload: this.preloadPath,
+            contextIsolation: true,
+            sandbox: true,
+            nodeIntegration: false,
+            webSecurity: true,
+          },
+        })
+        const webContents = window.webContents
+        this.overlays.set(webContents, { window, image, payload })
+        window.setAlwaysOnTop(true, "screen-saver")
+        window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+        window.removeMenu()
+        window.webContents.setWindowOpenHandler(() => ({ action: "deny" }))
+        window.webContents.on("will-navigate", (event) => event.preventDefault())
+        window.on("closed", () => {
+          if (this.overlays.has(webContents)) this.destroyOverlays()
+        })
+        return { window, displayId: display.id }
+      })
+      await Promise.all(
+        windows.map(({ window }) => {
+          if (this.developmentUrl) {
+            const url = new URL(this.developmentUrl)
+            url.hash = "/screenshot"
+            return window.loadURL(url.href)
+          }
+          return window.loadFile(this.rendererPath, { hash: "/screenshot" })
+        }),
+      )
+      if (generation !== this.generation) return
+      for (const { window } of windows) window.showInactive()
+      const focusedWindow = windows.find(({ displayId }) => displayId === cursorDisplay.id)?.window
+      const windowToFocus = focusedWindow ?? windows[0]?.window
+      if (windowToFocus) windowToFocus.focus()
+      await new Promise<void>((resolve) => {
+        if (generation !== this.generation) resolve()
+        else this.finishSession = resolve
+      })
+    } catch (error) {
+      if (generation === this.generation) this.destroyOverlays()
+      throw error
     }
   }
 
-  getPayload(): ScreenshotPayload {
-    if (!this.payload) throw new AuthFailure("screenshot_unavailable", "截图画面尚未准备完成")
-    return this.payload
+  getPayload(sender: WebContents): ScreenshotPayload {
+    const overlay = this.overlays.get(sender)
+    if (!overlay || overlay.window.isDestroyed()) {
+      throw new AuthFailure("screenshot_unavailable", "截图画面尚未准备完成")
+    }
+    return overlay.payload
   }
 
   ownsSender(sender: WebContents): boolean {
-    return Boolean(
-      this.overlay && !this.overlay.isDestroyed() && this.overlay.webContents === sender,
-    )
+    const overlay = this.overlays.get(sender)
+    return Boolean(overlay && !overlay.window.isDestroyed())
   }
 
-  complete(selection: ScreenshotSelection) {
-    const image = this.image
-    if (!image || !validSelection(selection)) {
+  activate(sender: WebContents) {
+    if (!this.ownsSender(sender)) {
+      throw new AuthFailure("invalid_screenshot_selection", "截图窗口已关闭")
+    }
+    if (this.activeSender === sender) return
+    this.activeSender = sender
+    for (const [other, overlay] of this.overlays) {
+      if (other !== sender && !overlay.window.isDestroyed()) {
+        other.send(SCREENSHOT_CHANNELS.resetSelection)
+      }
+    }
+  }
+
+  complete(sender: WebContents, selection: ScreenshotSelection) {
+    const overlay = this.overlays.get(sender)
+    if (
+      this.activeSender !== sender ||
+      !overlay ||
+      overlay.window.isDestroyed() ||
+      !validScreenshotSelection(selection)
+    ) {
       throw new AuthFailure("invalid_screenshot_selection", "截图区域不正确")
     }
+    const image = overlay.image
     const size = image.getSize()
     const scaleX = size.width / selection.viewportWidth
     const scaleY = size.height / selection.viewportHeight
@@ -121,44 +195,47 @@ export class ScreenshotManager {
     const y = clamp(Math.round(selection.y * scaleY), 0, size.height - 1)
     const width = clamp(Math.round(selection.width * scaleX), 1, size.width - x)
     const height = clamp(Math.round(selection.height * scaleY), 1, size.height - y)
-    const cropped = image.crop({ x, y, width, height })
-    if (cropped.isEmpty()) throw new AuthFailure("screenshot_failed", "截图区域为空")
-    clipboard.writeImage(cropped)
-    this.destroyOverlay()
+    if (selection.editedPng !== undefined) {
+      if (
+        !validEditedPng(selection.editedPng) ||
+        new DataView(selection.editedPng).getUint32(16) !== width ||
+        new DataView(selection.editedPng).getUint32(20) !== height
+      ) {
+        throw new AuthFailure("invalid_screenshot_selection", "截图标注数据不正确")
+      }
+      const edited = nativeImage.createFromBuffer(Buffer.from(selection.editedPng))
+      const editedSize = edited.getSize()
+      if (edited.isEmpty() || editedSize.width !== width || editedSize.height !== height) {
+        throw new AuthFailure("invalid_screenshot_selection", "截图标注尺寸不正确")
+      }
+      clipboard.writeImage(edited)
+    } else {
+      const cropped = image.crop({ x, y, width, height })
+      if (cropped.isEmpty()) throw new AuthFailure("screenshot_failed", "截图区域为空")
+      clipboard.writeImage(cropped)
+    }
+    this.destroyOverlays()
   }
 
   cancel() {
-    this.destroyOverlay()
+    this.destroyOverlays()
   }
 
   close() {
-    this.destroyOverlay()
+    this.destroyOverlays()
   }
 
-  private destroyOverlay() {
-    const overlay = this.overlay
-    this.overlay = null
-    this.image = null
-    this.payload = null
-    if (overlay && !overlay.isDestroyed()) overlay.destroy()
+  private destroyOverlays() {
+    this.generation += 1
+    this.activeSender = null
+    this.finishSession?.()
+    this.finishSession = null
+    const overlays = Array.from(this.overlays.values())
+    this.overlays.clear()
+    for (const { window } of overlays) {
+      if (!window.isDestroyed()) window.destroy()
+    }
   }
-}
-
-function validSelection(value: ScreenshotSelection): boolean {
-  return (
-    value != null &&
-    [value.x, value.y, value.width, value.height, value.viewportWidth, value.viewportHeight].every(
-      (part) => typeof part === "number" && Number.isFinite(part),
-    ) &&
-    value.x >= 0 &&
-    value.y >= 0 &&
-    value.width >= 2 &&
-    value.height >= 2 &&
-    value.viewportWidth > 0 &&
-    value.viewportHeight > 0 &&
-    value.x + value.width <= value.viewportWidth + 1 &&
-    value.y + value.height <= value.viewportHeight + 1
-  )
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

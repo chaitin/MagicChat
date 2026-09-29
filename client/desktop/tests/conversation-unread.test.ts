@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import {
   conversationUnreadIndicator,
+  hasUnreadMention,
   hasUnmutedUnreadConversations,
 } from "../src/renderer/features/chat/conversation-unread.ts"
 
@@ -30,6 +31,13 @@ test("免打扰会话有未读时只显示红点", () => {
     label: "有未读消息",
     text: null,
   })
+})
+
+test("只有未读消息包含针对自己的提及时显示提及标记", () => {
+  assert.equal(hasUnreadMention({ unreadCount: 2, lastReadSeq: 3, lastMentionedSeq: 5 }), true)
+  assert.equal(hasUnreadMention({ unreadCount: 2, lastReadSeq: 5, lastMentionedSeq: 5 }), false)
+  assert.equal(hasUnreadMention({ unreadCount: 0, lastReadSeq: 3, lastMentionedSeq: 5 }), false)
+  assert.equal(hasUnreadMention({ unreadCount: 2, lastReadSeq: 3 }), false)
 })
 
 test("消息导航只在存在非免打扰的未读会话时显示红点", () => {

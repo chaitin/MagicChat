@@ -1,6 +1,7 @@
 import type {
   AddGroupMembersInput,
   AvatarRequest,
+  BindConversationProjectInput,
   ConversationTargetInput,
   ContactTargetInput,
   CreateGroupConversationInput,
@@ -32,6 +33,9 @@ import type {
   SetMessageReactionInput,
   SubmitChoiceResponseInput,
   UpdateClientAppInput,
+  UploadGroupAvatarInput,
+  UpdateProfileInput,
+  UploadProfileAvatarInput,
 } from "../../shared/account-data"
 import { AuthFailure } from "../../shared/auth"
 import type { MediaCacheRequest } from "../../shared/media"
@@ -51,6 +55,21 @@ export class AccountDataFacade {
     private readonly requireTarget: (targetId: unknown) => void,
     private readonly requireRuntime: () => AccountRuntime,
   ) {}
+
+  async getProfile(targetId: string) {
+    await this.ready(targetId)
+    return this.requireRuntime().getProfile()
+  }
+
+  async updateProfile(input: UpdateProfileInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().updateProfile(input)
+  }
+
+  async uploadProfileAvatar(input: UploadProfileAvatarInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().uploadProfileAvatar(input.bytes)
+  }
 
   async searchLocal(input: LocalSearchInput) {
     await this.ready(input?.targetId)
@@ -122,6 +141,26 @@ export class AccountDataFacade {
   async manageGroup(input: ManageGroupInput) {
     await this.ready(input?.targetId)
     return this.requireRuntime().manageGroup(input)
+  }
+
+  async uploadGroupAvatar(input: UploadGroupAvatarInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().uploadGroupAvatar(input.conversationId, input.bytes)
+  }
+
+  async listBindableProjects(targetId: string) {
+    await this.ready(targetId)
+    return this.requireRuntime().listBindableProjects()
+  }
+
+  async bindConversationProject(input: BindConversationProjectInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().bindConversationProject(input.conversationId, input.projectId)
+  }
+
+  async archiveTopic(input: ConversationTargetInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().archiveTopic(input.conversationId)
   }
 
   async markConversationRead(input: MarkConversationReadInput) {

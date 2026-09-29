@@ -68,6 +68,7 @@ export type UpdateInfo = {
   downloadUrl: string
   updateAvailable: boolean
 }
+export type UpdateProgress = { received: number; total: number | null; percent: number | null }
 
 export type StorageInfo = {
   directoryPath: string
@@ -87,7 +88,11 @@ export const DESKTOP_CHANNELS = {
   openExternalLink: "desktop-next:v1:open-external-link",
   openWebLink: "desktop-next:v1:open-web-link",
   copyText: "desktop-next:v1:clipboard-copy-text",
+  captureScreenshot: "desktop-next:v1:capture-screenshot",
   checkForUpdates: "desktop-next:v1:check-for-updates",
+  downloadUpdate: "desktop-next:v1:download-update",
+  installUpdate: "desktop-next:v1:install-update",
+  updateProgress: "desktop-next:v1:update-progress",
   getSystemInfo: "desktop-next:v1:get-system-info",
   getStorageInfo: "desktop-next:v1:get-storage-info",
   openStorageDirectory: "desktop-next:v1:open-storage-directory",
@@ -131,10 +136,14 @@ export interface DesktopBridge {
   readonly accountData: AccountDataBridge
   readonly media: MediaBridge
   openHomepage(): Promise<AuthResult<null>>
+  captureScreenshot(): Promise<AuthResult<null>>
   openExternalLink(url: string): Promise<AuthResult<null>>
   openWebLink(url: string): Promise<AuthResult<null>>
   copyText(text: string): Promise<AuthResult<null>>
   checkForUpdates(): Promise<AuthResult<UpdateInfo>>
+  downloadUpdate(): Promise<AuthResult<null>>
+  installUpdate(): Promise<AuthResult<null>>
+  onUpdateProgress(callback: (value: UpdateProgress) => void): () => void
   getSystemInfo(): Promise<AuthResult<SystemInfo>>
   getStorageInfo(): Promise<AuthResult<StorageInfo>>
   openStorageDirectory(): Promise<AuthResult<null>>

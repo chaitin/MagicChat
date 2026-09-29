@@ -28,6 +28,7 @@ export function initializeAccountSchema(database: DatabaseSync) {
       unread_count INTEGER NOT NULL,
       last_message_seq INTEGER NOT NULL DEFAULT 0,
       last_read_seq INTEGER NOT NULL DEFAULT 0,
+      last_mentioned_seq INTEGER NOT NULL DEFAULT 0,
       current INTEGER NOT NULL DEFAULT 0,
       payload_json TEXT NOT NULL
     );
@@ -126,6 +127,7 @@ export function initializeAccountSchema(database: DatabaseSync) {
   ensureColumn(database, "conversations", "member_count", "INTEGER NOT NULL DEFAULT 0")
   ensureColumn(database, "conversations", "last_message_seq", "INTEGER NOT NULL DEFAULT 0")
   ensureColumn(database, "conversations", "last_read_seq", "INTEGER NOT NULL DEFAULT 0")
+  ensureColumn(database, "conversations", "last_mentioned_seq", "INTEGER NOT NULL DEFAULT 0")
   ensureColumn(database, "messages", "sender_name", "TEXT NOT NULL DEFAULT ''")
   ensureColumn(database, "messages", "client_message_id", "TEXT NOT NULL DEFAULT ''")
   ensureColumn(database, "messages", "delivery_status", "TEXT NOT NULL DEFAULT ''")

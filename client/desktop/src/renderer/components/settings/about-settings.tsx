@@ -1,10 +1,5 @@
 import { useEffect, useState } from "react"
-import {
-  DownloadCircle02Icon,
-  LinkSquare02Icon,
-  Loading03Icon,
-  RefreshCwIcon,
-} from "@hugeicons/core-free-icons"
+import { LinkSquare02Icon, Loading03Icon, RefreshCwIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { Button as BeButton } from "@/components/motion/button/base"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
@@ -17,18 +12,13 @@ import {
   ItemTitle,
 } from "@/components/ui/item"
 import { APP_VERSION, BUILD_ID } from "../../../shared/build-info"
-import {
-  JIYING_HOMEPAGE,
-  MAGICCHAT_REPOSITORY,
-  type SystemInfo,
-  type UpdateInfo,
-} from "../../../shared/desktop"
+import { useUpdateDialog } from "../../update-provider"
+import { JIYING_HOMEPAGE, MAGICCHAT_REPOSITORY, type SystemInfo } from "../../../shared/desktop"
 
 export function AboutSettings({ active }: { active: boolean }) {
   const { showToast } = useAnimatedToast()
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
-  const [checkingUpdate, setCheckingUpdate] = useState(false)
-  const [availableUpdate, setAvailableUpdate] = useState<UpdateInfo | null>(null)
+  const { checking: checkingUpdate, checkUpdates } = useUpdateDialog()
 
   useEffect(() => {
     if (!active || systemInfo || !window.desktop) return
@@ -54,55 +44,6 @@ export function AboutSettings({ active }: { active: boolean }) {
     }
   }, [active, showToast, systemInfo])
 
-  async function checkUpdates() {
-    if (checkingUpdate) return
-    if (!window.desktop) {
-      showToast({ status: "error", title: "请在桌面客户端中检查更新" })
-      return
-    }
-    setCheckingUpdate(true)
-    try {
-      const result = await window.desktop.checkForUpdates()
-      if (!result.ok) {
-        showToast({
-          status: "error",
-          title: "检查更新失败",
-          description: result.error.message,
-        })
-      } else if (result.data.updateAvailable) {
-        setAvailableUpdate(result.data)
-        showToast({
-          status: "info",
-          title: "发现新版本",
-          description: `${result.data.latestVersion}（Build ${result.data.latestBuildId}）`,
-        })
-      } else {
-        setAvailableUpdate(null)
-        showToast({ status: "success", title: "当前已是最新版本" })
-      }
-    } catch {
-      showToast({ status: "error", title: "无法检查更新，请稍后重试" })
-    } finally {
-      setCheckingUpdate(false)
-    }
-  }
-
-  async function downloadUpdate() {
-    if (!availableUpdate || !window.desktop) return
-    try {
-      const result = await window.desktop.openExternalLink(availableUpdate.downloadUrl)
-      if (!result.ok) {
-        showToast({
-          status: "error",
-          title: "无法打开下载地址",
-          description: result.error.message,
-        })
-      }
-    } catch {
-      showToast({ status: "error", title: "无法打开下载地址" })
-    }
-  }
-
   if (!active) return null
 
   return (
@@ -116,18 +57,12 @@ export function AboutSettings({ active }: { active: boolean }) {
             </ItemDescription>
           </ItemContent>
           <ItemActions className="shrink-0">
-            {availableUpdate && (
-              <BeButton type="button" variant="primary" size="sm" onClick={downloadUpdate}>
-                <HugeiconsIcon icon={DownloadCircle02Icon} aria-hidden />
-                下载新版本
-              </BeButton>
-            )}
             <BeButton
               type="button"
               variant="outline"
               size="sm"
               disabled={checkingUpdate}
-              onClick={checkUpdates}
+              onClick={() => checkUpdates(true)}
             >
               <HugeiconsIcon
                 icon={checkingUpdate ? Loading03Icon : RefreshCwIcon}

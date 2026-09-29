@@ -6,6 +6,7 @@ import { Button as BeButton } from "@/components/motion/button/base"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import { SidebarSearchHeader } from "@/components/sidebar-search-header"
 import type { MentionLabelResolver } from "@/lib/message-mentions"
+import { Avatar, AvatarBadge } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog,
@@ -256,14 +257,25 @@ export function ContactsPage({
                                   aria-current={selected ? "page" : undefined}
                                   onClick={() => setSelection({ type: section.type, id: entry.id })}
                                 >
-                                  <EntityAvatar
-                                    key={`${entry.id}:${avatarRevision}`}
-                                    targetId={targetId}
-                                    type={entry.avatarType}
-                                    id={entry.avatarId}
-                                    theme={resolvedTheme}
-                                    label={entry.name}
-                                  />
+                                  <Avatar className="size-10! rounded-sm after:hidden">
+                                    <EntityAvatar
+                                      key={`${entry.id}:${avatarRevision}`}
+                                      targetId={targetId}
+                                      type={entry.avatarType}
+                                      id={entry.avatarId}
+                                      theme={resolvedTheme}
+                                      label={entry.name}
+                                    />
+                                    {"online" in entry && (
+                                      <AvatarBadge
+                                        className={cn(
+                                          "size-2.5!",
+                                          entry.online ? "bg-xgui-brand" : "bg-muted-foreground",
+                                        )}
+                                        aria-label={entry.online ? "在线" : "离线"}
+                                      />
+                                    )}
+                                  </Avatar>
                                   <ItemContent className="w-0 min-w-0">
                                     <span className="block truncate text-sm leading-snug font-medium">
                                       {entry.name}
@@ -272,15 +284,6 @@ export function ContactsPage({
                                       {entrySummary(entry)}
                                     </span>
                                   </ItemContent>
-                                  {"online" in entry && (
-                                    <span
-                                      className={cn(
-                                        "size-2 shrink-0 rounded-full",
-                                        entry.online ? "bg-xgui-green" : "bg-xgui-foreground-4",
-                                      )}
-                                      aria-label={entry.online ? "在线" : "离线"}
-                                    />
-                                  )}
                                 </button>
                               </Item>
                             )

@@ -153,6 +153,8 @@ export function parseUser(data: unknown): AuthUser {
     email: data.user.email,
     name: data.user.name,
     avatar: typeof data.user.avatar === "string" ? data.user.avatar : "",
+    nickname: typeof data.user.nickname === "string" ? data.user.nickname : "",
+    phone: typeof data.user.phone === "string" ? data.user.phone : "",
   }
 }
 

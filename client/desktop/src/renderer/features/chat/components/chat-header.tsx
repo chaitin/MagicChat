@@ -25,6 +25,9 @@ export function ChatHeader({
   currentUserId,
   onLocateMessage,
   onConversationRemoved,
+  onSetPinned,
+  onSetMuted,
+  onDismiss,
 }: {
   conversation: DesktopConversation
   targetId: string
@@ -34,6 +37,9 @@ export function ChatHeader({
   currentUserId: string
   onLocateMessage: (messageId: string) => Promise<boolean>
   onConversationRemoved: () => void
+  onSetPinned: (conversationId: string, pinned: boolean) => Promise<void>
+  onSetMuted: (conversationId: string, muted: boolean) => Promise<void>
+  onDismiss: (conversationId: string) => Promise<void>
 }) {
   const [panel, setPanel] = useState<{ conversationId: string; kind: HeaderPanel } | null>(null)
   useEffect(() => setPanel(null), [conversation.id])
@@ -67,7 +73,7 @@ export function ChatHeader({
       />
       {(profileType === "user" || profileType === "app") && (
         <AvatarBadge
-          className={cn("size-2.5!", online ? "bg-xgui-green" : "bg-muted-foreground")}
+          className={cn("size-2.5!", online ? "bg-xgui-brand" : "bg-muted-foreground")}
           aria-label={online ? "在线" : "离线"}
         />
       )}
@@ -132,13 +138,11 @@ export function ChatHeader({
               onClick={() => openPanel("attachments")}
             />
           )}
-          {conversation.type !== "topic" && (
-            <HeaderActionButton
-              label="对话设置"
-              icon={Settings02Icon}
-              onClick={() => openPanel("info")}
-            />
-          )}
+          <HeaderActionButton
+            label="对话设置"
+            icon={Settings02Icon}
+            onClick={() => openPanel("info")}
+          />
         </div>
       </header>
       {panel?.conversationId === conversation.id && (
@@ -151,6 +155,9 @@ export function ChatHeader({
           onClose={() => setPanel(null)}
           onLocateMessage={onLocateMessage}
           onConversationRemoved={onConversationRemoved}
+          onSetPinned={onSetPinned}
+          onSetMuted={onSetMuted}
+          onDismiss={onDismiss}
         />
       )}
     </>

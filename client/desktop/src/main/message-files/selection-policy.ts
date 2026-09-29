@@ -16,6 +16,15 @@ export function mediaContentType(category: "image" | "video", extension: string)
   return ""
 }
 
+export function isValidAvatarUpload(bytes: unknown): bytes is ArrayBuffer {
+  return (
+    bytes instanceof ArrayBuffer &&
+    bytes.byteLength > 0 &&
+    bytes.byteLength <= 1024 * 1024 &&
+    detectImageContentType(new Uint8Array(bytes)) === "image/webp"
+  )
+}
+
 export function detectImageContentType(bytes: Uint8Array) {
   if (
     bytes.length >= 8 &&

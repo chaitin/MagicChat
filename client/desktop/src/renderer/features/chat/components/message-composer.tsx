@@ -14,6 +14,7 @@ import {
   ArrowUp02Icon,
   Attachment01Icon,
   Cancel01Icon,
+  Camera01Icon,
   Analytics01Icon,
   CheckmarkSquare02Icon,
   Image01Icon,
@@ -48,6 +49,7 @@ export function MessageComposer({
   replyTarget,
   mentionLabelResolver,
   markdownMode,
+  takingScreenshot,
   selectingFile,
   sendingFile,
   selectingMedia,
@@ -64,6 +66,7 @@ export function MessageComposer({
   onRestoreFocus,
   onInsertExpression,
   onSelectFile,
+  onScreenshot,
   onSelectMedia,
   onSelectChoice,
   onSelectChart,
@@ -77,6 +80,7 @@ export function MessageComposer({
   replyTarget: DesktopMessageReplyTarget | null
   mentionLabelResolver: MentionLabelResolver
   markdownMode: boolean
+  takingScreenshot: boolean
   selectingFile: boolean
   sendingFile: boolean
   selectingMedia: "image" | "video" | null
@@ -93,6 +97,7 @@ export function MessageComposer({
   onRestoreFocus: () => void
   onInsertExpression: (value: string) => void
   onSelectFile: () => void
+  onScreenshot: () => void
   onSelectMedia: (category: "image" | "video") => void
   onSelectChoice: () => void
   onSelectChart: () => void
@@ -231,7 +236,7 @@ export function MessageComposer({
           aria-controls={mentionTrigger && filteredCandidates.length ? menuId : undefined}
           aria-autocomplete="list"
           placeholder={markdownMode ? "输入 Markdown 消息" : "输入消息"}
-          className="max-h-48 min-h-24"
+          className={cn("max-h-48 min-h-24", markdownMode && "font-mono")}
           onBlur={() => {
             setMentionTrigger(null)
             onDraftBlur()
@@ -270,6 +275,13 @@ export function MessageComposer({
               disabled={selectingFile || sendingFile || importingFile}
               loading={selectingFile}
               onClick={onSelectFile}
+            />
+            <ComposerButton
+              label={takingScreenshot ? "正在截图" : "截图"}
+              icon={takingScreenshot ? Loading03Icon : Camera01Icon}
+              disabled={takingScreenshot}
+              loading={takingScreenshot}
+              onClick={onScreenshot}
             />
             <ComposerButton
               label={selectingMedia === "image" ? "正在读取图片" : "插入图片"}

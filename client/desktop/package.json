@@ -18,6 +18,8 @@
     "dev:web": "vite --config vite.renderer.config.ts",
     "build": "electron-vite build",
     "pack:win": "pnpm build && electron-builder --win nsis --x64 --config electron-builder.yml",
+    "pack:mac": "pnpm build && electron-builder --mac dmg --universal --config electron-builder.yml",
+    "pack:linux": "pnpm build && electron-builder --linux AppImage --x64 --arm64 --config electron-builder.yml",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
     "format:check": "prettier --check .",

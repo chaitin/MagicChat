@@ -419,8 +419,8 @@ export function SendChartMessageDialog({
         >
           <ScrollArea
             type="auto"
-            className="-mr-5 -ml-1 min-w-0 max-h-[calc(85vh-11rem)] overflow-hidden"
-            viewportClassName="h-auto max-h-[calc(85vh-11rem)] pr-5 pl-1"
+            className="-mr-6 -ml-1 min-w-0 max-h-[calc(85vh-11rem)] overflow-hidden"
+            viewportClassName="h-auto max-h-[calc(85vh-11rem)] pr-6 pl-1"
           >
             <div className="grid gap-4">
               <fieldset className="grid gap-2">

@@ -35,7 +35,14 @@ export type ServerCheck = {
   organizationName?: string
   message?: string
 }
-export type AuthUser = { id: string; email: string; name: string; avatar: string }
+export type AuthUser = {
+  id: string
+  email: string
+  name: string
+  avatar: string
+  nickname?: string
+  phone?: string
+}
 export type ThirdPartyProvider = { key: string; name: string }
 export type AppInfo = {
   appName: string

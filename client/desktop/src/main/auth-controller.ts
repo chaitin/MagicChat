@@ -227,6 +227,24 @@ export class AuthController {
     return this.initializeAccountRuntime(active, runtime, () => runtime.refreshAll())
   }
 
+  async getProfile(targetId: string) {
+    const user = await this.accountData.getProfile(targetId)
+    if (this.active?.targetId === targetId) this.active.user = user
+    return user
+  }
+
+  async updateProfile(...args: Parameters<AccountDataFacade["updateProfile"]>) {
+    const user = await this.accountData.updateProfile(...args)
+    if (this.active?.targetId === args[0].targetId) this.active.user = user
+    return user
+  }
+
+  async uploadProfileAvatar(...args: Parameters<AccountDataFacade["uploadProfileAvatar"]>) {
+    const user = await this.accountData.uploadProfileAvatar(...args)
+    if (this.active?.targetId === args[0].targetId) this.active.user = user
+    return user
+  }
+
   searchLocal(...args: Parameters<AccountDataFacade["searchLocal"]>) {
     return this.accountData.searchLocal(...args)
   }
@@ -261,6 +279,22 @@ export class AuthController {
 
   manageGroup(...args: Parameters<AccountDataFacade["manageGroup"]>) {
     return this.accountData.manageGroup(...args)
+  }
+
+  uploadGroupAvatar(...args: Parameters<AccountDataFacade["uploadGroupAvatar"]>) {
+    return this.accountData.uploadGroupAvatar(...args)
+  }
+
+  listBindableProjects(...args: Parameters<AccountDataFacade["listBindableProjects"]>) {
+    return this.accountData.listBindableProjects(...args)
+  }
+
+  bindConversationProject(...args: Parameters<AccountDataFacade["bindConversationProject"]>) {
+    return this.accountData.bindConversationProject(...args)
+  }
+
+  archiveTopic(...args: Parameters<AccountDataFacade["archiveTopic"]>) {
+    return this.accountData.archiveTopic(...args)
   }
 
   markConversationRead(...args: Parameters<AccountDataFacade["markConversationRead"]>) {

@@ -4,6 +4,7 @@ import {
   OFFICIAL_SERVER_URL,
   type AuthProblem,
   type AuthResult,
+  type AuthUser,
   type Connection,
   type ServerCatalog,
   type ServerProfile,
@@ -47,6 +48,10 @@ export function useConnection() {
     setConnection(connected)
     setError(null)
     setLoading(false)
+  }, [])
+
+  const acceptUser = useCallback((user: AuthUser) => {
+    setConnection((current) => (current?.user?.id === user.id ? { ...current, user } : current))
   }, [])
 
   const acceptCatalog = useCallback((next: ServerCatalog) => {
@@ -138,6 +143,7 @@ export function useConnection() {
     loading,
     isPreview,
     accept,
+    acceptUser,
     acceptCatalog,
     connect,
     clearError,

@@ -55,6 +55,7 @@ export function parseConversation(value: unknown, currentUserId: string): Stored
     unreadCount: nonNegativeInteger(value.unread_count),
     lastMessageSeq: nonNegativeInteger(value.last_message_seq),
     lastReadSeq: nonNegativeInteger(value.last_read_seq),
+    lastMentionedSeq: nonNegativeInteger(value.last_mentioned_seq),
     topic: parseConversationTopic(value),
     payload: value,
   }

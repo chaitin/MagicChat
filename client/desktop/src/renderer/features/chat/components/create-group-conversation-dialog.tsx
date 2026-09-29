@@ -23,6 +23,7 @@ import type {
   DesktopContactUser,
   DesktopConversation,
 } from "../../../../shared/account-data"
+import { CANDIDATE_ROW_HEIGHT, useVirtualCandidateRows } from "../virtual-candidate-rows"
 
 type Candidate = DesktopContactUser | DesktopContactApp
 
@@ -60,6 +61,7 @@ export function CreateGroupConversationDialog({
     if (!query) return source
     return source.filter((candidate) => candidateSearchText(candidate).includes(query))
   }, [apps, contacts, currentUserId, keyword])
+  const virtual = useVirtualCandidateRows(candidates.length, keyword)
   const canCreate = Boolean(name.trim()) && !loading && !creating
   const selectedUserCount = [...selected].filter((key) => key.startsWith("user:")).length
   const selectedAppCount = selected.size - selectedUserCount
@@ -137,6 +139,8 @@ export function CreateGroupConversationDialog({
           <ScrollArea
             className="-mt-2 h-64 rounded-md border"
             viewportClassName="[&>div]:block! [&>div]:w-full!"
+            viewportRef={virtual.viewportRef}
+            onViewportScroll={virtual.onViewportScroll}
             aria-busy={loading}
           >
             {loading ? (
@@ -150,8 +154,12 @@ export function CreateGroupConversationDialog({
                 ))}
               </div>
             ) : candidates.length ? (
-              <ItemGroup className="gap-1! p-2" aria-label="群聊成员和应用">
-                {candidates.map((candidate) => {
+              <ItemGroup
+                className="relative gap-1! p-2"
+                style={{ height: virtual.height + 16 }}
+                aria-label="群聊成员和应用"
+              >
+                {candidates.slice(virtual.start, virtual.end).map((candidate, offset) => {
                   const key = candidateKey(candidate)
                   const checkboxId = `create-group-${key}`
                   const displayName = candidateDisplayName(candidate)
@@ -159,11 +167,17 @@ export function CreateGroupConversationDialog({
                     <Item
                       asChild
                       size="sm"
-                      className="cursor-pointer px-2 py-1 hover:bg-muted data-[selected=true]:bg-xgui-background-0 data-[selected=true]:hover:bg-xgui-background-0"
+                      className="absolute inset-x-2 h-[34px] w-auto! flex-nowrap cursor-pointer px-2 py-1 hover:bg-muted data-[selected=true]:bg-xgui-background-0 data-[selected=true]:hover:bg-xgui-background-0"
                       data-selected={selected.has(key)}
                       key={key}
+                      style={{ top: (virtual.start + offset) * CANDIDATE_ROW_HEIGHT + 8 }}
                     >
-                      <Label htmlFor={checkboxId} role="listitem">
+                      <Label
+                        htmlFor={checkboxId}
+                        role="listitem"
+                        aria-posinset={virtual.start + offset + 1}
+                        aria-setsize={candidates.length}
+                      >
                         <EntityAvatar
                           targetId={targetId}
                           type={candidate.avatarType}

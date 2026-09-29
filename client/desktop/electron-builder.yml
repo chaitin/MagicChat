@@ -31,3 +31,19 @@ nsis:
   deleteAppDataOnUninstall: false
   shortcutName: 即应
   uninstallDisplayName: 即应新桌面客户端预览版
+mac:
+  icon: resources/icon.png
+  artifactName: "Jiying-Desktop-Preview-${version}-mac-${arch}.${ext}"
+  target:
+    - target: dmg
+      arch:
+        - universal
+linux:
+  icon: resources/icon.png
+  category: Network;Chat
+  artifactName: "Jiying-Desktop-Preview-${version}-linux-${arch}.${ext}"
+  target:
+    - target: AppImage
+      arch:
+        - x64
+        - arm64
