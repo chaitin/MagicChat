@@ -61,6 +61,10 @@ type addGroupConversationMembersRequest struct {
 	MemberIDs []string `json:"member_ids" example:"7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"`
 }
 
+type setGroupMemberRoleRequest struct {
+	Role string `json:"role" example:"admin"`
+}
+
 type updateGroupConversationNameRequest struct {
 	Name string `json:"name" example:"产品讨论组"`
 }
@@ -282,6 +286,7 @@ func (a *ConversationAPI) RegisterRoutes(group *echo.Group) {
 	group.POST("/conversations/groups/:conversation_id/leave", a.leave)
 	group.DELETE("/conversations/groups/:conversation_id", a.dissolve)
 	group.DELETE("/conversations/groups/:conversation_id/members/:member_type/:member_id", a.removeTypedMember)
+	group.PATCH("/conversations/groups/:conversation_id/members/:member_type/:member_id/role", a.setMemberRole)
 	group.DELETE("/conversations/groups/:conversation_id/members/:member_id", a.removeMember)
 	group.POST("/conversations/:conversation_id/avatar", a.uploadAvatar)
 	group.PUT("/conversations/:conversation_id/projects/:project_id", a.bindProject)
@@ -776,6 +781,43 @@ func (a *ConversationAPI) removeTypedMember(c echo.Context) error {
 	return a.removeMemberByType(c, memberType)
 }
 
+// setMemberRole godoc
+//
+// @Summary 设置群成员管理员身份
+// @Description 群主或管理员可将其他非群主成员或应用设为管理员或普通成员，并生成系统消息。
+// @Tags 客户端会话
+// @Accept json
+// @Produce json
+// @Param conversation_id path string true "会话 ID"
+// @Param member_type path string true "成员类型 user|app"
+// @Param member_id path string true "成员 ID"
+// @Param request body setGroupMemberRoleRequest true "新角色：admin|member"
+// @Success 200 {object} successEnvelope{data=addGroupConversationMembersResponse}
+// @Failure 400 {object} errorEnvelope
+// @Failure 401 {object} errorEnvelope
+// @Failure 403 {object} errorEnvelope
+// @Failure 404 {object} errorEnvelope
+// @Failure 500 {object} errorEnvelope
+// @Router /api/client/conversations/groups/{conversation_id}/members/{member_type}/{member_id}/role [patch]
+func (a *ConversationAPI) setMemberRole(c echo.Context) error {
+	current, ok := CurrentAccount(c)
+	if !ok {
+		return writeFailure(c, 500, string(conversationapp.CodeInternal), "服务端错误")
+	}
+	var request setGroupMemberRoleRequest
+	if err := c.Bind(&request); err != nil {
+		return writeFailure(c, 400, string(conversationapp.CodeInvalidRequest), "请求格式错误")
+	}
+	result, err := a.conversations.SetMemberRole(c.Request().Context(), conversationapp.SetMemberRoleCommand{
+		Actor: conversationActor(current), ConversationID: c.Param("conversation_id"),
+		MemberType: c.Param("member_type"), MemberID: c.Param("member_id"), Role: request.Role,
+	})
+	if err != nil {
+		return writeConversationError(c, err)
+	}
+	return writeSuccess(c, http.StatusOK, newMutationResponse(result))
+}
+
 func (a *ConversationAPI) removeMemberByType(c echo.Context, memberType string) error {
 	current, ok := CurrentAccount(c)
 	if !ok {
@@ -791,7 +833,7 @@ func (a *ConversationAPI) removeMemberByType(c echo.Context, memberType string) 
 // updateName godoc
 //
 // @Summary 修改群聊名称
-// @Description 任意当前群成员均可修改 active 群聊名称，并生成系统消息。
+// @Description 群主或管理员可修改 active 群聊名称，并生成系统消息。
 // @Tags 客户端会话
 // @Accept json
 // @Produce json

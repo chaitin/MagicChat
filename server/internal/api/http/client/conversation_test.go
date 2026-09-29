@@ -51,6 +51,29 @@ func TestConversationAPIListsTopicsWithPagination(t *testing.T) {
 	}
 }
 
+func TestConversationAPIUpdatesGroupMemberRole(t *testing.T) {
+	service := &conversationClientServiceStub{}
+	router := echo.New()
+	group := router.Group("/api/client", func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			c.Set(currentAccountKey, account.Account{ID: "actor-id"})
+			return next(c)
+		}
+	})
+	NewConversationAPI(service, nil).RegisterRoutes(group)
+	request := httptest.NewRequest(http.MethodPatch, "/api/client/conversations/groups/group-id/members/user/member-id/role", strings.NewReader(`{"role":"admin"}`))
+	request.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	cmd := service.setMemberRoleCommand
+	if cmd.Actor.ID != "actor-id" || cmd.ConversationID != "group-id" || cmd.MemberType != "user" || cmd.MemberID != "member-id" || cmd.Role != "admin" {
+		t.Fatalf("command = %#v", cmd)
+	}
+}
+
 func TestNewConversationItemResponseIncludesLastMessageSender(t *testing.T) {
 	response := newConversationItemResponse(conversationapp.Item{
 		LastMessageSender: &conversationapp.LastMessageSender{
@@ -83,13 +106,19 @@ func TestNewGroupResponseIncludesLastMessageSender(t *testing.T) {
 
 type conversationClientServiceStub struct {
 	conversationapp.ClientService
-	listTopicsCommand conversationapp.ListTopicsCommand
-	listTopicsResult  conversationapp.ListTopicsResult
+	listTopicsCommand    conversationapp.ListTopicsCommand
+	listTopicsResult     conversationapp.ListTopicsResult
+	setMemberRoleCommand conversationapp.SetMemberRoleCommand
 }
 
 func (s *conversationClientServiceStub) ListTopics(_ context.Context, cmd conversationapp.ListTopicsCommand) (conversationapp.ListTopicsResult, error) {
 	s.listTopicsCommand = cmd
 	return s.listTopicsResult, nil
+}
+
+func (s *conversationClientServiceStub) SetMemberRole(_ context.Context, cmd conversationapp.SetMemberRoleCommand) (conversationapp.ConversationMutationResult, error) {
+	s.setMemberRoleCommand = cmd
+	return conversationapp.ConversationMutationResult{}, nil
 }
 
 func containsAll(value string, snippets ...string) bool {

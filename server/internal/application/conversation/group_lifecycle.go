@@ -188,6 +188,9 @@ func (s *Service) updateGroupField(db *gorm.DB, actor store.User, conversationID
 				return nil
 			}
 		} else {
+			if !canManage(current.Role) {
+				return ErrAccessDenied
+			}
 			if conversation.Name == value {
 				ids, err := loadActiveUserIDs(tx, conversationID)
 				if err != nil {

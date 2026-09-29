@@ -1977,6 +1977,12 @@ definitions:
         example: true
         type: boolean
     type: object
+  client.setGroupMemberRoleRequest:
+    properties:
+      role:
+        example: admin
+        type: string
+    type: object
   client.setMessageReactionRequest:
     properties:
       reacted:
@@ -6294,11 +6300,73 @@ paths:
       summary: 移出群聊成员或应用
       tags:
       - 客户端会话
+  /api/client/conversations/groups/{conversation_id}/members/{member_type}/{member_id}/role:
+    patch:
+      consumes:
+      - application/json
+      description: 群主或管理员可将其他非群主成员或应用设为管理员或普通成员，并生成系统消息。
+      parameters:
+      - description: 会话 ID
+        in: path
+        name: conversation_id
+        required: true
+        type: string
+      - description: 成员类型 user|app
+        in: path
+        name: member_type
+        required: true
+        type: string
+      - description: 成员 ID
+        in: path
+        name: member_id
+        required: true
+        type: string
+      - description: 新角色：admin|member
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/client.setGroupMemberRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/client.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.addGroupConversationMembersResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+      summary: 设置群成员管理员身份
+      tags:
+      - 客户端会话
   /api/client/conversations/groups/{conversation_id}/name:
     patch:
       consumes:
       - application/json
-      description: 任意当前群成员均可修改 active 群聊名称，并生成系统消息。
+      description: 群主或管理员可修改 active 群聊名称，并生成系统消息。
       parameters:
       - description: 会话 ID
         in: path

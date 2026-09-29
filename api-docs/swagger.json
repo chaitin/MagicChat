@@ -3996,9 +3996,106 @@
                 }
             }
         },
+        "/api/client/conversations/groups/{conversation_id}/members/{member_type}/{member_id}/role": {
+            "patch": {
+                "description": "群主或管理员可将其他非群主成员或应用设为管理员或普通成员，并生成系统消息。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端会话"
+                ],
+                "summary": "设置群成员管理员身份",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "会话 ID",
+                        "name": "conversation_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "成员类型 user|app",
+                        "name": "member_type",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "成员 ID",
+                        "name": "member_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "新角色：admin|member",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/client.setGroupMemberRoleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/client.successEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/client.addGroupConversationMembersResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
         "/api/client/conversations/groups/{conversation_id}/name": {
             "patch": {
-                "description": "任意当前群成员均可修改 active 群聊名称，并生成系统消息。",
+                "description": "群主或管理员可修改 active 群聊名称，并生成系统消息。",
                 "consumes": [
                     "application/json"
                 ],
@@ -12695,6 +12792,15 @@
                 "pinned": {
                     "type": "boolean",
                     "example": true
+                }
+            }
+        },
+        "client.setGroupMemberRoleRequest": {
+            "type": "object",
+            "properties": {
+                "role": {
+                    "type": "string",
+                    "example": "admin"
                 }
             }
         },

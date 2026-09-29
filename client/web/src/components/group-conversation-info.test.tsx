@@ -269,9 +269,9 @@ describe("GroupConversationInfo", () => {
     )
   })
 
-  it("lets a regular member edit the group name", async () => {
+  it("lets an owner edit the group name", async () => {
     const user = userEvent.setup()
-    const conversation = createGroupConversation()
+    const conversation = createOwnedGroupConversation()
     const updateGroupConversationName = vi.fn().mockResolvedValue(conversation)
 
     render(
@@ -295,15 +295,41 @@ describe("GroupConversationInfo", () => {
     await user.click(screen.getByRole("button", { name: "修改群聊名称" }))
     const input = screen.getByLabelText("群聊名称")
     await user.clear(input)
-    await user.type(input, "成员修改后的群名")
+    await user.type(input, "群主修改后的群名")
     await user.click(screen.getByRole("button", { name: "保存群聊名称" }))
 
     await waitFor(() =>
       expect(updateGroupConversationName).toHaveBeenCalledWith(
         conversation.id,
-        "成员修改后的群名"
+        "群主修改后的群名"
       )
     )
+  })
+
+  it("shows the group name read-only to regular members", () => {
+    const conversation = createGroupConversation()
+
+    render(
+      <MemoryRouter>
+        <ClientDataContext.Provider
+          value={createClientDataContextValue({
+            conversations: [conversation],
+            getConversation: vi.fn(() => conversation),
+          })}
+        >
+          <Sheet open>
+            <SheetContent showCloseButton={false}>
+              <GroupConversationInfo conversationId={conversation.id} />
+            </SheetContent>
+          </Sheet>
+        </ClientDataContext.Provider>
+      </MemoryRouter>
+    )
+
+    expect(screen.getByLabelText("群聊名称")).toBeDisabled()
+    expect(
+      screen.queryByRole("button", { name: "修改群聊名称" })
+    ).not.toBeInTheDocument()
   })
 
   it("shows the group announcement read-only to regular members", () => {

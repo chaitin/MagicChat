@@ -196,6 +196,87 @@ func reactivateMembers(tx *gorm.DB, conversationID, memberType string, ids []str
 		Updates(map[string]any{"role": store.ConversationMemberRoleMember, "joined_at": now, "history_visible_from_seq": visibleFromSeq, "left_at": nil, "last_read_seq": lastReadSeq}).Error
 }
 
+func (s *Service) SetMemberRole(ctx context.Context, cmd SetMemberRoleCommand) (ConversationMutationResult, error) {
+	memberType := strings.TrimSpace(cmd.MemberType)
+	if memberType != store.ConversationMemberTypeUser && memberType != store.ConversationMemberTypeApp {
+		return ConversationMutationResult{}, invalidRequest("成员类型格式错误", nil)
+	}
+	conversationID, err := normalizeConversationID(cmd.ConversationID)
+	if err != nil {
+		return ConversationMutationResult{}, invalidRequest(err.Error(), err)
+	}
+	memberID, err := normalizeUUID(cmd.MemberID, "成员 ID 格式错误")
+	if err != nil {
+		return ConversationMutationResult{}, invalidRequest(err.Error(), err)
+	}
+	role := strings.TrimSpace(cmd.Role)
+	if role != store.ConversationMemberRoleAdmin && role != store.ConversationMemberRoleMember {
+		return ConversationMutationResult{}, invalidRequest("成员角色只支持 admin 或 member", nil)
+	}
+	actor := actorUser(cmd.Actor)
+	var conversation store.Conversation
+	var message *store.Message
+	var userIDs []string
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&conversation, "id = ?", conversationID).Error; err != nil {
+			return err
+		}
+		if conversation.Status != store.ConversationStatusActive || conversation.Kind != store.ConversationKindGroup {
+			return ErrAccessDenied
+		}
+		var current store.ConversationMember
+		if err := tx.First(&current, "conversation_id = ? AND member_type = ? AND member_id = ? AND left_at IS NULL", conversationID, store.ConversationMemberTypeUser, actor.ID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrAccessDenied
+			}
+			return err
+		}
+		if !canManage(current.Role) {
+			return ErrAccessDenied
+		}
+		var target store.ConversationMember
+		if err := tx.First(&target, "conversation_id = ? AND member_type = ? AND member_id = ? AND left_at IS NULL", conversationID, memberType, memberID).Error; err != nil {
+			return err
+		}
+		if target.Role == store.ConversationMemberRoleOwner {
+			return ErrOwnerCannotRemove
+		}
+		if target.Role == role {
+			return nil
+		}
+		targetRef, err := loadMemberSystemRef(tx, memberType, memberID)
+		if err != nil {
+			return err
+		}
+		if err := tx.Model(&store.ConversationMember{}).
+			Where("conversation_id = ? AND member_type = ? AND member_id = ?", conversationID, memberType, memberID).
+			Update("role", role).Error; err != nil {
+			return err
+		}
+		created, err := createGroupMemberRoleUpdatedSystemMessage(tx, &conversation, actor, targetRef, role, s.now().UTC())
+		if err != nil {
+			return err
+		}
+		message = &created
+		if err := advanceReadSeq(tx, conversationID, actor.ID, created.Seq); err != nil {
+			return err
+		}
+		userIDs, err = loadActiveUserIDs(tx, conversationID)
+		return err
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			return ConversationMutationResult{}, notFound("会话不存在或成员不在群聊中", err)
+		case errors.Is(err, ErrAccessDenied), errors.Is(err, ErrOwnerCannotRemove):
+			return ConversationMutationResult{}, forbidden("无权修改成员角色", err)
+		default:
+			return ConversationMutationResult{}, internalError(err)
+		}
+	}
+	return s.finishMutation(ctx, actor.ID, conversation, message, userIDs)
+}
+
 func (s *Service) RemoveMember(ctx context.Context, cmd RemoveMemberCommand) (ConversationMutationResult, error) {
 	memberType := strings.TrimSpace(cmd.MemberType)
 	if memberType != store.ConversationMemberTypeUser && memberType != store.ConversationMemberTypeApp {

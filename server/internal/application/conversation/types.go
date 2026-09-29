@@ -402,6 +402,14 @@ type RemoveMemberCommand struct {
 	MemberID       string
 }
 
+type SetMemberRoleCommand struct {
+	Actor          Actor
+	ConversationID string
+	MemberType     string
+	MemberID       string
+	Role           string
+}
+
 type UpdateNameCommand struct {
 	Actor          Actor
 	ConversationID string
@@ -483,6 +491,7 @@ type ClientService interface {
 	CreateGroup(context.Context, CreateGroupCommand) (CreateGroupResult, error)
 	AddMembers(context.Context, AddMembersCommand) (ConversationMutationResult, error)
 	RemoveMember(context.Context, RemoveMemberCommand) (ConversationMutationResult, error)
+	SetMemberRole(context.Context, SetMemberRoleCommand) (ConversationMutationResult, error)
 	UpdateName(context.Context, UpdateNameCommand) (ConversationMutationResult, error)
 	UpdateAnnouncement(context.Context, UpdateAnnouncementCommand) (ConversationMutationResult, error)
 	UpdateVisibility(context.Context, UpdateVisibilityCommand) (ConversationMutationResult, error)

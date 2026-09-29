@@ -161,6 +161,22 @@ func createGroupMemberRemovedSystemMessage(db *gorm.DB, conversation *store.Conv
 	return createSystemMessage(db, conversation, body, displayName+" 已将 "+target.DisplayName+" 移出群聊", now)
 }
 
+func createGroupMemberRoleUpdatedSystemMessage(db *gorm.DB, conversation *store.Conversation, actor store.User, target systemEventUserRef, role string, now time.Time) (store.Message, error) {
+	displayName := userDisplayName(actor)
+	body, err := json.Marshal(groupMemberRoleUpdatedSystemEventBody{
+		Actor: systemEventUserRef{DisplayName: displayName, ID: actor.ID},
+		Event: "group_member_role_updated", Role: role, Target: target, Type: messageTypeSystemEvent,
+	})
+	if err != nil {
+		return store.Message{}, err
+	}
+	action := "取消了 " + target.DisplayName + " 的管理员"
+	if role == store.ConversationMemberRoleAdmin {
+		action = "将 " + target.DisplayName + " 设为管理员"
+	}
+	return createSystemMessage(db, conversation, body, displayName+" "+action, now)
+}
+
 func createGroupNameUpdatedSystemMessage(db *gorm.DB, conversation *store.Conversation, actor store.User, name string, now time.Time) (store.Message, error) {
 	displayName := userDisplayName(actor)
 	body, err := json.Marshal(groupNameUpdatedSystemEventBody{Actor: systemEventUserRef{DisplayName: displayName, ID: actor.ID}, Event: systemEventGroupNameUpdated, Name: name, Type: messageTypeSystemEvent})

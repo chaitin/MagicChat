@@ -138,6 +138,46 @@ func TestServiceRejectsInvalidGroupAnnouncementUpdates(t *testing.T) {
 	}
 }
 
+func TestServiceGroupNameRequiresManager(t *testing.T) {
+	db := openConversationTestDB(t)
+	now := time.Date(2026, 9, 23, 10, 0, 0, 0, time.UTC)
+	owner := insertConversationTestUser(t, db, "owner-name@example.com", "Owner", now)
+	member := insertConversationTestUser(t, db, "member-name@example.com", "Member", now)
+	service := NewService(Dependencies{DB: db, Now: func() time.Time { return now }})
+	created, err := service.CreateGroup(context.Background(), CreateGroupCommand{
+		Actor: actorFromTestUser(owner), Name: "Original", MemberIDs: []string{member.ID},
+	})
+	if err != nil {
+		t.Fatalf("create group: %v", err)
+	}
+	groupID := created.Conversation.ID
+	for _, name := range []string{"Changed", "Original"} {
+		if _, err := service.UpdateName(context.Background(), UpdateNameCommand{
+			Actor: actorFromTestUser(member), ConversationID: groupID, Name: name,
+		}); ErrorCodeOf(err) != CodeForbidden {
+			t.Fatalf("ordinary member update %q: %v", name, err)
+		}
+	}
+	if _, err := service.SetMemberRole(context.Background(), SetMemberRoleCommand{
+		Actor: actorFromTestUser(owner), ConversationID: groupID,
+		MemberType: store.ConversationMemberTypeUser, MemberID: member.ID, Role: store.ConversationMemberRoleAdmin,
+	}); err != nil {
+		t.Fatalf("promote admin: %v", err)
+	}
+	updated, err := service.UpdateName(context.Background(), UpdateNameCommand{
+		Actor: actorFromTestUser(member), ConversationID: groupID, Name: "Admin renamed",
+	})
+	if err != nil || updated.Conversation.Name != "Admin renamed" {
+		t.Fatalf("admin update = %#v, err = %v", updated, err)
+	}
+	updated, err = service.UpdateName(context.Background(), UpdateNameCommand{
+		Actor: actorFromTestUser(owner), ConversationID: groupID, Name: "Owner renamed",
+	})
+	if err != nil || updated.Conversation.Name != "Owner renamed" {
+		t.Fatalf("owner update = %#v, err = %v", updated, err)
+	}
+}
+
 func TestServiceGroupLifecyclePublishesAfterCommit(t *testing.T) {
 	db := openConversationTestDB(t)
 	now := time.Date(2026, 7, 15, 6, 0, 0, 0, time.UTC)
