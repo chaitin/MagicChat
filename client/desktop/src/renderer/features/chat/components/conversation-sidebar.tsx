@@ -32,14 +32,17 @@ import {
 } from "@/components/ui/context-menu"
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { formatMentionText, type MentionLabelResolver } from "@/lib/message-mentions"
+import type { MentionLabelResolver } from "@/lib/message-mentions"
 import { cn } from "@/lib/utils"
 import { groupConversationList } from "../conversation-list-order"
+import { formatConversationSummary } from "../conversation-list-preview"
 import { canPinConversation } from "../conversation-action-policy"
-import { conversationUnreadIndicator } from "../conversation-unread"
+import { conversationUnreadIndicator, hasUnreadMention } from "../conversation-unread"
 
 export function ConversationSidebar({
   conversations,
+  currentUserId,
+  draftConversationIds,
   loading,
   selectedId,
   targetId,
@@ -55,6 +58,8 @@ export function ConversationSidebar({
   onDismiss,
 }: {
   conversations: DesktopConversation[]
+  currentUserId: string
+  draftConversationIds: ReadonlySet<string>
   loading: boolean
   selectedId: string | null
   targetId: string
@@ -169,6 +174,8 @@ export function ConversationSidebar({
                   <div className="bg-xgui-background-0 px-2 py-1">
                     <ConversationGroup
                       conversations={pinned}
+                      currentUserId={currentUserId}
+                      draftConversationIds={draftConversationIds}
                       selectedId={selectedId}
                       targetId={targetId}
                       resolvedTheme={resolvedTheme}
@@ -185,6 +192,8 @@ export function ConversationSidebar({
                   <div className="px-2 py-1">
                     <ConversationGroup
                       conversations={regular}
+                      currentUserId={currentUserId}
+                      draftConversationIds={draftConversationIds}
                       selectedId={selectedId}
                       targetId={targetId}
                       resolvedTheme={resolvedTheme}
@@ -208,7 +217,7 @@ export function ConversationSidebar({
           if (!open && !dismissing) setDismissCandidate(null)
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent size="sm">
           <AlertDialogHeader>
             <AlertDialogTitle>删除对话？</AlertDialogTitle>
             <AlertDialogDescription>
@@ -241,6 +250,8 @@ type PendingConversationAction = {
 
 function ConversationGroup({
   conversations,
+  currentUserId,
+  draftConversationIds,
   selectedId,
   targetId,
   resolvedTheme,
@@ -252,6 +263,8 @@ function ConversationGroup({
   onSelect,
 }: {
   conversations: DesktopConversation[]
+  currentUserId: string
+  draftConversationIds: ReadonlySet<string>
   selectedId: string | null
   targetId: string
   resolvedTheme: "light" | "dark"
@@ -312,10 +325,16 @@ function ConversationGroup({
                       </span>
                     </div>
                     <p className="flex min-w-0 items-center gap-0.5 text-left text-xs leading-normal font-normal text-muted-foreground">
+                      {hasUnreadMention(conversation) ? (
+                        <span className="shrink-0 text-destructive">[有人@我]</span>
+                      ) : !active && draftConversationIds.has(conversation.id) ? (
+                        <span className="shrink-0 text-destructive">[草稿]</span>
+                      ) : null}
                       <span className="min-w-0 flex-1 truncate">
                         {formatConversationSummary(
-                          conversation.lastMessageSummary,
+                          conversation,
                           mentionLabelResolver,
+                          currentUserId,
                         )}
                       </span>
                       {conversation.notificationMuted && (
@@ -434,11 +453,6 @@ function ConversationListAvatar({
       </Avatar>
     </div>
   )
-}
-
-function formatConversationSummary(summary: string, mentionLabelResolver: MentionLabelResolver) {
-  if (!summary) return "暂无消息"
-  return formatMentionText(summary, mentionLabelResolver)
 }
 
 function formatConversationTime(value: string | null): string {

@@ -44,6 +44,21 @@ test("只为未静音的其他用户和应用消息生成通知", () => {
   assert.ok(incomingMessageNotification(message({ senderType: "app" }), "user-1", false))
 })
 
+test("通知里的发送者名字优先用通讯录现查到的结果", () => {
+  // 消息里没存名字（服务端下发的 sender 只有 id/type），用通讯录查到的名字。
+  assert.equal(
+    incomingMessageNotification(message({ senderName: "" }), "user-1", false, "李四")?.sender,
+    "李四",
+  )
+  // 通讯录查不到时回退到消息里存的名字。
+  assert.equal(incomingMessageNotification(message(), "user-1", false)?.sender, "小明")
+  // 两边都拿不到时才用通用文案。
+  assert.equal(
+    incomingMessageNotification(message({ senderName: " " }), "user-1", false)?.sender,
+    "未知用户",
+  )
+})
+
 test("空摘要使用通用文案且长摘要被截断", () => {
   assert.equal(
     incomingMessageNotification(message({ content: " \n " }), "user-1", false)?.summary,

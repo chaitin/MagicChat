@@ -61,6 +61,10 @@ export class AccountDatabase {
     return this.conversations.applyReadSeq(conversationId, seq)
   }
 
+  applyConversationMentionSeq(conversationId: string, seq: number) {
+    return this.conversations.applyMentionSeq(conversationId, seq)
+  }
+
   getConversationReadSeq(conversationId: string) {
     return this.conversations.getReadSeq(conversationId)
   }
@@ -208,6 +212,10 @@ export class AccountDatabase {
 
   getContacts(): DesktopContactDirectory {
     return this.contacts.getDirectory()
+  }
+
+  resolveContactName(type: string, entityId: string): string | undefined {
+    return this.contacts.resolveDisplayName(type, entityId)
   }
 
   getConversationPayload(conversationId: string): unknown {

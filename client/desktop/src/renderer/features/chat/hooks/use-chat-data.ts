@@ -41,13 +41,13 @@ export function useChatData({
   const [focusRevision, setFocusRevision] = useState(0)
   const readInFlightRef = useRef(new Set<string>())
   const [mentionLabels, setMentionLabels] = useState<Map<string, string>>(new Map())
-  const [resolvedReactionNames, setResolvedReactionNames] = useState<{
+  const [resolvedUserNames, setResolvedUserNames] = useState<{
     targetId: string
     names: Map<string, string>
   } | null>(null)
-  const requestedReactionIds = useRef({ targetId, ids: new Set<string>() })
-  if (requestedReactionIds.current.targetId !== targetId) {
-    requestedReactionIds.current = { targetId, ids: new Set() }
+  const requestedUserNameIds = useRef({ targetId, ids: new Set<string>() })
+  if (requestedUserNameIds.current.targetId !== targetId) {
+    requestedUserNameIds.current = { targetId, ids: new Set() }
   }
   const [onlineContacts, setOnlineContacts] = useState<{
     targetId: string
@@ -90,15 +90,33 @@ export function useChatData({
   }, [])
 
   useEffect(() => {
-    if (!window.desktop || !selectedId || activeSection !== "chat" || loadingMessages ||
-      !selected?.unreadCount || document.visibilityState !== "visible" || !document.hasFocus() ||
-      readInFlightRef.current.has(selectedId)) return
-    const upToSeq = Math.max(0, ...messages.filter((message) => message.conversationId === selectedId && !message.virtualType && message.deliveryStatus !== "sending")
-      .map((message) => message.seq))
+    if (
+      !window.desktop ||
+      !selectedId ||
+      activeSection !== "chat" ||
+      loadingMessages ||
+      !selected?.unreadCount ||
+      document.visibilityState !== "visible" ||
+      !document.hasFocus() ||
+      readInFlightRef.current.has(selectedId)
+    )
+      return
+    const upToSeq = Math.max(
+      0,
+      ...messages
+        .filter(
+          (message) =>
+            message.conversationId === selectedId &&
+            !message.virtualType &&
+            message.deliveryStatus !== "sending",
+        )
+        .map((message) => message.seq),
+    )
     if (upToSeq <= (selected.lastReadSeq ?? 0)) return
     const conversationId = selectedId
     readInFlightRef.current.add(conversationId)
-    void window.desktop.accountData.markConversationRead({ targetId, conversationId, upToSeq })
+    void window.desktop.accountData
+      .markConversationRead({ targetId, conversationId, upToSeq })
       .then((result) => {
         readInFlightRef.current.delete(conversationId)
         if (result.ok) setFocusRevision((revision) => revision + 1)
@@ -106,7 +124,16 @@ export function useChatData({
       .catch(() => {
         readInFlightRef.current.delete(conversationId)
       })
-  }, [activeSection, focusRevision, loadingMessages, messages, selected?.lastReadSeq, selected?.unreadCount, selectedId, targetId])
+  }, [
+    activeSection,
+    focusRevision,
+    loadingMessages,
+    messages,
+    selected?.lastReadSeq,
+    selected?.unreadCount,
+    selectedId,
+    targetId,
+  ])
 
   const setSelectedId = useCallback((conversationId: string) => {
     setTransientConversation(null)
@@ -219,24 +246,39 @@ export function useChatData({
     if (!window.desktop) return
     const ids = new Set<string>()
     for (const message of messages) {
+      if (message.replyTo?.senderType === "user" && message.replyTo.senderId) {
+        const id = message.replyTo.senderId.toLowerCase()
+        if (!requestedUserNameIds.current.ids.has(id)) ids.add(id)
+      }
       for (const reaction of message.reactions) {
         for (const user of reaction.users) {
-          if (user.id && !requestedReactionIds.current.ids.has(user.id.toLowerCase())) {
+          if (user.id && !requestedUserNameIds.current.ids.has(user.id.toLowerCase())) {
             ids.add(user.id.toLowerCase())
           }
         }
       }
     }
+    // 会话列表要用最新一条消息的发送者名字，同样按通讯录现查。
+    for (const conversation of conversations) {
+      const sender = conversation.lastMessageSender
+      if (
+        sender?.type === "user" &&
+        sender.id &&
+        !requestedUserNameIds.current.ids.has(sender.id.toLowerCase())
+      ) {
+        ids.add(sender.id.toLowerCase())
+      }
+    }
     const pending = [...ids]
     for (let index = 0; index < pending.length; index += 100) {
       const batch = pending.slice(index, index + 100)
-      batch.forEach((id) => requestedReactionIds.current.ids.add(id))
+      batch.forEach((id) => requestedUserNameIds.current.ids.add(id))
       void window.desktop.accountData
         .resolveUserNames({ targetId, userIds: batch })
         .then((result) => {
-          if (requestedReactionIds.current.targetId !== targetId) return
+          if (requestedUserNameIds.current.targetId !== targetId) return
           if (!result.ok) throw new Error(result.error.message)
-          setResolvedReactionNames((current) => {
+          setResolvedUserNames((current) => {
             const names = new Map(current?.targetId === targetId ? current.names : [])
             for (const user of result.data) {
               if (user.name) names.set(user.id.toLowerCase(), user.name)
@@ -245,12 +287,12 @@ export function useChatData({
           })
         })
         .catch(() => {
-          if (requestedReactionIds.current.targetId === targetId) {
-            batch.forEach((id) => requestedReactionIds.current.ids.delete(id))
+          if (requestedUserNameIds.current.targetId === targetId) {
+            batch.forEach((id) => requestedUserNameIds.current.ids.delete(id))
           }
         })
     }
-  }, [messages, targetId])
+  }, [conversations, messages, targetId])
 
   const resolveMentionLabel = useCallback(
     (target: MentionTarget) => {
@@ -266,12 +308,12 @@ export function useChatData({
       if (memberName) return memberName
       const contactName = mentionLabels.get(`${target.type}:${target.id.toLowerCase()}`)
       if (contactName) return contactName
-      if (target.type === "user" && resolvedReactionNames?.targetId === targetId) {
-        return resolvedReactionNames.names.get(target.id.toLowerCase())
+      if (target.type === "user" && resolvedUserNames?.targetId === targetId) {
+        return resolvedUserNames.names.get(target.id.toLowerCase())
       }
       return undefined
     },
-    [conversations, mentionLabels, resolvedReactionNames, selected, targetId],
+    [conversations, mentionLabels, resolvedUserNames, selected, targetId],
   )
 
   const setMessageReaction = useCallback(
@@ -646,8 +688,13 @@ export function useChatData({
     loadingAfterRef.current = true
     const revision = messageWindowRevisionRef.current
     try {
-      const result = await window.desktop.accountData.listLocalMessagesAfter({ targetId, conversationId, afterSeq: last.seq })
-      if (selectedIdRef.current !== conversationId || messageWindowRevisionRef.current !== revision) return
+      const result = await window.desktop.accountData.listLocalMessagesAfter({
+        targetId,
+        conversationId,
+        afterSeq: last.seq,
+      })
+      if (selectedIdRef.current !== conversationId || messageWindowRevisionRef.current !== revision)
+        return
       if (!result.ok) throw new Error(result.error.message)
       isAtBottomRef.current = false
       setMessages((current) => {
@@ -658,7 +705,10 @@ export function useChatData({
       setHasMoreAfterMessages(result.data.hasMoreAfter)
     } catch (error) {
       if (selectedIdRef.current === conversationId) {
-        showToast({ status: "error", title: error instanceof Error ? error.message : "无法加载后续消息" })
+        showToast({
+          status: "error",
+          title: error instanceof Error ? error.message : "无法加载后续消息",
+        })
       }
     } finally {
       loadingAfterRef.current = false
@@ -713,9 +763,14 @@ export function useChatData({
     if (hasMoreAfterMessages && selectedId && window.desktop) {
       const conversationId = selectedId
       const revision = ++messageWindowRevisionRef.current
-      void window.desktop.accountData.listMessages({ targetId, conversationId, latestLimit: 50 })
+      void window.desktop.accountData
+        .listMessages({ targetId, conversationId, latestLimit: 50 })
         .then((result) => {
-          if (selectedIdRef.current !== conversationId || messageWindowRevisionRef.current !== revision) return
+          if (
+            selectedIdRef.current !== conversationId ||
+            messageWindowRevisionRef.current !== revision
+          )
+            return
           if (!result.ok) throw new Error(result.error.message)
           browsingOlderWindowRef.current = false
           scrollToBottomRef.current = true
@@ -725,7 +780,12 @@ export function useChatData({
           setMessageGap(null)
           setNewMessageCount(0)
         })
-        .catch((error: unknown) => showToast({ status: "error", title: error instanceof Error ? error.message : "无法读取聊天记录" }))
+        .catch((error: unknown) =>
+          showToast({
+            status: "error",
+            title: error instanceof Error ? error.message : "无法读取聊天记录",
+          }),
+        )
       return
     }
     viewport.scrollTop = viewport.scrollHeight

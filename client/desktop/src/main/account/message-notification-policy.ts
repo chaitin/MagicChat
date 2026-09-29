@@ -17,6 +17,7 @@ export function incomingMessageNotification(
   message: DesktopMessage,
   currentUserId: string,
   muted: boolean,
+  resolvedSenderName?: string,
 ): { sender: string; summary: string } | null {
   if (
     muted ||
@@ -27,8 +28,13 @@ export function incomingMessageNotification(
   )
     return null
 
+  // 消息里存的 sender_name 往往为空，优先用通讯录现查到的名字。
+  const sender = [resolvedSenderName, message.senderName]
+    .map((value) => value?.trim().replace(/\s+/g, " ").slice(0, 64))
+    .find((value) => Boolean(value))
+
   return {
-    sender: message.senderName.trim().replace(/\s+/g, " ").slice(0, 64) || "未知用户",
+    sender: sender || "未知用户",
     summary: message.content.trim().replace(/\s+/g, " ").slice(0, 120) || "收到一条新消息",
   }
 }

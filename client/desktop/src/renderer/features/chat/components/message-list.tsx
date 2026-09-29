@@ -27,6 +27,7 @@ import {
   canCreateDesktopMessageTopic,
   canRevokeDesktopMessage,
   getDesktopMessageEditableBody,
+  getDesktopMessageReplyAuthor,
 } from "../message-actions"
 import { MessageBodyRenderer } from "../message-body-renderer"
 import { MessageActionsDropdown, MessageCopyMenu } from "../message-copy-menu"
@@ -302,7 +303,7 @@ function MessageRow({
       <article data-message-id={message.id} className="flex justify-center">
         <Badge
           variant="secondary"
-          className={cn(highlighted && "ring-2 ring-xgui-yellow/60 message-highlight-flash")}
+          className={cn(highlighted && "ring-2 ring-xgui-orange message-highlight-flash")}
         >
           <MessageBodyRenderer
             body={message.body}
@@ -319,6 +320,12 @@ function MessageRow({
   const flushMediaBubble = shouldFlushMediaBubble(message)
   const flushInteractiveCardBubble = shouldFlushInteractiveCardBubble(message)
   const flushBubble = flushMediaBubble || flushInteractiveCardBubble
+  const senderDisplayName = messageSenderName(
+    message,
+    mentionLabelResolver,
+    userName,
+    conversationName,
+  )
   const replyAction =
     !message.deliveryStatus &&
     !message.virtualType &&
@@ -351,7 +358,7 @@ function MessageRow({
           <ContactProfilePopover
             type={message.senderType}
             id={message.senderId}
-            fallbackName={message.senderName || conversationName}
+            fallbackName={senderDisplayName}
           >
             <EntityAvatar
               targetId={targetId}
@@ -359,7 +366,7 @@ function MessageRow({
               id={message.senderId}
               theme={resolvedTheme}
               size={32}
-              label={`${message.senderName || conversationName}头像`}
+              label={`${senderDisplayName}头像`}
             />
           </ContactProfilePopover>
         )}
@@ -370,14 +377,7 @@ function MessageRow({
         )}
       >
         <div className="flex max-w-full min-w-0 items-center gap-2 text-xs text-muted-foreground">
-          <span className="max-w-32 truncate">
-            {message.senderName ||
-              (message.senderType === "system"
-                ? "系统"
-                : message.isMine
-                  ? userName
-                  : conversationName)}
-          </span>
+          <span className="max-w-32 truncate">{senderDisplayName}</span>
           <span className="shrink-0">{formatMessageTime(message.createdAt)}</span>
         </div>
         <div
@@ -394,7 +394,7 @@ function MessageRow({
             onRevoke={revokeAction}
             className={cn(
               "group/bubble max-w-full rounded-xl text-sm leading-6",
-              highlighted && "ring-2 ring-xgui-yellow/60 message-highlight-flash",
+              highlighted && "ring-2 ring-xgui-orange message-highlight-flash",
               flushBubble ? "overflow-hidden p-0" : "px-3 py-2.5",
               message.isMine
                 ? "rounded-tr-sm bg-xgui-brand-1 hover:bg-xgui-brand-6 data-menu-open:bg-xgui-brand-6"
@@ -404,7 +404,7 @@ function MessageRow({
             {message.replyTo && (
               <div className="mb-2 border-l-2 border-foreground/20 pl-2 text-xs">
                 <div className="truncate font-medium text-foreground/80">
-                  {message.replyTo.author}
+                  {getDesktopMessageReplyAuthor(message.replyTo, mentionLabelResolver)}
                 </div>
                 <div className="line-clamp-2 text-muted-foreground">
                   {formatMentionText(message.replyTo.summary, mentionLabelResolver)}
@@ -585,6 +585,22 @@ function formatMessageTime(value: string): string {
     return `${twoDigits(date.getHours())}:${twoDigits(date.getMinutes())}`
   }
   return `${twoDigits(date.getMonth() + 1)}/${twoDigits(date.getDate())}`
+}
+
+// 发送者名字按通讯录现查，消息里存的 sender_name 只作兜底。
+function messageSenderName(
+  message: DesktopMessage,
+  mentionLabelResolver: MentionLabelResolver,
+  userName: string,
+  conversationName: string,
+) {
+  if (message.senderType === "system") return "系统"
+  if (message.isMine) return message.senderName.trim() || userName
+  const label =
+    message.senderId && (message.senderType === "user" || message.senderType === "app")
+      ? mentionLabelResolver({ id: message.senderId, type: message.senderType })
+      : undefined
+  return label || message.senderName.trim() || conversationName
 }
 
 function shouldFlushMediaBubble(message: DesktopMessage) {

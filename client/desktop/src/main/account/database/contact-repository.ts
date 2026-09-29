@@ -15,7 +15,11 @@ export type StoredContactGroup = DesktopContactGroup & { avatar: string; payload
 export type StoredContactApp = DesktopContactApp & { avatar: string; payload: unknown }
 
 export class ContactRepository {
-  constructor(private readonly database: DatabaseSync) {}
+  private readonly database: DatabaseSync
+
+  constructor(database: DatabaseSync) {
+    this.database = database
+  }
 
   replace(input: {
     mode: "organization" | "friends"
@@ -93,6 +97,24 @@ export class ContactRepository {
         .prepare("UPDATE contact_users SET online = ? WHERE id = ?")
         .run(Number(online), userId).changes > 0
     )
+  }
+
+  // 发送者名字按通讯录现查，缺资料时返回 undefined。
+  resolveDisplayName(type: string, entityId: string): string | undefined {
+    if (!entityId) return undefined
+    if (type === "app" || type === "group") {
+      const table = type === "app" ? "contact_apps" : "contact_groups"
+      const row = this.database
+        .prepare(`SELECT name FROM ${table} WHERE id = ? COLLATE NOCASE`)
+        .get(entityId) as Record<string, unknown> | undefined
+      return typeof row?.name === "string" && row.name.trim() ? row.name.trim() : undefined
+    }
+    const row = this.database
+      .prepare("SELECT name, nickname FROM contact_users WHERE id = ? COLLATE NOCASE")
+      .get(entityId) as Record<string, unknown> | undefined
+    const nickname = typeof row?.nickname === "string" ? row.nickname.trim() : ""
+    const name = typeof row?.name === "string" ? row.name.trim() : ""
+    return nickname || name || undefined
   }
 
   getDirectory(): DesktopContactDirectory {

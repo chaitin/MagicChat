@@ -21,8 +21,8 @@ export class ConversationRepository {
       INSERT INTO conversations (
         id, type, name, member_count, avatar, avatar_type, avatar_id, created_at, last_message_at,
         last_message_summary, pinned, notification_muted, is_builtin_assistant,
-        unread_count, last_message_seq, last_read_seq, current, payload_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        unread_count, last_message_seq, last_read_seq, last_mentioned_seq, current, payload_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
       ON CONFLICT(id) DO UPDATE SET
         type = excluded.type,
         name = excluded.name,
@@ -38,6 +38,7 @@ export class ConversationRepository {
         is_builtin_assistant = excluded.is_builtin_assistant,
         last_message_seq = MAX(conversations.last_message_seq, excluded.last_message_seq),
         last_read_seq = MAX(conversations.last_read_seq, excluded.last_read_seq),
+        last_mentioned_seq = MAX(conversations.last_mentioned_seq, excluded.last_mentioned_seq),
         unread_count = CASE WHEN MAX(conversations.last_message_seq, excluded.last_message_seq) = 0
           THEN excluded.unread_count
           ELSE MAX(0, MAX(conversations.last_message_seq, excluded.last_message_seq) - MAX(conversations.last_read_seq, excluded.last_read_seq)) END,
@@ -62,6 +63,7 @@ export class ConversationRepository {
         conversation.unreadCount,
         conversation.lastMessageSeq ?? 0,
         conversation.lastReadSeq ?? 0,
+        conversation.lastMentionedSeq ?? 0,
         JSON.stringify(conversation.payload),
       )
     }
@@ -89,23 +91,45 @@ export class ConversationRepository {
 
   applyMessageSeq(conversationId: string, seq: number, isMine: boolean) {
     if (!Number.isSafeInteger(seq) || seq <= 0) return
-    this.database.prepare(`UPDATE conversations SET
+    this.database
+      .prepare(
+        `UPDATE conversations SET
       last_message_seq = MAX(last_message_seq, ?),
       last_read_seq = CASE WHEN ? THEN MAX(last_read_seq, ?) ELSE last_read_seq END,
       unread_count = MAX(0, MAX(last_message_seq, ?) - CASE WHEN ? THEN MAX(last_read_seq, ?) ELSE last_read_seq END)
-      WHERE id = ? AND current = 1`).run(seq, Number(isMine), seq, seq, Number(isMine), seq, conversationId)
+      WHERE id = ? AND current = 1`,
+      )
+      .run(seq, Number(isMine), seq, seq, Number(isMine), seq, conversationId)
   }
 
   applyReadSeq(conversationId: string, seq: number) {
     if (!Number.isSafeInteger(seq) || seq < 0) return false
-    return this.database.prepare(`UPDATE conversations SET
+    return (
+      this.database
+        .prepare(
+          `UPDATE conversations SET
       last_read_seq = MAX(last_read_seq, ?),
       unread_count = MAX(0, last_message_seq - MAX(last_read_seq, ?))
-      WHERE id = ? AND current = 1`).run(seq, seq, conversationId).changes > 0
+      WHERE id = ? AND current = 1`,
+        )
+        .run(seq, seq, conversationId).changes > 0
+    )
+  }
+
+  applyMentionSeq(conversationId: string, seq: number) {
+    if (!Number.isSafeInteger(seq) || seq <= 0) return false
+    return (
+      this.database
+        .prepare(
+          "UPDATE conversations SET last_mentioned_seq = MAX(last_mentioned_seq, ?) WHERE id = ? AND current = 1",
+        )
+        .run(seq, conversationId).changes > 0
+    )
   }
 
   getReadSeq(conversationId: string) {
-    const row = this.database.prepare("SELECT last_read_seq FROM conversations WHERE id = ? AND current = 1")
+    const row = this.database
+      .prepare("SELECT last_read_seq FROM conversations WHERE id = ? AND current = 1")
       .get(conversationId) as { last_read_seq: number } | undefined
     return row?.last_read_seq
   }
@@ -144,18 +168,24 @@ export class ConversationRepository {
         `SELECT conversations.id, conversations.type, conversations.name,
                 conversations.member_count, conversations.avatar_type, conversations.avatar_id,
                 conversations.created_at, conversations.last_message_at,
-                COALESCE((
-                  SELECT messages.content
-                  FROM messages
-                  WHERE messages.conversation_id = conversations.id
-                  ORDER BY messages.seq DESC, messages.created_at DESC, messages.id DESC
-                  LIMIT 1
-                ), '') AS last_message_summary,
+                COALESCE(last_message.content, '') AS last_message_summary,
+                last_message.sender_id AS last_message_sender_id,
+                last_message.sender_name AS last_message_sender_name,
+                last_message.sender_type AS last_message_sender_type,
                 conversations.pinned, conversations.notification_muted,
                 conversations.is_builtin_assistant, conversations.unread_count,
                 conversations.last_message_seq, conversations.last_read_seq,
+                conversations.last_mentioned_seq,
                 conversations.payload_json
          FROM conversations
+         LEFT JOIN messages AS last_message
+           ON last_message.conversation_id = conversations.id
+          AND last_message.id = (
+            SELECT messages.id FROM messages
+            WHERE messages.conversation_id = conversations.id
+            ORDER BY messages.seq DESC, messages.created_at DESC, messages.id DESC
+            LIMIT 1
+          )
          WHERE conversations.current = 1
            AND (
              conversations.type <> 'topic'
@@ -176,11 +206,21 @@ export class ConversationRepository {
       .prepare(
         `SELECT c.id, c.type, c.name, c.member_count, c.avatar_type, c.avatar_id,
                 c.created_at, c.last_message_at,
-                COALESCE((SELECT content FROM messages WHERE conversation_id = c.id
-                  ORDER BY seq DESC, created_at DESC, id DESC LIMIT 1), '') AS last_message_summary,
+                COALESCE(last_message.content, '') AS last_message_summary,
+                last_message.sender_id AS last_message_sender_id,
+                last_message.sender_name AS last_message_sender_name,
+                last_message.sender_type AS last_message_sender_type,
                 c.pinned, c.notification_muted, c.is_builtin_assistant, c.unread_count,
-                c.last_message_seq, c.last_read_seq, c.payload_json
+                c.last_message_seq, c.last_read_seq, c.last_mentioned_seq, c.payload_json
          FROM conversations c
+         LEFT JOIN messages AS last_message
+           ON last_message.conversation_id = c.id
+          AND last_message.id = (
+            SELECT messages.id FROM messages
+            WHERE messages.conversation_id = c.id
+            ORDER BY messages.seq DESC, messages.created_at DESC, messages.id DESC
+            LIMIT 1
+          )
          WHERE c.type = 'topic' AND c.current = 1
            AND json_valid(c.payload_json)
            AND json_extract(c.payload_json, '$.topic.parent_conversation_id') = ?
@@ -207,12 +247,14 @@ export class ConversationRepository {
       createdAt: String(row.created_at),
       lastMessageAt: typeof row.last_message_at === "string" ? row.last_message_at : null,
       lastMessageSummary: String(row.last_message_summary),
+      lastMessageSender: mapLastMessageSender(row),
       pinned: row.pinned === 1,
       notificationMuted: row.notification_muted === 1,
       isBuiltinAssistant: row.is_builtin_assistant === 1,
       unreadCount: Number(row.unread_count),
       lastMessageSeq: Number(row.last_message_seq),
       lastReadSeq: Number(row.last_read_seq),
+      lastMentionedSeq: Number(row.last_mentioned_seq),
       topic: parseConversationTopic(payload),
       members: parseConversationMembers(payload),
     }
@@ -235,6 +277,19 @@ export class ConversationRepository {
       this.database.exec("ROLLBACK")
       throw error
     }
+  }
+}
+
+function mapLastMessageSender(
+  row: Record<string, unknown>,
+): DesktopConversation["lastMessageSender"] {
+  const id = row.last_message_sender_id
+  const type = row.last_message_sender_type
+  if (typeof id !== "string" || typeof type !== "string") return undefined
+  return {
+    id,
+    name: typeof row.last_message_sender_name === "string" ? row.last_message_sender_name : "",
+    type,
   }
 }
 

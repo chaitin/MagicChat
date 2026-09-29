@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react"
 import { FlashIcon, Loading03Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { ContactProfileProvider } from "@/components/avatar/contact-profile-popover"
@@ -26,7 +34,7 @@ import { useAttachmentSender } from "./hooks/use-attachment-sender"
 import { useChatData } from "./hooks/use-chat-data"
 import { useConversationStatus } from "./hooks/use-conversation-status"
 import { SendFileMessageDialog } from "./send-file-message-dialog"
-import { getDesktopMessageEditableBody } from "./message-actions"
+import { getDesktopMessageEditableBody, getDesktopMessageReplyAuthor } from "./message-actions"
 import { SendChoiceMessageDialog } from "./send-choice-message-dialog"
 import { SendChartMessageDialog } from "./send-chart-message-dialog"
 import { SendMediaMessageDialog } from "./send-media-message-dialog"
@@ -37,7 +45,7 @@ import type {
   LocalSearchResult,
   SendRichMessageBody,
 } from "../../../shared/account-data"
-import type { ServerCatalog } from "../../../shared/auth"
+import type { AuthUser, ServerCatalog } from "../../../shared/auth"
 import type { ThemePreference } from "../../../shared/desktop"
 import { normalizeSingleLinkMessageURL } from "../../../shared/message-link"
 import {
@@ -49,6 +57,13 @@ import {
   type DraftMention,
   type MentionCandidate,
 } from "./conversation-mentions"
+
+type ConversationDraft = {
+  text: string
+  mentions: DraftMention[]
+  replyTarget: DesktopMessageReplyTarget | null
+  markdownMode: boolean
+}
 
 export function ChatPage({
   targetId,
@@ -62,6 +77,7 @@ export function ChatPage({
   isPreview,
   onThemeChange,
   onSignOut,
+  onUserUpdated,
   onRequestQuit,
   onCatalogChange,
   onRefresh,
@@ -79,6 +95,7 @@ export function ChatPage({
   isPreview: boolean
   onThemeChange: (theme: ThemePreference) => void
   onSignOut: () => Promise<boolean>
+  onUserUpdated: (user: AuthUser) => void
   onRequestQuit: () => void
   onCatalogChange: (catalog: ServerCatalog) => void
   onRefresh: () => void
@@ -99,11 +116,16 @@ export function ChatPage({
   const [composerFocused, setComposerFocused] = useState(false)
   const [replyTarget, setReplyTarget] = useState<DesktopMessageReplyTarget | null>(null)
   const [markdownMode, setMarkdownMode] = useState(false)
+  const [takingScreenshot, setTakingScreenshot] = useState(false)
+  const capturingScreenshotRef = useRef(false)
+  const [draftRevision, setDraftRevision] = useState(0)
   const [richDialog, setRichDialog] = useState<"choice" | "chart" | null>(null)
   const [createTopicMessage, setCreateTopicMessage] = useState<DesktopMessage | null>(null)
   const [creatingTopic, setCreatingTopic] = useState(false)
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const pendingComposerCursorRef = useRef<number | null>(null)
+  const draftsRef = useRef(new Map<string, ConversationDraft>())
+  const previousDraftKeyRef = useRef<string | null>(null)
   const locatingSearchRef = useRef<string | null>(null)
   const {
     conversations,
@@ -222,7 +244,7 @@ export function ChatPage({
         setSearchMessageTarget((current) =>
           current?.messageId === searchMessageTarget.messageId ? null : current,
         )
-      }, 3000)
+      }, 2000)
     })
     return () => {
       window.cancelAnimationFrame(frame)
@@ -252,6 +274,43 @@ export function ChatPage({
       }
     })
   }, [])
+
+  const captureScreenshot = useCallback(async () => {
+    if (capturingScreenshotRef.current) return
+    capturingScreenshotRef.current = true
+    setTakingScreenshot(true)
+    try {
+      if (!window.desktop) throw new Error("桌面服务暂不可用")
+      const result = await window.desktop.captureScreenshot()
+      if (!result.ok) throw new Error(result.error.message)
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "未知错误"
+      showToast({
+        status: "error",
+        title: "启动截图失败",
+        description: detail,
+        duration: 15_000,
+        action: {
+          label: "复制完整报错",
+          onClick: () => {
+            if (!window.desktop) return
+            void window.desktop
+              .copyText(detail)
+              .then((result) => {
+                showToast({
+                  status: result.ok ? "success" : "error",
+                  title: result.ok ? "已复制完整报错" : "复制报错失败",
+                })
+              })
+              .catch(() => showToast({ status: "error", title: "复制报错失败" }))
+          },
+        },
+      })
+    } finally {
+      capturingScreenshotRef.current = false
+      setTakingScreenshot(false)
+    }
+  }, [showToast])
 
   const clearReplyTarget = useCallback(() => setReplyTarget(null), [])
 
@@ -390,14 +449,18 @@ export function ChatPage({
 
   const replyToMessage = useCallback(
     (message: DesktopMessage) => {
-      setReplyTarget({
+      const reply: DesktopMessageReplyTarget = {
         id: message.id,
         author: message.senderName || (message.isMine ? userName : "未知用户"),
         summary: message.content || "消息",
-      })
+        ...(message.senderId && (message.senderType === "user" || message.senderType === "app")
+          ? { senderId: message.senderId, senderType: message.senderType }
+          : {}),
+      }
+      setReplyTarget({ ...reply, author: getDesktopMessageReplyAuthor(reply, resolveMentionLabel) })
       focusComposer()
     },
-    [focusComposer, userName],
+    [focusComposer, resolveMentionLabel, userName],
   )
 
   const insertExpression = useCallback(
@@ -413,13 +476,45 @@ export function ChatPage({
     [draft],
   )
 
-  useEffect(() => {
-    setDraft("")
-    setDraftMentions([])
-    setReplyTarget(null)
+  const draftKey = selectedId ? `${targetId}\0${selectedId}` : null
+  useLayoutEffect(() => {
+    const previousKey = previousDraftKeyRef.current
+    if (previousKey === draftKey) return
+    if (previousKey) {
+      if (draft || draftMentions.length || replyTarget || markdownMode) {
+        draftsRef.current.set(previousKey, {
+          text: draft,
+          mentions: draftMentions,
+          replyTarget,
+          markdownMode,
+        })
+      } else {
+        draftsRef.current.delete(previousKey)
+      }
+    }
+    const restored = draftKey ? draftsRef.current.get(draftKey) : undefined
+    previousDraftKeyRef.current = draftKey
+    setDraftRevision((revision) => revision + 1)
+    setDraft(restored?.text ?? "")
+    setDraftMentions(restored?.mentions ?? [])
+    setReplyTarget(restored?.replyTarget ?? null)
+    setMarkdownMode(restored?.markdownMode ?? false)
     pendingComposerCursorRef.current = null
     if (selectedId) focusComposer()
-  }, [focusComposer, selectedId])
+  }, [draft, draftKey, draftMentions, focusComposer, markdownMode, replyTarget, selectedId])
+
+  const draftConversationIds = useMemo(() => {
+    const ids = new Set<string>()
+    const prefix = `${targetId}\0`
+    for (const [key, saved] of draftsRef.current) {
+      if (key.startsWith(prefix) && saved.text.trim()) ids.add(key.slice(prefix.length))
+    }
+    if (selectedId) {
+      if (draft.trim()) ids.add(selectedId)
+      else ids.delete(selectedId)
+    }
+    return ids
+  }, [draft, draftKey, draftRevision, selectedId, targetId])
 
   const openProfileConversation = useCallback(
     async (type: "user" | "app", id: string) => {
@@ -495,6 +590,7 @@ export function ChatPage({
     <main className="flex h-full min-h-0 overflow-hidden bg-background text-foreground">
       <AppRail
         targetId={targetId}
+        serverUrl={serverUrl}
         userId={userId}
         userName={userName}
         userEmail={userEmail}
@@ -506,6 +602,7 @@ export function ChatPage({
         hasUnreadMessages={hasUnmutedUnreadConversations(conversations)}
         onSectionChange={setActiveSection}
         onSignOut={onSignOut}
+        onUserUpdated={onUserUpdated}
         onRequestQuit={onRequestQuit}
         onThemeChange={onThemeChange}
         onCatalogChange={onCatalogChange}
@@ -514,6 +611,8 @@ export function ChatPage({
         <div className="grid min-w-0 flex-1 grid-cols-[19rem_minmax(0,1fr)]">
           <ConversationSidebar
             conversations={conversations}
+            currentUserId={userId}
+            draftConversationIds={draftConversationIds}
             loading={loadingConversations}
             selectedId={selectedId}
             targetId={targetId}
@@ -564,6 +663,9 @@ export function ChatPage({
                     onConversationRemoved={() =>
                       setSelectedId(conversations.find((item) => item.id !== selected.id)?.id ?? "")
                     }
+                    onSetPinned={setConversationPinned}
+                    onSetMuted={setConversationMuted}
+                    onDismiss={dismissConversation}
                   />
 
                   <MessageList
@@ -614,7 +716,7 @@ export function ChatPage({
                   />
 
                   <MessageComposer
-                    key={selectedId}
+                    key={draftKey}
                     composerRef={composerRef}
                     draft={draft}
                     mentionCandidates={mentionCandidates}
@@ -623,6 +725,7 @@ export function ChatPage({
                     replyTarget={replyTarget}
                     mentionLabelResolver={resolveMentionLabel}
                     markdownMode={markdownMode}
+                    takingScreenshot={takingScreenshot}
                     selectingFile={selectingFile}
                     sendingFile={sendingFile}
                     selectingMedia={selectingMedia}
@@ -651,6 +754,7 @@ export function ChatPage({
                     onRestoreFocus={focusComposer}
                     onInsertExpression={insertExpression}
                     onSelectFile={selectFile}
+                    onScreenshot={() => void captureScreenshot()}
                     onSelectMedia={(category) => void selectMedia(category)}
                     onSelectChoice={() => setRichDialog("choice")}
                     onSelectChart={() => setRichDialog("chart")}

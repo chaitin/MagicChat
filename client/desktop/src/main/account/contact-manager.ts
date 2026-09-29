@@ -92,6 +92,11 @@ export class ContactManager {
     return this.database.getContacts()
   }
 
+  // 通知等即时展示用的发送者名字，按本地通讯录现查。
+  resolveDisplayName(type: string, entityId: string): string | undefined {
+    return this.database.resolveContactName(type, entityId)
+  }
+
   async refreshAndGetDirectory() {
     await this.refresh()
     return this.getDirectory()
@@ -160,6 +165,13 @@ export class ContactManager {
       this.refreshedAvatars.get(`${type}:${entityId}`) ??
       avatarDescriptor(type, entityId, this.database.getContactPayload(type, entityId))
     )
+  }
+
+  updateGroupAvatarDescriptor(entityId: string, avatarUrl: string) {
+    const descriptor = this.getAvatarDescriptor("group", entityId)
+    if (descriptor) {
+      this.refreshedAvatars.set(`group:${entityId}`, { ...descriptor, avatarUrl })
+    }
   }
 
   refreshAvatarDescriptor(

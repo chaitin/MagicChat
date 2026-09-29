@@ -24,13 +24,16 @@ import type {
   SetMessageReactionInput,
   SubmitChoiceResponseInput,
   UpdateClientAppInput,
+  UpdateProfileInput,
 } from "../../shared/account-data"
-import { AuthFailure } from "../../shared/auth"
+import { AuthFailure, type AuthUser } from "../../shared/auth"
 import type { CachedMedia, MediaCacheRequest, MediaDownloadProgress } from "../../shared/media"
 import { AccountDatabase } from "./account-database"
 import { AvatarManager } from "./avatar-manager"
-import type { AvatarResource } from "./avatar-types"
+import type { AvatarDescriptor, AvatarResource } from "./avatar-types"
 import { AuthenticatedClient } from "./authenticated-client"
+import { parseUser } from "../auth/auth-api"
+import { isValidAvatarUpload } from "../message-files/selection-policy"
 import { ClientAppManager } from "./client-app-manager"
 import { ContactManager } from "./contact-manager"
 import { ConversationManager } from "./conversation-manager"
@@ -50,6 +53,7 @@ export class AccountRuntime {
   private clientAppManager?: ClientAppManager
   private projectManager?: ProjectManager
   private avatarManager?: AvatarManager
+  private currentUserAvatar?: AvatarDescriptor
   private mediaManager?: MediaManager
   private searchManager?: SearchManager
   private realtimeManager?: RealtimeManager
@@ -86,6 +90,71 @@ export class AccountRuntime {
   async refreshAll() {
     this.assertInitialized()
     await this.synchronize()
+  }
+
+  async getProfile() {
+    this.assertInitialized()
+    return this.acceptProfile(this.client!.get("/api/client/me"))
+  }
+
+  async updateProfile(input: Omit<UpdateProfileInput, "targetId">) {
+    this.assertInitialized()
+    if (input?.nickname === undefined && input?.avatar === undefined) {
+      throw new AuthFailure("invalid_profile", "请选择需要修改的资料")
+    }
+    if (
+      input.nickname !== undefined &&
+      (typeof input.nickname !== "string" || input.nickname.length > 256)
+    ) {
+      throw new AuthFailure("invalid_profile", "昵称不能超过 256 个字符")
+    }
+    if (
+      input.avatar !== undefined &&
+      (typeof input.avatar !== "string" ||
+        !/^\/assets\/avatars\/builtin\/(0[1-9]|[1-5][0-9]|6[0-4])\.webp$/.test(input.avatar))
+    ) {
+      throw new AuthFailure("invalid_avatar", "请选择系统头像")
+    }
+    return this.acceptProfile(
+      this.client!.patch("/api/client/me", {
+        ...(input.nickname !== undefined ? { nickname: input.nickname.trim() } : {}),
+        ...(input.avatar !== undefined ? { avatar: input.avatar } : {}),
+      }),
+    )
+  }
+
+  async uploadProfileAvatar(bytes: ArrayBuffer) {
+    this.assertInitialized()
+    if (!isValidAvatarUpload(bytes)) {
+      throw new AuthFailure("invalid_avatar", "请选择不超过 1MiB 的 WebP 头像")
+    }
+    return this.acceptProfile(
+      this.client!.postFile(
+        "/api/client/me/avatar",
+        {},
+        { bytes, name: "avatar.webp", contentType: "image/webp" },
+      ),
+    )
+  }
+
+  private async acceptProfile(request: Promise<unknown>): Promise<AuthUser> {
+    const user = parseUser(await request)
+    if (user.id !== this.input.userId) {
+      throw new AuthFailure("invalid_response", "账号资料不匹配")
+    }
+    const name = user.nickname?.trim() || user.name
+    this.input.userName = name
+    this.input.userAvatar = user.avatar
+    if (this.currentUserAvatar) {
+      const avatarChanged = this.currentUserAvatar.avatarUrl !== user.avatar
+      this.currentUserAvatar.name = name
+      this.currentUserAvatar.avatarUrl = user.avatar
+      if (avatarChanged) {
+        await this.avatarManager!.invalidate("user", user.id)
+        this.notifyChanged(["contacts"], [], { type: "user", id: user.id })
+      }
+    }
+    return user
   }
 
   searchLocal(input: Omit<LocalSearchInput, "targetId">) {
@@ -127,10 +196,44 @@ export class AccountRuntime {
     return conversation
   }
 
+  async uploadGroupAvatar(conversationId: string, bytes: ArrayBuffer) {
+    this.assertInitialized()
+    const { conversation, avatarUrl } = await this.conversationManager!.uploadGroupAvatar(
+      conversationId,
+      bytes,
+    )
+    this.contactManager!.updateGroupAvatarDescriptor(conversationId, avatarUrl)
+    await this.avatarManager!.invalidate("group", conversationId)
+    this.notifyChanged(["contacts", "conversations", "messages"], [conversationId])
+    return conversation
+  }
+
   async manageGroup(input: ManageGroupInput) {
     this.assertInitialized()
     const conversation = await this.conversationManager!.manageGroup(input)
     this.notifyChanged(["conversations", "messages"], [input.conversationId])
+    return conversation
+  }
+
+  listBindableProjects() {
+    this.assertInitialized()
+    return this.projectManager!.listBindableProjects()
+  }
+
+  async bindConversationProject(conversationId: string, projectId: string) {
+    this.assertInitialized()
+    const conversation = await this.conversationManager!.bindConversationProject(
+      conversationId,
+      projectId,
+    )
+    this.notifyChanged(["conversations"], [conversationId])
+    return conversation
+  }
+
+  async archiveTopic(conversationId: string) {
+    this.assertInitialized()
+    const conversation = await this.conversationManager!.archiveTopic(conversationId)
+    this.notifyChanged(["conversations"], [conversationId])
     return conversation
   }
 
@@ -549,6 +652,7 @@ export class AccountRuntime {
         name: this.input.userName,
         avatarUrl: this.input.userAvatar,
       }
+      this.currentUserAvatar = currentUserAvatar
       this.projectManager = new ProjectManager(client, this.contactManager, currentUserAvatar)
       this.mediaManager = new MediaManager(
         accountDirectory,
@@ -620,7 +724,12 @@ export class AccountRuntime {
       this.notifyChanged(domains, conversationChange.conversationIds)
       if (conversationChange.notification) {
         const { message, muted } = conversationChange.notification
-        const details = incomingMessageNotification(message, this.input.userId, muted)
+        const details = incomingMessageNotification(
+          message,
+          this.input.userId,
+          muted,
+          this.contactManager?.resolveDisplayName(message.senderType, message.senderId),
+        )
         if (details) {
           this.input.onIncomingMessage({
             targetId: this.input.targetId,
@@ -638,13 +747,18 @@ export class AccountRuntime {
     }
   }
 
-  private notifyChanged(domains: AccountDataDomain[], conversationIds: string[]) {
+  private notifyChanged(
+    domains: AccountDataDomain[],
+    conversationIds: string[],
+    avatarChange?: AccountDataChangedEvent["avatarChange"],
+  ) {
     this.revision += 1
     this.input.onDataChanged({
       targetId: this.input.targetId,
       revision: this.revision,
       domains,
       conversationIds,
+      ...(avatarChange ? { avatarChange } : {}),
     })
   }
 
