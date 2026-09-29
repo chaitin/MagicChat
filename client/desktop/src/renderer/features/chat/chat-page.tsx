@@ -28,11 +28,14 @@ import { ContactsPage } from "../contacts/contacts-page"
 import { ChatHeader } from "./components/chat-header"
 import { ConversationSidebar } from "./components/conversation-sidebar"
 import { CreateGroupConversationDialog } from "./components/create-group-conversation-dialog"
+import { ForwardMessageDialog } from "./components/forward-message-dialog"
 import { MessageComposer } from "./components/message-composer"
 import { MessageList } from "./components/message-list"
+import { MessageSelectionToolbar } from "./components/message-selection-toolbar"
 import { useAttachmentSender } from "./hooks/use-attachment-sender"
 import { useChatData } from "./hooks/use-chat-data"
 import { useConversationStatus } from "./hooks/use-conversation-status"
+import { orderedForwardMessageIds, useMessageSelection } from "./hooks/use-message-selection"
 import { SendFileMessageDialog } from "./send-file-message-dialog"
 import { getDesktopMessageEditableBody, getDesktopMessageReplyAuthor } from "./message-actions"
 import { SendChoiceMessageDialog } from "./send-choice-message-dialog"
@@ -63,6 +66,13 @@ type ConversationDraft = {
   mentions: DraftMention[]
   replyTarget: DesktopMessageReplyTarget | null
   markdownMode: boolean
+}
+
+type ForwardOperation = {
+  sourceConversationId: string
+  clientForwardId: string
+  messageIds: string[]
+  mode: "separate" | "merged"
 }
 
 export function ChatPage({
@@ -121,6 +131,7 @@ export function ChatPage({
   const [draftRevision, setDraftRevision] = useState(0)
   const [richDialog, setRichDialog] = useState<"choice" | "chart" | null>(null)
   const [createTopicMessage, setCreateTopicMessage] = useState<DesktopMessage | null>(null)
+  const [forwardOperation, setForwardOperation] = useState<ForwardOperation | null>(null)
   const [creatingTopic, setCreatingTopic] = useState(false)
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const pendingComposerCursorRef = useRef<number | null>(null)
@@ -163,9 +174,19 @@ export function ChatPage({
     retryMessage,
     loadBeforeMessages,
   } = useChatData({ targetId, userId, userName, activeSection })
+  const selection = useMessageSelection(`${targetId}:${selectedId ?? ""}`)
+  useEffect(() => {
+    setForwardOperation(null)
+  }, [targetId, selectedId])
+  useEffect(() => {
+    if (activeSection !== "chat") {
+      selection.cancel()
+      setForwardOperation(null)
+    }
+  }, [activeSection, selection.cancel])
   const mentionCandidates = useMemo(
-    () => createMentionCandidates(selected, conversations),
-    [selected, conversations],
+    () => createMentionCandidates(selected, conversations, resolveMentionLabel),
+    [selected, conversations, resolveMentionLabel],
   )
   useEffect(() => {
     if (!window.desktop) return
@@ -586,6 +607,41 @@ export function ChatPage({
     setActionDirectory(null)
   }, [])
 
+  function openForwardOperation(messageIds: string[], mode: "separate" | "merged") {
+    if (!selectedId || !messageIds.length || (mode === "merged" && messageIds.length < 2)) return
+    setForwardOperation({
+      sourceConversationId: selectedId,
+      clientForwardId: crypto.randomUUID(),
+      messageIds,
+      mode,
+    })
+  }
+
+  function toggleForwardSelection(message: DesktopMessage) {
+    if (
+      !selection.selected.has(message.id) &&
+      selection.selected.size >= selection.maxSelectedMessages
+    ) {
+      showToast({ status: "warning", title: "一次最多选择 50 条消息" })
+      return
+    }
+    selection.toggle(message)
+  }
+
+  async function submitForward(targetConversationIds: string[]) {
+    if (!forwardOperation || !window.desktop) throw new Error("转发操作不可用")
+    const result = await window.desktop.accountData.forwardMessages({
+      targetId,
+      sourceConversationId: forwardOperation.sourceConversationId,
+      clientForwardId: forwardOperation.clientForwardId,
+      messageIds: forwardOperation.messageIds,
+      mode: forwardOperation.mode,
+      targetConversationIds,
+    })
+    if (!result.ok) throw new Error(result.error.message)
+    return result.data
+  }
+
   return (
     <main className="flex h-full min-h-0 overflow-hidden bg-background text-foreground">
       <AppRail
@@ -711,55 +767,70 @@ export function ChatPage({
                     onCreateTopic={setCreateTopicMessage}
                     onReeditRevokedMessage={reeditRevokedMessage}
                     onReplyMessage={replyToMessage}
+                    selectionActive={selection.active}
+                    selectedMessageIds={selection.selected}
+                    onForwardMessage={(message) => openForwardOperation([message.id], "separate")}
+                    onStartMessageSelection={selection.start}
+                    onToggleMessageSelection={toggleForwardSelection}
                     onRevokeMessage={revokeMessage}
                     onRetryMessage={retryMessage}
                   />
 
-                  <MessageComposer
-                    key={draftKey}
-                    composerRef={composerRef}
-                    draft={draft}
-                    mentionCandidates={mentionCandidates}
-                    targetId={targetId}
-                    resolvedTheme={resolvedTheme}
-                    replyTarget={replyTarget}
-                    mentionLabelResolver={resolveMentionLabel}
-                    markdownMode={markdownMode}
-                    takingScreenshot={takingScreenshot}
-                    selectingFile={selectingFile}
-                    sendingFile={sendingFile}
-                    selectingMedia={selectingMedia}
-                    sendingMedia={sendingMedia}
-                    importingFile={importingFile}
-                    onCancelReply={() => {
-                      clearReplyTarget()
-                      focusComposer()
-                    }}
-                    onFiles={(files) => {
-                      if (files.length !== 1) {
-                        showToast({ status: "error", title: "请每次发送一个文件" })
-                        return
+                  {selection.active ? (
+                    <MessageSelectionToolbar
+                      count={selection.selected.size}
+                      onCancel={selection.cancel}
+                      onForward={(mode) =>
+                        openForwardOperation(orderedForwardMessageIds(selection.selected), mode)
                       }
-                      void importFile(files[0])
-                    }}
-                    onDraftBlur={() => setComposerFocused(false)}
-                    onDraftChange={changeDraft}
-                    onInsertMention={insertMention}
-                    onDraftFocus={() => setComposerFocused(true)}
-                    onKeyDown={handleComposerKeyDown}
-                    onMarkdownChange={(pressed) => {
-                      setMarkdownMode(pressed)
-                      focusComposer()
-                    }}
-                    onRestoreFocus={focusComposer}
-                    onInsertExpression={insertExpression}
-                    onSelectFile={selectFile}
-                    onScreenshot={() => void captureScreenshot()}
-                    onSelectMedia={(category) => void selectMedia(category)}
-                    onSelectChoice={() => setRichDialog("choice")}
-                    onSelectChart={() => setRichDialog("chart")}
-                    onSend={sendDraft}
-                  />
+                    />
+                  ) : (
+                    <MessageComposer
+                      key={draftKey}
+                      composerRef={composerRef}
+                      draft={draft}
+                      mentionCandidates={mentionCandidates}
+                      targetId={targetId}
+                      resolvedTheme={resolvedTheme}
+                      replyTarget={replyTarget}
+                      mentionLabelResolver={resolveMentionLabel}
+                      markdownMode={markdownMode}
+                      takingScreenshot={takingScreenshot}
+                      selectingFile={selectingFile}
+                      sendingFile={sendingFile}
+                      selectingMedia={selectingMedia}
+                      sendingMedia={sendingMedia}
+                      importingFile={importingFile}
+                      onCancelReply={() => {
+                        clearReplyTarget()
+                        focusComposer()
+                      }}
+                      onFiles={(files) => {
+                        if (files.length !== 1) {
+                          showToast({ status: "error", title: "请每次发送一个文件" })
+                          return
+                        }
+                        void importFile(files[0])
+                      }}
+                      onDraftBlur={() => setComposerFocused(false)}
+                      onDraftChange={changeDraft}
+                      onInsertMention={insertMention}
+                      onDraftFocus={() => setComposerFocused(true)}
+                      onKeyDown={handleComposerKeyDown}
+                      onMarkdownChange={(pressed) => {
+                        setMarkdownMode(pressed)
+                        focusComposer()
+                      }}
+                      onRestoreFocus={focusComposer}
+                      onInsertExpression={insertExpression}
+                      onSelectFile={selectFile}
+                      onScreenshot={() => void captureScreenshot()}
+                      onSelectMedia={(category) => void selectMedia(category)}
+                      onSelectChoice={() => setRichDialog("choice")}
+                      onSelectChart={() => setRichDialog("chart")}
+                      onSend={sendDraft}
+                    />
+                  )}
                 </>
               ) : (
                 <div className="flex flex-1 items-center justify-center text-xgui-background-2">
@@ -821,6 +892,17 @@ export function ChatPage({
           onClose={closeActionDialog}
           onChanged={() => undefined}
           onAvatarChanged={() => undefined}
+        />
+      )}
+      {forwardOperation && (
+        <ForwardMessageDialog
+          conversations={conversations}
+          targetId={targetId}
+          theme={resolvedTheme}
+          messageCount={forwardOperation.messageIds.length}
+          onForward={submitForward}
+          onComplete={selection.cancel}
+          onClose={() => setForwardOperation(null)}
         />
       )}
       <AlertDialog

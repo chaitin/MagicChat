@@ -269,6 +269,25 @@ export function useChatData({
         ids.add(sender.id.toLowerCase())
       }
     }
+    const parent = conversations.find((item) => item.id === selected?.topic?.parentConversationId)
+    if (
+      selected?.type === "group" ||
+      (selected?.type === "topic" &&
+        (selected.topic?.parentConversationType === "group" || parent?.type === "group"))
+    ) {
+      const members = selected.members?.length ? selected.members : (parent?.members ?? [])
+      for (const member of members) {
+        const id = member.id.toLowerCase()
+        if (
+          member.type === "user" &&
+          !member.nickname.trim() &&
+          !member.name.trim() &&
+          !mentionLabels.has(`user:${id}`) &&
+          !requestedUserNameIds.current.ids.has(id)
+        )
+          ids.add(id)
+      }
+    }
     const pending = [...ids]
     for (let index = 0; index < pending.length; index += 100) {
       const batch = pending.slice(index, index + 100)
@@ -292,7 +311,7 @@ export function useChatData({
           }
         })
     }
-  }, [conversations, messages, targetId])
+  }, [conversations, mentionLabels, messages, selected, targetId])
 
   const resolveMentionLabel = useCallback(
     (target: MentionTarget) => {

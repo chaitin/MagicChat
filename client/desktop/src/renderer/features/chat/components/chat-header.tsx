@@ -5,7 +5,7 @@ import {
   Settings02Icon,
   UserAdd01Icon,
 } from "@hugeicons/core-free-icons"
-import { useEffect, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 import type { DesktopConversation } from "../../../../shared/account-data"
 import { ConversationHeaderPanel, type HeaderPanel } from "./conversation-header-panel"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
@@ -100,7 +100,14 @@ export function ChatHeader({
             <h2 className="min-w-0 truncate text-sm">{conversation.name}</h2>
           </div>
           <p className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
-            <span className="truncate">{conversationDescription(conversation)}</span>
+            {conversationDescription(conversation).map((segment, index) => (
+              <Fragment key={segment}>
+                {index > 0 && (
+                  <HugeiconsIcon icon={DotIcon} className="size-3 shrink-0" aria-hidden />
+                )}
+                <span className={index === 0 ? "truncate" : "shrink-0"}>{segment}</span>
+              </Fragment>
+            ))}
             {status && (
               <>
                 <HugeiconsIcon icon={DotIcon} className="size-3 shrink-0" aria-hidden />
@@ -188,9 +195,10 @@ function HeaderActionButton({
   )
 }
 
-function conversationDescription(conversation: DesktopConversation): string {
-  if (conversation.type === "group") return `群聊 - ${conversation.memberCount} 人`
-  if (conversation.type === "app") return "应用会话"
-  if (conversation.type === "topic") return "话题"
-  return "单聊"
+// 分段返回，段之间统一用圆点图标分隔，避免使用减号等字符。
+function conversationDescription(conversation: DesktopConversation): string[] {
+  if (conversation.type === "group") return ["群聊", `${conversation.memberCount} 人`]
+  if (conversation.type === "app") return ["应用会话"]
+  if (conversation.type === "topic") return ["话题"]
+  return ["单聊"]
 }

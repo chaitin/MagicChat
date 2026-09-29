@@ -17,6 +17,18 @@ export function getDesktopMessageEditableBody(message: DesktopMessage) {
   return message.isMine && message.body.type === "revoked" ? message.body.editableBody : undefined
 }
 
+export function canForwardDesktopMessage(message: DesktopMessage): boolean {
+  return (
+    !message.deliveryStatus &&
+    !message.virtualType &&
+    message.seq > 0 &&
+    message.body.type !== "revoked" &&
+    message.body.type !== "unsupported" &&
+    message.body.type !== "system_event" &&
+    message.body.type !== "choice"
+  )
+}
+
 export function canCreateDesktopMessageTopic(
   message: DesktopMessage,
   topicCreationEnabled: boolean,

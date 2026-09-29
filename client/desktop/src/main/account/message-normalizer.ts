@@ -289,7 +289,7 @@ function normalizeBody(value: unknown, depth: number): DesktopMessageBody {
       }
     }
   }
-  if (type === "forward_bundle" && depth < 3 && Array.isArray(body?.items)) {
+  if (type === "forward_bundle" && depth < 5 && Array.isArray(body?.items)) {
     const items = body.items.flatMap((value) => {
       const item = asRecord(value)
       if (!item) return []

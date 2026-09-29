@@ -40,6 +40,7 @@ export const ACCOUNT_DATA_CHANNELS = {
   sendImageMessage: "desktop-next:v1:conversation-message-image-send",
   sendVideoMessage: "desktop-next:v1:conversation-message-video-send",
   retryMessage: "desktop-next:v1:conversation-message-retry",
+  forwardMessages: "desktop-next:v1:conversation-messages-forward",
   createMessageTopic: "desktop-next:v1:conversation-message-topic-create",
   revokeMessage: "desktop-next:v1:conversation-message-revoke",
   sendConversationStatus: "desktop-next:v1:conversation-status-send",
@@ -608,6 +609,26 @@ export type RevokeMessageInput = {
   messageId: string
 }
 
+export type ForwardMessagesInput = {
+  targetId: string
+  sourceConversationId: string
+  clientForwardId: string
+  messageIds: string[]
+  mode: "separate" | "merged"
+  targetConversationIds: string[]
+}
+
+export type ForwardMessagesResult = {
+  sentCount: number
+  failedCount: number
+  results: Array<{
+    conversationId: string
+    status: "sent" | "failed"
+    messages: DesktopMessage[]
+    error?: { code: string; message: string }
+  }>
+}
+
 export type SendConversationStatusInput = {
   targetId: string
   conversationId: string
@@ -700,6 +721,7 @@ export interface AccountDataBridge {
   sendImageMessage(input: SendImageMessageInput): Promise<AuthResult<DesktopMessage[]>>
   sendVideoMessage(input: SendVideoMessageInput): Promise<AuthResult<DesktopMessage[]>>
   retryMessage(input: RetryMessageInput): Promise<AuthResult<DesktopMessage[]>>
+  forwardMessages(input: ForwardMessagesInput): Promise<AuthResult<ForwardMessagesResult>>
   createMessageTopic(input: CreateMessageTopicInput): Promise<AuthResult<CreateMessageTopicResult>>
   revokeMessage(input: RevokeMessageInput): Promise<AuthResult<DesktopMessage[]>>
   sendConversationStatus(input: SendConversationStatusInput): Promise<AuthResult<void>>

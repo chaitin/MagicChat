@@ -8,6 +8,7 @@ import type {
   CreateMessageTopicInput,
   DismissConversationInput,
   FriendRequestListInput,
+  ForwardMessagesInput,
   ListConversationsInput,
   LocalAttachmentPageInput,
   LocalMessageContextInput,
@@ -261,6 +262,11 @@ export class AccountDataFacade {
   async retryMessage(input: RetryMessageInput) {
     await this.ready(input?.targetId)
     return this.requireRuntime().retryMessage(input.conversationId, input.clientMessageId)
+  }
+
+  async forwardMessages(input: ForwardMessagesInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().forwardMessages(input)
   }
 
   async createMessageTopic(input: CreateMessageTopicInput) {

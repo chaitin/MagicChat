@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react"
 import { UserGroupIcon } from "@hugeicons/core-free-icons"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import type { MentionCandidate } from "../conversation-mentions"
 
@@ -21,8 +22,16 @@ export function MentionCandidateMenu({
   onSelect: (candidate: MentionCandidate) => void
 }) {
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([])
+  const viewportRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    optionRefs.current[selectedIndex]?.scrollIntoView({ block: "nearest" })
+    const viewport = viewportRef.current
+    const option = optionRefs.current[selectedIndex]
+    if (!viewport || !option) return
+    const visible = viewport.getBoundingClientRect()
+    const selected = option.getBoundingClientRect()
+    if (selected.top < visible.top) viewport.scrollTop -= visible.top - selected.top
+    else if (selected.bottom > visible.bottom)
+      viewport.scrollTop += selected.bottom - visible.bottom
   }, [selectedIndex, candidates])
 
   return (
@@ -30,48 +39,56 @@ export function MentionCandidateMenu({
       id={id}
       role="listbox"
       aria-label="选择要提及的成员"
-      className="absolute bottom-full left-4 z-20 mb-2 max-h-72 w-72 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+      className="absolute bottom-full left-4 z-20 mb-2 w-72 rounded-md border bg-popover text-popover-foreground shadow-md"
     >
-      {candidates.map((candidate, index) => (
-        <button
-          key={`${candidate.targetType}-${candidate.id}`}
-          ref={(node) => {
-            optionRefs.current[index] = node
-          }}
-          type="button"
-          role="option"
-          aria-selected={index === selectedIndex}
-          className={cn(
-            "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-accent",
-            index === selectedIndex && "bg-accent",
-          )}
-          onMouseDown={(event) => {
-            event.preventDefault()
-            onSelect(candidate)
-          }}
-        >
-          {candidate.targetType === "all" ? (
-            <span className="flex size-6 shrink-0 items-center justify-center rounded-sm bg-teal-500 text-white">
-              <HugeiconsIcon icon={UserGroupIcon} className="size-4" aria-hidden />
-            </span>
-          ) : (
-            <EntityAvatar
-              targetId={targetId}
-              type={candidate.targetType}
-              id={candidate.id}
-              theme={theme}
-              label={candidate.label}
-              size={24}
-            />
-          )}
-          <span className="min-w-0">
-            <span className="block truncate text-sm">{candidate.label}</span>
-            <span className="block truncate text-xs text-muted-foreground">
-              {candidate.description}
-            </span>
-          </span>
-        </button>
-      ))}
+      <ScrollArea
+        type="hover"
+        viewportRef={viewportRef}
+        viewportClassName="h-auto! max-h-72 overflow-x-hidden [&>div]:block! [&>div]:w-full!"
+      >
+        <div className="p-1">
+          {candidates.map((candidate, index) => (
+            <button
+              key={`${candidate.targetType}-${candidate.id}`}
+              ref={(node) => {
+                optionRefs.current[index] = node
+              }}
+              type="button"
+              role="option"
+              aria-selected={index === selectedIndex}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-accent",
+                index === selectedIndex && "bg-accent",
+              )}
+              onMouseDown={(event) => {
+                event.preventDefault()
+                onSelect(candidate)
+              }}
+            >
+              {candidate.targetType === "all" ? (
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-sm bg-teal-500 text-white">
+                  <HugeiconsIcon icon={UserGroupIcon} className="size-4" aria-hidden />
+                </span>
+              ) : (
+                <EntityAvatar
+                  targetId={targetId}
+                  type={candidate.targetType}
+                  id={candidate.id}
+                  theme={theme}
+                  label={candidate.label}
+                  size={24}
+                />
+              )}
+              <span className="min-w-0">
+                <span className="block truncate text-sm">{candidate.label}</span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {candidate.description}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </ScrollArea>
     </div>
   )
 }

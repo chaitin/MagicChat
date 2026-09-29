@@ -15,6 +15,7 @@ import type {
   DesktopMessage,
   DesktopMessagePage,
   FriendRequestListInput,
+  ForwardMessagesInput,
   LocalSearchInput,
   ManageGroupInput,
   MessageReactionUsersInput,
@@ -372,6 +373,16 @@ export class AccountRuntime {
   retryMessage(conversationId: string, clientMessageId: string) {
     this.assertInitialized()
     return this.conversationManager!.retryMessage(conversationId, clientMessageId)
+  }
+
+  async forwardMessages(input: ForwardMessagesInput) {
+    this.assertInitialized()
+    const result = await this.conversationManager!.forwardMessages(input)
+    const changed = result.results
+      .filter((target) => target.status === "sent")
+      .map((target) => target.conversationId)
+    if (changed.length > 0) this.notifyChanged(["messages", "conversations"], changed)
+    return result
   }
 
   async createMessageTopic(conversationId: string, messageId: string) {

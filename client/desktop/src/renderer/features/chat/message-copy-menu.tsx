@@ -1,7 +1,9 @@
 import { useRef, useState, type ReactNode, type RefObject } from "react"
 import {
+  ArrowTurnForwardIcon,
   Copy01Icon,
   Edit02Icon,
+  ListIcon,
   MessageMultiple02Icon,
   ReplyIcon,
   Undo02Icon,
@@ -31,6 +33,8 @@ type MessageActionMenuProps = {
   summary: string
   targetId: string
   onReply?: () => void
+  onForward?: () => void
+  onMultiSelect?: () => void
   onCreateTopic?: () => void
   onRevoke?: () => void | Promise<void>
   showEdit?: boolean
@@ -44,6 +48,8 @@ export function MessageCopyMenu({
   menuTriggerRef,
   children,
   onReply,
+  onForward,
+  onMultiSelect,
   onCreateTopic,
   onRevoke,
   showEdit = false,
@@ -95,6 +101,8 @@ export function MessageCopyMenu({
             showEdit ? () => showToast({ status: "warning", title: "暂时没有后悔药" }) : undefined
           }
           onReply={onReply}
+          onForward={onForward}
+          onMultiSelect={onMultiSelect}
           onRevoke={onRevoke}
         />
       </ContextMenuContent>
@@ -109,6 +117,8 @@ export function MessageActionsDropdown({
   selectionContainerRef,
   children,
   onReply,
+  onForward,
+  onMultiSelect,
   onCreateTopic,
   onRevoke,
   showEdit = false,
@@ -142,6 +152,8 @@ export function MessageActionsDropdown({
             showEdit ? () => showToast({ status: "warning", title: "暂时没有后悔药" }) : undefined
           }
           onReply={onReply}
+          onForward={onForward}
+          onMultiSelect={onMultiSelect}
           onRevoke={onRevoke}
         />
       </DropdownMenuContent>
@@ -155,6 +167,8 @@ function MessageActionMenuItems({
   onCreateTopic,
   onEdit,
   onReply,
+  onForward,
+  onMultiSelect,
   onRevoke,
 }: {
   kind: "context" | "dropdown"
@@ -162,6 +176,8 @@ function MessageActionMenuItems({
   onCreateTopic?: () => void
   onEdit?: () => void
   onReply?: () => void
+  onForward?: () => void
+  onMultiSelect?: () => void
   onRevoke?: () => void | Promise<void>
 }) {
   const Item = kind === "context" ? ContextMenuItem : DropdownMenuItem
@@ -172,6 +188,18 @@ function MessageActionMenuItems({
         <Item onSelect={onReply}>
           <HugeiconsIcon icon={ReplyIcon} className="size-4" aria-hidden />
           回复
+        </Item>
+      )}
+      {onForward && (
+        <Item onSelect={onForward}>
+          <HugeiconsIcon icon={ArrowTurnForwardIcon} className="size-4" aria-hidden />
+          转发
+        </Item>
+      )}
+      {onMultiSelect && (
+        <Item onSelect={onMultiSelect}>
+          <HugeiconsIcon icon={ListIcon} className="size-4" aria-hidden />
+          多选
         </Item>
       )}
       <Item onSelect={onCopy}>

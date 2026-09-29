@@ -21,6 +21,7 @@ export type MentionCandidate = {
 export function createMentionCandidates(
   conversation: DesktopConversation | null,
   conversations: DesktopConversation[],
+  resolveLabel?: MentionLabelResolver,
 ): MentionCandidate[] {
   const parent = conversations.find((item) => item.id === conversation?.topic?.parentConversationId)
   if (
@@ -48,7 +49,12 @@ export function createMentionCandidates(
       if (seen.has(key)) return []
       seen.add(key)
       const label = (
-        member.type === "app" ? member.name : member.nickname.trim() || member.name
+        member.type === "app"
+          ? member.name
+          : member.nickname.trim() ||
+            member.name.trim() ||
+            resolveLabel?.({ id: member.id, type: "user" }) ||
+            ""
       ).trim()
       if (!label) return []
       return [

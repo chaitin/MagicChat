@@ -20,11 +20,13 @@ import { ContactProfilePopover } from "@/components/avatar/contact-profile-popov
 import { HugeiconsIcon, type HugeiconsIconProps } from "@/components/icons/hugeicons-icon"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { formatMentionText, type MentionLabelResolver } from "@/lib/message-mentions"
 import { cn } from "@/lib/utils"
 import {
   canCreateDesktopMessageTopic,
+  canForwardDesktopMessage,
   canRevokeDesktopMessage,
   getDesktopMessageEditableBody,
   getDesktopMessageReplyAuthor,
@@ -68,6 +70,11 @@ export function MessageList({
   onCreateTopic,
   onReeditRevokedMessage,
   onReplyMessage,
+  onForwardMessage,
+  onStartMessageSelection,
+  onToggleMessageSelection,
+  selectionActive,
+  selectedMessageIds,
   onRevokeMessage,
   onRetryMessage,
 }: {
@@ -103,6 +110,11 @@ export function MessageList({
   onCreateTopic: (message: DesktopMessage) => void
   onReeditRevokedMessage: (message: DesktopMessage) => void
   onReplyMessage: (message: DesktopMessage) => void
+  onForwardMessage: (message: DesktopMessage) => void
+  onStartMessageSelection: (message: DesktopMessage) => void
+  onToggleMessageSelection: (message: DesktopMessage) => void
+  selectionActive: boolean
+  selectedMessageIds: ReadonlyMap<string, number>
   onRevokeMessage: (message: DesktopMessage) => Promise<void>
   onRetryMessage: (message: DesktopMessage) => void
 }) {
@@ -223,6 +235,11 @@ export function MessageList({
                       onCreateTopic={onCreateTopic}
                       onReeditRevokedMessage={onReeditRevokedMessage}
                       onReplyMessage={onReplyMessage}
+                      onForwardMessage={onForwardMessage}
+                      onStartMessageSelection={onStartMessageSelection}
+                      onToggleMessageSelection={onToggleMessageSelection}
+                      selectionActive={selectionActive}
+                      selectedMessageIds={selectedMessageIds}
                       onRevokeMessage={onRevokeMessage}
                       onRetryMessage={onRetryMessage}
                     />
@@ -270,6 +287,11 @@ function MessageRow({
   onCreateTopic,
   onReeditRevokedMessage,
   onReplyMessage,
+  onForwardMessage,
+  onStartMessageSelection,
+  onToggleMessageSelection,
+  selectionActive,
+  selectedMessageIds,
   onRevokeMessage,
   onRetryMessage,
 }: {
@@ -293,6 +315,11 @@ function MessageRow({
   onCreateTopic: (message: DesktopMessage) => void
   onReeditRevokedMessage: (message: DesktopMessage) => void
   onReplyMessage: (message: DesktopMessage) => void
+  onForwardMessage: (message: DesktopMessage) => void
+  onStartMessageSelection: (message: DesktopMessage) => void
+  onToggleMessageSelection: (message: DesktopMessage) => void
+  selectionActive: boolean
+  selectedMessageIds: ReadonlyMap<string, number>
   onRevokeMessage: (message: DesktopMessage) => Promise<void>
   onRetryMessage: (message: DesktopMessage) => void
 }) {
@@ -333,6 +360,10 @@ function MessageRow({
     message.body.type !== "unsupported"
       ? () => onReplyMessage(message)
       : undefined
+  const forwardable = canForwardDesktopMessage(message)
+  const forwardAction = forwardable ? () => onForwardMessage(message) : undefined
+  const selectAction =
+    forwardable && !selectionActive ? () => onStartMessageSelection(message) : undefined
   const createTopicAction = canCreateDesktopMessageTopic(message, topicCreationEnabled, false)
     ? () => onCreateTopic(message)
     : undefined
@@ -348,10 +379,31 @@ function MessageRow({
     <article
       data-message-id={message.id}
       className={cn(
-        "group/message-row flex items-start gap-2",
+        "group/message-row relative flex items-start gap-2",
+        selectionActive && "py-2 pr-3 pl-10",
+        selectionActive && selectedMessageIds.has(message.id) && "rounded-md bg-xgui-background-1",
         message.isMine ? "justify-end" : "justify-start",
       )}
     >
+      {selectionActive && (
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-hidden="true"
+          disabled={!forwardable}
+          className="absolute inset-0 z-10 cursor-pointer disabled:cursor-not-allowed"
+          onClick={() => onToggleMessageSelection(message)}
+        />
+      )}
+      {selectionActive && (
+        <Checkbox
+          className="absolute top-9 left-3 z-20"
+          checked={selectedMessageIds.has(message.id)}
+          disabled={!forwardable}
+          onCheckedChange={forwardable ? () => onToggleMessageSelection(message) : undefined}
+          aria-label={`选择${senderDisplayName}的消息`}
+        />
+      )}
       {!message.isMine &&
         message.senderId &&
         (message.senderType === "user" || message.senderType === "app") && (
@@ -390,6 +442,8 @@ function MessageRow({
             menuTriggerRef={menuTriggerRef}
             showEdit={message.isMine}
             onReply={replyAction}
+            onForward={forwardAction}
+            onMultiSelect={selectAction}
             onCreateTopic={createTopicAction}
             onRevoke={revokeAction}
             className={cn(
@@ -471,6 +525,8 @@ function MessageRow({
                 selectionContainerRef={menuTriggerRef}
                 showEdit={message.isMine}
                 onReply={replyAction}
+                onForward={forwardAction}
+                onMultiSelect={selectAction}
                 onCreateTopic={createTopicAction}
                 onRevoke={revokeAction}
               >

@@ -4,6 +4,8 @@ import type {
   DesktopMessage,
   DesktopMessagePage,
   DesktopMessageReactionUser,
+  ForwardMessagesInput,
+  ForwardMessagesResult,
   ManageGroupInput,
   MessageReactionUsersInput,
   SendRichMessageInput,
@@ -32,6 +34,7 @@ import {
 } from "../../shared/message-window"
 import { normalizeOutgoingRichMessageBody } from "./rich-message-input"
 import { OutgoingMessageService } from "./outgoing-message-service"
+import { normalizeForwardResponse, validateForwardRequest } from "./forward-request"
 export class ConversationManager {
   private readonly outgoingMessages: OutgoingMessageService
   private readonly virtualMessages = new Map<string, DesktopMessage[]>()
@@ -815,6 +818,36 @@ export class ConversationManager {
       messages: this.listMessages(conversationId),
       created: data.created === true,
     }
+  }
+
+  async forwardMessages(
+    input: Omit<ForwardMessagesInput, "targetId">,
+  ): Promise<ForwardMessagesResult> {
+    const request = validateForwardRequest(input)
+    if (!this.database.hasCurrentConversation(request.sourceConversationId)) {
+      throw new AuthFailure("conversation_not_found", "来源对话不存在")
+    }
+    const data = await this.client.post(
+      `/api/client/conversations/${encodeURIComponent(request.sourceConversationId)}/messages/forward`,
+      {
+        client_forward_id: request.clientForwardId,
+        message_ids: request.messageIds,
+        mode: request.mode,
+        target_conversation_ids: request.targetConversationIds,
+      },
+    )
+    const response = normalizeForwardResponse(data, request.targetConversationIds, parseMessage)
+    for (const result of response.results) {
+      if (result.status !== "sent") continue
+      this.database.upsertMessages(result.messages)
+      for (const message of result.messages) {
+        this.database.applyConversationMessageSeq(result.conversationId, message.seq, true)
+      }
+      const latest = result.messages.at(-1)!
+      this.database.touchConversationActivity(result.conversationId, latest.createdAt)
+      this.updateTopicParentPreview(result.conversationId)
+    }
+    return response
   }
 
   async revokeMessage(conversationId: string, messageId: string) {

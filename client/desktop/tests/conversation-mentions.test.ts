@@ -48,6 +48,29 @@ test("群聊及群话题显示所有人与成员候选，私聊不弹候选", ()
   assert.deepEqual(createMentionCandidates({ type: "direct" } as DesktopConversation, []), [])
 })
 
+test("服务端隐藏用户姓名时从联系人或用户名解析补全群聊 @ 候选", () => {
+  const hiddenMembers = parseConversationMembers({
+    members: [
+      { id: aliceId, type: "user" },
+      { id: appId, type: "app", name: "助手" },
+    ],
+  })
+  const conversation = { ...group(), members: hiddenMembers }
+  assert.deepEqual(
+    createMentionCandidates(conversation, [conversation]).map(({ label }) => label),
+    ["所有人", "助手"],
+  )
+  const candidates = createMentionCandidates(conversation, [conversation], ({ type, id }) =>
+    type === "user" && id === aliceId ? "阿丽" : undefined,
+  )
+  assert.deepEqual(
+    candidates.map(({ label }) => label),
+    ["所有人", "阿丽", "助手"],
+  )
+  assert.equal(candidates[1].targetType, "user")
+  assert.equal(filterMentionCandidates(candidates, "ali")[0]?.id, aliceId)
+})
+
 test("光标附近 @ 触发搜索，空格和二次 @ 结束当前搜索", () => {
   assert.deepEqual(getMentionTrigger("早上 @阿", 5), { start: 3, query: "阿" })
   assert.equal(getMentionTrigger("@张 三", 4), null)

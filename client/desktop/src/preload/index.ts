@@ -159,6 +159,7 @@ const bridge: DesktopBridge = {
     sendImageMessage: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.sendImageMessage, input),
     sendVideoMessage: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.sendVideoMessage, input),
     retryMessage: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.retryMessage, input),
+    forwardMessages: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.forwardMessages, input),
     createMessageTopic: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.createMessageTopic, input),
     revokeMessage: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.revokeMessage, input),

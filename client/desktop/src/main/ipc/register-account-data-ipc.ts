@@ -19,6 +19,7 @@ import {
   type MessageReactionUsersInput,
   type ResolveUserNamesInput,
   type RetryMessageInput,
+  type ForwardMessagesInput,
   type RevokeMessageInput,
   type SendConversationStatusInput,
   type SendFileMessageInput,
@@ -214,6 +215,9 @@ export function registerAccountDataIpc({
   )
   handle(ACCOUNT_DATA_CHANNELS.retryMessage, (input) =>
     auth.retryMessage(input as RetryMessageInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.forwardMessages, (input) =>
+    auth.forwardMessages(input as ForwardMessagesInput),
   )
   handle(ACCOUNT_DATA_CHANNELS.createMessageTopic, (input) =>
     auth.createMessageTopic(input as CreateMessageTopicInput),

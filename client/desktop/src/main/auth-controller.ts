@@ -349,6 +349,10 @@ export class AuthController {
     return this.accountData.retryMessage(...args)
   }
 
+  forwardMessages(...args: Parameters<AccountDataFacade["forwardMessages"]>) {
+    return this.accountData.forwardMessages(...args)
+  }
+
   createMessageTopic(...args: Parameters<AccountDataFacade["createMessageTopic"]>) {
     return this.accountData.createMessageTopic(...args)
   }
