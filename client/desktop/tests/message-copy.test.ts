@@ -44,7 +44,52 @@ test("图片、链接和普通消息使用对应复制内容", () => {
   })
 })
 
-function message(body: DesktopMessage["body"]): DesktopMessage {
+test("带类型前缀的摘要复制时取原文", () => {
+  assert.deepEqual(
+    resolveMessageCopyPayload(
+      message(
+        { type: "file", fileId: "file-1", name: "报告.pdf", sizeBytes: 2048 },
+        "[文件] 报告.pdf",
+      ),
+      "",
+    ),
+    { type: "text", text: "报告.pdf" },
+  )
+  assert.deepEqual(
+    resolveMessageCopyPayload(
+      message(
+        {
+          type: "voice",
+          fileId: "file-2",
+          sizeBytes: 512,
+          durationMS: 3000,
+          contentType: "audio/ogg",
+          transcript: "你好",
+        },
+        "[语音] 你好",
+      ),
+      "",
+    ),
+    { type: "text", text: "你好" },
+  )
+  assert.deepEqual(
+    resolveMessageCopyPayload(
+      message(
+        {
+          type: "card",
+          title: "周报",
+          description: "本周进展",
+          url: "https://example.com/report",
+        },
+        "[卡片] 周报",
+      ),
+      "",
+    ),
+    { type: "text", text: "周报" },
+  )
+})
+
+function message(body: DesktopMessage["body"], content = "消息摘要"): DesktopMessage {
   return {
     id: "message-1",
     conversationId: "conversation-1",
@@ -55,7 +100,7 @@ function message(body: DesktopMessage["body"]): DesktopMessage {
     senderName: "Alice",
     isMine: false,
     bodyType: body.type,
-    content: "消息摘要",
+    content,
     clientMessageId: "",
     body,
     reactions: [],

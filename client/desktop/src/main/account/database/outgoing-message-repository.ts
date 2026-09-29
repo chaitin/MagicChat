@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite"
 import type { DesktopMessageBody, DesktopMessageReplyTarget } from "../../../shared/account-data"
+import { summarizeDesktopMessageBody } from "../message-normalizer.ts"
 import type { StoredMessage } from "./message-repository"
 
 export class OutgoingMessageRepository {
@@ -38,16 +39,7 @@ export class OutgoingMessageRepository {
       sender: { id: input.senderId, type: "user", name: input.senderName },
       seq,
       body,
-      ...(input.replyTo
-        ? {
-            reply_to_message_id: input.replyTo.id,
-            reply_to: {
-              id: input.replyTo.id,
-              summary: input.replyTo.summary,
-              sender: { name: input.replyTo.author },
-            },
-          }
-        : {}),
+      ...replyPayload(input.replyTo),
       reactions: [],
     }
     this.upsertMessages([
@@ -102,6 +94,7 @@ export class OutgoingMessageRepository {
       name: input.name,
       sizeBytes: input.sizeBytes,
     }
+    const summary = summarizeDesktopMessageBody(body)
     const payload = {
       id,
       client_message_id: input.clientMessageId,
@@ -131,7 +124,7 @@ export class OutgoingMessageRepository {
         senderName: input.senderName,
         isMine: true,
         bodyType: "file",
-        content: input.name,
+        content: summary,
         clientMessageId: input.clientMessageId,
         deliveryStatus: "sending",
         body,
@@ -146,7 +139,7 @@ export class OutgoingMessageRepository {
          SET last_message_at = ?, last_message_summary = ?
          WHERE id = ?`,
       )
-      .run(createdAt, `[文件] ${input.name}`, input.conversationId)
+      .run(createdAt, summary, input.conversationId)
   }
 
   createOptimisticImageMessage(input: {
@@ -170,12 +163,13 @@ export class OutgoingMessageRepository {
       width: input.width,
       height: input.height,
     }
+    const summary = summarizeDesktopMessageBody(body)
     this.createOptimisticMediaMessage({
       ...input,
       body,
       bodyType: "image",
-      content: input.caption || "[图片]",
-      summary: input.caption || "[图片]",
+      content: summary,
+      summary,
       temporary: true,
       payloadBody: {
         type: "image",
@@ -208,12 +202,13 @@ export class OutgoingMessageRepository {
       contentType: input.contentType,
       ...(input.caption ? { caption: input.caption, captionType: "text" as const } : {}),
     }
+    const summary = summarizeDesktopMessageBody(body)
     this.createOptimisticMediaMessage({
       ...input,
       body,
       bodyType: "video",
-      content: input.caption || input.name,
-      summary: input.caption || `[视频] ${input.name}`,
+      content: summary,
+      summary,
       payloadBody: {
         type: "video",
         file_id: `outgoing:${input.clientMessageId}`,
@@ -434,7 +429,12 @@ function replyPayload(replyTo?: DesktopMessageReplyTarget) {
         reply_to: {
           id: replyTo.id,
           summary: replyTo.summary,
-          sender: { name: replyTo.author },
+          sender: {
+            name: replyTo.author,
+            ...(replyTo.senderId && replyTo.senderType
+              ? { id: replyTo.senderId, type: replyTo.senderType }
+              : {}),
+          },
         },
       }
     : {}

@@ -2,6 +2,7 @@ import type {
   DesktopMessage,
   DesktopMessageBody,
   DesktopMessageChoiceState,
+  DesktopMessageReplyTarget,
 } from "../../shared/account-data"
 
 export type DesktopMessageDetails = Pick<
@@ -20,11 +21,24 @@ export function normalizeDesktopMessageDetails(payload: unknown): DesktopMessage
   const reply = asRecord(record?.reply_to)
   const replySender = asRecord(reply?.sender)
   const replyId = stringValue(reply?.id)
-  const replyTo = replyId
+  const replySenderId = stringValue(replySender?.id)
+  const rawReplySenderType = stringValue(replySender?.type)
+  const replySenderType =
+    rawReplySenderType === "user" || rawReplySenderType === "app" ? rawReplySenderType : undefined
+  const replyTo: DesktopMessageReplyTarget | undefined = replyId
     ? {
         id: replyId,
-        author: stringValue(replySender?.name) || stringValue(replySender?.id) || "未知用户",
+        author:
+          stringValue(replySender?.name) ||
+          (replySenderType === "app"
+            ? "未知应用"
+            : rawReplySenderType === "system"
+              ? "系统"
+              : "未知用户"),
         summary: stringValue(reply?.summary),
+        ...(replySenderId && replySenderType
+          ? { senderId: replySenderId, senderType: replySenderType }
+          : {}),
       }
     : undefined
   const reactions = Array.isArray(record?.reactions)
@@ -101,25 +115,33 @@ export function normalizeDesktopMessageChoiceState(
   }
 }
 
+// 摘要口径需要与 client/web 的 formatClientMessageBodySummary 保持一致。
 export function summarizeDesktopMessageBody(body: DesktopMessageBody): string {
   switch (body.type) {
     case "text":
-    case "markdown":
-    case "choice":
       return body.content
+    case "markdown":
+      return summarizeMarkdownMessageBody(body.content)
+    case "choice":
+      return `[选择] ${
+        body.contentType === "markdown" ? summarizeMarkdownMessageBody(body.content) : body.content
+      }`
     case "image":
-      return body.caption || "[图片]"
-    case "video":
-      return body.caption || "[视频]"
+    case "video": {
+      const label = body.type === "image" ? "图片" : "视频"
+      const caption = captionSummary(body.caption, body.captionType)
+      return caption ? `[${label}] ${caption}` : `[${label}]`
+    }
     case "file":
-      return body.name || "[文件]"
+      return `[文件] ${body.name}`
     case "voice":
-      return body.transcript || "[语音]"
+      return body.transcript ? `[语音] ${body.transcript}` : "[语音]"
     case "link":
-      return body.title || body.url
+      return `[链接] ${body.title}`
     case "card":
+      return `[卡片] ${body.title}`
     case "chart":
-      return body.title
+      return `[图表] ${body.title}`
     case "forward_bundle":
       return forwardBundleSummary(body)
     case "system_event":
@@ -129,6 +151,33 @@ export function summarizeDesktopMessageBody(body: DesktopMessageBody): string {
     case "unsupported":
       return "暂不支持查看该消息"
   }
+}
+
+function captionSummary(caption: string | undefined, captionType: "text" | "markdown" | undefined) {
+  if (!caption) return ""
+  return captionType === "markdown" ? summarizeMarkdownMessageBody(caption) : caption
+}
+
+function summarizeMarkdownMessageBody(content: string) {
+  return content
+    .replace(/```[\s\S]*?```/g, (block) =>
+      block
+        .replace(/^```[^\n]*\n?/, "")
+        .replace(/```$/, "")
+        .trim(),
+    )
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/!\[[^\]]*]\([^)]*\)/g, "")
+    .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^>\s?/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+[.)]\s+/gm, "")
+    .replace(/[*_~]+/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join("\n")
 }
 
 function forwardBundleSummary(body: Extract<DesktopMessageBody, { type: "forward_bundle" }>) {
@@ -283,24 +332,26 @@ function systemEventSummary(event: string, body: Record<string, unknown>) {
     }
     case "group_visibility_changed":
       return body.visibility === "public"
-        ? `${actor || "管理员"}将当前群设置为公开群`
-        : `${actor || "管理员"}将当前群设为私有群`
+        ? `${actor || "管理员"} 将当前群设置为公开群`
+        : `${actor || "管理员"} 将当前群设为私有群`
     case "group_member_joined":
-      return `${actor || "成员"}加入了群聊`
+      return `${actor || "成员"} 加入群聊`
     case "group_member_left":
-      return `${actor || "成员"}退出了群聊`
+      return `${actor || "成员"} 已退出群聊`
     case "group_member_removed":
-      return `${actor || "管理员"}移除了${displayName(body.target) || "成员"}`
+      return `${actor || "管理员"} 已将 ${displayName(body.target) || "成员"} 移出群聊`
     case "group_name_updated":
-      return `${actor || "管理员"}修改群名为“${stringValue(body.name)}”`
+      return `${actor || "管理员"} 修改群聊名称为 ${stringValue(body.name)}`
     case "group_announcement_updated":
-      return `${actor || "管理员"}更新了群公告`
+      return stringValue(body.announcement)
+        ? `${actor || "管理员"} 更新了群公告`
+        : `${actor || "管理员"} 清空了群公告`
     case "group_avatar_updated":
-      return `${actor || "管理员"}更新了群头像`
+      return `${actor || "管理员"} 修改了群头像`
     case "topic_closed":
-      return `${actor || "管理员"}关闭了话题`
+      return `${actor || "管理员"} 已将话题关闭`
     case "message_revoked":
-      return `${actor || "成员"}撤回了一条消息`
+      return `${actor || "成员"} 撤回了一条消息`
     default:
       return "系统消息"
   }
