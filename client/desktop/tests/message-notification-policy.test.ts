@@ -59,6 +59,35 @@ test("通知里的发送者名字优先用通讯录现查到的结果", () => {
   )
 })
 
+test("通知摘要按会话里的提及名称解析用户、应用和所有人", () => {
+  const userId = "123e4567-e89b-12d3-a456-426614174000"
+  const appId = "123e4567-e89b-12d3-a456-426614174001"
+  const content = `请 {(@user/${userId})} 和 {(@app/${appId})} 查看 {(@user/all)}`
+  const notification = message({ content })
+  assert.equal(
+    incomingMessageNotification(notification, "user-1", false, undefined, (target) => {
+      if (target.id === userId) return "小张"
+      if (target.id === appId) return "项目助手"
+      return undefined
+    })?.summary,
+    "请 @小张 和 @项目助手 查看 @所有人",
+  )
+  assert.equal(
+    incomingMessageNotification(notification, "user-1", false)?.summary,
+    "请 @用户 和 @应用 查看 @所有人",
+  )
+  assert.equal(
+    incomingMessageNotification(
+      message({ content: `回复 {{@${userId}}}` }),
+      "user-1",
+      false,
+      undefined,
+      () => "小张",
+    )?.summary,
+    "回复 @小张",
+  )
+})
+
 test("空摘要使用通用文案且长摘要被截断", () => {
   assert.equal(
     incomingMessageNotification(message({ content: " \n " }), "user-1", false)?.summary,

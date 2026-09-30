@@ -12,6 +12,7 @@ import type {
   CreateGroupConversationInput,
   DesktopContactDirectory,
   DesktopConversation,
+  DesktopConversationMember,
   DesktopMessage,
   DesktopMessagePage,
   FriendRequestListInput,
@@ -38,7 +39,9 @@ import { isValidAvatarUpload } from "../message-files/selection-policy"
 import { ClientAppManager } from "./client-app-manager"
 import { ContactManager } from "./contact-manager"
 import { ConversationManager } from "./conversation-manager"
+import { parseConversationMembers } from "./conversation-members"
 import { parseConversationPresenceEvent } from "./conversation-presence"
+import { parseConversationTopic } from "./conversation-topic"
 import { MediaManager } from "./media-manager"
 import { incomingMessageNotification } from "./message-notification-policy"
 import { ProjectManager } from "./project-manager"
@@ -735,11 +738,37 @@ export class AccountRuntime {
       this.notifyChanged(domains, conversationChange.conversationIds)
       if (conversationChange.notification) {
         const { message, muted } = conversationChange.notification
+        let members: DesktopConversationMember[] | undefined
         const details = incomingMessageNotification(
           message,
           this.input.userId,
           muted,
           this.contactManager?.resolveDisplayName(message.senderType, message.senderId),
+          (target) => {
+            if (target.type === "all") return undefined
+            if (!members) {
+              const payload = this.database?.getConversationPayload(message.conversationId)
+              members = parseConversationMembers(payload)
+              const parentId = parseConversationTopic(payload)?.parentConversationId
+              if (parentId) {
+                members.push(
+                  ...parseConversationMembers(this.database?.getConversationPayload(parentId)),
+                )
+              }
+            }
+            const member = members.find(
+              (item) => item.type === target.type && item.id.toLowerCase() === target.id,
+            )
+            const memberName =
+              member?.type === "app" ? member.name : member?.nickname || member?.name
+            return (
+              (memberName?.toLowerCase() !== target.id ? memberName : undefined) ||
+              this.contactManager?.resolveDisplayName(target.type, target.id) ||
+              (target.type === "user" && target.id === this.input.userId.toLowerCase()
+                ? this.input.userName
+                : undefined)
+            )
+          },
         )
         if (details) {
           this.input.onIncomingMessage({

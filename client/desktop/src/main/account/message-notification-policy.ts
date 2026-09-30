@@ -1,5 +1,6 @@
 import type { DesktopMessage } from "../../shared/account-data"
 import type { IncomingMessageNotification } from "../../shared/desktop"
+import { formatMentionText, type MentionLabelResolver } from "../../shared/message-mentions.ts"
 
 export function isMessageNotificationSuppressed(
   event: Pick<IncomingMessageNotification, "targetId" | "conversationId">,
@@ -18,6 +19,7 @@ export function incomingMessageNotification(
   currentUserId: string,
   muted: boolean,
   resolvedSenderName?: string,
+  resolveMentionLabel: MentionLabelResolver = () => undefined,
 ): { sender: string; summary: string } | null {
   if (
     muted ||
@@ -35,6 +37,10 @@ export function incomingMessageNotification(
 
   return {
     sender: sender || "未知用户",
-    summary: message.content.trim().replace(/\s+/g, " ").slice(0, 120) || "收到一条新消息",
+    summary:
+      formatMentionText(message.content, resolveMentionLabel)
+        .trim()
+        .replace(/\s+/g, " ")
+        .slice(0, 120) || "收到一条新消息",
   }
 }
