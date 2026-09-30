@@ -3,7 +3,8 @@ name: Desktop PR
 on:
   pull_request:
     paths:
-      - "client-desktop/**"
+      - "client/desktop/**"
+      - ".github/workflows/desktop.yml"
   workflow_dispatch:
 
 permissions:
@@ -16,14 +17,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Windows
+          - name: Windows x64
             runner: windows-2025
-          - name: macOS
+          - name: macOS universal
             runner: macos-15
-          - name: Linux
+          - name: Linux x64
             runner: ubuntu-24.04
+          - name: Linux ARM64
+            runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
@@ -33,13 +36,13 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: client-desktop/pnpm-lock.yaml
-      - name: 安装固定依赖
-        working-directory: client-desktop
+          cache-dependency-path: client/desktop/pnpm-lock.yaml
+      - name: 安装依赖
+        working-directory: client/desktop
         run: pnpm install --frozen-lockfile
-      - name: 格式、静态、类型、单元和 IPC 契约测试
-        working-directory: client-desktop
-        run: pnpm check && pnpm test
-      - name: 构建并校验本地 Renderer
-        working-directory: client-desktop
-        run: pnpm build && pnpm verify:build
+      - name: 类型检查和测试
+        working-directory: client/desktop
+        run: pnpm typecheck && pnpm test && pnpm test:release
+      - name: 构建新桌面客户端
+        working-directory: client/desktop
+        run: pnpm build

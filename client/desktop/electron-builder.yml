@@ -34,6 +34,8 @@ nsis:
 mac:
   icon: resources/icon.png
   artifactName: "Jiying-Desktop-Preview-${version}-mac-${arch}.${ext}"
+  hardenedRuntime: true
+  notarize: true
   target:
     - target: dmg
       arch:

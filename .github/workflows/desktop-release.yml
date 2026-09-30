@@ -1,33 +1,28 @@
-name: Desktop Stable Release
+name: Desktop Release
 
 on:
   push:
     tags:
-      - "desktop-v*"
+      - "desktop/*"
 
 permissions:
   contents: read
 
 concurrency:
-  group: desktop-stable-${{ github.ref }}
+  group: desktop-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   quality:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    outputs:
-      commit: ${{ steps.release.outputs.commit }}
-      build: ${{ steps.release.outputs.build }}
-      tag: ${{ steps.release.outputs.tag }}
-      version: ${{ steps.release.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: 在安装依赖前验证 Annotated Tag
-        id: release
-        run: node client-desktop/scripts/prepare-release-worktree.mjs --tag "$GITHUB_REF_NAME" --commit "$GITHUB_SHA" --github-output "$GITHUB_OUTPUT"
+      - name: 验证发布标签
+        shell: bash
+        run: node client/desktop/scripts/verify-release-tag.mjs --tag "$GITHUB_REF_NAME" --commit "$GITHUB_SHA"
       - uses: pnpm/action-setup@v4
         with:
           version: 11.1.3
@@ -35,18 +30,16 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: client-desktop/pnpm-lock.yaml
+          cache-dependency-path: client/desktop/pnpm-lock.yaml
       - name: 安装依赖
-        working-directory: ${{ steps.release.outputs.desktop-directory }}
+        working-directory: client/desktop
         run: pnpm install --frozen-lockfile
-      - name: 执行平台无关质量门禁
-        working-directory: ${{ steps.release.outputs.desktop-directory }}
-        run: pnpm check && pnpm test && pnpm build && pnpm verify:build && pnpm verify:workflow
+      - name: 类型检查、测试与构建
+        working-directory: client/desktop
+        run: pnpm typecheck && pnpm test && pnpm test:release && pnpm build
 
   package:
     needs: quality
-    env:
-      MAGICCHAT_RELEASE_CHANNEL: stable
     strategy:
       fail-fast: false
       matrix:
@@ -55,32 +48,22 @@ jobs:
             platform: win
             target: nsis
             arch: x64
-          - runner: windows-11-arm
-            platform: win
-            target: nsis
+          - runner: ubuntu-24.04
+            platform: linux
+            target: AppImage
+            arch: x64
+          - runner: ubuntu-24.04-arm
+            platform: linux
+            target: AppImage
             arch: arm64
           - runner: macos-15
             platform: mac
             target: dmg
             arch: universal
-          - runner: ubuntu-24.04
-            platform: linux
-            target: AppImage deb
-            arch: x64
-          - runner: ubuntu-24.04-arm
-            platform: linux
-            target: AppImage deb
-            arch: arm64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - name: 准备内部临时构建树
-        id: worktree
-        shell: bash
-        run: node client-desktop/scripts/prepare-release-worktree.mjs --tag "${{ needs.quality.outputs.tag }}" --commit "${{ needs.quality.outputs.commit }}" --github-output "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@v4
         with:
           version: 11.1.3
@@ -88,57 +71,67 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: client-desktop/pnpm-lock.yaml
+          cache-dependency-path: client/desktop/pnpm-lock.yaml
       - name: 安装依赖
-        working-directory: ${{ steps.worktree.outputs.desktop-directory }}
+        working-directory: client/desktop
         run: pnpm install --frozen-lockfile
-      - name: 生成并校验生产构建
-        working-directory: ${{ steps.worktree.outputs.desktop-directory }}
-        run: pnpm build && pnpm verify:build
-      - name: 生成 macOS 签名及公证制品
+      - name: 构建新桌面客户端
+        working-directory: client/desktop
+        run: pnpm build
+      - name: 构建 macOS 签名及公证制品
         if: matrix.platform == 'mac'
         shell: bash
-        working-directory: ${{ steps.worktree.outputs.desktop-directory }}
+        working-directory: client/desktop
         env:
           APPLE_API_ISSUER: ${{ vars.APPLE_API_ISSUER }}
           APPLE_API_KEY_ID: ${{ vars.APPLE_API_KEY_ID }}
           CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
           CSC_LINK: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
-          DEBUG: electron-osx-sign*,electron-notarize*
           NOTARY_API_KEY_BASE64: ${{ secrets.MACOS_NOTARY_API_KEY_P8_BASE64 }}
         run: |
           set -euo pipefail
-          : "${APPLE_API_ISSUER:?缺少 Repository Variable：APPLE_API_ISSUER}"
-          : "${APPLE_API_KEY_ID:?缺少 Repository Variable：APPLE_API_KEY_ID}"
-          : "${CSC_KEY_PASSWORD:?缺少 Repository Secret：MACOS_CERTIFICATE_PASSWORD}"
-          : "${CSC_LINK:?缺少 Repository Secret：MACOS_CERTIFICATE_P12_BASE64}"
-          : "${NOTARY_API_KEY_BASE64:?缺少 Repository Secret：MACOS_NOTARY_API_KEY_P8_BASE64}"
-
+          : "${APPLE_API_ISSUER:?缺少 APPLE_API_ISSUER}"
+          : "${APPLE_API_KEY_ID:?缺少 APPLE_API_KEY_ID}"
+          : "${CSC_KEY_PASSWORD:?缺少 MACOS_CERTIFICATE_PASSWORD}"
+          : "${CSC_LINK:?缺少 MACOS_CERTIFICATE_P12_BASE64}"
+          : "${NOTARY_API_KEY_BASE64:?缺少 MACOS_NOTARY_API_KEY_P8_BASE64}"
           umask 077
           api_key_path="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
           trap 'rm -f "$api_key_path"' EXIT
           printf '%s' "$NOTARY_API_KEY_BASE64" | base64 -D > "$api_key_path"
           unset NOTARY_API_KEY_BASE64
           export APPLE_API_KEY="$api_key_path"
-
           pnpm exec electron-builder --mac dmg --universal --config electron-builder.yml --publish never
-      - name: 生成非 macOS Stable 制品
+      - name: 验证 macOS 签名与公证
+        if: matrix.platform == 'mac'
+        shell: bash
+        working-directory: client/desktop
+        run: |
+          set -euo pipefail
+          dmg=(dist/*.dmg)
+          test "${#dmg[@]}" -eq 1
+          mountpoint="$RUNNER_TEMP/desktop-release-dmg"
+          mkdir "$mountpoint"
+          hdiutil attach -readonly -nobrowse -mountpoint "$mountpoint" "${dmg[0]}"
+          trap 'hdiutil detach "$mountpoint"' EXIT
+          app="$mountpoint/即应.app"
+          codesign --verify --deep --strict "$app"
+          xcrun stapler validate "$app"
+          archs="$(lipo -archs "$app/Contents/MacOS/即应")"
+          [[ " $archs " == *" x86_64 "* && " $archs " == *" arm64 "* ]]
+      - name: 构建 Windows / Linux 制品
         if: matrix.platform != 'mac'
-        working-directory: ${{ steps.worktree.outputs.desktop-directory }}
+        working-directory: client/desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: pnpm exec electron-builder --${{ matrix.platform }} ${{ matrix.target }} --${{ matrix.arch }} --config electron-builder.yml --publish never
-      - name: 校验安装包真实版本与架构
-        working-directory: ${{ steps.worktree.outputs.desktop-directory }}
-        run: pnpm verify:package -- --platform ${{ matrix.platform }} --arch ${{ matrix.arch }} --tag "${{ needs.quality.outputs.tag }}" --build "${{ needs.quality.outputs.build }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: jiying-desktop-${{ matrix.platform }}-${{ matrix.arch }}
+          name: desktop-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
-            ${{ steps.worktree.outputs.desktop-directory }}/dist/*.exe
-            ${{ steps.worktree.outputs.desktop-directory }}/dist/*.dmg
-            ${{ steps.worktree.outputs.desktop-directory }}/dist/*.AppImage
-            ${{ steps.worktree.outputs.desktop-directory }}/dist/*.deb
+            client/desktop/dist/*.exe
+            client/desktop/dist/*.dmg
+            client/desktop/dist/*.AppImage
           if-no-files-found: error
 
   release:
@@ -146,47 +139,21 @@ jobs:
     permissions:
       contents: write
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.1.3
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: pnpm
-          cache-dependency-path: client-desktop/pnpm-lock.yaml
-      - working-directory: client-desktop
-        run: pnpm install --frozen-lockfile
       - uses: actions/download-artifact@v5
         with:
           path: artifacts
-      - name: 生成精确发布资产计划
-        working-directory: client-desktop
-        run: |
-          pnpm release:prepare-assets -- \
-            --tag "${{ needs.quality.outputs.tag }}" \
-            --build "${{ needs.quality.outputs.build }}" \
-            --commit "${{ needs.quality.outputs.commit }}" \
-            --output ../release-assets \
-            --input win:x64:../artifacts/jiying-desktop-win-x64 \
-            --input win:arm64:../artifacts/jiying-desktop-win-arm64 \
-            --input mac:universal:../artifacts/jiying-desktop-mac-universal \
-            --input linux:x64:../artifacts/jiying-desktop-linux-x64 \
-            --input linux:arm64:../artifacts/jiying-desktop-linux-arm64
-      - name: 生成官网手工上传目录
-        working-directory: client-desktop
-        run: pnpm release:prepare-official -- --input ../release-assets --output ../website-release-upload
-      - uses: actions/upload-artifact@v4
-        with:
-          name: jiying-website-release-${{ needs.quality.outputs.version }}
-          path: website-release-upload/*
-          if-no-files-found: error
-      - name: 通过 Draft 事务发布并复核远端摘要
-        working-directory: client-desktop
+          merge-multiple: true
+      - name: 校验四个平台产物并生成发布计划
+        run: node client/desktop/scripts/prepare-release-plan.mjs --tag "$GITHUB_REF_NAME" --commit "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY" --input artifacts --output "$RUNNER_TEMP/desktop-release-plan"
+      - name: 通过 Draft 事务发布并核对远端文件摘要
         env:
           GH_TOKEN: ${{ github.token }}
-        run: pnpm release:publish -- --plan ../release-assets/release-plan.json --repository "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT"
+        run: node client/desktop/scripts/publish-release.mjs --plan "$RUNNER_TEMP/desktop-release-plan/release-plan.json" --repository "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT"

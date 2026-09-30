@@ -1,6 +1,6 @@
 # 即应 · 新桌面客户端
 
-全新的 **Electron 桌面客户端原型**，位于 `client/desktop/`，独立于旧版 `client-desktop` 和移动客户端。
+**Electron 桌面客户端**位于 `client/desktop/`，与移动客户端独立。
 
 ## 启动
 
@@ -31,6 +31,12 @@ pnpm dev:web
 ```
 
 打开终端输出的 `http://127.0.0.1:20110`。桌面开发与浏览器预览使用同一个固定端口，不要同时运行；浏览器模式没有 Electron 的系统原生标题栏。
+
+## 桌面版发布
+
+推送 `desktop/<标识>` 标签后，CI 从 `client/desktop/` 构建 Windows x64、Linux x64/arm64 AppImage、macOS universal DMG，并在四个产物全部完成后发布到对应的 GitHub Release。macOS 构建需要仓库配置 Developer ID 证书与 Apple 公证凭据；缺失时发布失败，不会上传未签名的 DMG。
+
+安装包的版本及更新 build ID 来自 `package.json` 的 `version` 和 `buildId`，而非标签名称；发布新版前应更新这两个字段。应用内更新读取官网的 `releases/version.json`，GitHub Release 不会自动修改官网清单，仍需按官网发布流程更新。
 
 ## 当前内容
 

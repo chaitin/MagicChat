@@ -1,2 +1,0 @@
-export const messageHoverActionButtonClassName =
-  "flex size-6 shrink-0 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-xs outline-none transition-colors hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/50"
