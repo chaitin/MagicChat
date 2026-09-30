@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react"
 import {
   Cancel01Icon,
   ChangeScreenModeIcon,
+  DotIcon,
   RectangularIcon,
   MinusSignIcon,
 } from "@hugeicons/core-free-icons"
@@ -20,10 +21,12 @@ type WindowControls = {
 export function WindowTitleBar({
   title,
   brandTitle = "即应 Chat",
+  organizationName,
   controls = window.desktop?.windowControls,
 }: {
   title?: string
   brandTitle?: string
+  organizationName?: string
   controls?: WindowControls
 }) {
   const [maximized, setMaximized] = useState(false)
@@ -51,13 +54,27 @@ export function WindowTitleBar({
           {title}
         </div>
       ) : controls?.platform === "macos" ? (
-        <div className="pointer-events-none min-w-0 flex-1 truncate px-20 text-center text-xs font-medium text-muted-foreground">
-          {brandTitle}
+        <div className="pointer-events-none flex min-w-0 flex-1 items-center justify-center gap-1 px-20 text-xs font-medium text-muted-foreground">
+          <span className="shrink-0">{brandTitle}</span>
+          {organizationName && (
+            <>
+              <HugeiconsIcon icon={DotIcon} className="size-3 shrink-0" aria-hidden />
+              <span className="min-w-0 truncate">{organizationName}</span>
+            </>
+          )}
         </div>
       ) : (
         <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-1.5 px-2">
           <img src={appIcon} alt="" className="size-4 shrink-0 rounded-sm" />
-          <span className="truncate text-xs font-medium text-muted-foreground">{brandTitle}</span>
+          <span className="flex min-w-0 items-center gap-1 text-xs font-medium text-muted-foreground">
+            <span className="shrink-0">{brandTitle}</span>
+            {organizationName && (
+              <>
+                <HugeiconsIcon icon={DotIcon} className="size-3 shrink-0" aria-hidden />
+                <span className="min-w-0 truncate">{organizationName}</span>
+              </>
+            )}
+          </span>
         </div>
       )}
       {controls && controls.platform !== "macos" ? (

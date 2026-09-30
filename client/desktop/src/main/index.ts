@@ -66,6 +66,9 @@ if (!hasSingleInstanceLock) app.quit()
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
+const appIconPath = app.isPackaged
+  ? path.join(process.resourcesPath, "tray-icon.png")
+  : path.join(__dirname, "../../resources/icon.png")
 
 function createWindow() {
   if (mainWindow) return
@@ -75,6 +78,7 @@ function createWindow() {
     minWidth: 760,
     minHeight: 560,
     title: "即应",
+    icon: appIconPath,
     ...(process.platform === "darwin"
       ? {
           titleBarStyle: "hiddenInset" as const,
@@ -155,21 +159,14 @@ function quitApp() {
 
 function createTray() {
   const isMac = process.platform === "darwin"
-  const isWindows = process.platform === "win32"
+  const iconFile = isMac ? "trayTemplate.png" : "tray-color.png"
   const iconPath = app.isPackaged
-    ? path.join(
-        process.resourcesPath,
-        isMac ? "trayTemplate.png" : isWindows ? "tray-color.png" : "tray-icon.png",
-      )
-    : path.join(
-        __dirname,
-        "../../resources",
-        isMac ? "trayTemplate.png" : isWindows ? "tray-color.png" : "icon.png",
-      )
+    ? path.join(process.resourcesPath, iconFile)
+    : path.join(__dirname, "../../resources", iconFile)
   const source = nativeImage.createFromPath(iconPath)
   if (source.isEmpty()) throw new Error("无法加载托盘图标")
   if (isMac) source.setTemplateImage(true)
-  tray = new Tray(isMac ? source : source.resize({ width: 16, height: 16 }))
+  tray = new Tray(source)
   tray.setToolTip("即应")
   tray.setContextMenu(
     Menu.buildFromTemplate([
@@ -237,6 +234,7 @@ void app.whenReady().then(async () => {
   if (process.platform === "win32") app.setAppUserModelId("chat.jiying.desktop.next")
   if (process.platform === "darwin") {
     app.setActivationPolicy("regular")
+    if (!app.isPackaged) app.dock?.setIcon(appIconPath)
     await app.dock?.show()
   }
   let notificationSettings: NotificationSettings = DEFAULT_NOTIFICATION_SETTINGS

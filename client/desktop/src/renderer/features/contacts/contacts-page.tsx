@@ -1,5 +1,6 @@
-import { useEffect, useId, useMemo, useState } from "react"
-import { ArrowRight01Icon, FlashIcon } from "@hugeicons/core-free-icons"
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { ArrowRight01Icon } from "@hugeicons/core-free-icons"
+import appIcon from "@/assets/app-icon.png"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { Button as BeButton } from "@/components/motion/button/base"
@@ -32,6 +33,11 @@ import type {
   LocalSearchResult,
 } from "../../../shared/account-data"
 import { ClientAppDialog } from "./client-app-dialog"
+import {
+  CONTACT_ITEM_HEIGHT,
+  CONTACT_ROW_HEIGHT,
+  visibleContactRanges,
+} from "./contacts-virtual-list"
 
 type Tab = "user" | "app" | "group"
 type Selection = { type: Tab; id: string }
@@ -65,6 +71,8 @@ export function ContactsPage({
   const [directory, setDirectory] = useState<DesktopContactDirectory | null>(null)
   const [loading, setLoading] = useState(true)
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set())
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const [viewport, setViewport] = useState({ scrollTop: 0, height: 0 })
   const [selection, setSelection] = useState<Selection | null>(null)
   const [busyKey, setBusyKey] = useState("")
   const [appDialog, setAppDialog] = useState<"edit" | "credentials" | null>(null)
@@ -148,6 +156,38 @@ export function ContactsPage({
     ]
   }, [directory, organizationName, userId])
 
+  function updateViewport() {
+    const element = viewportRef.current
+    if (!element) return
+    const scrollTop =
+      Math.floor(Math.max(0, element.scrollTop) / CONTACT_ROW_HEIGHT) * CONTACT_ROW_HEIGHT
+    setViewport((current) =>
+      current.scrollTop === scrollTop && current.height === element.clientHeight
+        ? current
+        : { scrollTop, height: element.clientHeight },
+    )
+  }
+
+  useEffect(() => {
+    const element = viewportRef.current
+    if (!element) return
+    const observer = new ResizeObserver(updateViewport)
+    observer.observe(element)
+    updateViewport()
+    return () => observer.disconnect()
+  }, [])
+  useLayoutEffect(updateViewport, [sections, expandedSections])
+
+  const visibleRanges = visibleContactRanges(
+    sections.map((section) => ({
+      key: section.key,
+      count: section.entries.length,
+      expanded: expandedSections.has(section.key),
+    })),
+    viewport.scrollTop,
+    viewport.height,
+  )
+
   const active = directory && selection ? entityFor(directory, selection) : null
   const isOwnedApp =
     selection?.type === "app" &&
@@ -193,6 +233,8 @@ export function ContactsPage({
           scrollHideDelay={200}
           className="min-h-0 min-w-0 flex-1 overflow-hidden bg-xgui-background-1"
           viewportClassName="overflow-x-hidden [&>div]:block! [&>div]:w-full! [&>div]:min-w-0!"
+          viewportRef={viewportRef}
+          onViewportScroll={updateViewport}
         >
           <nav className="flex min-h-full flex-col" aria-label="通讯录列表">
             {loading ? (
@@ -204,6 +246,7 @@ export function ContactsPage({
                 {sections.map((section) => {
                   if (section.entries.length === 0) return null
                   const expanded = expandedSections.has(section.key)
+                  const range = visibleRanges.get(section.key)
                   return (
                     <section
                       key={section.key}
@@ -236,58 +279,69 @@ export function ContactsPage({
                         </button>
                       </div>
                       {expanded && (
-                        <ItemGroup className="bg-xgui-background-1 px-2 py-1 has-data-[size=sm]:gap-1">
-                          {section.entries.map((entry) => {
-                            const selected =
-                              selection?.type === section.type && selection.id === entry.id
-                            return (
-                              <Item
-                                key={`${section.type}:${entry.id}`}
-                                asChild
-                                variant="default"
-                                size="sm"
-                                className={cn(
-                                  "flex-nowrap border-transparent text-left hover:bg-foreground/5 hover:text-foreground",
-                                  selected &&
-                                    "bg-xgui-brand-1 text-sidebar-accent-foreground hover:bg-xgui-brand-1 hover:text-sidebar-accent-foreground",
-                                )}
-                              >
-                                <button
-                                  type="button"
-                                  aria-current={selected ? "page" : undefined}
-                                  onClick={() => setSelection({ type: section.type, id: entry.id })}
+                        <ItemGroup
+                          className="relative bg-xgui-background-1 px-2 py-1 has-data-[size=sm]:gap-1"
+                          style={{ height: section.entries.length * CONTACT_ROW_HEIGHT + 4 }}
+                        >
+                          {section.entries
+                            .slice(range?.start ?? 0, range?.end ?? 0)
+                            .map((entry, offset) => {
+                              const selected =
+                                selection?.type === section.type && selection.id === entry.id
+                              return (
+                                <Item
+                                  key={`${section.type}:${entry.id}`}
+                                  asChild
+                                  variant="default"
+                                  size="sm"
+                                  className={cn(
+                                    "absolute right-2 left-2 w-auto flex-nowrap border-transparent text-left hover:bg-foreground/5 hover:text-foreground",
+                                    selected &&
+                                      "bg-xgui-brand-1 text-sidebar-accent-foreground hover:bg-xgui-brand-1 hover:text-sidebar-accent-foreground",
+                                  )}
+                                  style={{
+                                    top: 4 + ((range?.start ?? 0) + offset) * CONTACT_ROW_HEIGHT,
+                                    height: CONTACT_ITEM_HEIGHT,
+                                  }}
                                 >
-                                  <Avatar className="size-10! rounded-sm after:hidden">
-                                    <EntityAvatar
-                                      key={`${entry.id}:${avatarRevision}`}
-                                      targetId={targetId}
-                                      type={entry.avatarType}
-                                      id={entry.avatarId}
-                                      theme={resolvedTheme}
-                                      label={entry.name}
-                                    />
-                                    {"online" in entry && (
-                                      <AvatarBadge
-                                        className={cn(
-                                          "size-2.5!",
-                                          entry.online ? "bg-xgui-brand" : "bg-muted-foreground",
-                                        )}
-                                        aria-label={entry.online ? "在线" : "离线"}
+                                  <button
+                                    type="button"
+                                    aria-current={selected ? "page" : undefined}
+                                    onClick={() =>
+                                      setSelection({ type: section.type, id: entry.id })
+                                    }
+                                  >
+                                    <Avatar className="size-10! rounded-sm after:hidden">
+                                      <EntityAvatar
+                                        key={`${entry.id}:${avatarRevision}`}
+                                        targetId={targetId}
+                                        type={entry.avatarType}
+                                        id={entry.avatarId}
+                                        theme={resolvedTheme}
+                                        label={entry.name}
                                       />
-                                    )}
-                                  </Avatar>
-                                  <ItemContent className="w-0 min-w-0">
-                                    <span className="block truncate text-sm leading-snug font-medium">
-                                      {entry.name}
-                                    </span>
-                                    <span className="block truncate text-xs text-muted-foreground">
-                                      {entrySummary(entry)}
-                                    </span>
-                                  </ItemContent>
-                                </button>
-                              </Item>
-                            )
-                          })}
+                                      {"online" in entry && (
+                                        <AvatarBadge
+                                          className={cn(
+                                            "size-2.5!",
+                                            entry.online ? "bg-xgui-brand" : "bg-muted-foreground",
+                                          )}
+                                          aria-label={entry.online ? "在线" : "离线"}
+                                        />
+                                      )}
+                                    </Avatar>
+                                    <ItemContent className="w-0 min-w-0">
+                                      <span className="block truncate text-sm leading-snug font-medium">
+                                        {entry.name}
+                                      </span>
+                                      <span className="block truncate text-xs text-muted-foreground">
+                                        {entrySummary(entry)}
+                                      </span>
+                                    </ItemContent>
+                                  </button>
+                                </Item>
+                              )
+                            })}
                         </ItemGroup>
                       )}
                     </section>
@@ -357,10 +411,8 @@ export function ContactsPage({
             }
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-xgui-background-2">
-            <span className="flex size-32 items-center justify-center rounded-full bg-xgui-background-1">
-              <HugeiconsIcon icon={FlashIcon} className="size-16" aria-hidden />
-            </span>
+          <div className="flex h-full items-center justify-center">
+            <img src={appIcon} alt="" className="size-32" />
           </div>
         )}
       </div>

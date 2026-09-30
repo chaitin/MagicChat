@@ -215,6 +215,7 @@ export function LoginPage({
           userName={connection?.user?.nickname?.trim() || connection?.user?.name || "我"}
           onUserUpdated={acceptUser}
           userEmail={connection?.user?.email ?? ""}
+          organizationName={connection?.info.organizationName ?? "通讯录"}
           resolvedTheme={resolvedTheme}
           theme={theme}
           catalog={catalog}

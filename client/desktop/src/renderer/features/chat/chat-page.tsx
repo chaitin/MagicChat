@@ -7,7 +7,8 @@ import {
   useState,
   type KeyboardEvent,
 } from "react"
-import { FlashIcon, Loading03Icon } from "@hugeicons/core-free-icons"
+import { Loading03Icon } from "@hugeicons/core-free-icons"
+import appIcon from "@/assets/app-icon.png"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { ContactProfileProvider } from "@/components/avatar/contact-profile-popover"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
@@ -81,6 +82,7 @@ export function ChatPage({
   userId,
   userName,
   userEmail,
+  organizationName,
   resolvedTheme,
   theme,
   catalog,
@@ -99,6 +101,7 @@ export function ChatPage({
   userId: string
   userName: string
   userEmail: string
+  organizationName: string
   resolvedTheme: "light" | "dark"
   theme: ThemePreference
   catalog: ServerCatalog
@@ -846,10 +849,8 @@ export function ChatPage({
                   )}
                 </>
               ) : (
-                <div className="flex flex-1 items-center justify-center text-xgui-background-2">
-                  <span className="flex size-32 items-center justify-center rounded-full bg-xgui-background-1">
-                    <HugeiconsIcon icon={FlashIcon} className="size-16" aria-hidden />
-                  </span>
+                <div className="flex flex-1 items-center justify-center">
+                  <img src={appIcon} alt="" className="size-32" />
                 </div>
               )}
             </ContactProfileProvider>
@@ -860,9 +861,7 @@ export function ChatPage({
           targetId={targetId}
           serverUrl={serverUrl}
           userId={userId}
-          organizationName={
-            catalog.servers.find((server) => server.id === catalog.activeServerId)?.name ?? "通讯录"
-          }
+          organizationName={organizationName}
           resolvedTheme={resolvedTheme}
           onOpenConversation={(conversationId) => {
             setSelectedId(conversationId)

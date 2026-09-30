@@ -48,7 +48,7 @@ export function App() {
   }
 
   const resolvedTheme = theme === "system" ? systemTheme : theme
-  const windowTitle = organizationName ? `即应 Chat - ${organizationName}` : "即应 Chat"
+  const windowTitle = organizationName ? `即应 Chat · ${organizationName}` : "即应 Chat"
   const changeOrganizationName = useCallback((name: string) => setOrganizationName(name), [])
 
   useEffect(() => {
@@ -75,7 +75,7 @@ export function App() {
     <AnimatedToastProvider>
       <UpdateProvider>
         <div className="flex h-dvh flex-col overflow-hidden">
-          <WindowTitleBar brandTitle={windowTitle} />
+          <WindowTitleBar brandTitle="即应 Chat" organizationName={organizationName} />
           <div className="min-h-0 flex-1">
             <div className="app-shell">
               <LoginPage
