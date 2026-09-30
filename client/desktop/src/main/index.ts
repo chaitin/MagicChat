@@ -154,13 +154,14 @@ function quitApp() {
 }
 
 function createTray() {
+  const isMac = process.platform === "darwin"
   const iconPath = app.isPackaged
-    ? path.join(process.resourcesPath, "tray-icon.png")
-    : path.join(__dirname, "../../resources/icon.png")
+    ? path.join(process.resourcesPath, isMac ? "trayTemplate.png" : "tray-icon.png")
+    : path.join(__dirname, "../../resources", isMac ? "trayTemplate.png" : "icon.png")
   const source = nativeImage.createFromPath(iconPath)
   if (source.isEmpty()) throw new Error("无法加载托盘图标")
-  const size = process.platform === "darwin" ? 18 : 16
-  tray = new Tray(source.resize({ width: size, height: size }))
+  if (isMac) source.setTemplateImage(true)
+  tray = new Tray(isMac ? source : source.resize({ width: 16, height: 16 }))
   tray.setToolTip("即应")
   tray.setContextMenu(
     Menu.buildFromTemplate([
@@ -226,6 +227,10 @@ if (hasSingleInstanceLock) {
 void app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return
   if (process.platform === "win32") app.setAppUserModelId("chat.jiying.desktop.next")
+  if (process.platform === "darwin") {
+    app.setActivationPolicy("regular")
+    await app.dock?.show()
+  }
   let notificationSettings: NotificationSettings = DEFAULT_NOTIFICATION_SETTINGS
   let activeConversation: { targetId: string; conversationId: string } | null = null
   const activeNotifications = new Set<SystemNotification>()

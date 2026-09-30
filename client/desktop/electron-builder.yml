@@ -14,6 +14,10 @@ files:
 extraResources:
   - from: resources/icon.png
     to: tray-icon.png
+  - from: resources/trayTemplate.png
+    to: trayTemplate.png
+  - from: resources/trayTemplate@2x.png
+    to: trayTemplate@2x.png
 extraMetadata:
   description: 即应新桌面客户端 Windows 预览版
 win:
@@ -34,6 +38,9 @@ nsis:
 mac:
   icon: resources/icon.png
   artifactName: "Jiying-Desktop-Preview-${version}-mac-${arch}.${ext}"
+  extendInfo:
+    LSUIElement: false
+    LSBackgroundOnly: false
   hardenedRuntime: true
   notarize: true
   target:

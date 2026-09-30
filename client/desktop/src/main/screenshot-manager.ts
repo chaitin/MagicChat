@@ -98,14 +98,12 @@ export class ScreenshotManager {
           frame: false,
           show: false,
           fullscreen: process.platform === "win32",
-          // macOS 使用不创建独立 Space 的简易全屏，确保遮罩覆盖系统菜单栏。
-          simpleFullscreen: process.platform === "darwin",
           resizable: false,
           movable: false,
           minimizable: false,
           maximizable: false,
-          fullscreenable: process.platform === "win32" || process.platform === "darwin",
-          skipTaskbar: true,
+          fullscreenable: process.platform === "win32",
+          skipTaskbar: process.platform !== "darwin",
           alwaysOnTop: true,
           backgroundColor: "#000000",
           webPreferences: {
@@ -118,15 +116,19 @@ export class ScreenshotManager {
         })
         const webContents = window.webContents
         this.overlays.set(webContents, { window, image, payload })
+        window.setVisibleOnAllWorkspaces(true, {
+          visibleOnFullScreen: true,
+          // 避免 Electron 将整个 macOS 应用切换为不显示 Dock 的辅助进程。
+          skipTransformProcessType: process.platform === "darwin",
+        })
         window.setAlwaysOnTop(true, "screen-saver")
-        window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
         window.removeMenu()
         window.webContents.setWindowOpenHandler(() => ({ action: "deny" }))
         window.webContents.on("will-navigate", (event) => event.preventDefault())
         window.on("closed", () => {
           if (this.overlays.has(webContents)) this.destroyOverlays()
         })
-        return { window, displayId: display.id }
+        return { window, displayId: display.id, bounds: display.bounds }
       })
       await Promise.all(
         windows.map(({ window }) => {
@@ -139,7 +141,21 @@ export class ScreenshotManager {
         }),
       )
       if (generation !== this.generation) return
-      for (const { window } of windows) window.showInactive()
+      for (const { window, bounds } of windows) {
+        window.showInactive()
+        if (process.platform === "darwin") {
+          window.setBounds(bounds)
+          const actual = window.getBounds()
+          if (
+            actual.x !== bounds.x ||
+            actual.y !== bounds.y ||
+            actual.width !== bounds.width ||
+            actual.height !== bounds.height
+          ) {
+            console.warn("macOS 截图遮罩未覆盖整个显示器", { expected: bounds, actual })
+          }
+        }
+      }
       const focusedWindow = windows.find(({ displayId }) => displayId === cursorDisplay.id)?.window
       const windowToFocus = focusedWindow ?? windows[0]?.window
       if (windowToFocus) windowToFocus.focus()
