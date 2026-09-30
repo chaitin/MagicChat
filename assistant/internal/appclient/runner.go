@@ -245,11 +245,15 @@ func (directAgentRunner) Start(ctx context.Context, key string, sink agent.Outpu
 		if errors.Is(runErr, context.Canceled) {
 			return false
 		}
+		if errors.Is(runErr, agent.ErrOutputDelivery) {
+			log.Printf("agent output delivery failed: %v", runErr)
+			return false
+		}
 		log.Printf("agent reply failed: %v", runErr)
 		if taskSink.taskErrorSent {
 			return true
 		}
-		return sendAgentFallback(ctx, taskSink) == nil
+		return sendAgentFallback(ctx, taskSink, agent.ProcessingErrorFallback) == nil
 	}
 	return true
 }
@@ -369,7 +373,7 @@ func (r *conversationAgentRunner) Start(ctx context.Context, key string, sink ag
 		}); err != nil {
 			r.mu.Unlock()
 			log.Printf("append agent instruction failed: %v", err)
-			return sendAgentFallback(ctx, prepared.ErrorSink) == nil
+			return sendAgentFallback(ctx, prepared.ErrorSink, agent.ProcessingErrorFallback) == nil
 		}
 		job.actorType, job.actorID = authorizationActor(prepared.Authorization)
 		job.lastActiveAt = time.Now().UTC()
@@ -393,7 +397,7 @@ func (r *conversationAgentRunner) Start(ctx context.Context, key string, sink ag
 		if retiredJob == nil {
 			r.mu.Unlock()
 			log.Printf("agent session capacity reached: max=%d", r.maxSessions)
-			return r.rejectPreparedRun(ctx, sink, prepared)
+			return r.rejectPreparedRun(ctx, sink, prepared, agent.CapacityErrorFallback)
 		}
 		delete(r.jobs, retiredKey)
 		if retiredJob.timer != nil {
@@ -411,7 +415,7 @@ func (r *conversationAgentRunner) Start(ctx context.Context, key string, sink ag
 		r.mu.Unlock()
 		cancel()
 		log.Printf("create agent session failed: %v", err)
-		return r.rejectPreparedRun(ctx, sink, prepared)
+		return r.rejectPreparedRun(ctx, sink, prepared, agent.ProcessingErrorFallback)
 	}
 	job := &conversationAgentJob{
 		actorID:      strings.TrimSpace(prepared.Authorization.Authorization.ActorID),
@@ -583,8 +587,8 @@ func (r *conversationAgentRunner) runJob(key string, job *conversationAgentJob) 
 		controller.Stop()
 		if err != nil && !errors.Is(err, context.Canceled) {
 			log.Printf("agent reply failed: %v", err)
-			if !taskSink.taskErrorSent {
-				_ = sendAgentFallback(job.ctx, taskSink)
+			if !taskSink.taskErrorSent && !errors.Is(err, agent.ErrOutputDelivery) {
+				_ = sendAgentFallback(job.ctx, taskSink, agent.ProcessingErrorFallback)
 			}
 		}
 
@@ -629,7 +633,7 @@ func (r *conversationAgentRunner) runJob(key string, job *conversationAgentJob) 
 			if appended || len(job.pending) > 0 {
 				r.mu.Unlock()
 				for _, failed := range failedAppends {
-					_ = sendAgentFallback(job.ctx, failed.ErrorSink)
+					_ = sendAgentFallback(job.ctx, failed.ErrorSink, agent.ProcessingErrorFallback)
 				}
 				continue
 			}
@@ -641,7 +645,7 @@ func (r *conversationAgentRunner) runJob(key string, job *conversationAgentJob) 
 		})
 		r.mu.Unlock()
 		for _, failed := range failedAppends {
-			_ = sendAgentFallback(job.ctx, failed.ErrorSink)
+			_ = sendAgentFallback(job.ctx, failed.ErrorSink, agent.ProcessingErrorFallback)
 		}
 		return
 	}
@@ -725,12 +729,13 @@ func (r *conversationAgentRunner) rejectPreparedRun(
 	ctx context.Context,
 	sink agent.OutputSink,
 	prepared preparedAgentRun,
+	content string,
 ) bool {
 	errorSink := prepared.ErrorSink
 	if errorSink == nil {
 		errorSink = sink
 	}
-	sendErr := sendAgentFallback(ctx, errorSink)
+	sendErr := sendAgentFallback(ctx, errorSink, content)
 	return sendErr == nil
 }
 
@@ -781,7 +786,8 @@ func (s *taskOutputSink) SendMarkdown(ctx context.Context, content string) error
 }
 
 func isAgentTaskError(content string) bool {
-	return content == agent.ModelErrorFallback || content == agent.LoopLimitFallback
+	return content == agent.ModelErrorFallback || content == agent.ProcessingErrorFallback ||
+		content == agent.CapacityErrorFallback || content == agent.LoopLimitFallback
 }
 
 func (j *conversationAgentJob) sameActor(authorization preparedAuthorization) bool {
@@ -920,11 +926,11 @@ func filterHistoryAfterSeq(history []agent.HistoryMessage, afterSeq int64) []age
 	return filtered
 }
 
-func sendAgentFallback(ctx context.Context, sink agent.OutputSink) error {
+func sendAgentFallback(ctx context.Context, sink agent.OutputSink, content string) error {
 	if sink == nil {
 		return errors.New("agent output sink unavailable")
 	}
-	if err := sink.SendMarkdown(ctx, agent.ModelErrorFallback); err != nil {
+	if err := sink.SendMarkdown(ctx, content); err != nil {
 		if !errors.Is(err, context.Canceled) {
 			log.Printf("send agent fallback failed: %v", err)
 		}

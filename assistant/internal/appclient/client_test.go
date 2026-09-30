@@ -670,6 +670,49 @@ func TestHandleParsedServerMessageRunsGroupMessageWithDirectAppMention(t *testin
 	}
 }
 
+func TestTopicSetupFailureUsesProcessingFallback(t *testing.T) {
+	appID := "00000000-0000-0000-0000-000000000001"
+	for _, failedMethod := range []string{methodMessageSend, methodConversationTopicCreate} {
+		t.Run(failedMethod, func(t *testing.T) {
+			requester := appRequestFunc(func(_ context.Context, method string, _ any) (json.RawMessage, error) {
+				switch method {
+				case methodConversationMessagesList:
+					return json.Marshal(appListConversationMessagesResponsePayload{})
+				case failedMethod:
+					return nil, errors.New("topic setup failed")
+				case methodMessageSend:
+					return json.Marshal(sendMessageResponsePayload{Message: messagePayload{ID: "notice-1"}})
+				default:
+					t.Fatalf("unexpected request %q", method)
+					return nil, nil
+				}
+			})
+			var sent []sendMessageRequestPayload
+			handled := handleParsedServerMessageWithTopicRouter(
+				context.Background(),
+				testGroupMessageCreatedEnvelope(t, appID, "user-1", "message-1", 1, "请处理 {(@app/"+appID+")}"),
+				appID, requester,
+				replyAgentFunc(func(context.Context, agent.Request, agent.OutputSink) error {
+					t.Fatal("agent must not run after topic setup failure")
+					return nil
+				}),
+				topicRouterDecision(true), directAgentRunner{},
+				func(_ context.Context, message envelope) error {
+					var reply sendMessageRequestPayload
+					if err := json.Unmarshal(message.Payload, &reply); err != nil {
+						return err
+					}
+					sent = append(sent, reply)
+					return nil
+				},
+			)
+			if !handled || len(sent) != 1 || sent[0].Message.Content != agent.ProcessingErrorFallback || sent[0].Target.Type != "group" {
+				t.Fatalf("handled=%v replies=%#v, want one processing error in group", handled, sent)
+			}
+		})
+	}
+}
+
 func TestHandleParsedServerMessageRunsGroupMessageWithUppercaseDirectAppMention(t *testing.T) {
 	appID := "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1"
 	mentionedAppID := strings.ToUpper(appID)
@@ -973,7 +1016,7 @@ func TestHandleParsedServerMessageReportsTopicPreparationFailureToParent(t *test
 	if err := json.Unmarshal(sent[0].Payload, &reply); err != nil {
 		t.Fatalf("decode fallback reply: %v", err)
 	}
-	if reply.Target.Type != "group" || reply.Target.ConversationID != "parent-group" || reply.Message.Content != agent.ModelErrorFallback {
+	if reply.Target.Type != "group" || reply.Target.ConversationID != "parent-group" || reply.Message.Content != agent.ProcessingErrorFallback {
 		t.Fatalf("preparation fallback = %#v, want parent group", reply)
 	}
 }

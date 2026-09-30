@@ -706,7 +706,7 @@ func handleParsedServerMessageWithTopicRouter(ctx context.Context, message envel
 		fallbackSink := agent.OutputSinkFunc(func(ctx context.Context, content string) error {
 			return sendMarkdownReply(ctx, writeJSON, errorConversation, content)
 		})
-		return sendAgentFallback(ctx, fallbackSink) == nil
+		return sendAgentFallback(ctx, fallbackSink, agent.ProcessingErrorFallback) == nil
 	}
 	errorConversation := agentErrorConversation(payload.Conversation, &prepared)
 	prepared.ErrorSink = agent.OutputSinkFunc(func(ctx context.Context, content string) error {
@@ -732,12 +732,12 @@ func handleParsedServerMessageWithTopicRouter(ctx context.Context, message envel
 			)
 			if err != nil {
 				log.Printf("send agent topic notice failed: %v", err)
-				return sendAgentFallback(ctx, prepared.ErrorSink) == nil
+				return sendAgentFallback(ctx, prepared.ErrorSink, agent.ProcessingErrorFallback) == nil
 			}
 			topic, err := createConversationTopic(ctx, requester, payload.Conversation.ID, notice.ID)
 			if err != nil {
 				log.Printf("create agent topic failed: %v", err)
-				return sendAgentFallback(ctx, prepared.ErrorSink) == nil
+				return sendAgentFallback(ctx, prepared.ErrorSink, agent.ProcessingErrorFallback) == nil
 			}
 			replyConversation = topic
 			parentConversation := prepared.Request.Conversation
@@ -795,7 +795,7 @@ func handleChoiceResponseCreated(
 		fallbackSink := agent.OutputSinkFunc(func(ctx context.Context, content string) error {
 			return sendMarkdownReply(ctx, writeJSON, payload.Conversation, content)
 		})
-		return sendAgentFallback(ctx, fallbackSink) == nil
+		return sendAgentFallback(ctx, fallbackSink, agent.ProcessingErrorFallback) == nil
 	}
 	sink := agent.OutputSinkFunc(func(ctx context.Context, content string) error {
 		return sendMarkdownReply(ctx, writeJSON, payload.Conversation, content)

@@ -598,6 +598,54 @@ func TestConversationAgentRunnerRoutesModelFailureToParentConversation(t *testin
 	}
 }
 
+func TestReplyDeliveryFailureDoesNotSendFallback(t *testing.T) {
+	for _, persistent := range []bool{false, true} {
+		name := "direct"
+		if persistent {
+			name = "session"
+		}
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			assistantAgent := agent.New(llmModelFunc(func(context.Context, llm.Request) (llm.Response, error) {
+				return llm.Response{Blocks: []llm.Block{{Type: llm.BlockTypeText, Text: "完成"}}}, nil
+			}))
+			replyCalls := make(chan string, 2)
+			errorCalls := make(chan string, 2)
+			sink := agent.OutputSinkFunc(func(_ context.Context, content string) error {
+				replyCalls <- content
+				return errors.New("send failed")
+			})
+			prepared := preparedTopicRun("topic-delivery", "message-1", 1, "开始", "user-1", "auth_1", newRunnerTopicRequester())
+			prepared.ErrorSink = agent.OutputSinkFunc(func(_ context.Context, content string) error {
+				errorCalls <- content
+				return nil
+			})
+			if persistent {
+				runner := newConversationAgentRunner(ctx)
+				defer runner.CancelAll()
+				runner.Start(ctx, "topic-delivery", sink, assistantAgent, prepared)
+				waitForRunnerJobIdle(t, runner, "topic-delivery")
+			} else {
+				directAgentRunner{}.Start(ctx, "topic-delivery", sink, assistantAgent, prepared)
+			}
+			if got := <-replyCalls; got != "完成" {
+				t.Fatalf("reply = %q", got)
+			}
+			select {
+			case got := <-replyCalls:
+				t.Fatalf("unexpected second reply attempt: %q", got)
+			default:
+			}
+			select {
+			case got := <-errorCalls:
+				t.Fatalf("unexpected error fallback: %q", got)
+			default:
+			}
+		})
+	}
+}
+
 func TestConversationAgentRunnerCapacityFailureKeepsNewTopicOpenAndRepliesToParent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -618,7 +666,7 @@ func TestConversationAgentRunnerCapacityFailureKeepsNewTopicOpenAndRepliesToPare
 
 	requester := newRunnerTopicRequester()
 	topicOutputs := make(chan string, 1)
-	parentOutputs := make(chan string, 1)
+	parentOutputs := make(chan string, 2)
 	second := preparedTopicRun("topic-rejected", "rejected-message", 1, "新任务", "user-2", "auth_2", requester)
 	second.ErrorSink = agent.OutputSinkFunc(func(_ context.Context, content string) error {
 		parentOutputs <- content
@@ -631,8 +679,13 @@ func TestConversationAgentRunnerCapacityFailureKeepsNewTopicOpenAndRepliesToPare
 	if !accepted {
 		t.Fatal("capacity rejection was not handled after notifying the parent")
 	}
-	if output := waitForString(t, parentOutputs, "capacity error in parent"); output != agent.ModelErrorFallback {
-		t.Fatalf("parent output = %q, want model fallback", output)
+	if output := waitForString(t, parentOutputs, "capacity error in parent"); output != agent.CapacityErrorFallback {
+		t.Fatalf("parent output = %q, want capacity fallback", output)
+	}
+	select {
+	case output := <-parentOutputs:
+		t.Fatalf("capacity error was sent more than once: %q", output)
+	default:
 	}
 	select {
 	case output := <-topicOutputs:

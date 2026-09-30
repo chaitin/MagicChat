@@ -574,8 +574,26 @@ func TestAgentRunReportsLLMErrorToUser(t *testing.T) {
 	if len(outputs) != 1 {
 		t.Fatalf("output count = %d, want one error message", len(outputs))
 	}
-	if outputs[0] != "调用大模型出现异常，无法生成回复" {
+	if outputs[0] != ModelErrorFallback {
 		t.Fatalf("error output = %q, want fixed model error message", outputs[0])
+	}
+}
+
+func TestAgentRunDistinguishesReplyDeliveryFailure(t *testing.T) {
+	model := New(modelFunc(func(context.Context, llm.Request) (llm.Response, error) {
+		return llm.Response{Blocks: []llm.Block{{Type: llm.BlockTypeText, Text: "完成"}}}, nil
+	}))
+	sendErr := errors.New("reply transport unavailable")
+	calls := 0
+	err := model.Run(context.Background(), Request{Content: "你好"}, sinkFunc(func(context.Context, string) error {
+		calls++
+		return sendErr
+	}))
+	if !errors.Is(err, ErrOutputDelivery) || !errors.Is(err, sendErr) {
+		t.Fatalf("Run() error = %v, want delivery and transport error", err)
+	}
+	if calls != 1 {
+		t.Fatalf("send calls = %d, want no fallback attempt", calls)
 	}
 }
 

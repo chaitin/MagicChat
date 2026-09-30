@@ -255,8 +255,12 @@ const (
 	contextSummaryChunkTokens   = 60_000
 	FinalAnswerFollowup         = "你刚才没有给出可见结论。请直接给出最终回答，主要回答用户最后一个问题。"
 	LoopLimitFallback           = "已达到本次处理的最大步骤数，我先暂停。"
-	ModelErrorFallback          = "调用大模型出现异常，无法生成回复"
+	ModelErrorFallback          = "大模型服务暂时不可用，请稍后重试"
+	ProcessingErrorFallback     = "处理消息时遇到问题，请稍后重试"
+	CapacityErrorFallback       = "当前处理任务较多，请稍后重试"
 )
+
+var ErrOutputDelivery = errors.New("agent output delivery failed")
 
 const contextSummarySystemPrompt = `你是上下文压缩器。请把提供的旧 Agent 会话压缩成一份可以替代原消息的准确记忆。
 
@@ -562,7 +566,7 @@ func (s *Session) RunCycleWithProgress(ctx context.Context, sink OutputSink, obs
 				return err
 			}
 			if sendErr := sink.SendMarkdown(ctx, ModelErrorFallback); sendErr != nil {
-				return fmt.Errorf("send model error fallback: %w", sendErr)
+				return fmt.Errorf("%w: send model error fallback: %w", ErrOutputDelivery, sendErr)
 			}
 			return err
 		}
@@ -603,7 +607,10 @@ func (s *Session) RunCycleWithProgress(ctx context.Context, sink OutputSink, obs
 		})
 	}
 
-	return sink.SendMarkdown(ctx, LoopLimitFallback)
+	if err := sink.SendMarkdown(ctx, LoopLimitFallback); err != nil {
+		return fmt.Errorf("%w: send loop limit fallback: %w", ErrOutputDelivery, err)
+	}
+	return nil
 }
 
 func reportPhase(observer ProgressObserver, phase Phase) {
@@ -1160,7 +1167,7 @@ func (a *Agent) handleResponseBlocks(ctx context.Context, sink OutputSink, block
 			}
 			result.hasText = true
 			if err := sink.SendMarkdown(ctx, block.Text); err != nil {
-				return responseBlocksResult{}, err
+				return responseBlocksResult{}, fmt.Errorf("%w: send model response: %w", ErrOutputDelivery, err)
 			}
 		case llm.BlockTypeThinking:
 			continue
