@@ -95,6 +95,17 @@ test("候选插入转换为服务端提及模板，改动文字会使提及失�
   assert.equal(createDraftMentionTemplate(changed, []), changed)
 })
 
+test("点击群成员名字可在光标处插入带身份的提及", () => {
+  const candidate = createMentionCandidates(group(), [group()])[1]
+  const inserted = insertDraftMention("请通知大家", [], candidate, 2, 2)
+  assert.equal(inserted.value, "请通@阿丽 知大家")
+  assert.equal(inserted.cursor, 6)
+  assert.equal(
+    createDraftMentionTemplate(inserted.value, inserted.mentions),
+    `请通{(@user/${aliceId})} 知大家`,
+  )
+})
+
 test("所有人及重编辑消息保留提及身份", () => {
   const all = createMentionCandidates(group(), [group()])[0]
   const inserted = insertDraftMention("@", [], all, 0, 1)

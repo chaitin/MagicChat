@@ -1,6 +1,7 @@
 import {
   Fragment,
   forwardRef,
+  useMemo,
   useRef,
   type ComponentPropsWithoutRef,
   type ReactNode,
@@ -31,6 +32,7 @@ import {
   getDesktopMessageEditableBody,
   getDesktopMessageReplyAuthor,
 } from "../message-actions"
+import type { MentionCandidate } from "../conversation-mentions"
 import { MessageBodyRenderer } from "../message-body-renderer"
 import { MessageActionsDropdown, MessageCopyMenu } from "../message-copy-menu"
 import { MessageReactionChips } from "../message-reaction-chips"
@@ -52,6 +54,8 @@ export function MessageList({
   revokeEnabled,
   canModerateMessages,
   mentionLabelResolver,
+  mentionCandidates,
+  onMentionSender,
   pendingReactionKeys,
   revokingMessageIds,
   highlightedMessageId,
@@ -92,6 +96,8 @@ export function MessageList({
   revokeEnabled: boolean
   canModerateMessages: boolean
   mentionLabelResolver: MentionLabelResolver
+  mentionCandidates: MentionCandidate[]
+  onMentionSender: (candidate: MentionCandidate) => void
   pendingReactionKeys: Set<string>
   revokingMessageIds: Set<string>
   highlightedMessageId: string | null
@@ -120,6 +126,15 @@ export function MessageList({
 }) {
   const gapRef = useRef<HTMLDivElement>(null)
   const gapAutoArmedRef = useRef(true)
+  const senderMentions = useMemo(
+    () =>
+      new Map(
+        mentionCandidates
+          .filter((candidate) => candidate.targetType !== "all")
+          .map((candidate) => [`${candidate.targetType}:${candidate.id.toLowerCase()}`, candidate]),
+      ),
+    [mentionCandidates],
+  )
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1">
       <ScrollArea
@@ -226,6 +241,14 @@ export function MessageList({
                       revokeEnabled={revokeEnabled}
                       canModerateMessages={canModerateMessages}
                       mentionLabelResolver={mentionLabelResolver}
+                      senderMention={
+                        !selectionActive && !message.virtualType && message.senderId
+                          ? senderMentions.get(
+                              `${message.senderType}:${message.senderId.toLowerCase()}`,
+                            )
+                          : undefined
+                      }
+                      onMentionSender={onMentionSender}
                       pendingReactionKeys={pendingReactionKeys}
                       revokingMessageIds={revokingMessageIds}
                       highlighted={message.id === highlightedMessageId}
@@ -278,6 +301,8 @@ function MessageRow({
   revokeEnabled,
   canModerateMessages,
   mentionLabelResolver,
+  senderMention,
+  onMentionSender,
   pendingReactionKeys,
   revokingMessageIds,
   highlighted,
@@ -306,6 +331,8 @@ function MessageRow({
   revokeEnabled: boolean
   canModerateMessages: boolean
   mentionLabelResolver: MentionLabelResolver
+  senderMention: MentionCandidate | undefined
+  onMentionSender: (candidate: MentionCandidate) => void
   pendingReactionKeys: Set<string>
   revokingMessageIds: Set<string>
   highlighted: boolean
@@ -429,7 +456,19 @@ function MessageRow({
         )}
       >
         <div className="flex max-w-full min-w-0 items-center gap-2 text-xs text-muted-foreground">
-          <span className="max-w-32 truncate">{senderDisplayName}</span>
+          {senderMention ? (
+            <button
+              type="button"
+              className="max-w-32 cursor-pointer truncate text-left hover:text-foreground focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              title={`@${senderDisplayName}`}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => onMentionSender({ ...senderMention, label: senderDisplayName })}
+            >
+              {senderDisplayName}
+            </button>
+          ) : (
+            <span className="max-w-32 truncate">{senderDisplayName}</span>
+          )}
           <span className="shrink-0">{formatMessageTime(message.createdAt)}</span>
         </div>
         <div

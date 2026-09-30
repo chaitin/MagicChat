@@ -315,7 +315,7 @@ function ProfileAvatarPicker({
       {open && (
         <DialogContent
           showCloseButton={false}
-          className="flex max-h-[80vh] min-w-0 flex-col overflow-hidden sm:max-w-[26rem]"
+          className="flex max-h-[calc(100dvh-var(--desktop-titlebar-height)-1rem)] min-w-0 flex-col gap-4 overflow-x-hidden overflow-y-auto p-5 sm:max-w-[28rem]"
         >
           <div className="flex shrink-0 items-start justify-between gap-4">
             <div>
@@ -342,7 +342,7 @@ function ProfileAvatarPicker({
               setMode(value as "builtin" | "custom")
               setError("")
             }}
-            className="min-h-0"
+            className="shrink-0"
           >
             <TabsList className="shrink-0">
               <TabsTrigger value="builtin" disabled={saving}>
@@ -356,7 +356,7 @@ function ProfileAvatarPicker({
               <ScrollArea
                 type="hover"
                 className="-mr-2 min-h-0"
-                viewportClassName="h-auto! max-h-[calc(80vh-13rem)] overflow-x-hidden"
+                viewportClassName="h-auto! max-h-[calc(100dvh-var(--desktop-titlebar-height)-12rem)] overflow-x-hidden"
               >
                 <div className="grid grid-cols-4 gap-2 rounded-md border bg-muted/30 p-2 sm:grid-cols-8">
                   {builtinAvatars.map((avatar, index) => (
@@ -381,20 +381,12 @@ function ProfileAvatarPicker({
               </ScrollArea>
             </TabsContent>
             <TabsContent value="custom" className="min-h-0">
-              <ScrollArea
-                type="hover"
-                className="-mr-2 min-h-0"
-                viewportClassName="h-auto! max-h-[calc(80vh-13rem)] overflow-x-hidden"
-              >
-                <div className="pr-2">
-                  <GroupAvatarPicker
-                    formId={formId}
-                    saving={saving}
-                    onReadyChange={setReady}
-                    onSave={async (bytes) => onSave(bytes)}
-                  />
-                </div>
-              </ScrollArea>
+              <GroupAvatarPicker
+                formId={formId}
+                saving={saving}
+                onReadyChange={setReady}
+                onSave={async (bytes) => onSave(bytes)}
+              />
             </TabsContent>
           </Tabs>
           {error && (

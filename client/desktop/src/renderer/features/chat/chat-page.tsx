@@ -396,6 +396,15 @@ export function ChatPage({
     [draft, draftMentions, focusComposer],
   )
 
+  const mentionMessageSender = useCallback(
+    (candidate: MentionCandidate) => {
+      const composer = composerRef.current
+      const start = composer?.selectionStart ?? draft.length
+      insertMention(candidate, start, composer?.selectionEnd ?? start)
+    },
+    [draft.length, insertMention],
+  )
+
   const sendRichMessage = useCallback(
     async (body: SendRichMessageBody) => {
       if (!selectedId || !window.desktop) throw new Error("桌面服务暂不可用")
@@ -741,6 +750,10 @@ export function ChatPage({
                     revokeEnabled={!selected.topic?.archived}
                     canModerateMessages={Boolean(selected.canModerateMessages)}
                     mentionLabelResolver={resolveMentionLabel}
+                    mentionCandidates={
+                      selected.canSend === false || selection.active ? [] : mentionCandidates
+                    }
+                    onMentionSender={mentionMessageSender}
                     pendingReactionKeys={pendingReactionKeys}
                     revokingMessageIds={revokingMessageIds}
                     highlightedMessageId={

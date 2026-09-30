@@ -233,12 +233,12 @@ export function GroupAvatarPicker({
           event.target.value = ""
         }}
       />
-      <div className="grid w-full max-w-80 gap-4 sm:max-w-none sm:grid-cols-[minmax(0,1fr)_auto]">
+      <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-4">
         <div
           ref={frameRef}
           role={sourceUrl ? "img" : undefined}
           aria-label={sourceUrl ? "头像裁切区域" : undefined}
-          className={`relative aspect-square w-full overflow-hidden rounded-md bg-muted ${sourceUrl ? (disabled ? "cursor-default opacity-60" : dragging ? "cursor-grabbing touch-none" : "cursor-grab touch-none") : "group/choose-image transition-colors hover:bg-muted/70"}`}
+          className={`relative aspect-square w-full overflow-hidden rounded-md bg-background ${sourceUrl ? (disabled ? "cursor-default opacity-60" : dragging ? "cursor-grabbing touch-none" : "cursor-grab touch-none") : "group/choose-image transition-colors hover:bg-muted/40"}`}
           onPointerDown={
             sourceUrl
               ? (event) => {
@@ -296,8 +296,8 @@ export function GroupAvatarPicker({
             <div className="pointer-events-none absolute inset-0 rounded-md ring-1 ring-foreground/15 ring-inset transition-shadow group-hover/choose-image:ring-primary/50 group-focus-within/choose-image:ring-primary/50" />
           )}
         </div>
-        <div className="flex justify-between gap-3 sm:flex-col sm:items-center">
-          <div className="flex gap-2 sm:flex-col">
+        <div className="flex flex-col items-center justify-between gap-3">
+          <div className="flex flex-col gap-2">
             <Button
               type="button"
               size="icon-sm"

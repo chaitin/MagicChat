@@ -10252,7 +10252,7 @@ func TestUpdateGroupConversationNameCreatesSystemMessage(t *testing.T) {
 	}
 }
 
-func TestUpdateGroupConversationNameAllowsMember(t *testing.T) {
+func TestUpdateGroupConversationNameRequiresManager(t *testing.T) {
 	server, db := newTestRouter(t)
 	defer server.Close()
 
@@ -10267,11 +10267,31 @@ func TestUpdateGroupConversationNameAllowsMember(t *testing.T) {
 		now:             now,
 	})
 
-	resp, body := patchJSON(t, server, "/api/client/conversations/groups/"+conversation.ID+"/name", map[string]any{
-		"name": "新产品讨论组",
-	}, loginAsUser(t, server, bob.Email))
+	bobCookie := loginAsUser(t, server, bob.Email)
+	path := "/api/client/conversations/groups/" + conversation.ID + "/name"
+	request := map[string]any{"name": "新产品讨论组"}
+	resp, body := patchJSON(t, server, path, request, bobCookie)
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("member status = %d, want 403, body = %#v", resp.StatusCode, body)
+	}
+	requireError(t, body, "forbidden")
+	var unchanged store.Conversation
+	if err := db.First(&unchanged, "id = ?", conversation.ID).Error; err != nil {
+		t.Fatalf("find conversation: %v", err)
+	}
+	if unchanged.Name != "产品讨论组" {
+		t.Fatalf("member changed conversation name to %q", unchanged.Name)
+	}
+	requireRowCount(t, db, &store.Message{}, 0, "conversation_id = ?", conversation.ID)
+
+	if err := db.Model(&store.ConversationMember{}).
+		Where("conversation_id = ? AND member_type = ? AND member_id = ?", conversation.ID, store.ConversationMemberTypeUser, bob.ID).
+		Update("role", store.ConversationMemberRoleAdmin).Error; err != nil {
+		t.Fatalf("promote admin: %v", err)
+	}
+	resp, body = patchJSON(t, server, path, request, bobCookie)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200, body = %#v", resp.StatusCode, body)
+		t.Fatalf("admin status = %d, want 200, body = %#v", resp.StatusCode, body)
 	}
 	data := requireSuccess(t, body)
 	updatedConversation := data["conversation"].(map[string]any)
@@ -10279,7 +10299,7 @@ func TestUpdateGroupConversationNameAllowsMember(t *testing.T) {
 		t.Fatalf("conversation.name = %v, want 新产品讨论组", updatedConversation["name"])
 	}
 	if updatedConversation["last_message_summary"] != "Bob 修改群聊名称为 新产品讨论组" {
-		t.Fatalf("last_message_summary = %v, want member rename summary", updatedConversation["last_message_summary"])
+		t.Fatalf("last_message_summary = %v, want admin rename summary", updatedConversation["last_message_summary"])
 	}
 }
 
