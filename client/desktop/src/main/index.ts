@@ -155,9 +155,17 @@ function quitApp() {
 
 function createTray() {
   const isMac = process.platform === "darwin"
+  const isWindows = process.platform === "win32"
   const iconPath = app.isPackaged
-    ? path.join(process.resourcesPath, isMac ? "trayTemplate.png" : "tray-icon.png")
-    : path.join(__dirname, "../../resources", isMac ? "trayTemplate.png" : "icon.png")
+    ? path.join(
+        process.resourcesPath,
+        isMac ? "trayTemplate.png" : isWindows ? "tray-color.png" : "tray-icon.png",
+      )
+    : path.join(
+        __dirname,
+        "../../resources",
+        isMac ? "trayTemplate.png" : isWindows ? "tray-color.png" : "icon.png",
+      )
   const source = nativeImage.createFromPath(iconPath)
   if (source.isEmpty()) throw new Error("无法加载托盘图标")
   if (isMac) source.setTemplateImage(true)
