@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { Check, Circle, Eraser, Pencil, Square, Type, Undo2, X } from "lucide-react"
-import { ArrowUpRight01Icon, HazeIcon } from "@hugeicons/core-free-icons"
+import { ArrowUpRight01Icon, BlurIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import type {
   ScreenshotPayload,
@@ -24,7 +24,7 @@ import {
 type Drag = {
   start: Point
   current: Point
-  mode: "selection" | "annotation" | "move"
+  mode: "selection" | "annotation" | "move" | "text"
   origin?: ScreenshotRect
 }
 
@@ -63,6 +63,8 @@ export function ScreenshotOverlay() {
   const [error, setError] = useState("")
   const [textDraft, setTextDraft] = useState<{ at: Point; text: string } | null>(null)
   const textDraftRef = useRef<{ at: Point; text: string } | null>(null)
+  const editingText = textDraft !== null
+  const textInputRef = useRef<HTMLTextAreaElement>(null)
   const pointerId = useRef<number | null>(null)
   const activationRef = useRef<Promise<void>>(Promise.resolve())
   const pendingWindow = useRef<ScreenshotWindowBounds | null>(null)
@@ -110,6 +112,12 @@ export function ScreenshotOverlay() {
       }),
     [],
   )
+
+  useEffect(() => {
+    if (!editingText) return
+    const frame = window.requestAnimationFrame(() => textInputRef.current?.focus())
+    return () => window.cancelAnimationFrame(frame)
+  }, [editingText])
 
   useEffect(() => {
     if (!selection || !payload || !imageLoaded || !imageRef.current || !canvasRef.current) return
@@ -171,10 +179,7 @@ export function ScreenshotOverlay() {
     if (selection && !tool && inside(point, selection)) {
       setDrag({ start: point, current: point, mode: "move", origin: selection })
     } else if (selection && tool === "text" && inside(point, selection)) {
-      const pending = { at: point, text: "" }
-      textDraftRef.current = pending
-      setTextDraft(pending)
-      return
+      setDrag({ start: point, current: point, mode: "text" })
     } else if (selection && tool && tool !== "text" && inside(point, selection)) {
       const annotation: Annotation =
         tool === "pen" || tool === "mosaic" || tool === "eraser"
@@ -215,7 +220,7 @@ export function ScreenshotOverlay() {
           viewport,
         ),
       )
-    } else if (selection) {
+    } else if (selection && drag.mode !== "text") {
       setDrag((current) => (current ? { ...current, current: point } : null))
       setDraft((current) => {
         if (!current) return null
@@ -248,6 +253,10 @@ export function ScreenshotOverlay() {
           viewport,
         ),
       )
+    } else if (drag.mode === "text" && selection && inside(point, selection)) {
+      const pending = { at: drag.start, text: "" }
+      textDraftRef.current = pending
+      setTextDraft(pending)
     } else if (selection && draft) {
       if ("points" in draft) {
         setAnnotations((current) => [...current, { ...draft, points: [...draft.points, point] }])
@@ -462,7 +471,7 @@ export function ScreenshotOverlay() {
             >
               {id === "arrow" || id === "mosaic" ? (
                 <HugeiconsIcon
-                  icon={id === "arrow" ? ArrowUpRight01Icon : HazeIcon}
+                  icon={id === "arrow" ? ArrowUpRight01Icon : BlurIcon}
                   className="size-4"
                   aria-hidden
                 />
@@ -506,12 +515,12 @@ export function ScreenshotOverlay() {
       )}
       {textDraft && (
         <textarea
-          autoFocus
+          ref={textInputRef}
           aria-label="输入截图文字"
           placeholder="输入文字，Enter 完成"
           value={textDraft.text}
           rows={2}
-          className="absolute z-40 min-h-12 w-56 resize-none rounded border border-emerald-400 bg-white px-2 py-1 text-lg text-red-500 shadow-lg outline-none"
+          className="absolute z-40 min-h-12 w-56 cursor-text resize-none rounded border border-emerald-400 bg-white px-2 py-1 text-lg text-red-500 shadow-lg outline-none"
           style={{
             left: Math.min(textDraft.at.x, Math.max(0, viewport.width - 224)),
             top: Math.min(textDraft.at.y, Math.max(0, viewport.height - 48)),
@@ -530,7 +539,7 @@ export function ScreenshotOverlay() {
             if (event.key === "Escape") {
               textDraftRef.current = null
               setTextDraft(null)
-            } else if (event.key === "Enter" && !event.shiftKey) {
+            } else if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
               event.preventDefault()
               commitText()
             }
