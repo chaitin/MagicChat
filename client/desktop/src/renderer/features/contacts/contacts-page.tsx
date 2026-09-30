@@ -1,6 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { ArrowRight01Icon } from "@hugeicons/core-free-icons"
-import appIcon from "@/assets/app-icon.png"
+import { ArrowRight01Icon, FlashIcon } from "@hugeicons/core-free-icons"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { Button as BeButton } from "@/components/motion/button/base"
@@ -411,8 +410,10 @@ export function ContactsPage({
             }
           />
         ) : (
-          <div className="flex h-full items-center justify-center">
-            <img src={appIcon} alt="" className="size-32" />
+          <div className="flex h-full items-center justify-center text-xgui-background-2">
+            <span className="flex size-32 items-center justify-center rounded-full bg-xgui-background-1">
+              <HugeiconsIcon icon={FlashIcon} className="size-16" aria-hidden />
+            </span>
           </div>
         )}
       </div>

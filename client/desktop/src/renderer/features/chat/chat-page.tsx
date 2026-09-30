@@ -7,8 +7,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react"
-import { Loading03Icon } from "@hugeicons/core-free-icons"
-import appIcon from "@/assets/app-icon.png"
+import { FlashIcon, Loading03Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { ContactProfileProvider } from "@/components/avatar/contact-profile-popover"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
@@ -849,8 +848,10 @@ export function ChatPage({
                   )}
                 </>
               ) : (
-                <div className="flex flex-1 items-center justify-center">
-                  <img src={appIcon} alt="" className="size-32" />
+                <div className="flex flex-1 items-center justify-center text-xgui-background-2">
+                  <span className="flex size-32 items-center justify-center rounded-full bg-xgui-background-1">
+                    <HugeiconsIcon icon={FlashIcon} className="size-16" aria-hidden />
+                  </span>
                 </div>
               )}
             </ContactProfileProvider>

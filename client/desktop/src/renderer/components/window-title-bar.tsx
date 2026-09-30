@@ -6,7 +6,7 @@ import {
   RectangularIcon,
   MinusSignIcon,
 } from "@hugeicons/core-free-icons"
-import appIcon from "@/assets/app-icon.png"
+import appIcon from "../../../resources/tray-color@2x.png"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 
 type WindowControls = {
