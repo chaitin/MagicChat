@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
-import { Check, Circle, EraserIcon, Pencil, Square, Undo2, X } from "lucide-react"
-import { ArrowUpRight01Icon } from "@hugeicons/core-free-icons"
+import { Check, Circle, Eraser, Pencil, Square, Type, Undo2, X } from "lucide-react"
+import { ArrowUpRight01Icon, HazeIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import type {
   ScreenshotPayload,
@@ -13,7 +13,6 @@ import {
   moveSelection,
   resizeSelection,
   toolbarPosition,
-  translateAnnotations,
   windowAtPoint,
   type Annotation,
   type DrawTool,
@@ -45,7 +44,9 @@ const tools = [
   { id: "ellipse", label: "椭圆", icon: Circle },
   { id: "arrow", label: "箭头", icon: null },
   { id: "pen", label: "画笔", icon: Pencil },
-  { id: "mosaic", label: "马赛克", icon: EraserIcon },
+  { id: "mosaic", label: "马赛克", icon: null },
+  { id: "eraser", label: "橡皮擦", icon: Eraser },
+  { id: "text", label: "文字", icon: Type },
 ] as const
 
 export function ScreenshotOverlay() {
@@ -60,6 +61,8 @@ export function ScreenshotOverlay() {
   const [draft, setDraft] = useState<Annotation | null>(null)
   const [finishing, setFinishing] = useState(false)
   const [error, setError] = useState("")
+  const [textDraft, setTextDraft] = useState<{ at: Point; text: string } | null>(null)
+  const textDraftRef = useRef<{ at: Point; text: string } | null>(null)
   const pointerId = useRef<number | null>(null)
   const activationRef = useRef<Promise<void>>(Promise.resolve())
   const pendingWindow = useRef<ScreenshotWindowBounds | null>(null)
@@ -68,7 +71,6 @@ export function ScreenshotOverlay() {
     handle: ResizeHandle
     start: Point
     original: ScreenshotRect
-    annotations: Annotation[]
   } | null>(null)
   const imageRef = useRef<HTMLImageElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -79,7 +81,7 @@ export function ScreenshotOverlay() {
       : (selection ?? hoveredWindow)
   const toolbar =
     selection && !drag && !resizing
-      ? toolbarPosition(selection, viewport, { width: 298, height: 44 })
+      ? toolbarPosition(selection, viewport, { width: 374, height: 44 })
       : null
 
   useEffect(() => {
@@ -102,6 +104,8 @@ export function ScreenshotOverlay() {
         setTool(null)
         setDraft(null)
         setAnnotations([])
+        textDraftRef.current = null
+        setTextDraft(null)
         setError("")
       }),
     [],
@@ -122,6 +126,11 @@ export function ScreenshotOverlay() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (textDraftRef.current) {
+          textDraftRef.current = null
+          setTextDraft(null)
+          return
+        }
         void window.screenshot?.cancel()
       } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
         event.preventDefault()
@@ -129,7 +138,7 @@ export function ScreenshotOverlay() {
       } else if (
         event.key === "Enter" &&
         selection &&
-        !(event.target instanceof HTMLElement && event.target.closest("button, input"))
+        !(event.target instanceof HTMLElement && event.target.closest("button, input, textarea"))
       ) {
         void confirm()
       }
@@ -138,11 +147,12 @@ export function ScreenshotOverlay() {
     return () => window.removeEventListener("keydown", onKeyDown)
   })
 
-  function localPoint(point: Point, rect: ScreenshotRect): Point {
-    return {
-      x: Math.max(0, Math.min(rect.width, point.x - rect.x)),
-      y: Math.max(0, Math.min(rect.height, point.y - rect.y)),
-    }
+  function commitText() {
+    const pending = textDraftRef.current
+    textDraftRef.current = null
+    setTextDraft(null)
+    if (pending?.text.trim())
+      setAnnotations((current) => [...current, { type: "text", ...pending }])
   }
 
   function inside(point: Point, rect: ScreenshotRect) {
@@ -157,16 +167,21 @@ export function ScreenshotOverlay() {
   function begin(event: ReactPointerEvent<HTMLElement>) {
     if (!payload || finishing || event.button !== 0 || pointerId.current !== null) return
     const point = { x: event.clientX, y: event.clientY }
+    if (textDraftRef.current) commitText()
     if (selection && !tool && inside(point, selection)) {
       setDrag({ start: point, current: point, mode: "move", origin: selection })
-    } else if (selection && tool && inside(point, selection)) {
-      const start = localPoint(point, selection)
+    } else if (selection && tool === "text" && inside(point, selection)) {
+      const pending = { at: point, text: "" }
+      textDraftRef.current = pending
+      setTextDraft(pending)
+      return
+    } else if (selection && tool && tool !== "text" && inside(point, selection)) {
       const annotation: Annotation =
-        tool === "pen" || tool === "mosaic"
-          ? { type: tool, points: [start] }
-          : { type: tool, from: start, to: start }
+        tool === "pen" || tool === "mosaic" || tool === "eraser"
+          ? { type: tool, points: [point] }
+          : { type: tool, from: point, to: point }
       setDraft(annotation)
-      setDrag({ start, current: start, mode: "annotation" })
+      setDrag({ start: point, current: point, mode: "annotation" })
     } else {
       activationRef.current = window.screenshot?.activate() ?? Promise.resolve()
       void activationRef.current.catch(() => setError("无法切换截图屏幕，请重试"))
@@ -174,7 +189,6 @@ export function ScreenshotOverlay() {
         !selection && hoveredWindow && inside(point, hoveredWindow) ? hoveredWindow : null
       setSelection(null)
       setHoveredWindow(null)
-      setAnnotations([])
       setDraft(null)
       setError("")
       setDrag({ start: point, current: point, mode: "selection" })
@@ -202,14 +216,14 @@ export function ScreenshotOverlay() {
         ),
       )
     } else if (selection) {
-      const end = localPoint(point, selection)
-      setDrag((current) => (current ? { ...current, current: end } : null))
+      setDrag((current) => (current ? { ...current, current: point } : null))
       setDraft((current) => {
         if (!current) return null
-        if (current.type === "pen" || current.type === "mosaic") {
-          return { ...current, points: [...current.points, end] }
+        if ("points" in current) {
+          return { ...current, points: [...current.points, point] }
         }
-        return { ...current, to: end }
+        if ("to" in current) return { ...current, to: point }
+        return current
       })
     }
   }
@@ -235,11 +249,10 @@ export function ScreenshotOverlay() {
         ),
       )
     } else if (selection && draft) {
-      const end = localPoint(point, selection)
-      if (draft.type === "pen" || draft.type === "mosaic") {
-        setAnnotations((current) => [...current, { ...draft, points: [...draft.points, end] }])
+      if ("points" in draft) {
+        setAnnotations((current) => [...current, { ...draft, points: [...draft.points, point] }])
       } else if ("from" in draft) {
-        setAnnotations((current) => [...current, { ...draft, to: end }])
+        setAnnotations((current) => [...current, { ...draft, to: point }])
       }
     }
     setDrag(null)
@@ -256,12 +269,6 @@ export function ScreenshotOverlay() {
       viewport,
     )
     setSelection(next)
-    setAnnotations(
-      translateAnnotations(active.annotations, {
-        x: next.x - active.original.x,
-        y: next.y - active.original.y,
-      }),
-    )
   }
 
   function beginResize(event: ReactPointerEvent<HTMLButtonElement>, handle: ResizeHandle) {
@@ -272,7 +279,6 @@ export function ScreenshotOverlay() {
       handle,
       start: { x: event.clientX, y: event.clientY },
       original: selection,
-      annotations,
     }
     event.currentTarget.setPointerCapture(event.pointerId)
     setResizing(true)
@@ -295,15 +301,20 @@ export function ScreenshotOverlay() {
     setError("")
     try {
       await activationRef.current
+      const pendingText = textDraftRef.current
+      if (pendingText) commitText()
+      const finalAnnotations: Annotation[] = pendingText?.text.trim()
+        ? [...annotations, { type: "text", ...pendingText }]
+        : annotations
       let editedPng: ArrayBuffer | undefined
-      if (annotations.length) {
+      if (finalAnnotations.length) {
         const canvas = canvasRef.current
         if (
           !canvas ||
           !imageLoaded ||
           !imageRef.current ||
           !payload ||
-          !paintScreenshot(canvas, imageRef.current, payload, selection, viewport, annotations)
+          !paintScreenshot(canvas, imageRef.current, payload, selection, viewport, finalAnnotations)
         ) {
           throw new Error("截图画面尚未准备完成")
         }
@@ -449,8 +460,12 @@ export function ScreenshotOverlay() {
               className="flex size-8 cursor-pointer items-center justify-center rounded-sm hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-blue-500 aria-pressed:bg-blue-100 aria-pressed:text-blue-700 disabled:opacity-50"
               onClick={() => setTool((current) => (current === id ? null : id))}
             >
-              {id === "arrow" ? (
-                <HugeiconsIcon icon={ArrowUpRight01Icon} className="size-4" aria-hidden />
+              {id === "arrow" || id === "mosaic" ? (
+                <HugeiconsIcon
+                  icon={id === "arrow" ? ArrowUpRight01Icon : HazeIcon}
+                  className="size-4"
+                  aria-hidden
+                />
               ) : (
                 <Icon className="size-4" aria-hidden />
               )}
@@ -488,6 +503,39 @@ export function ScreenshotOverlay() {
             <Check className="size-4" aria-hidden />
           </button>
         </div>
+      )}
+      {textDraft && (
+        <textarea
+          autoFocus
+          aria-label="输入截图文字"
+          placeholder="输入文字，Enter 完成"
+          value={textDraft.text}
+          rows={2}
+          className="absolute z-40 min-h-12 w-56 resize-none rounded border border-emerald-400 bg-white px-2 py-1 text-lg text-red-500 shadow-lg outline-none"
+          style={{
+            left: Math.min(textDraft.at.x, Math.max(0, viewport.width - 224)),
+            top: Math.min(textDraft.at.y, Math.max(0, viewport.height - 48)),
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerMove={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          onChange={(event) => {
+            const next = { ...textDraft, text: event.target.value }
+            textDraftRef.current = next
+            setTextDraft(next)
+          }}
+          onBlur={commitText}
+          onKeyDown={(event) => {
+            event.stopPropagation()
+            if (event.key === "Escape") {
+              textDraftRef.current = null
+              setTextDraft(null)
+            } else if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault()
+              commitText()
+            }
+          }}
+        />
       )}
       {error && (
         <p

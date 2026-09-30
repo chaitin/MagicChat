@@ -3,10 +3,11 @@ import type { ScreenshotWindowBounds } from "../shared/screenshot"
 export type Point = { x: number; y: number }
 export type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w"
 export type ScreenshotRect = Point & { width: number; height: number }
-export type DrawTool = "rectangle" | "ellipse" | "arrow" | "pen" | "mosaic"
+export type DrawTool = "rectangle" | "ellipse" | "arrow" | "pen" | "mosaic" | "eraser" | "text"
 export type Annotation =
   | { type: "rectangle" | "ellipse" | "arrow"; from: Point; to: Point }
-  | { type: "pen" | "mosaic"; points: Point[] }
+  | { type: "pen" | "mosaic" | "eraser"; points: Point[] }
+  | { type: "text"; at: Point; text: string }
 
 export function normalizeSelection(
   start: Point,
@@ -55,18 +56,6 @@ export function moveSelection(
     x: Math.max(0, Math.min(viewport.width - original.width, original.x + delta.x)),
     y: Math.max(0, Math.min(viewport.height - original.height, original.y + delta.y)),
   }
-}
-
-export function translateAnnotations(
-  annotations: readonly Annotation[],
-  delta: Point,
-): Annotation[] {
-  const translate = (point: Point): Point => ({ x: point.x - delta.x, y: point.y - delta.y })
-  return annotations.map((annotation) => {
-    if ("from" in annotation)
-      return { ...annotation, from: translate(annotation.from), to: translate(annotation.to) }
-    return { ...annotation, points: annotation.points.map(translate) }
-  })
 }
 
 export function windowAtPoint(
@@ -137,13 +126,29 @@ export function paintScreenshot(
     canvas.width,
     canvas.height,
   )
+  if (!annotations.length) return true
+  const base = document.createElement("canvas")
+  base.width = canvas.width
+  base.height = canvas.height
+  base.getContext("2d")?.drawImage(canvas, 0, 0)
   drawAnnotations(
     context,
     annotations,
     canvas.width / selection.width,
     canvas.height / selection.height,
+    selection,
+    base,
   )
   return true
+}
+
+export function annotationCanvasPoint(
+  point: Point,
+  selection: ScreenshotRect,
+  scaleX: number,
+  scaleY: number,
+): Point {
+  return { x: (point.x - selection.x) * scaleX, y: (point.y - selection.y) * scaleY }
 }
 
 export function drawAnnotations(
@@ -151,6 +156,8 @@ export function drawAnnotations(
   annotations: readonly Annotation[],
   scaleX: number,
   scaleY: number,
+  selection: ScreenshotRect,
+  base: HTMLCanvasElement,
 ) {
   context.save()
   context.beginPath()
@@ -161,12 +168,49 @@ export function drawAnnotations(
   context.lineWidth = Math.max(2, 2 * Math.min(scaleX, scaleY))
   context.lineCap = "round"
   context.lineJoin = "round"
-  const x = (point: Point) => point.x * scaleX
-  const y = (point: Point) => point.y * scaleY
+  const x = (point: Point) => annotationCanvasPoint(point, selection, scaleX, scaleY).x
+  const y = (point: Point) => annotationCanvasPoint(point, selection, scaleX, scaleY).y
+  let pixelated: HTMLCanvasElement | null = null
 
   for (const annotation of annotations) {
-    if (annotation.type === "mosaic") {
-      for (const point of annotation.points) drawMosaic(context, x(point), y(point), scaleX, scaleY)
+    if (annotation.type === "mosaic" || annotation.type === "eraser") {
+      if (annotation.type === "mosaic" && !pixelated) {
+        const small = document.createElement("canvas")
+        small.width = Math.max(1, Math.ceil(context.canvas.width / (10 * scaleX)))
+        small.height = Math.max(1, Math.ceil(context.canvas.height / (10 * scaleY)))
+        small.getContext("2d")?.drawImage(base, 0, 0, small.width, small.height)
+        pixelated = document.createElement("canvas")
+        pixelated.width = context.canvas.width
+        pixelated.height = context.canvas.height
+        const pixels = pixelated.getContext("2d")
+        if (pixels) {
+          pixels.imageSmoothingEnabled = false
+          pixels.drawImage(small, 0, 0, pixelated.width, pixelated.height)
+        }
+      }
+      context.strokeStyle = context.createPattern(
+        annotation.type === "eraser" ? base : pixelated!,
+        "no-repeat",
+      )!
+      context.lineWidth = 24 * Math.min(scaleX, scaleY)
+      context.beginPath()
+      annotation.points.forEach((point, index) => {
+        if (index === 0) context.moveTo(x(point), y(point))
+        else context.lineTo(x(point), y(point))
+      })
+      if (annotation.points.length === 1)
+        context.lineTo(x(annotation.points[0]) + 0.01, y(annotation.points[0]))
+      context.stroke()
+      continue
+    }
+    context.strokeStyle = "#ff4d4f"
+    context.lineWidth = Math.max(2, 2 * Math.min(scaleX, scaleY))
+    if (annotation.type === "text") {
+      context.font = `${Math.round(18 * scaleY)}px sans-serif`
+      context.textBaseline = "top"
+      annotation.text.split("\n").forEach((line, index) => {
+        context.fillText(line, x(annotation.at), y(annotation.at) + index * 22 * scaleY)
+      })
       continue
     }
     if (annotation.type === "pen") {
@@ -209,35 +253,4 @@ export function drawAnnotations(
     context.stroke()
   }
   context.restore()
-}
-
-function drawMosaic(
-  context: CanvasRenderingContext2D,
-  centerX: number,
-  centerY: number,
-  scaleX: number,
-  scaleY: number,
-) {
-  const radiusX = Math.max(1, Math.round(14 * scaleX))
-  const radiusY = Math.max(1, Math.round(14 * scaleY))
-  const x = Math.max(0, Math.floor(centerX - radiusX))
-  const y = Math.max(0, Math.floor(centerY - radiusY))
-  const width = Math.min(context.canvas.width - x, radiusX * 2)
-  const height = Math.min(context.canvas.height - y, radiusY * 2)
-  if (width <= 0 || height <= 0) return
-  const source = context.getImageData(x, y, width, height)
-  const blockX = Math.max(4, Math.round(8 * scaleX))
-  const blockY = Math.max(4, Math.round(8 * scaleY))
-  for (let top = 0; top < height; top += blockY) {
-    for (let left = 0; left < width; left += blockX) {
-      const pixel = (top * width + left) * 4
-      context.fillStyle = `rgb(${source.data[pixel]}, ${source.data[pixel + 1]}, ${source.data[pixel + 2]})`
-      context.fillRect(
-        x + left,
-        y + top,
-        Math.min(blockX, width - left),
-        Math.min(blockY, height - top),
-      )
-    }
-  }
 }

@@ -5,7 +5,8 @@ import {
   normalizeSelection,
   resizeSelection,
   toolbarPosition,
-  translateAnnotations,
+  annotationCanvasPoint,
+  drawAnnotations,
   windowAtPoint,
 } from "../src/renderer/screenshot-editor.ts"
 
@@ -66,15 +67,100 @@ test("八方向手柄缩放保持选区在屏内且不会翻转", () => {
   })
 })
 
-test("缩放左上边时，标注保持在原屏幕坐标", () => {
-  const annotations = [
-    { type: "rectangle" as const, from: { x: 20, y: 25 }, to: { x: 60, y: 80 } },
-    { type: "mosaic" as const, points: [{ x: 40, y: 50 }] },
-  ]
-  assert.deepEqual(translateAnnotations(annotations, { x: 10, y: -5 }), [
-    { type: "rectangle", from: { x: 10, y: 30 }, to: { x: 50, y: 85 } },
-    { type: "mosaic", points: [{ x: 30, y: 55 }] },
-  ])
+test("移动或缩放选区时，标注仍对应原屏幕像素", () => {
+  const point = { x: 160, y: 180 }
+  const initial = { x: 100, y: 120, width: 200, height: 100 }
+  assert.deepEqual(annotationCanvasPoint(point, initial, 2, 2), { x: 120, y: 120 })
+  assert.deepEqual(
+    annotationCanvasPoint(
+      point,
+      moveSelection(initial, { x: 30, y: 10 }, { width: 400, height: 300 }),
+      2,
+      2,
+    ),
+    { x: 60, y: 100 },
+  )
+  assert.deepEqual(
+    annotationCanvasPoint(
+      point,
+      resizeSelection(initial, "nw", { x: 20, y: 20 }, { width: 400, height: 300 }),
+      2,
+      2,
+    ),
+    { x: 80, y: 80 },
+  )
+})
+
+test("马赛克只沿笔迹使用像素画，橡皮擦恢复底图，文字使用屏幕坐标", () => {
+  const previousDocument = globalThis.document
+  const operations: string[] = []
+  const base = { width: 200, height: 200 } as HTMLCanvasElement
+  let pixelated: { width: number; height: number; getContext: () => object } | undefined
+  globalThis.document = {
+    createElement: () => {
+      const canvas = {
+        width: 0,
+        height: 0,
+        getContext: () => ({
+          drawImage: () => operations.push("draw pixels"),
+          set imageSmoothingEnabled(value: boolean) {
+            operations.push(`smoothing ${value}`)
+          },
+        }),
+      }
+      pixelated = canvas
+      return canvas
+    },
+  } as unknown as Document
+  try {
+    let patternSource: object | undefined
+    const context = {
+      canvas: base,
+      save: () => {},
+      restore: () => {},
+      beginPath: () => {},
+      rect: () => {},
+      clip: () => {},
+      moveTo: (x: number, y: number) => operations.push(`move ${x} ${y}`),
+      lineTo: () => {},
+      stroke: () => operations.push("stroke"),
+      fillText: (text: string, x: number, y: number) => operations.push(`text ${text} ${x} ${y}`),
+      createPattern: (source: object) => {
+        patternSource = source
+        operations.push(source === base ? "original pattern" : "pixelated pattern")
+        return {} as CanvasPattern
+      },
+    } as unknown as CanvasRenderingContext2D
+    drawAnnotations(
+      context,
+      [
+        {
+          type: "mosaic",
+          points: [
+            { x: 20, y: 30 },
+            { x: 40, y: 50 },
+          ],
+        },
+        { type: "eraser", points: [{ x: 30, y: 40 }] },
+        { type: "text", at: { x: 25, y: 35 }, text: "测试" },
+      ],
+      2,
+      2,
+      { x: 10, y: 20, width: 100, height: 100 },
+      base,
+    )
+    assert.ok(pixelated)
+    assert.equal(patternSource, base)
+    assert.deepEqual(
+      operations.filter((operation) => operation.includes("pattern")),
+      ["pixelated pattern", "original pattern"],
+    )
+    assert.ok(operations.includes("smoothing false"))
+    assert.ok(operations.includes("move 20 20"))
+    assert.ok(operations.includes("text 测试 30 30"))
+  } finally {
+    globalThis.document = previousDocument
+  }
 })
 
 test("窗口悬停优先命中最上层窗口，空白区域不命中", () => {
