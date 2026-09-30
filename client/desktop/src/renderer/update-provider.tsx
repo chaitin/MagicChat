@@ -11,6 +11,12 @@ import {
 } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
 import type { UpdateInfo, UpdateProgress } from "../shared/desktop"
+import {
+  readDismissedUpdate,
+  saveDismissedUpdate,
+  shouldPromptForUpdate,
+  updateVersionKey,
+} from "./update-prompt"
 
 type UpdateContextValue = {
   checking: boolean
@@ -39,6 +45,7 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
   const manualRef = useRef(false)
   const startupChecked = useRef(false)
   const updateKey = useRef("")
+  const dismissedUpdateKey = useRef(readDismissedUpdate())
 
   const checkUpdates = useCallback(
     (manual: boolean) => {
@@ -57,6 +64,9 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
           if (!result.ok) throw new Error(result.error.message)
           if (!result.data.updateAvailable) {
             if (manualRef.current) showToast({ status: "success", title: "当前已是最新版本" })
+            return
+          }
+          if (!shouldPromptForUpdate(result.data, manualRef.current, dismissedUpdateKey.current)) {
             return
           }
           const nextKey = `${result.data.platform}:${result.data.latestBuildId}:${result.data.downloadUrl}`
@@ -88,9 +98,12 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
   )
 
   useEffect(() => {
-    if (startupChecked.current) return
-    startupChecked.current = true
-    checkUpdates(false)
+    if (!startupChecked.current) {
+      startupChecked.current = true
+      checkUpdates(false)
+    }
+    const timer = window.setInterval(() => checkUpdates(false), 60 * 60 * 1000)
+    return () => window.clearInterval(timer)
   }, [checkUpdates])
 
   useEffect(() => window.desktop?.onUpdateProgress(setProgress), [])
@@ -124,6 +137,14 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  function dismissUpdate() {
+    if (update) {
+      dismissedUpdateKey.current = updateVersionKey(update)
+      saveDismissedUpdate(update)
+    }
+    setOpen(false)
+  }
+
   const isLinux = update?.platform === "linux-amd" || update?.platform === "linux-arm"
   const installLabel = isLinux ? "打开下载位置" : "立即更新"
   const instructions = isLinux
@@ -135,7 +156,7 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
   return (
     <UpdateContext.Provider value={{ checking, checkUpdates }}>
       {children}
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? setOpen(true) : dismissUpdate())}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>发现新版本</DialogTitle>
@@ -166,7 +187,7 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
             </p>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={installing}>
+            <Button variant="outline" onClick={dismissUpdate} disabled={installing}>
               以后再说
             </Button>
             {downloaded ? (
