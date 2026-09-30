@@ -479,7 +479,6 @@ function MessageRow({
             summary={message.content}
             targetId={targetId}
             menuTriggerRef={menuTriggerRef}
-            showEdit={message.isMine}
             onReply={replyAction}
             onForward={forwardAction}
             onMultiSelect={selectAction}
@@ -562,7 +561,6 @@ function MessageRow({
                 summary={message.content}
                 targetId={targetId}
                 selectionContainerRef={menuTriggerRef}
-                showEdit={message.isMine}
                 onReply={replyAction}
                 onForward={forwardAction}
                 onMultiSelect={selectAction}

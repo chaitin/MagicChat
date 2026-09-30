@@ -2,7 +2,6 @@ import { useRef, useState, type ReactNode, type RefObject } from "react"
 import {
   ArrowTurnForwardIcon,
   Copy01Icon,
-  Edit02Icon,
   ListIcon,
   MessageMultiple02Icon,
   ReplyIcon,
@@ -37,7 +36,6 @@ type MessageActionMenuProps = {
   onMultiSelect?: () => void
   onCreateTopic?: () => void
   onRevoke?: () => void | Promise<void>
-  showEdit?: boolean
 }
 
 export function MessageCopyMenu({
@@ -52,13 +50,11 @@ export function MessageCopyMenu({
   onMultiSelect,
   onCreateTopic,
   onRevoke,
-  showEdit = false,
 }: MessageActionMenuProps & {
   className?: string
   menuTriggerRef?: RefObject<HTMLDivElement | null>
   children: ReactNode
 }) {
-  const { showToast } = useAnimatedToast()
   const internalTriggerRef = useRef<HTMLDivElement>(null)
   const triggerRef = menuTriggerRef ?? internalTriggerRef
   const selectedCopyTextRef = useRef("")
@@ -97,9 +93,6 @@ export function MessageCopyMenu({
             void copyMessage(selectedText)
           }}
           onCreateTopic={onCreateTopic}
-          onEdit={
-            showEdit ? () => showToast({ status: "warning", title: "暂时没有后悔药" }) : undefined
-          }
           onReply={onReply}
           onForward={onForward}
           onMultiSelect={onMultiSelect}
@@ -121,12 +114,10 @@ export function MessageActionsDropdown({
   onMultiSelect,
   onCreateTopic,
   onRevoke,
-  showEdit = false,
 }: MessageActionMenuProps & {
   selectionContainerRef: RefObject<HTMLDivElement | null>
   children: ReactNode
 }) {
-  const { showToast } = useAnimatedToast()
   const selectedCopyTextRef = useRef("")
   const copyMessage = useMessageCopy(body, summary, targetId)
 
@@ -148,9 +139,6 @@ export function MessageActionsDropdown({
             void copyMessage(selectedText)
           }}
           onCreateTopic={onCreateTopic}
-          onEdit={
-            showEdit ? () => showToast({ status: "warning", title: "暂时没有后悔药" }) : undefined
-          }
           onReply={onReply}
           onForward={onForward}
           onMultiSelect={onMultiSelect}
@@ -165,7 +153,6 @@ function MessageActionMenuItems({
   kind,
   onCopy,
   onCreateTopic,
-  onEdit,
   onReply,
   onForward,
   onMultiSelect,
@@ -174,7 +161,6 @@ function MessageActionMenuItems({
   kind: "context" | "dropdown"
   onCopy: () => void
   onCreateTopic?: () => void
-  onEdit?: () => void
   onReply?: () => void
   onForward?: () => void
   onMultiSelect?: () => void
@@ -184,6 +170,10 @@ function MessageActionMenuItems({
   const Separator = kind === "context" ? ContextMenuSeparator : DropdownMenuSeparator
   return (
     <>
+      <Item onSelect={onCopy}>
+        <HugeiconsIcon icon={Copy01Icon} className="size-4" aria-hidden />
+        复制
+      </Item>
       {onReply && (
         <Item onSelect={onReply}>
           <HugeiconsIcon icon={ReplyIcon} className="size-4" aria-hidden />
@@ -200,16 +190,6 @@ function MessageActionMenuItems({
         <Item onSelect={onMultiSelect}>
           <HugeiconsIcon icon={ListIcon} className="size-4" aria-hidden />
           多选
-        </Item>
-      )}
-      <Item onSelect={onCopy}>
-        <HugeiconsIcon icon={Copy01Icon} className="size-4" aria-hidden />
-        复制
-      </Item>
-      {onEdit && (
-        <Item onSelect={onEdit}>
-          <HugeiconsIcon icon={Edit02Icon} className="size-4" aria-hidden />
-          编辑
         </Item>
       )}
       {onCreateTopic && (
