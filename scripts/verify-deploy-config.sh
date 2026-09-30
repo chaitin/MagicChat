@@ -275,7 +275,7 @@ assert_contains "homepage/src/styles/global.css" "--ease: cubic-bezier"
 assert_contains "homepage/src/styles/global.css" "@media (max-width: 620px)"
 assert_contains "homepage/astro.config.mjs" "plugins: [tailwindcss()]"
 assert_not_contains "homepage/astro.config.mjs" "harmonyos-sans-sc-webfont-splitted"
-assert_contains "homepage/src/components/SiteHeader.astro" '<HeaderActions />'
+assert_contains "homepage/src/components/SiteHeader.astro" '<HeaderActions client:load />'
 assert_contains "homepage/src/components/HeaderActions.tsx" 'href="https://github.com/chaitin/MagicChat"'
 assert_contains "homepage/src/components/HeaderActions.tsx" 'target="_blank"'
 assert_contains "homepage/src/components/HeaderActions.tsx" 'rel="noopener noreferrer"'
@@ -289,7 +289,7 @@ assert_not_contains "homepage/src/components/SiteFooter.astro" "chat.chaitin.net
 assert_not_contains "homepage/src/components/SiteHeader.astro" "desktop-nav"
 assert_not_contains "homepage/src/components/SiteHeader.astro" "mobile-nav"
 assert_contains "homepage/package.json" '"astro-icon"'
-assert_contains "homepage/package.json" '"@iconify-json/tabler"'
+assert_contains "homepage/package.json" '"@iconify-json/hugeicons"'
 assert_not_contains "homepage/package.json" '"@fontsource-variable/noto-sans-sc"'
 assert_contains "homepage/package.json" '"@astrojs/react"'
 assert_contains "homepage/package.json" '"react"'
