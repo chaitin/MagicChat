@@ -20,6 +20,8 @@ func TestAnthropicClientGenerateUsesMessagesAPI(t *testing.T) {
 	var gotVersion string
 	var gotModel string
 	var gotMaxTokens int
+	var gotEffort string
+	var gotThinking json.RawMessage
 	var gotSystem string
 	var gotRole string
 	var gotContent string
@@ -30,9 +32,13 @@ func TestAnthropicClientGenerateUsesMessagesAPI(t *testing.T) {
 		gotVersion = r.Header.Get("anthropic-version")
 
 		var request struct {
-			Model     string `json:"model"`
-			MaxTokens int    `json:"max_tokens"`
-			System    []struct {
+			Model        string `json:"model"`
+			MaxTokens    int    `json:"max_tokens"`
+			OutputConfig struct {
+				Effort string `json:"effort"`
+			} `json:"output_config"`
+			Thinking json.RawMessage `json:"thinking"`
+			System   []struct {
 				Type string `json:"type"`
 				Text string `json:"text"`
 			} `json:"system"`
@@ -49,6 +55,8 @@ func TestAnthropicClientGenerateUsesMessagesAPI(t *testing.T) {
 		}
 		gotModel = request.Model
 		gotMaxTokens = request.MaxTokens
+		gotEffort = request.OutputConfig.Effort
+		gotThinking = request.Thinking
 		if len(request.System) == 1 {
 			gotSystem = request.System[0].Text
 		}
@@ -109,6 +117,9 @@ func TestAnthropicClientGenerateUsesMessagesAPI(t *testing.T) {
 	}
 	if gotMaxTokens != 4096 {
 		t.Fatalf("max_tokens = %d, want 4096", gotMaxTokens)
+	}
+	if gotEffort != "low" || len(gotThinking) != 0 {
+		t.Fatalf("effort = %q, thinking = %s; want low effort without explicit thinking budget", gotEffort, gotThinking)
 	}
 	if gotSystem != "你是 MagicChat 助手" {
 		t.Fatalf("system = %q, want system prompt", gotSystem)
@@ -471,6 +482,19 @@ func TestAnthropicStreamMessageAggregatesAndObservesBlocks(t *testing.T) {
 		`{"type":"message_stop"}`,
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			OutputConfig struct {
+				Effort string `json:"effort"`
+			} `json:"output_config"`
+			Thinking json.RawMessage `json:"thinking"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode streaming request: %v", err)
+			return
+		}
+		if request.OutputConfig.Effort != "low" || len(request.Thinking) != 0 {
+			t.Errorf("streaming effort = %q, thinking = %s; want low effort without explicit thinking budget", request.OutputConfig.Effort, request.Thinking)
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		for _, event := range events {
 			var envelope struct {

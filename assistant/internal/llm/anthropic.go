@@ -164,10 +164,11 @@ func (c *AnthropicClient) messageParams(request Request) (anthropic.MessageNewPa
 	}
 
 	params := anthropic.MessageNewParams{
-		MaxTokens: int64(c.maxTokens()),
-		Model:     anthropic.Model(c.ModelName),
-		Messages:  make([]anthropic.MessageParam, 0, len(request.Messages)),
-		Tools:     makeAnthropicTools(request.Tools),
+		MaxTokens:    int64(c.maxTokens()),
+		Model:        anthropic.Model(c.ModelName),
+		Messages:     make([]anthropic.MessageParam, 0, len(request.Messages)),
+		Tools:        makeAnthropicTools(request.Tools),
+		OutputConfig: anthropic.OutputConfigParam{Effort: anthropic.OutputConfigEffortLow},
 	}
 	if system := strings.TrimSpace(request.System); system != "" {
 		params.System = []anthropic.TextBlockParam{{Text: system}}
