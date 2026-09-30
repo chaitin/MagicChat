@@ -97,6 +97,7 @@ export class ScreenshotManager {
           height: display.bounds.height,
           frame: false,
           show: false,
+          enableLargerThanScreen: process.platform === "darwin",
           fullscreen: process.platform === "win32",
           resizable: false,
           movable: false,
@@ -145,6 +146,24 @@ export class ScreenshotManager {
         window.showInactive()
         if (process.platform === "darwin") {
           window.setBounds(bounds)
+          const initial = window.getBounds()
+          let attempted: typeof initial | undefined
+          if (
+            initial.x === bounds.x &&
+            initial.width === bounds.width &&
+            initial.height === bounds.height &&
+            initial.y > bounds.y
+          ) {
+            // 部分 macOS 环境会把 y=0 强制下移一个菜单栏高度；尝试抵消这次偏移。
+            const requested = { ...bounds, y: bounds.y - (initial.y - bounds.y) }
+            try {
+              window.setBounds(requested)
+              attempted = window.getBounds()
+              if (attempted.y !== bounds.y) window.setBounds(bounds)
+            } catch {
+              window.setBounds(bounds)
+            }
+          }
           const actual = window.getBounds()
           if (
             actual.x !== bounds.x ||
@@ -152,7 +171,12 @@ export class ScreenshotManager {
             actual.width !== bounds.width ||
             actual.height !== bounds.height
           ) {
-            console.warn("macOS 截图遮罩未覆盖整个显示器", { expected: bounds, actual })
+            console.warn("macOS 截图遮罩未覆盖整个显示器", {
+              expected: bounds,
+              initial,
+              attempted,
+              actual,
+            })
           }
         }
       }
