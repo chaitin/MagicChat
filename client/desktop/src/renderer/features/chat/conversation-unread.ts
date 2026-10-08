@@ -25,7 +25,25 @@ export function hasUnmutedUnreadConversations(
   conversations: ReadonlyArray<Pick<DesktopConversation, "unreadCount" | "notificationMuted">>,
 ): boolean {
   return conversations.some(
-    (conversation) => !conversation.notificationMuted &&
-      Number.isFinite(conversation.unreadCount) && conversation.unreadCount > 0,
+    (conversation) =>
+      !conversation.notificationMuted &&
+      Number.isFinite(conversation.unreadCount) &&
+      conversation.unreadCount > 0,
   )
+}
+
+export function unmutedUnreadCount(
+  conversations: ReadonlyArray<Pick<DesktopConversation, "unreadCount" | "notificationMuted">>,
+): number {
+  let count = 0
+  for (const conversation of conversations) {
+    if (
+      !conversation.notificationMuted &&
+      Number.isFinite(conversation.unreadCount) &&
+      conversation.unreadCount > 0
+    ) {
+      count = Math.min(100, count + conversation.unreadCount)
+    }
+  }
+  return Math.ceil(count)
 }

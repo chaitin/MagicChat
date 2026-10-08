@@ -13,10 +13,12 @@ export function registerAuthIpc({
   handle,
   auth,
   getMainWindow,
+  onSignOut,
 }: {
   handle: IpcRegistrar
   auth: AuthController
   getMainWindow: () => BrowserWindow | null
+  onSignOut?: () => void
 }) {
   handle(AUTH_CHANNELS.getServer, () => auth.getServer())
   handle(AUTH_CHANNELS.getServers, () => auth.getServers())
@@ -35,5 +37,9 @@ export function registerAuthIpc({
   handle(AUTH_CHANNELS.sendCode, (input) =>
     auth.sendCode(input as { targetId: string; email: string }),
   )
-  handle(AUTH_CHANNELS.signOut, (input) => auth.signOut(input as string))
+  handle(AUTH_CHANNELS.signOut, async (input) => {
+    const result = await auth.signOut(input as string)
+    onSignOut?.()
+    return result
+  })
 }

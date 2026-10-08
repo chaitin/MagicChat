@@ -114,6 +114,7 @@ export const DESKTOP_CHANNELS = {
   playMessageSound: "desktop-next:v1:play-message-sound",
   openMessageNotification: "desktop-next:v1:open-message-notification",
   setActiveConversation: "desktop-next:v1:set-active-conversation",
+  setUnreadAttention: "desktop-next:v1:set-unread-attention",
 } as const
 
 export function isSafeWebUrl(value: unknown): value is string {
@@ -155,6 +156,7 @@ export interface DesktopBridge {
     targetId: string
     conversationId: string | null
   }): Promise<AuthResult<null>>
+  setUnreadAttention(input: { targetId: string; unreadCount: number }): Promise<AuthResult<null>>
   setShortcutSettings(settings: ShortcutSettings): Promise<AuthResult<null>>
   setShortcutRecording(recording: boolean): Promise<AuthResult<null>>
   onOpenSettings(callback: () => void): () => void

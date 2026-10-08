@@ -12,6 +12,7 @@ import {
   shell,
   Tray,
   type IpcMainInvokeEvent,
+  type NativeImage,
 } from "electron"
 import { ACCOUNT_DATA_CHANNELS } from "../shared/account-data"
 import { AuthFailure, isRecord } from "../shared/auth"
@@ -48,6 +49,7 @@ import { ScreenshotManager } from "./screenshot-manager"
 import { ShortcutManager } from "./shortcut-manager"
 import { isTrustedReleaseUrl } from "./update-service"
 import { UpdateManager, updateCacheDirectory } from "./update-manager"
+import { createUnreadAttention } from "./unread-attention"
 
 // WSLg 不会稳定继承 Windows 的 DPI，且硬件视频合成可能只播放声音而显示黑屏。
 if (!app.isPackaged && process.platform === "linux" && process.env.WSL_DISTRO_NAME) {
@@ -65,6 +67,8 @@ if (!hasSingleInstanceLock) app.quit()
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
+let unreadAttention: ReturnType<typeof createUnreadAttention> | null = null
+let unreadTargetId: string | null = null
 let isQuitting = false
 const appIconPath = app.isPackaged
   ? path.join(process.resourcesPath, "tray-icon.png")
@@ -103,9 +107,14 @@ function createWindow() {
     event.preventDefault()
     window.hide()
   })
+  window.on("focus", () => unreadAttention?.setWindowFocused(true))
+  window.on("blur", () => unreadAttention?.setWindowFocused(false))
+  window.on("hide", () => unreadAttention?.setWindowFocused(false))
   window.on("closed", () => {
+    clearUnreadAttention()
     mainWindow = null
   })
+  window.webContents.on("did-start-loading", clearUnreadAttention)
   const sendMaximizedState = () => {
     if (!window.isDestroyed()) {
       window.webContents.send(DESKTOP_CHANNELS.windowMaximizedChanged, window.isMaximized())
@@ -157,6 +166,31 @@ function quitApp() {
   app.quit()
 }
 
+function clearUnreadAttention() {
+  unreadTargetId = null
+  unreadAttention?.setUnread(false)
+  if (process.platform === "darwin") tray?.setTitle("")
+}
+
+function createDimmedTrayImage(image: NativeImage): NativeImage {
+  const dimmed = nativeImage.createEmpty()
+  const size = image.getSize()
+  for (const scaleFactor of image.getScaleFactors()) {
+    const bitmap = Buffer.from(image.toBitmap({ scaleFactor }))
+    for (let offset = 3; offset < bitmap.length; offset += 4) {
+      bitmap[offset] = Math.round(bitmap[offset] * 0.1)
+    }
+    dimmed.addRepresentation({
+      buffer: bitmap,
+      width: Math.round(size.width * scaleFactor),
+      height: Math.round(size.height * scaleFactor),
+      scaleFactor,
+    })
+  }
+  if (process.platform === "darwin") dimmed.setTemplateImage(true)
+  return dimmed
+}
+
 function createTray() {
   const isMac = process.platform === "darwin"
   const iconFile = isMac ? "trayTemplate.png" : "tray-color.png"
@@ -166,7 +200,21 @@ function createTray() {
   const source = nativeImage.createFromPath(iconPath)
   if (source.isEmpty()) throw new Error("无法加载托盘图标")
   if (isMac) source.setTemplateImage(true)
-  tray = new Tray(source)
+  const trayImage =
+    process.platform === "win32"
+      ? nativeImage.createFromBuffer(source.toPNG({ scaleFactor: 2 }))
+      : source
+  const dimmedImage = createDimmedTrayImage(trayImage)
+  tray = new Tray(trayImage)
+  unreadAttention = createUnreadAttention({
+    showDimmed: (dimmed) => tray?.setImage(dimmed ? dimmedImage : trayImage),
+    setTaskbarAttention: (enabled) => {
+      if (process.platform === "win32" && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.flashFrame(enabled)
+      }
+    },
+  })
+  unreadAttention.setWindowFocused(mainWindow?.isFocused() ?? false)
   tray.setToolTip("即应")
   tray.setContextMenu(
     Menu.buildFromTemplate([
@@ -193,6 +241,7 @@ function createTray() {
       },
     ]),
   )
+  if (process.platform === "win32") tray.on("click", showMainWindow)
   tray.on("double-click", showMainWindow)
 }
 
@@ -484,6 +533,7 @@ void app.whenReady().then(async () => {
     handle: handleIpc,
     auth,
     getMainWindow: () => mainWindow,
+    onSignOut: clearUnreadAttention,
   })
   handleIpc(DESKTOP_CHANNELS.openHomepage, async () => {
     await shell.openExternal(JIYING_HOMEPAGE)
@@ -546,6 +596,33 @@ void app.whenReady().then(async () => {
     notificationSettings = (await auth.getAppSettings()).notifications
     return null
   })
+  handleIpc(DESKTOP_CHANNELS.setUnreadAttention, async (input) => {
+    if (
+      !isRecord(input) ||
+      typeof input.targetId !== "string" ||
+      !input.targetId ||
+      input.targetId.length > 128 ||
+      !Number.isInteger(input.unreadCount) ||
+      (input.unreadCount as number) < 0 ||
+      (input.unreadCount as number) > 100
+    ) {
+      throw new AuthFailure("invalid_input", "未读提醒参数不正确")
+    }
+    const unreadCount = input.unreadCount as number
+    if (unreadCount > 0) {
+      if (!auth.isActiveTarget(input.targetId)) return null
+      unreadTargetId = input.targetId
+      unreadAttention?.setUnread(true)
+      if (process.platform === "darwin") {
+        tray?.setTitle(unreadCount > 99 ? "99+" : String(unreadCount), {
+          fontType: "monospacedDigit",
+        })
+      }
+    } else if (unreadTargetId === input.targetId) {
+      clearUnreadAttention()
+    }
+    return null
+  })
   handleIpc(DESKTOP_CHANNELS.setActiveConversation, async (input) => {
     if (
       !isRecord(input) ||
@@ -595,6 +672,7 @@ void app.whenReady().then(async () => {
   createTray()
   app.on("activate", showMainWindow)
   app.once("before-quit", () => {
+    clearUnreadAttention()
     shortcuts.close()
     screenshot.close()
     mediaPreview.close()

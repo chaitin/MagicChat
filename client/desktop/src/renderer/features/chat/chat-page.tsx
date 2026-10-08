@@ -22,7 +22,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { AppRail, SectionPlaceholder, type AppSection } from "./components/app-navigation"
-import { hasUnmutedUnreadConversations } from "./conversation-unread"
+import { hasUnmutedUnreadConversations, unmutedUnreadCount } from "./conversation-unread"
 import { ClientAppDialog } from "../contacts/client-app-dialog"
 import { ContactsPage } from "../contacts/contacts-page"
 import { ChatHeader } from "./components/chat-header"
@@ -176,6 +176,8 @@ export function ChatPage({
     retryMessage,
     loadBeforeMessages,
   } = useChatData({ targetId, userId, userName, activeSection })
+  const hasUnreadMessages = hasUnmutedUnreadConversations(conversations)
+  const unreadCount = unmutedUnreadCount(conversations)
   const selection = useMessageSelection(`${targetId}:${selectedId ?? ""}`)
   useEffect(() => {
     setForwardOperation(null)
@@ -190,6 +192,16 @@ export function ChatPage({
     () => createMentionCandidates(selected, conversations, resolveMentionLabel),
     [selected, conversations, resolveMentionLabel],
   )
+  useEffect(() => {
+    if (!window.desktop || !targetId) return
+    void window.desktop.setUnreadAttention({ targetId, unreadCount })
+  }, [unreadCount, targetId])
+  useEffect(() => {
+    if (!window.desktop || !targetId) return
+    return () => {
+      void window.desktop?.setUnreadAttention({ targetId, unreadCount: 0 })
+    }
+  }, [targetId])
   useEffect(() => {
     if (!window.desktop) return
     void window.desktop.setActiveConversation({
@@ -666,7 +678,7 @@ export function ChatPage({
         catalog={catalog}
         isPreview={isPreview}
         activeSection={activeSection}
-        hasUnreadMessages={hasUnmutedUnreadConversations(conversations)}
+        hasUnreadMessages={hasUnreadMessages}
         onSectionChange={setActiveSection}
         onSignOut={onSignOut}
         onUserUpdated={onUserUpdated}

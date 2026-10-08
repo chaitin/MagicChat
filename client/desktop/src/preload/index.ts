@@ -31,6 +31,7 @@ const bridge: DesktopBridge = {
     ipcRenderer.invoke(DESKTOP_CHANNELS.setNotificationSettings, settings),
   setActiveConversation: (input) =>
     ipcRenderer.invoke(DESKTOP_CHANNELS.setActiveConversation, input),
+  setUnreadAttention: (input) => ipcRenderer.invoke(DESKTOP_CHANNELS.setUnreadAttention, input),
   setShortcutSettings: (settings) =>
     ipcRenderer.invoke(DESKTOP_CHANNELS.setShortcutSettings, settings),
   setShortcutRecording: (recording) =>
