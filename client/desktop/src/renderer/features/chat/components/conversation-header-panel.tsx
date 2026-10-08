@@ -1121,7 +1121,7 @@ function ConversationInfo({
                 aria-label="更换群头像"
                 title="更换群头像"
                 disabled={avatarSaving || saving || savingAction}
-                className="group relative shrink-0 cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-wait"
+                className="group relative flex size-11 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-sm p-0 focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-wait"
                 onClick={() => setAvatarPickerOpen(true)}
               >
                 <EntityAvatar
