@@ -17,7 +17,7 @@ export type ShortcutSettings = {
 }
 export const DEFAULT_SHORTCUTS: ShortcutSettings = {
   showWindow: "Alt+J",
-  screenshot: "Alt+Shift+A",
+  screenshot: "Alt+S",
   search: "CommandOrControl+F",
 }
 export type NotificationSettings = {

@@ -5,6 +5,7 @@ import { formatKeyboardShortcut, matchesKeyboardShortcut } from "../src/shared/k
 
 test("快捷键默认值包含应用内搜索", () => {
   assert.equal(DEFAULT_SHORTCUTS.showWindow, "Alt+J")
+  assert.equal(DEFAULT_SHORTCUTS.screenshot, "Alt+S")
   assert.equal(DEFAULT_SHORTCUTS.search, "CommandOrControl+F")
 })
 
