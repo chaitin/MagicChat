@@ -609,6 +609,19 @@ void app.whenReady().then(async () => {
     notificationSettings = (await auth.getAppSettings()).notifications
     return null
   })
+  handleIpc(DESKTOP_CHANNELS.openNotificationSettings, async () => {
+    const settingsUrl =
+      process.platform === "darwin"
+        ? "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+        : process.platform === "win32"
+          ? "ms-settings:notifications"
+          : null
+    if (!settingsUrl) {
+      throw new AuthFailure("notification_settings_unavailable", "请在系统设置中开启通知权限")
+    }
+    await shell.openExternal(settingsUrl)
+    return null
+  })
   handleIpc(DESKTOP_CHANNELS.setUnreadAttention, async (input) => {
     if (
       !isRecord(input) ||

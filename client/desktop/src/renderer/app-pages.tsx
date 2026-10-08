@@ -1,6 +1,7 @@
 import { Suspense, lazy } from "react"
 import { MotionConfig } from "motion/react"
 import { AnimatedToastProvider } from "./components/motion/animated-toast-provider"
+import { NotificationPermissionProvider } from "./notification-permission-provider"
 
 const App = lazy(() => import("./App").then(({ App }) => ({ default: App })))
 const MediaPreviewPage = lazy(() =>
@@ -18,7 +19,9 @@ export function AppPages({ mediaPreviewMode }: { mediaPreviewMode: boolean }) {
             <MediaPreviewPage />
           </AnimatedToastProvider>
         ) : (
-          <App />
+          <NotificationPermissionProvider>
+            <App />
+          </NotificationPermissionProvider>
         )}
       </Suspense>
     </MotionConfig>

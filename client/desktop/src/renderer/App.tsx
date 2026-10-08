@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { AnimatedToastProvider } from "@/components/motion/animated-toast-provider"
 import { WindowTitleBar } from "@/components/window-title-bar"
 import { LoginPage } from "@/features/auth/login-page"
+import { useNotificationPermission } from "./notification-permission-provider"
 import { UpdateProvider } from "./update-provider"
 import type { ThemePreference } from "../shared/desktop"
 
@@ -10,6 +11,7 @@ export type Theme = ThemePreference
 type ResolvedTheme = Exclude<Theme, "system">
 
 export function App() {
+  const { ensureNotificationPermission } = useNotificationPermission()
   const [theme, setTheme] = useState<Theme>("system")
   const [organizationName, setOrganizationName] = useState("")
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(() =>
@@ -19,12 +21,17 @@ export function App() {
   useEffect(() => {
     let cancelled = false
     void window.desktop?.getAppSettings().then((result) => {
-      if (!cancelled && result.ok) setTheme(result.data.theme)
+      if (!cancelled && result.ok) {
+        setTheme(result.data.theme)
+        if (result.data.notifications.desktopEnabled) {
+          void ensureNotificationPermission({ remindOnce: true })
+        }
+      }
     })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [ensureNotificationPermission])
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)")
