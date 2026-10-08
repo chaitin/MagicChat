@@ -6,7 +6,7 @@ import {
   RectangularIcon,
   MinusSignIcon,
 } from "@hugeicons/core-free-icons"
-import appIcon from "@/assets/app-icon-small.png"
+import appIcon from "@/assets/app-icon.png"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 
 type WindowControls = {
@@ -65,7 +65,7 @@ export function WindowTitleBar({
         </div>
       ) : (
         <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-1.5 px-2">
-          <img src={appIcon} alt="" className="size-4 shrink-0 rounded-sm" />
+          <img src={appIcon} alt="" className="size-4 shrink-0" />
           <span className="flex min-w-0 items-center gap-1 text-xs font-medium text-muted-foreground">
             <span className="shrink-0">{brandTitle}</span>
             {organizationName && (

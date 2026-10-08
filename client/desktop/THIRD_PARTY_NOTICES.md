@@ -12,26 +12,6 @@
 | MiSans-Medium.woff2  | `44e28ca6c2f0ca79829f192831ef87b5eec7c464f5cfb7a83467f57bb6e58114` |
 | MiSans-Bold.woff2    | `1c5a7515b61bc82baaa2e2c2fdae2032479fb9a99e09d4d021dc17314fc5939b` |
 
-## HarmonyOS Sans（旧版资源，当前界面未使用）
-
-旧版界面使用 HarmonyOS Sans 字体，原资源与许可仍保留在仓库中。
-
-Copyright 2021 Huawei Device Co., Ltd.
-
-官方来源：https://developer.huawei.com/images/download/general/HarmonyOS-Sans.zip
-
-原压缩包中 `HarmonyOS Sans/HarmonyOS_Sans_SC/` 的 Regular（400）、Medium（500）、Bold（700）原始 TTF 保存在 `src/renderer/assets/fonts/harmonyos-sans/`。文件字节与官方包一致，未裁剪、转格式或修改字形；当前界面不再引用这些文件。
-
-这些字体适用 **HarmonyOS Sans Fonts License Agreement**，并非 MIT/OFL。原始许可完整保存在 `src/renderer/public/licenses/harmonyos-sans.txt`。
-
-原始字体 SHA-256：
-
-| 文件                          | SHA-256                                                            |
-| ----------------------------- | ------------------------------------------------------------------ |
-| HarmonyOS_Sans_SC_Regular.ttf | `297b088424be212207df2ce8b98e335468b782aa6b96832af0b8b773d711e2b1` |
-| HarmonyOS_Sans_SC_Medium.ttf  | `6ed1553edccddc48eb27ff25d134a4a715cf54211238d4840b3038576cba1944` |
-| HarmonyOS_Sans_SC_Bold.ttf    | `43a424b85e47fb53a17b3b32026a71801f86f8e022ca6798d186b47d39fa5f01` |
-
 ## shadcn/ui
 
 来源：
