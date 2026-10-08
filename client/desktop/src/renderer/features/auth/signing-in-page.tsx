@@ -24,7 +24,7 @@ export function SigningInPage({
     const complete = onComplete
     const fail = onFailure
     let cancelled = false
-    const minimumDisplay = new Promise<void>((resolve) => window.setTimeout(resolve, 3_000))
+    const minimumDisplay = new Promise<void>((resolve) => window.setTimeout(resolve, 1_000))
 
     async function initialize() {
       let result: AuthResult<null>
