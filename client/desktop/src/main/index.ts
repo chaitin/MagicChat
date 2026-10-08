@@ -18,10 +18,12 @@ import { ACCOUNT_DATA_CHANNELS } from "../shared/account-data"
 import { AuthFailure, isRecord } from "../shared/auth"
 import {
   DESKTOP_CHANNELS,
+  DEFAULT_CONTENT_ZOOM,
   DEFAULT_NOTIFICATION_SETTINGS,
   EXTERNAL_LINKS,
   isSafeWebUrl,
   JIYING_HOMEPAGE,
+  type ContentZoom,
   type IncomingMessageNotification,
   type NotificationSettings,
   type ShortcutSettings,
@@ -66,6 +68,7 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) app.quit()
 
 let mainWindow: BrowserWindow | null = null
+let contentZoom: ContentZoom = DEFAULT_CONTENT_ZOOM
 let tray: Tray | null = null
 let unreadAttention: ReturnType<typeof createUnreadAttention> | null = null
 let unreadTargetId: string | null = null
@@ -100,6 +103,8 @@ function createWindow() {
     },
   })
   mainWindow = window
+  window.webContents.setZoomFactor(contentZoom)
+  window.webContents.on("did-finish-load", () => window.webContents.setZoomFactor(contentZoom))
   window.removeMenu()
   window.once("ready-to-show", () => window.show())
   window.on("close", (event) => {
@@ -351,6 +356,7 @@ void app.whenReady().then(async () => {
   try {
     const settings = await auth.getAppSettings()
     notificationSettings = settings.notifications
+    contentZoom = settings.contentZoom
     shortcuts.update(settings.shortcuts)
   } catch (error) {
     console.warn("无法注册全局快捷键", error)
@@ -589,6 +595,13 @@ void app.whenReady().then(async () => {
     const theme = input as ThemePreference
     await auth.setTheme(theme)
     mediaPreview.notifyThemeChanged(theme)
+    return null
+  })
+  handleIpc(DESKTOP_CHANNELS.setContentZoom, async (input) => {
+    const zoom = input as ContentZoom
+    await auth.setContentZoom(zoom)
+    contentZoom = zoom
+    mainWindow?.webContents.setZoomFactor(zoom)
     return null
   })
   handleIpc(DESKTOP_CHANNELS.setNotificationSettings, async (input) => {

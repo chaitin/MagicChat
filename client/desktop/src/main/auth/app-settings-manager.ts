@@ -1,6 +1,8 @@
 import { isRecord, AuthFailure } from "../../shared/auth"
+import { isContentZoom } from "../../shared/desktop"
 import type {
   AppSettings,
+  ContentZoom,
   NotificationSettings,
   ShortcutSettings,
   ThemePreference,
@@ -18,6 +20,7 @@ export class AppSettingsManager {
     const config = this.getConfig()
     return {
       theme: config.theme,
+      contentZoom: config.contentZoom,
       shortcuts: { ...config.shortcuts },
       notifications: { ...config.notifications },
     }
@@ -30,6 +33,16 @@ export class AppSettingsManager {
     const current = this.getConfig()
     if (theme === current.theme) return null
     await this.save({ ...current, theme })
+    return null
+  }
+
+  async setContentZoom(zoom: ContentZoom) {
+    if (!isContentZoom(zoom)) {
+      throw new AuthFailure("invalid_content_zoom", "界面缩放设置不受支持")
+    }
+    const current = this.getConfig()
+    if (zoom === current.contentZoom) return null
+    await this.save({ ...current, contentZoom: zoom })
     return null
   }
 

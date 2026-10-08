@@ -150,7 +150,7 @@ export function SettingsDialog({
             </SidebarContent>
           </Sidebar>
           <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <header className="flex h-16 shrink-0 items-center px-6">
+            <header className="flex h-16 shrink-0 items-center justify-between gap-3 px-6">
               <Breadcrumb>
                 <BreadcrumbList>
                   <BreadcrumbItem>
@@ -186,6 +186,18 @@ export function SettingsDialog({
                   </BreadcrumbItem>
                 </BreadcrumbList>
               </Breadcrumb>
+              <select
+                aria-label="设置分类"
+                value={section}
+                onChange={(event) => setSection(event.target.value as SettingsSection)}
+                className="min-w-0 max-w-28 rounded-md border border-input bg-background px-2 py-1 text-sm md:hidden"
+              >
+                {sections.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
             </header>
             <div className="flex min-w-0 flex-1 flex-col overflow-y-auto px-6 pb-6">
               {section === "appearance" ? (

@@ -27,6 +27,7 @@ const bridge: DesktopBridge = {
   calculateStorageUsage: () => ipcRenderer.invoke(DESKTOP_CHANNELS.calculateStorageUsage),
   getAppSettings: () => ipcRenderer.invoke(DESKTOP_CHANNELS.getAppSettings),
   setTheme: (theme) => ipcRenderer.invoke(DESKTOP_CHANNELS.setTheme, theme),
+  setContentZoom: (zoom) => ipcRenderer.invoke(DESKTOP_CHANNELS.setContentZoom, zoom),
   setNotificationSettings: (settings) =>
     ipcRenderer.invoke(DESKTOP_CHANNELS.setNotificationSettings, settings),
   setActiveConversation: (input) =>

@@ -3,6 +3,12 @@ import type { AuthBridge, AuthResult } from "./auth"
 import type { MediaBridge } from "./media"
 
 export type ThemePreference = "light" | "dark" | "system"
+export const CONTENT_ZOOM_OPTIONS = [0.75, 1, 1.25] as const
+export type ContentZoom = (typeof CONTENT_ZOOM_OPTIONS)[number]
+export const DEFAULT_CONTENT_ZOOM: ContentZoom = 1
+export function isContentZoom(value: unknown): value is ContentZoom {
+  return CONTENT_ZOOM_OPTIONS.some((option) => option === value)
+}
 export type DesktopPlatform = "windows" | "macos" | "linux"
 export type ShortcutSettings = {
   showWindow: string
@@ -43,6 +49,7 @@ export type IncomingMessageNotification = {
 }
 export type AppSettings = {
   theme: ThemePreference
+  contentZoom: ContentZoom
   shortcuts: ShortcutSettings
   notifications: NotificationSettings
 }
@@ -99,6 +106,7 @@ export const DESKTOP_CHANNELS = {
   calculateStorageUsage: "desktop-next:v1:calculate-storage-usage",
   getAppSettings: "desktop-next:v1:get-app-settings",
   setTheme: "desktop-next:v1:set-theme",
+  setContentZoom: "desktop-next:v1:set-content-zoom",
   setNotificationSettings: "desktop-next:v1:set-notification-settings",
   setShortcutSettings: "desktop-next:v1:set-shortcut-settings",
   setShortcutRecording: "desktop-next:v1:set-shortcut-recording",
@@ -151,6 +159,7 @@ export interface DesktopBridge {
   calculateStorageUsage(): Promise<AuthResult<StorageUsage>>
   getAppSettings(): Promise<AuthResult<AppSettings>>
   setTheme(theme: ThemePreference): Promise<AuthResult<null>>
+  setContentZoom(zoom: ContentZoom): Promise<AuthResult<null>>
   setNotificationSettings(settings: NotificationSettings): Promise<AuthResult<null>>
   setActiveConversation(input: {
     targetId: string

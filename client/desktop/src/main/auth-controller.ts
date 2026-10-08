@@ -25,6 +25,7 @@ import type {
 } from "../shared/account-data"
 import {
   type AppSettings,
+  type ContentZoom,
   type IncomingMessageNotification,
   type NotificationSettings,
   type ShortcutSettings,
@@ -487,6 +488,10 @@ export class AuthController {
 
   setTheme(theme: ThemePreference): Promise<null> {
     return this.exclusive(() => this.settings.setTheme(theme))
+  }
+
+  setContentZoom(zoom: ContentZoom): Promise<null> {
+    return this.exclusive(() => this.settings.setContentZoom(zoom))
   }
 
   setNotificationSettings(settings: NotificationSettings): Promise<null> {
