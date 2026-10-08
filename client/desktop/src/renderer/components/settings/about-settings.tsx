@@ -11,7 +11,7 @@ import {
   ItemGroup,
   ItemTitle,
 } from "@/components/ui/item"
-import { APP_VERSION, BUILD_ID } from "../../../shared/build-info"
+import { APP_VERSION } from "../../../shared/build-info"
 import { useUpdateDialog } from "../../update-provider"
 import { JIYING_HOMEPAGE, MAGICCHAT_REPOSITORY, type SystemInfo } from "../../../shared/desktop"
 
@@ -52,9 +52,7 @@ export function AboutSettings({ active }: { active: boolean }) {
         <Item variant="outline" size="sm">
           <ItemContent className="min-w-0">
             <ItemTitle>版本信息</ItemTitle>
-            <ItemDescription>
-              版本 {APP_VERSION} · Build {BUILD_ID}
-            </ItemDescription>
+            <ItemDescription>版本 {APP_VERSION}</ItemDescription>
           </ItemContent>
           <ItemActions className="shrink-0">
             <BeButton

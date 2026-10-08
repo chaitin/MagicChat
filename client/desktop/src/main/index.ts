@@ -192,12 +192,12 @@ function createDimmedTrayImage(image: NativeImage): NativeImage {
       scaleFactor,
     })
   }
-  if (process.platform === "darwin") dimmed.setTemplateImage(true)
   return dimmed
 }
 
 function createTray() {
   const isMac = process.platform === "darwin"
+  const blinkTray = process.platform === "win32"
   const iconFile = isMac ? "trayTemplate.png" : "tray-color.png"
   const iconPath = app.isPackaged
     ? path.join(process.resourcesPath, iconFile)
@@ -209,10 +209,13 @@ function createTray() {
     process.platform === "win32"
       ? nativeImage.createFromBuffer(source.toPNG({ scaleFactor: 2 }))
       : source
-  const dimmedImage = createDimmedTrayImage(trayImage)
+  const dimmedImage = blinkTray ? createDimmedTrayImage(trayImage) : null
   tray = new Tray(trayImage)
   unreadAttention = createUnreadAttention({
-    showDimmed: (dimmed) => tray?.setImage(dimmed ? dimmedImage : trayImage),
+    blink: blinkTray,
+    showDimmed: (dimmed) => {
+      if (dimmedImage) tray?.setImage(dimmed ? dimmedImage : trayImage)
+    },
     setTaskbarAttention: (enabled) => {
       if (process.platform === "win32" && mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.flashFrame(enabled)

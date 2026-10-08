@@ -64,3 +64,27 @@ test("窗口外仍有未读时任务栏请求注意，退出时恢复原图", ()
   assert.deepEqual(taskbar, [true, false])
   assert.equal(stopped, 1)
 })
+
+test("不闪烁的平台有未读时不启动定时器或切换托盘图", () => {
+  const images: boolean[] = []
+  const taskbar: boolean[] = []
+  let started = 0
+  const attention = createUnreadAttention({
+    blink: false,
+    showDimmed: (dimmed) => images.push(dimmed),
+    setTaskbarAttention: (enabled) => taskbar.push(enabled),
+    startTimer: () => {
+      started += 1
+      return 1 as unknown as ReturnType<typeof setInterval>
+    },
+  })
+
+  attention.setUnread(true)
+  assert.equal(started, 0)
+  assert.deepEqual(images, [])
+  assert.deepEqual(taskbar, [true])
+
+  attention.setUnread(false)
+  assert.deepEqual(images, [])
+  assert.deepEqual(taskbar, [true, false])
+})
