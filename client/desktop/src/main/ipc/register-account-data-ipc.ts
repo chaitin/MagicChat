@@ -65,6 +65,9 @@ export function registerAccountDataIpc({
   handle(ACCOUNT_DATA_CHANNELS.listConversations, (input) =>
     auth.listConversations(input as ListConversationsInput),
   )
+  handle(ACCOUNT_DATA_CHANNELS.openTopicConversation, (input) =>
+    auth.openTopicConversation(input as ConversationTargetInput),
+  )
   handle(ACCOUNT_DATA_CHANNELS.listLocalTopics, (input) =>
     auth.listLocalTopics(input as LocalConversationPageInput),
   )

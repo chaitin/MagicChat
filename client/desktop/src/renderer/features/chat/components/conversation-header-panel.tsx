@@ -1029,6 +1029,7 @@ function ConversationInfo({
           const result = await window.desktop!.accountData.archiveTopic(base)
           if (!result.ok) throw new Error(result.error.message)
           showToast({ status: "success", title: "话题已关闭" })
+          onClose()
           break
         }
         case "unbind-project": {
@@ -1085,12 +1086,7 @@ function ConversationInfo({
         }
       }
       setAction(null)
-      if (
-        action.type === "dismiss" ||
-        action.type === "archive" ||
-        action.type === "leave" ||
-        action.type === "dissolve"
-      ) {
+      if (action.type === "dismiss" || action.type === "leave" || action.type === "dissolve") {
         onClose()
         onConversationRemoved()
       }

@@ -89,6 +89,11 @@ export class AccountDataFacade {
     return this.requireRuntime().listConversations(selectedId ?? null)
   }
 
+  async openTopicConversation(input: ConversationTargetInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().openTopicConversation(input.conversationId)
+  }
+
   async listLocalTopics(input: LocalConversationPageInput) {
     await this.ready(input?.targetId)
     if (

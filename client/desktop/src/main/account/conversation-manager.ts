@@ -27,6 +27,7 @@ import {
   requiredString,
 } from "./conversation-parser"
 import { normalizeDesktopMessageChoiceState } from "./message-normalizer"
+import { topicOpenMode } from "./conversation-topic"
 import {
   contiguousMessageSuffix,
   isCompleteLocalPage,
@@ -38,6 +39,7 @@ import { normalizeForwardResponse, validateForwardRequest } from "./forward-requ
 export class ConversationManager {
   private readonly outgoingMessages: OutgoingMessageService
   private readonly virtualMessages = new Map<string, DesktopMessage[]>()
+  private readonly viewedTopics = new Map<string, DesktopConversation>()
 
   constructor(
     private readonly database: AccountDatabase,
@@ -65,7 +67,9 @@ export class ConversationManager {
     this.database.upsertCurrentConversations(conversations)
     const currentConversationIds = new Set(conversations.map((conversation) => conversation.id))
     for (const conversationId of this.virtualMessages.keys()) {
-      if (!currentConversationIds.has(conversationId)) this.virtualMessages.delete(conversationId)
+      if (!currentConversationIds.has(conversationId) && !this.viewedTopics.has(conversationId)) {
+        this.virtualMessages.delete(conversationId)
+      }
     }
     await mapConcurrent(conversations, 4, async (conversation) => {
       const messages = await retryNetworkAction(() => this.fetchMessages(conversation.id))
@@ -218,6 +222,61 @@ export class ConversationManager {
     }))
   }
 
+  async openTopicConversation(conversationId: string): Promise<DesktopConversation> {
+    this.assertConversationId(conversationId)
+    const detail = await this.client.get(
+      `/api/client/conversations/topics/${encodeURIComponent(conversationId)}`,
+    )
+    if (
+      !isRecord(detail) ||
+      !isRecord(detail.conversation) ||
+      !isRecord(detail.parent_conversation)
+    ) {
+      throw new AuthFailure("invalid_response", "话题详情响应格式不正确")
+    }
+    let topic = parseConversation(detail.conversation, this.currentUserId)
+    if (
+      topic.id !== conversationId ||
+      topic.type !== "topic" ||
+      !topic.topic ||
+      topic.topic.parentConversationId !== detail.parent_conversation.id ||
+      !this.database.hasCurrentConversation(topic.topic.parentConversationId)
+    ) {
+      throw new AuthFailure("invalid_response", "话题所属会话不正确")
+    }
+    const mode = topicOpenMode(topic.topic, detail.can_participate === true)
+    if (mode === "denied") throw new AuthFailure("forbidden", "当前无法参与话题")
+    if (mode === "join") {
+      const joined = await this.client.post(
+        `/api/client/conversations/topics/${encodeURIComponent(conversationId)}/participate`,
+        {},
+      )
+      if (!isRecord(joined) || !isRecord(joined.conversation)) {
+        throw new AuthFailure("invalid_response", "参与话题响应格式不正确")
+      }
+      topic = parseConversation(joined.conversation, this.currentUserId)
+      if (
+        topic.id !== conversationId ||
+        topic.type !== "topic" ||
+        !topic.topic?.participating ||
+        topic.topic.parentConversationId !== detail.parent_conversation.id
+      ) {
+        throw new AuthFailure("invalid_response", "参与话题响应格式不正确")
+      }
+    }
+    if (topic.topic?.participating) this.database.upsertCurrentConversations([topic])
+    else this.database.upsertViewedTopic(topic)
+    this.database.upsertMessages(await retryNetworkAction(() => this.fetchMessages(conversationId)))
+    if (topic.topic?.participating) {
+      this.viewedTopics.delete(conversationId)
+      return this.listConversations(conversationId).find((item) => item.id === conversationId)!
+    }
+    const { avatar: _avatar, payload: _payload, ...conversation } = topic
+    const viewed = { ...conversation, canSend: false, canModerateMessages: false }
+    this.viewedTopics.set(conversationId, viewed)
+    return viewed
+  }
+
   async markRead(conversationId: string, upToSeq: number) {
     this.assertConversationId(conversationId)
     if (!Number.isSafeInteger(upToSeq) || upToSeq <= 0) {
@@ -307,10 +366,17 @@ export class ConversationManager {
 
   async getConversationInfo(conversationId: string) {
     this.assertConversationId(conversationId)
-    const conversation = this.database
+    const current = this.database
       .listConversations(conversationId)
       .find((item) => item.id === conversationId)
-    if (!conversation) throw new AuthFailure("conversation_not_found", "对话不存在")
+    const conversation = current ?? this.viewedTopics.get(conversationId)
+    if (
+      !conversation ||
+      (!current &&
+        !this.database.hasCurrentConversation(conversation.topic?.parentConversationId ?? ""))
+    ) {
+      throw new AuthFailure("conversation_not_found", "对话不存在")
+    }
     const payload = this.database.getConversationPayload(conversationId)
     if (!isRecord(payload)) throw new AuthFailure("invalid_conversation", "会话信息不可用")
     const info = {

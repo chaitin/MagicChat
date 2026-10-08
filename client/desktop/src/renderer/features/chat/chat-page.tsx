@@ -9,6 +9,7 @@ import {
 } from "react"
 import { FlashIcon, Loading03Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
+import { Textarea } from "@/components/ui/textarea"
 import { ContactProfileProvider } from "@/components/avatar/contact-profile-popover"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import {
@@ -811,6 +812,14 @@ export function ChatPage({
                         openForwardOperation(orderedForwardMessageIds(selection.selected), mode)
                       }
                     />
+                  ) : selected.type === "topic" && selected.topic?.archived ? (
+                    <div className="border-t px-3 py-3">
+                      <Textarea
+                        disabled
+                        aria-label="话题已关闭"
+                        placeholder="话题已关闭，无法发送消息"
+                      />
+                    </div>
                   ) : (
                     <MessageComposer
                       key={draftKey}

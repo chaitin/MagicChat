@@ -8,6 +8,7 @@ export const ACCOUNT_DATA_CHANNELS = {
   uploadProfileAvatar: "desktop-next:v1:account-profile-avatar-upload",
   searchLocal: "desktop-next:v1:account-data-search-local",
   listConversations: "desktop-next:v1:conversations-list",
+  openTopicConversation: "desktop-next:v1:conversation-topic-open",
   listLocalTopics: "desktop-next:v1:conversation-topics-local-list",
   listLocalAttachments: "desktop-next:v1:conversation-attachments-local-list",
   getLocalMessageContext: "desktop-next:v1:message-context-local-get",
@@ -664,6 +665,7 @@ export interface AccountDataBridge {
   uploadProfileAvatar(input: UploadProfileAvatarInput): Promise<AuthResult<AuthUser>>
   searchLocal(input: LocalSearchInput): Promise<AuthResult<LocalSearchResponse>>
   listConversations(input: ListConversationsInput): Promise<AuthResult<DesktopConversation[]>>
+  openTopicConversation(input: ConversationTargetInput): Promise<AuthResult<DesktopConversation>>
   listLocalTopics(
     input: LocalConversationPageInput,
   ): Promise<AuthResult<DesktopLocalPage<DesktopConversation>>>

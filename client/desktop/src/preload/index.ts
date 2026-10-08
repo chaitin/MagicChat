@@ -102,6 +102,8 @@ const bridge: DesktopBridge = {
     searchLocal: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.searchLocal, input),
     listConversations: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listConversations, input),
+    openTopicConversation: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.openTopicConversation, input),
     listLocalTopics: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listLocalTopics, input),
     listLocalAttachments: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listLocalAttachments, input),

@@ -67,6 +67,7 @@ export function useChatData({
   const isAtBottomRef = useRef(true)
   const messagesRef = useRef(messages)
   const selectedIdRef = useRef(selectedId)
+  const openingTopicsRef = useRef(new Set<string>())
   const loadedConversationIdRef = useRef<string | null>(null)
   const historyRef = useRef<HTMLDivElement>(null)
   selectedIdRef.current = selectedId
@@ -96,6 +97,7 @@ export function useChatData({
       activeSection !== "chat" ||
       loadingMessages ||
       !selected?.unreadCount ||
+      (selected.type === "topic" && !selected.topic?.participating) ||
       document.visibilityState !== "visible" ||
       !document.hasFocus() ||
       readInFlightRef.current.has(selectedId)
@@ -130,6 +132,8 @@ export function useChatData({
     loadingMessages,
     messages,
     selected?.lastReadSeq,
+    selected?.topic?.participating,
+    selected?.type,
     selected?.unreadCount,
     selectedId,
     targetId,
@@ -141,32 +145,35 @@ export function useChatData({
   }, [])
 
   const openTopicConversation = useCallback(
-    (conversationId: string) => {
-      if (!conversations.some((conversation) => conversation.id === conversationId)) {
-        const parent = conversations.find(
-          (conversation) => conversation.id === selectedIdRef.current,
-        )
-        setTransientConversation({
-          id: conversationId,
-          type: "topic",
-          name: "话题",
-          memberCount: parent?.memberCount ?? 0,
-          avatarType: parent?.avatarType ?? "group",
-          avatarId: parent?.avatarId ?? "",
-          createdAt: "",
-          lastMessageAt: null,
-          lastMessageSummary: "",
-          pinned: false,
-          notificationMuted: false,
-          isBuiltinAssistant: false,
-          unreadCount: 0,
-        })
-      } else {
+    async (conversationId: string) => {
+      if (conversations.some((conversation) => conversation.id === conversationId)) {
         setTransientConversation(null)
+        setSelectedIdState(conversationId)
+        return
       }
-      setSelectedIdState(conversationId)
+      if (!window.desktop || openingTopicsRef.current.has(conversationId)) return
+      openingTopicsRef.current.add(conversationId)
+      const previousId = selectedIdRef.current
+      try {
+        const result = await window.desktop.accountData.openTopicConversation({
+          targetId,
+          conversationId,
+        })
+        if (!result.ok) {
+          showToast({ status: "error", title: "无法加入话题", description: result.error.message })
+          return
+        }
+        if (selectedIdRef.current !== previousId) return
+        setTransientConversation(result.data)
+        setConversationRevision((revision) => revision + 1)
+        setSelectedIdState(conversationId)
+      } catch {
+        showToast({ status: "error", title: "无法加入话题，请稍后重试" })
+      } finally {
+        openingTopicsRef.current.delete(conversationId)
+      }
     },
-    [conversations],
+    [conversations, showToast, targetId],
   )
 
   useEffect(() => {

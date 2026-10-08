@@ -45,6 +45,10 @@ export class AccountDatabase {
     this.conversations.upsertCurrent(conversations)
   }
 
+  upsertViewedTopic(conversation: StoredConversation) {
+    this.conversations.upsertViewed(conversation)
+  }
+
   hasCurrentConversation(conversationId: string) {
     return this.conversations.hasCurrent(conversationId)
   }

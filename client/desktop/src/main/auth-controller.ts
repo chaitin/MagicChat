@@ -254,6 +254,10 @@ export class AuthController {
     return this.accountData.listConversations(...args)
   }
 
+  openTopicConversation(...args: Parameters<AccountDataFacade["openTopicConversation"]>) {
+    return this.accountData.openTopicConversation(...args)
+  }
+
   listLocalTopics(...args: Parameters<AccountDataFacade["listLocalTopics"]>) {
     return this.accountData.listLocalTopics(...args)
   }

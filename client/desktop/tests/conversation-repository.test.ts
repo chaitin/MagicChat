@@ -25,6 +25,36 @@ function conversation(id: string, overrides: Record<string, unknown> = {}) {
   }
 }
 
+test("只查看话题不算参与，加入后才进入当前会话", () => {
+  const database = new DatabaseSync(":memory:")
+  initializeAccountSchema(database)
+  const repository = new ConversationRepository(database)
+  const topic = conversation("topic-1", {
+    type: "topic",
+    avatarType: "topic",
+    payload: {
+      type: "topic",
+      topic: {
+        parent_conversation_id: "group-1",
+        source_sender: { id: "user-1", type: "user" },
+      },
+    },
+  })
+
+  repository.upsertViewed(topic)
+  assert.equal(repository.hasCurrent("topic-1"), false)
+  assert.equal(
+    repository.list().some((item) => item.id === "topic-1"),
+    false,
+  )
+
+  repository.upsertCurrent([topic])
+  assert.equal(repository.hasCurrent("topic-1"), true)
+  repository.upsertViewed(topic)
+  assert.equal(repository.hasCurrent("topic-1"), true)
+  database.close()
+})
+
 test("消息序号和已读事件幂等推进，旧快照不会恢复未读", () => {
   const database = new DatabaseSync(":memory:")
   initializeAccountSchema(database)

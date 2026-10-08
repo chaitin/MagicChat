@@ -13,16 +13,20 @@ export class ConversationRepository {
   }
 
   upsertCurrent(conversations: StoredConversation[]) {
-    this.transaction(() => this.upsertRows(conversations))
+    this.transaction(() => this.upsertRows(conversations, 1))
   }
 
-  private upsertRows(conversations: StoredConversation[]) {
+  upsertViewed(conversation: StoredConversation) {
+    this.transaction(() => this.upsertRows([conversation], 0))
+  }
+
+  private upsertRows(conversations: StoredConversation[], current: 0 | 1) {
     const statement = this.database.prepare(`
       INSERT INTO conversations (
         id, type, name, member_count, avatar, avatar_type, avatar_id, created_at, last_message_at,
         last_message_summary, pinned, notification_muted, is_builtin_assistant,
         unread_count, last_message_seq, last_read_seq, last_mentioned_seq, current, payload_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         type = excluded.type,
         name = excluded.name,
@@ -42,7 +46,7 @@ export class ConversationRepository {
         unread_count = CASE WHEN MAX(conversations.last_message_seq, excluded.last_message_seq) = 0
           THEN excluded.unread_count
           ELSE MAX(0, MAX(conversations.last_message_seq, excluded.last_message_seq) - MAX(conversations.last_read_seq, excluded.last_read_seq)) END,
-        current = 1,
+        current = MAX(conversations.current, excluded.current),
         payload_json = excluded.payload_json
     `)
     for (const conversation of conversations) {
@@ -64,6 +68,7 @@ export class ConversationRepository {
         conversation.lastMessageSeq ?? 0,
         conversation.lastReadSeq ?? 0,
         conversation.lastMentionedSeq ?? 0,
+        current,
         JSON.stringify(conversation.payload),
       )
     }

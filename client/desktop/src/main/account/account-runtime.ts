@@ -171,6 +171,13 @@ export class AccountRuntime {
     return this.conversationManager!.listConversations(selectedConversationId)
   }
 
+  async openTopicConversation(conversationId: string) {
+    this.assertInitialized()
+    const conversation = await this.conversationManager!.openTopicConversation(conversationId)
+    this.notifyChanged(["conversations", "messages"], [conversationId])
+    return conversation
+  }
+
   async markConversationRead(conversationId: string, upToSeq: number) {
     this.assertInitialized()
     await this.conversationManager!.markRead(conversationId, upToSeq)

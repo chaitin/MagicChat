@@ -1,4 +1,13 @@
-import type { DesktopConversation } from "../../shared/account-data.ts"
+import type { DesktopConversation, DesktopConversationTopic } from "../../shared/account-data.ts"
+
+export function topicOpenMode(
+  topic: DesktopConversationTopic,
+  canParticipate: boolean,
+): "joined" | "join" | "view" | "denied" {
+  if (topic.participating) return "joined"
+  if (topic.archived) return "view"
+  return canParticipate ? "join" : "denied"
+}
 
 export function parseConversationTopic(value: unknown): DesktopConversation["topic"] {
   if (!isRecord(value) || value.type !== "topic" || !isRecord(value.topic)) return undefined
