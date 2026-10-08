@@ -138,6 +138,7 @@ export function EntityAvatar({
           icon={fallbackIcons[fallbackType]}
           size={iconSize}
           strokeWidth={2}
+          className="text-white!"
           aria-hidden
         />
       ) : null}

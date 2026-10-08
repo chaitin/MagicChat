@@ -4,6 +4,7 @@ import path from "node:path"
 import type { AvatarRequest, AvatarResult, AvatarType } from "../../shared/account-data"
 import { AuthFailure } from "../../shared/auth"
 import { AccountDatabase } from "./account-database"
+import { avatarExtensionFor } from "./avatar-content-type"
 import { AuthenticatedClient } from "./authenticated-client"
 import {
   buildCompositeAvatar,
@@ -221,7 +222,7 @@ export class AvatarManager {
 
     try {
       const downloaded = await this.client.downloadAvatar(sourceUrl)
-      const extension = extensionFor(downloaded.contentType)
+      const extension = avatarExtensionFor(downloaded.contentType)
       const resourceKey = cacheResourceKey(descriptor.type, descriptor.id, sourceUrl)
       const localFile = `${resourceKey}.${extension}`
       await mkdir(this.avatarDirectory, { recursive: true })
@@ -336,7 +337,7 @@ export class AvatarManager {
   }
 
   private localPath(localFile: string): string {
-    if (!/^[a-f0-9-]+\.(png|jpg|webp|gif|svg|tmp)$/.test(localFile)) {
+    if (!/^[a-f0-9-]+\.(png|jpg|avif|webp|gif|svg|tmp)$/.test(localFile)) {
       throw new AuthFailure("invalid_avatar", "头像缓存路径不正确")
     }
     return path.join(this.avatarDirectory, localFile)
@@ -376,18 +377,6 @@ function cacheResourceKey(type: string, entityId: string, source: string): strin
 
 function resourceUrl(record: AvatarCacheRecord): string {
   return `jiying-avatar://cache/${record.resourceKey}?v=${record.downloadedAt}`
-}
-
-function extensionFor(contentType: string): string {
-  return (
-    {
-      "image/png": "png",
-      "image/jpeg": "jpg",
-      "image/webp": "webp",
-      "image/gif": "gif",
-      "image/svg+xml": "svg",
-    }[contentType] ?? "png"
-  )
 }
 
 async function fileExists(filePath: string): Promise<boolean> {

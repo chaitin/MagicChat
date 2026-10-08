@@ -1,16 +1,10 @@
 import { openAsBlob } from "node:fs"
 import { type Session } from "electron"
 import { AuthFailure, isRecord } from "../../shared/auth"
+import { AVATAR_ACCEPT, AVATAR_CONTENT_TYPES, detectAvatarContentType } from "./avatar-content-type"
 
 const MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024
-const AVATAR_CONTENT_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/gif",
-  "image/svg+xml",
-])
 
 export class AuthenticatedClient {
   constructor(
@@ -104,7 +98,7 @@ export class AuthenticatedClient {
       const response = await this.serverSession.fetch(url.toString(), {
         method: "GET",
         headers: {
-          Accept: "image/png,image/jpeg,image/webp,image/gif,image/svg+xml",
+          Accept: AVATAR_ACCEPT,
           ...(url.origin === serverOrigin ? { Authorization: `Bearer ${this.token}` } : {}),
         },
         credentials: "omit",
@@ -189,29 +183,6 @@ async function readJson(response: Response): Promise<unknown> {
   } catch {
     throw new AuthFailure("invalid_response", "账号数据响应格式不正确")
   }
-}
-
-function detectAvatarContentType(bytes: Uint8Array): string | undefined {
-  if (bytes.byteLength === 0) return undefined
-  if ([137, 80, 78, 71, 13, 10, 26, 10].every((value, index) => bytes[index] === value)) {
-    return "image/png"
-  }
-  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg"
-  const decoder = new TextDecoder()
-  const signature = decoder.decode(bytes.subarray(0, 12))
-  if (signature.startsWith("GIF87a") || signature.startsWith("GIF89a")) return "image/gif"
-  if (signature.startsWith("RIFF") && signature.slice(8, 12) === "WEBP") return "image/webp"
-  const source = decoder.decode(bytes.subarray(0, 32 * 1_024))
-  if (
-    /<svg(?:\s|>)/i.test(source) &&
-    !/<script(?:\s|>)/i.test(source) &&
-    !/<foreignObject(?:\s|>)/i.test(source) &&
-    !/\son[a-z]+\s*=/i.test(source) &&
-    !/(?:href|src)\s*=\s*["'](?:https?:|\/\/)/i.test(source)
-  ) {
-    return "image/svg+xml"
-  }
-  return undefined
 }
 
 async function readBytes(response: Response, maximum: number): Promise<Uint8Array> {
