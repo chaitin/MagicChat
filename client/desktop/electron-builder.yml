@@ -40,7 +40,7 @@ nsis:
   shortcutName: 即应
   uninstallDisplayName: 即应新桌面客户端预览版
 mac:
-  icon: resources/icon.png
+  icon: resources/AppIcon.icon
   artifactName: "Jiying-Desktop-Preview-${version}-mac-${arch}.${ext}"
   extendInfo:
     LSUIElement: false
