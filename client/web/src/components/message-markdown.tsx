@@ -176,20 +176,23 @@ function createMarkdownComponents(
     del: ({ children }) => (
       <del className="text-muted-foreground">{children}</del>
     ),
+    strong: ({ children }) => (
+      <strong className="font-semibold">{children}</strong>
+    ),
     h1: ({ children }) => (
-      <h1 className="text-2xl leading-snug font-bold">{children}</h1>
+      <h1 className="text-2xl leading-snug font-semibold">{children}</h1>
     ),
     h2: ({ children }) => (
-      <h2 className="text-xl leading-snug font-bold">{children}</h2>
+      <h2 className="text-xl leading-snug font-semibold">{children}</h2>
     ),
     h3: ({ children }) => (
-      <h3 className="text-lg leading-snug font-bold">{children}</h3>
+      <h3 className="text-lg leading-snug font-semibold">{children}</h3>
     ),
     h4: ({ children }) => (
-      <h4 className="text-base leading-snug font-bold">{children}</h4>
+      <h4 className="text-base leading-snug font-semibold">{children}</h4>
     ),
     h5: ({ children }) => (
-      <h5 className="text-sm leading-snug font-bold">{children}</h5>
+      <h5 className="text-sm leading-snug font-semibold">{children}</h5>
     ),
     h6: ({ children }) => (
       <h6 className="text-sm leading-snug font-semibold text-foreground/80">

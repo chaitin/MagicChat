@@ -468,7 +468,7 @@ export function MeScreen() {
                 <YStack flex={1} gap="$2" justify="center">
                   <SizableText
                     color={colors.textPrimary}
-                    fontWeight="700"
+                    fontWeight="600"
                     numberOfLines={1}
                     size="$6"
                   >

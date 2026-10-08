@@ -249,7 +249,7 @@ export function DocumentEditor({
         >
           <input
             aria-label="文档页面标题"
-            className="mb-8 w-full border-b bg-transparent pb-5 text-4xl font-bold tracking-tight outline-none placeholder:text-muted-foreground/60"
+            className="mb-8 w-full border-b bg-transparent pb-5 text-4xl font-semibold tracking-tight outline-none placeholder:text-muted-foreground/60"
             onBlur={onTitleBlur}
             onChange={(event) => onTitleChange(event.target.value)}
             placeholder="无标题文档"

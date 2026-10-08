@@ -151,7 +151,7 @@ function renderBlockNode(
     return (
       <SizableText
         color={context.textColor}
-        fontWeight="700"
+        fontWeight="600"
         key={key}
         lineHeight={23}
         size="$4"
@@ -510,7 +510,7 @@ function renderInlineNode(
   }
   if (token.type === "strong_open") {
     return (
-      <SizableText color={color} fontWeight="700" key={key} size="$4">
+      <SizableText color={color} fontWeight="600" key={key} size="$4">
         {children}
       </SizableText>
     )

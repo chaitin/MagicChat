@@ -244,7 +244,7 @@ export function MarkdownDocumentEditor({
           >
             <input
               aria-label="文档页面标题"
-              className="mx-8 mt-10 mb-6 border-b bg-transparent pb-5 text-4xl font-bold tracking-tight outline-none placeholder:text-muted-foreground/60 sm:mx-12"
+              className="mx-8 mt-10 mb-6 border-b bg-transparent pb-5 text-4xl font-semibold tracking-tight outline-none placeholder:text-muted-foreground/60 sm:mx-12"
               onBlur={onTitleBlur}
               onChange={(event) => onTitleChange(event.target.value)}
               placeholder="无标题 Markdown"
@@ -269,7 +269,7 @@ export function MarkdownDocumentEditor({
           >
             <h1
               aria-label="预览文档标题"
-              className="mx-8 mt-10 mb-6 border-b pb-5 text-4xl font-bold tracking-tight break-words sm:mx-12"
+              className="mx-8 mt-10 mb-6 border-b pb-5 text-4xl font-semibold tracking-tight break-words sm:mx-12"
             >
               {title.trim() || "无标题 Markdown"}
             </h1>

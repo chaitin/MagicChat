@@ -4,13 +4,13 @@
 
 本应用界面使用小米 MiSans 字体。官方来源：https://hyperos.mi.com/font-download/MiSans.zip
 
-使用压缩包 `MiSans/woff2/` 下未经修改的 Regular（400）、Medium（500）、Bold（700），统一保存在仓库根目录 `assets/fonts/misans/`，由各客户端直接引用。压缩包内未附授权文件；发布前需核对官方字体使用与分发条款。
+使用压缩包 `MiSans/woff2/` 下未经修改的 Regular、Medium、Demibold，在界面中分别映射为 400、500、600。文件统一保存在仓库根目录 `assets/fonts/misans/`，由各客户端直接引用。压缩包内未附授权文件；发布前需核对官方字体使用与分发条款。
 
-| 文件                 | SHA-256                                                            |
-| -------------------- | ------------------------------------------------------------------ |
-| MiSans-Regular.woff2 | `d704c1a932c0bd7e8a071d276cd81c0ed0c9fecfa26ac234f4bed0559fe1cb2d` |
-| MiSans-Medium.woff2  | `44e28ca6c2f0ca79829f192831ef87b5eec7c464f5cfb7a83467f57bb6e58114` |
-| MiSans-Bold.woff2    | `1c5a7515b61bc82baaa2e2c2fdae2032479fb9a99e09d4d021dc17314fc5939b` |
+| 文件                  | SHA-256                                                            |
+| --------------------- | ------------------------------------------------------------------ |
+| MiSans-Regular.woff2  | `d704c1a932c0bd7e8a071d276cd81c0ed0c9fecfa26ac234f4bed0559fe1cb2d` |
+| MiSans-Medium.woff2   | `44e28ca6c2f0ca79829f192831ef87b5eec7c464f5cfb7a83467f57bb6e58114` |
+| MiSans-Demibold.woff2 | `7afe3737efaf6a137db0ef4857fbe4033a8802756485ebc7f008e96a4bdedcf2` |
 
 ## shadcn/ui
 

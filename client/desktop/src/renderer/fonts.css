@@ -22,8 +22,8 @@
 
 @font-face {
   font-family: "MiSans";
-  src: url("../../../../assets/fonts/misans/MiSans-Bold.woff2") format("woff2");
+  src: url("../../../../assets/fonts/misans/MiSans-Demibold.woff2") format("woff2");
   font-style: normal;
-  font-weight: 700;
+  font-weight: 600;
   font-display: swap;
 }

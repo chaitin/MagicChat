@@ -15,7 +15,7 @@ export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     "MiSans-Regular": require("../../assets/fonts/misans/MiSans-Regular.ttf"),
     "MiSans-Medium": require("../../assets/fonts/misans/MiSans-Medium.ttf"),
-    "MiSans-Bold": require("../../assets/fonts/misans/MiSans-Bold.ttf"),
+    "MiSans-Demibold": require("../../assets/fonts/misans/MiSans-Demibold.ttf"),
   })
   return (
     <AppProviders>

@@ -31,7 +31,7 @@ const darkTealHalfStepColors = {
 const miSansFaces = {
   400: { normal: "MiSans-Regular" },
   500: { normal: "MiSans-Medium" },
-  700: { normal: "MiSans-Bold" },
+  600: { normal: "MiSans-Demibold" },
 }
 
 export const tamaguiConfig = createTamagui({

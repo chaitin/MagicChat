@@ -11,9 +11,13 @@ import {
 const TextFontContext = createContext<{ weight?: TextStyle["fontWeight"]; family?: string }>({})
 
 function miSansForWeight(weight: TextStyle["fontWeight"]) {
-  if (weight === "bold" || (weight !== undefined && Number(weight) >= 700)) return "MiSans-Bold"
+  if (weight === "bold" || (weight !== undefined && Number(weight) >= 600)) return "MiSans-Demibold"
   if (weight !== undefined && Number(weight) >= 500) return "MiSans-Medium"
   return "MiSans-Regular"
+}
+
+function normalizedMiSansWeight(weight: TextStyle["fontWeight"]): TextStyle["fontWeight"] {
+  return weight === "bold" || (weight !== undefined && Number(weight) >= 600) ? "600" : weight
 }
 
 export const Text = forwardRef<NativeText, TextProps>(function Text({ style, ...props }, ref) {
@@ -26,7 +30,11 @@ export const Text = forwardRef<NativeText, TextProps>(function Text({ style, ...
       <NativeText
         ref={ref}
         {...props}
-        style={[{ fontFamily: family ?? miSansForWeight(weight) }, style]}
+        style={[
+          { fontFamily: family ?? miSansForWeight(weight) },
+          style,
+          !family && { fontWeight: normalizedMiSansWeight(weight) },
+        ]}
       />
     </TextFontContext.Provider>
   )
@@ -41,7 +49,11 @@ export const TextInput = forwardRef<NativeTextInput, TextInputProps>(function Te
     <NativeTextInput
       ref={ref}
       {...props}
-      style={[{ fontFamily: flattened?.fontFamily ?? miSansForWeight(flattened?.fontWeight) }, style]}
+      style={[
+        { fontFamily: flattened?.fontFamily ?? miSansForWeight(flattened?.fontWeight) },
+        style,
+        !flattened?.fontFamily && { fontWeight: normalizedMiSansWeight(flattened?.fontWeight) },
+      ]}
     />
   )
 })

@@ -269,7 +269,7 @@ export const MessageBubble = memo(function MessageBubble({
               >
                 <SizableText
                   color={colors.textSecondary}
-                  fontWeight="700"
+                  fontWeight="600"
                   numberOfLines={1}
                   selectable={allowsTextSelection}
                   size="$3"
