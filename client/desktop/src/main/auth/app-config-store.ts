@@ -16,6 +16,7 @@ import {
   DEFAULT_SHORTCUTS,
   DEFAULT_NOTIFICATION_SETTINGS,
   DEFAULT_CONTENT_ZOOM,
+  CONTENT_ZOOM_VERSION,
   normalizeContentZoom,
   normalizeNotificationSettings,
   type ContentZoom,
@@ -46,6 +47,7 @@ export type AppConfig = {
   version: 1
   theme: ThemePreference
   contentZoom: ContentZoom
+  contentZoomVersion: typeof CONTENT_ZOOM_VERSION
   shortcuts: ShortcutSettings
   notifications: NotificationSettings
   activeServerId: string
@@ -67,6 +69,7 @@ export function createDefaultAppConfig(): AppConfig {
     version: 1,
     theme: "system",
     contentZoom: DEFAULT_CONTENT_ZOOM,
+    contentZoomVersion: CONTENT_ZOOM_VERSION,
     shortcuts: { ...DEFAULT_SHORTCUTS },
     notifications: { ...DEFAULT_NOTIFICATION_SETTINGS },
     activeServerId: OFFICIAL_SERVER_ID,
@@ -212,7 +215,8 @@ export class AppConfigStore {
       return {
         version: 1,
         theme,
-        contentZoom: normalizeContentZoom(stored.contentZoom),
+        contentZoom: normalizeContentZoom(stored.contentZoom, stored.contentZoomVersion),
+        contentZoomVersion: CONTENT_ZOOM_VERSION,
         shortcuts,
         notifications,
         activeServerId,

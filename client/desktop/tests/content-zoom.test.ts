@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import {
   CONTENT_ZOOM_OPTIONS,
+  CONTENT_ZOOM_VERSION,
   DEFAULT_CONTENT_ZOOM,
   isContentZoom,
   normalizeContentZoom,
@@ -35,11 +36,14 @@ test("不接受任意、旧版或非数值的内容缩放比例", () => {
   }
 })
 
-test("旧版缩放设置迁移到最近档位，保留新版设置", () => {
-  assert.equal(normalizeContentZoom(0.75), 0.8)
-  assert.equal(normalizeContentZoom(1.1), 1.15)
-  assert.equal(normalizeContentZoom(1.2), 1.15)
-  assert.equal(normalizeContentZoom(1.25), 1.3)
-  for (const option of CONTENT_ZOOM_OPTIONS) assert.equal(normalizeContentZoom(option), option)
-  assert.equal(normalizeContentZoom(1.05), DEFAULT_CONTENT_ZOOM)
+test("旧配置中的所有缩放值回退到 100%，仅保留新版配置", () => {
+  for (const value of [0.75, 0.8, 0.9, 1, 1.1, 1.15, 1.2, 1.25, 1.3]) {
+    assert.equal(normalizeContentZoom(value, undefined), DEFAULT_CONTENT_ZOOM)
+    assert.equal(normalizeContentZoom(value, 1), DEFAULT_CONTENT_ZOOM)
+  }
+  for (const option of CONTENT_ZOOM_OPTIONS) {
+    assert.equal(normalizeContentZoom(option, CONTENT_ZOOM_VERSION), option)
+  }
+  assert.equal(normalizeContentZoom(0.75, CONTENT_ZOOM_VERSION), DEFAULT_CONTENT_ZOOM)
+  assert.equal(normalizeContentZoom(1.05, CONTENT_ZOOM_VERSION), DEFAULT_CONTENT_ZOOM)
 })

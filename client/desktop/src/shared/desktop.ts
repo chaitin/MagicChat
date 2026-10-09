@@ -6,14 +6,12 @@ export type ThemePreference = "light" | "dark" | "system"
 export const CONTENT_ZOOM_OPTIONS = [0.8, 0.9, 1, 1.15, 1.3] as const
 export type ContentZoom = (typeof CONTENT_ZOOM_OPTIONS)[number]
 export const DEFAULT_CONTENT_ZOOM: ContentZoom = 1
+export const CONTENT_ZOOM_VERSION = 2 as const
 export function isContentZoom(value: unknown): value is ContentZoom {
   return CONTENT_ZOOM_OPTIONS.some((option) => option === value)
 }
-export function normalizeContentZoom(value: unknown): ContentZoom {
-  if (value === 0.75) return 0.8
-  if (value === 1.1 || value === 1.2) return 1.15
-  if (value === 1.25) return 1.3
-  return isContentZoom(value) ? value : DEFAULT_CONTENT_ZOOM
+export function normalizeContentZoom(value: unknown, version: unknown): ContentZoom {
+  return version === CONTENT_ZOOM_VERSION && isContentZoom(value) ? value : DEFAULT_CONTENT_ZOOM
 }
 export type DesktopPlatform = "windows" | "macos" | "linux"
 export type ShortcutSettings = {
