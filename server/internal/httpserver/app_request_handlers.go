@@ -2074,7 +2074,7 @@ func (s *Server) findAppSendMessageConversation(appID string, target appSendMess
 			}
 			return store.Conversation{}, err
 		}
-		if conversation.Kind == store.ConversationKindDirect {
+		if conversation.Kind == store.ConversationKindDirect && !appregistry.IsAIAssistantAppID(appID) {
 			return store.Conversation{}, newAppRequestFailure("forbidden", "应用不能向用户私聊发送消息")
 		}
 		if err := s.messages.AuthorizeAppConversationSend(context.Background(), messageapp.AppConversationAccessCommand{

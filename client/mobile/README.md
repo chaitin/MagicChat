@@ -42,7 +42,7 @@ pnpm lint
 EXPO_PUBLIC_MOBILE_PERF=1 ./android/gradlew -p android :app:assembleRelease
 ```
 
-与已安装包签名不同的 APK 无法直接覆盖安装，切勿为了诊断卸载已有应用。前台运行时每 10 秒通过 Android `ReactNativeJS` 日志输出一条 `[mobile-perf]` 汇总，可用 `adb logcat -s ReactNativeJS:I '*:S'` 查看。`n` 为次数，`sum` 和 `max` 为毫秒数（`commit`、`prepare`、`conversation.local_read_reused` 仅使用 `n`）；`conversation.open_to_ready_ms` 从列表按下到聊天页数据可呈现，不等同于首帧绘制；`conversation.local_read_ms` 与 `conversation.sync_elapsed_ms` 分别包含异步本地读取和网络同步的等待时间；`conversations.sqlite_list_ms`、`conversations.sqlite_upsert_ms` 和 `conversations.sqlite_upsert_queue_ms` 分别统计会话列表 SQL 执行、批量写入执行及等待写队列的时间；`js.lag_ms` 表示 100 毫秒定时器晚于预期至少 50 毫秒，不等同于 JS CPU 时间。只记录汇总，不记录账号、对话 ID 或消息内容。日志和诊断包仅用于本地性能分析，普通构建不设置该变量。
+与已安装包签名不同的 APK 无法直接覆盖安装，切勿为了诊断卸载已有应用。前台运行时每 10 秒通过 Android `ReactNativeJS` 日志输出一条 `[mobile-perf]` 汇总，可用 `adb logcat -s ReactNativeJS:I '*:S'` 查看。`n` 为次数，`sum` 和 `max` 为毫秒数（`commit`、`prepare`、`conversation.local_read_reused` 仅使用 `n`）；`conversation.open_to_ready_ms` 从列表按下到聊天页数据可呈现，不等同于首帧绘制；`conversation.local_read_ms` 与 `conversation.sync_elapsed_ms` 分别包含异步本地读取和网络同步的等待时间；`conversations.sqlite_list_ms`、`conversations.sqlite_upsert_ms` 和 `conversations.sqlite_upsert_queue_ms` 分别统计会话列表 SQL 执行、批量写入执行及等待写队列的时间；`contacts.profiles_read_ms`、`contacts.profiles_merge_ms` 和 `contacts.profiles_merge_queue_ms` 对应用户资料的定向读取、合并写入和写队列等待；`js.lag_ms` 表示 100 毫秒定时器晚于预期至少 50 毫秒，不等同于 JS CPU 时间。只记录汇总，不记录账号、对话 ID 或消息内容。日志和诊断包仅用于本地性能分析，普通构建不设置该变量。
 
 iOS 使用原生 APNs Token，固定连接 `https://push.jiying.chat`，并从签名 Entitlement 读取 sandbox/production 环境。Xcode Debug 使用 `development`，Release/TestFlight 使用 `production`；`with-apns-environments` config plugin 会在 prebuild 后保持这组配置。安装凭据、grant 和通知路由映射保存在 SecureStore；需要 Development Build 或 TestFlight 真机验证，Expo Go 不作为远程推送验证环境。
 

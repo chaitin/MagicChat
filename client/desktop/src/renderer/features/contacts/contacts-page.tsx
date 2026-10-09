@@ -68,6 +68,8 @@ export function ContactsPage({
 }) {
   const { showToast } = useAnimatedToast()
   const [directory, setDirectory] = useState<DesktopContactDirectory | null>(null)
+  const activeTargetRef = useRef(targetId)
+  activeTargetRef.current = targetId
   const [loading, setLoading] = useState(true)
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set())
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -84,6 +86,7 @@ export function ContactsPage({
     const result = refresh
       ? await window.desktop.accountData.refreshContacts(targetId)
       : await window.desktop.accountData.getContacts(targetId)
+    if (activeTargetRef.current !== targetId) return
     if (result.ok) {
       setDirectory(result.data)
       setSelection((current) => (current && entityFor(result.data, current) ? current : null))
@@ -92,13 +95,47 @@ export function ContactsPage({
   }
 
   useEffect(() => {
-    void load()
-    return window.desktop?.accountData.onChanged((event) => {
-      if (event.targetId === targetId && event.domains.includes("contacts")) {
-        void load(false, true)
+    if (!window.desktop) return
+    let disposed = false
+    let reading = false
+    let dirty = false
+    const read = async () => {
+      if (reading) {
+        dirty = true
+        return
       }
+      reading = true
+      do {
+        dirty = false
+        try {
+          const result = await window.desktop!.accountData.getContacts(targetId)
+          if (!disposed && !dirty && activeTargetRef.current === targetId) {
+            if (result.ok) {
+              setDirectory(result.data)
+              setSelection((current) =>
+                current && entityFor(result.data, current) ? current : null,
+              )
+            } else showToast({ title: result.error.message, status: "error" })
+            setLoading(false)
+          }
+        } catch {
+          if (!disposed && !dirty && activeTargetRef.current === targetId) {
+            showToast({ title: "无法读取通讯录", status: "error" })
+            setLoading(false)
+          }
+        }
+      } while (!disposed && dirty)
+      reading = false
+    }
+    void read()
+    const unsubscribe = window.desktop.accountData.onChanged((event) => {
+      if (event.targetId === targetId && event.domains.includes("contacts")) void read()
     })
-  }, [targetId])
+    return () => {
+      disposed = true
+      unsubscribe()
+    }
+  }, [showToast, targetId])
 
   const sections = useMemo(() => {
     if (!directory) return []

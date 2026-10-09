@@ -1243,6 +1243,27 @@ func TestReplyToolCallsMessageSendForCurrentConversation(t *testing.T) {
 	}
 }
 
+func TestReplyToolTargetsCurrentDirectConversation(t *testing.T) {
+	requester := &fakeRequester{}
+	ctx := WithScope(context.Background(), Scope{
+		ConversationID: "private-conversation", ConversationType: "direct", Requester: requester,
+	})
+	_, err := NewSource().CallTool(ctx, conversationsToolName, json.RawMessage(`{"operation":"reply","arguments":{"type":"text","content":"在的"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(requester.calls) != 1 || requester.calls[0].method != methodMessageSend {
+		t.Fatalf("calls = %#v, want one message.send", requester.calls)
+	}
+	var payload sendMessagePayload
+	if err := json.Unmarshal(requester.calls[0].payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Target.Type != "conversation" || payload.Target.ConversationID != "private-conversation" || payload.Message.Content != "在的" {
+		t.Fatalf("private reply payload = %#v", payload)
+	}
+}
+
 func TestReplyToolCallsMessageSendForFileURLWithSpecifiedName(t *testing.T) {
 	requester := &fakeRequester{}
 	ctx := WithScope(context.Background(), Scope{

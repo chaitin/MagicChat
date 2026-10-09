@@ -1,6 +1,7 @@
 import type { ClientContactDirectory, ContactGroup, ContactUser } from "@/core/models"
 import type { AuthenticatedTarget } from "@/core/server-target"
 import { fetchContacts } from "@/data/contacts/contacts-api"
+import { applyContactProfileBatch } from "@/data/contacts/contact-profile-snapshot"
 import { mergeUserProfiles, readContactDirectory, readUserProfiles, replaceContactDirectory } from "@/data/contacts/contact-cache-store"
 import { createServerKey } from "@/data/server-key"
 import { resolveClientUsers } from "@/data/users/user-profiles-api"
@@ -85,9 +86,10 @@ class ContactManager {
 
   private async ensureUsersSerial(target: AuthenticatedTarget, rawIds: string[], force: boolean) {
     const snapshot = await this.getSnapshot(target)
-    const rows = await readUserProfiles(target)
-    const now = Date.now()
     const normalizedIds = [...new Set(rawIds.map((id) => id.trim()).filter(Boolean))]
+    if (normalizedIds.length === 0) return
+    const rows = await readUserProfiles(target, normalizedIds)
+    const now = Date.now()
     const ids = force ? normalizedIds : normalizedIds.filter((id) => {
       const row = rows.get(id)
       return !(row && (row.missing_until ?? 0) > now) && !(row?.profile && now - row.cached_at < PROFILE_TTL)
@@ -97,15 +99,9 @@ class ContactManager {
       const profiles = await resolveClientUsers(target, batch)
       const returned = new Set(profiles.map((profile) => profile.id))
       await mergeUserProfiles(target, profiles, batch.filter((id) => !returned.has(id)), Date.now() + MISSING_TTL)
-      const latest = await readUserProfiles(target)
+      const latest = await readUserProfiles(target, batch)
       const currentSnapshot = this.snapshots.get(targetKey(target)) ?? snapshot
-      const usersById: Record<string, ContactUser> = {}
-      const unavailable = new Set<string>()
-      for (const [id, row] of latest) {
-        if (row.profile) usersById[id] = row.profile
-        else if ((row.missing_until ?? 0) > Date.now()) unavailable.add(id)
-      }
-      this.commit(target, { directory: currentSnapshot.directory, unavailableUserIds: unavailable, usersById })
+      this.commit(target, applyContactProfileBatch(currentSnapshot, batch, latest, Date.now()))
     }
   }
 

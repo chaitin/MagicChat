@@ -12,6 +12,7 @@ import {
 } from "./account-database"
 import { AuthenticatedClient } from "./authenticated-client"
 import { retryNetworkAction } from "./retry"
+import { coalesceRefresh } from "./coalesced-refresh"
 import type { AvatarDescriptor, AvatarMemberDescriptor } from "./avatar-types"
 
 type ContactSnapshot = {
@@ -23,6 +24,7 @@ type ContactSnapshot = {
 
 export class ContactManager {
   private readonly refreshedAvatars = new Map<string, AvatarDescriptor>()
+  private readonly refreshCoalesced = coalesceRefresh(() => this.refreshDirectory())
 
   constructor(
     private readonly database: AccountDatabase,
@@ -33,7 +35,11 @@ export class ContactManager {
     return this.refresh()
   }
 
-  async refresh() {
+  refresh() {
+    return this.refreshCoalesced()
+  }
+
+  private async refreshDirectory() {
     const snapshot = await retryNetworkAction(() => this.fetchDirectory())
     const batches = chunk(snapshot.userIds, 100)
     const users = (

@@ -90,6 +90,11 @@ function observeDatabaseOperation(metric: DatabaseOperationMetric) {
   } else if (metric.name === "conversations.upsert-batch") {
     recordMobilePerf("conversations.sqlite_upsert_ms", metric.executionDurationMs)
     recordMobilePerf("conversations.sqlite_upsert_queue_ms", metric.queueDurationMs)
+  } else if (metric.name === "contacts.profiles.read") {
+    recordMobilePerf("contacts.profiles_read_ms", metric.executionDurationMs)
+  } else if (metric.name === "contacts.profiles.merge") {
+    recordMobilePerf("contacts.profiles_merge_ms", metric.executionDurationMs)
+    recordMobilePerf("contacts.profiles_merge_queue_ms", metric.queueDurationMs)
   }
   emitDatabaseTelemetry({
     operation: metric.name,

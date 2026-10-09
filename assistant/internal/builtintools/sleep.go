@@ -867,9 +867,13 @@ func callReply(ctx context.Context, input json.RawMessage) (mcpclient.ToolResult
 		return mcpclient.ToolResult{}, err
 	}
 
+	targetType := strings.TrimSpace(scope.ConversationType)
+	if targetType == "direct" {
+		targetType = "conversation"
+	}
 	result, err := requestTool(ctx, scope.Requester, methodMessageSend, sendMessagePayload{
 		Target: sendMessageTargetPayload{
-			Type:           strings.TrimSpace(scope.ConversationType),
+			Type:           targetType,
 			ConversationID: strings.TrimSpace(scope.ConversationID),
 		},
 		Message: message,
@@ -924,12 +928,16 @@ func callReplyEntityCard(ctx context.Context, input json.RawMessage) (mcpclient.
 		return mcpclient.ToolResult{}, err
 	}
 
+	targetType := strings.TrimSpace(scope.ConversationType)
+	if targetType == "direct" {
+		targetType = "conversation"
+	}
 	result, err := requestTool(ctx, scope.Requester, methodMessageSend, sendMessagePayload{
 		ActorUserID:                 auth.ActorID,
 		AuthorizationConversationID: scopeAuthorizationConversationID(scope),
 		Message:                     message,
 		Target: sendMessageTargetPayload{
-			Type:           strings.TrimSpace(scope.ConversationType),
+			Type:           targetType,
 			ConversationID: strings.TrimSpace(scope.ConversationID),
 		},
 		TriggerMessageID: auth.TriggerMessageID,

@@ -22,12 +22,22 @@ export async function replaceContactDirectory(target: AuthenticatedTarget, value
   ))
 }
 
-export async function readUserProfiles(target: AuthenticatedTarget) {
+export async function readUserProfiles(target: AuthenticatedTarget, profileIds?: readonly string[]) {
   const result = new Map<string, ProfileRow & { profile: ResolvedClientUser | null }>()
-  const rows = await databaseService.read("contacts.profiles.read", (db) => db.getAll<ProfileRow & { profile_user_id: string }>(
-    "SELECT profile_user_id,payload_json,version,cached_at,missing_until FROM cached_user_profiles WHERE server_key = ? AND user_id = ?",
-    [createServerKey(target), target.userId]
-  ))
+  if (profileIds?.length === 0) return result
+  const rows = await databaseService.read("contacts.profiles.read", async (db) => {
+    const select = "SELECT profile_user_id,payload_json,version,cached_at,missing_until FROM cached_user_profiles WHERE server_key = ? AND user_id = ?"
+    if (!profileIds) return db.getAll<ProfileRow & { profile_user_id: string }>(select, [createServerKey(target), target.userId])
+    const matches: (ProfileRow & { profile_user_id: string })[] = []
+    for (let offset = 0; offset < profileIds.length; offset += 100) {
+      const batch = profileIds.slice(offset, offset + 100)
+      matches.push(...await db.getAll<ProfileRow & { profile_user_id: string }>(
+        `${select} AND profile_user_id IN (${batch.map(() => "?").join(",")})`,
+        [createServerKey(target), target.userId, ...batch]
+      ))
+    }
+    return matches
+  })
   for (const row of rows) {
     const profile = parse<ResolvedClientUser>(row.payload_json)
     if (row.payload_json && !profile) continue
