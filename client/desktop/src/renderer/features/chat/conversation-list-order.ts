@@ -1,5 +1,18 @@
 import type { DesktopConversation } from "../../../shared/account-data"
 
+export function shouldReloadConversationListForSelection(
+  conversations: DesktopConversation[],
+  previousId: string | null,
+  nextId: string | null,
+  now: number,
+) {
+  if (nextId && !conversations.some((item) => item.id === nextId)) return true
+  if (!previousId || previousId === nextId) return false
+  const previous = conversations.find((item) => item.id === previousId)
+  if (!previous || previous.type !== "topic" || previous.unreadCount > 0) return false
+  return Date.parse(previous.lastMessageAt ?? previous.createdAt) < now - 30 * 60 * 1000
+}
+
 export function groupConversationList(conversations: DesktopConversation[]) {
   const parents = conversations.filter((conversation) => conversation.type !== "topic")
   const parentIds = new Set(parents.map((conversation) => conversation.id))

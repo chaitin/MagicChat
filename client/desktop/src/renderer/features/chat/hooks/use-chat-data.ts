@@ -8,6 +8,7 @@ import {
 } from "../../../../shared/message-window"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import type { MentionTarget } from "@/lib/message-mentions"
+import { shouldReloadConversationListForSelection } from "@/features/chat/conversation-list-order"
 
 export function useChatData({
   targetId,
@@ -139,16 +140,28 @@ export function useChatData({
     targetId,
   ])
 
-  const setSelectedId = useCallback((conversationId: string | null) => {
-    setTransientConversation(null)
-    setSelectedIdState(conversationId)
-  }, [])
+  const setSelectedId = useCallback(
+    (conversationId: string | null) => {
+      if (
+        shouldReloadConversationListForSelection(
+          conversations,
+          selectedIdRef.current,
+          conversationId,
+          Date.now(),
+        )
+      ) {
+        setConversationRevision((revision) => revision + 1)
+      }
+      setTransientConversation(null)
+      setSelectedIdState(conversationId)
+    },
+    [conversations],
+  )
 
   const openTopicConversation = useCallback(
     async (conversationId: string) => {
       if (conversations.some((conversation) => conversation.id === conversationId)) {
-        setTransientConversation(null)
-        setSelectedIdState(conversationId)
+        setSelectedId(conversationId)
         return
       }
       if (!window.desktop || openingTopicsRef.current.has(conversationId)) return
@@ -173,7 +186,7 @@ export function useChatData({
         openingTopicsRef.current.delete(conversationId)
       }
     },
-    [conversations, showToast, targetId],
+    [conversations, setSelectedId, showToast, targetId],
   )
 
   useEffect(() => {
@@ -204,7 +217,7 @@ export function useChatData({
       try {
         const result = await window.desktop.accountData.listConversations({
           targetId,
-          selectedConversationId: selectedId,
+          selectedConversationId: selectedIdRef.current,
         })
         if (cancelled) return
         if (result.ok) setConversations(result.data)
@@ -220,7 +233,7 @@ export function useChatData({
     return () => {
       cancelled = true
     }
-  }, [conversationRevision, selectedId, showToast, targetId])
+  }, [conversationRevision, showToast, targetId])
 
   useEffect(() => {
     if (!window.desktop || !targetId) return

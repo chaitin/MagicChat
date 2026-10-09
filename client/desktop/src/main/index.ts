@@ -595,6 +595,19 @@ void app.whenReady().then(async () => {
     clipboard.writeText(input)
     return null
   })
+  ipcMain.handle(DESKTOP_CHANNELS.editComposer, (event, action: unknown) =>
+    authResult(async () => {
+      assertTrustedSender(event)
+      if (!mainWindow || event.sender !== mainWindow.webContents) {
+        throw new AuthFailure("invalid_window", "仅聊天窗口可编辑输入框")
+      }
+      if (action !== "copy" && action !== "cut" && action !== "paste" && action !== "delete") {
+        throw new AuthFailure("invalid_edit_action", "不支持的编辑操作")
+      }
+      mainWindow.webContents[action]()
+      return null
+    }),
+  )
   handleIpc(DESKTOP_CHANNELS.checkForUpdates, () => updates.check())
   handleIpc(DESKTOP_CHANNELS.downloadUpdate, async () => {
     await updates.download()

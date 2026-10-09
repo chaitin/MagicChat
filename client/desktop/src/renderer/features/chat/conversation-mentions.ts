@@ -18,32 +18,45 @@ export type MentionCandidate = {
   searchText: string
 }
 
+const builtinAssistantAppId = "00000000-0000-0000-0000-000000000001"
+
 export function createMentionCandidates(
   conversation: DesktopConversation | null,
   conversations: DesktopConversation[],
   resolveLabel?: MentionLabelResolver,
 ): MentionCandidate[] {
   const parent = conversations.find((item) => item.id === conversation?.topic?.parentConversationId)
-  if (
-    conversation?.type !== "group" &&
-    !(
-      conversation?.type === "topic" &&
-      (conversation.topic?.parentConversationType === "group" || parent?.type === "group")
-    )
-  )
-    return []
-
+  if (!conversation) return []
+  const group =
+    conversation.type === "group" ||
+    (conversation.type === "topic" &&
+      (conversation.topic?.parentConversationType === "group" || parent?.type === "group"))
   const members = conversation.members?.length ? conversation.members : (parent?.members ?? [])
+  const candidates = group
+    ? members
+    : members.filter((member) => member.type === "app" && member.id === builtinAssistantAppId)
+  const fallbackAssistantName = resolveLabel?.({ id: builtinAssistantAppId, type: "app" })?.trim() || "茉莉"
   const seen = new Set<string>()
   return [
-    {
-      id: "all",
-      label: "所有人",
-      description: "所有成员",
-      targetType: "all",
-      searchText: searchText(["所有人", "全体", "all", "everyone"]),
-    },
-    ...members.flatMap((member): MentionCandidate[] => {
+    ...(group
+      ? [{
+          id: "all",
+          label: "所有人",
+          description: "所有成员",
+          targetType: "all" as const,
+          searchText: searchText(["所有人", "全体", "all", "everyone"]),
+        }]
+      : []),
+    ...(!group && !candidates.some((member) => member.id.toLowerCase() === builtinAssistantAppId && member.name.trim())
+      ? [{
+          id: builtinAssistantAppId,
+          label: fallbackAssistantName,
+          description: "应用",
+          targetType: "app" as const,
+          searchText: searchText([fallbackAssistantName]),
+        }]
+      : []),
+    ...candidates.flatMap((member): MentionCandidate[] => {
       if (!/^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$/.test(member.id)) return []
       const key = `${member.type}:${member.id.toLowerCase()}`
       if (seen.has(key)) return []

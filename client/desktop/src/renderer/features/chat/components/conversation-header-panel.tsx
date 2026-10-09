@@ -1533,7 +1533,8 @@ function ConversationInfo({
                           {conversation.type === "group" &&
                             canManage &&
                             !isSelf &&
-                            member.role !== "owner" && (
+                            member.role !== "owner" &&
+                            !(member.type === "app" && member.id === "00000000-0000-0000-0000-000000000001") && (
                               <ItemActions className="shrink-0">
                                 <DropdownMenu modal={false}>
                                   <DropdownMenuTrigger asChild>

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import type { DesktopConversation } from "../src/shared/account-data.ts"
-import { groupConversationList } from "../src/renderer/features/chat/conversation-list-order.ts"
+import {
+  groupConversationList,
+  shouldReloadConversationListForSelection,
+} from "../src/renderer/features/chat/conversation-list-order.ts"
 
 function conversation(
   id: string,
@@ -51,6 +54,26 @@ test("话题紧跟父会话并以组内最新活动排序", () => {
   assert.deepEqual(
     result.regular.map((item) => item.id),
     ["parent-a", "topic-a", "topic-a-old", "parent-b"],
+  )
+})
+
+test("普通会话切换不刷新列表，缺失会话与离开的旧话题需要刷新", () => {
+  const now = Date.parse("2026-09-22T12:00:00Z")
+  const oldTopic = topic("old", "parent", "2026-09-22T11:00:00Z")
+  const recentTopic = topic("recent", "parent", "2026-09-22T11:50:00Z")
+  const rows = [conversation("parent", "2026-09-22T12:00:00Z"), oldTopic, recentTopic]
+  assert.equal(shouldReloadConversationListForSelection(rows, "parent", "recent", now), false)
+  assert.equal(shouldReloadConversationListForSelection(rows, "parent", "missing", now), true)
+  assert.equal(shouldReloadConversationListForSelection(rows, "old", "parent", now), true)
+  assert.equal(shouldReloadConversationListForSelection(rows, "recent", "parent", now), false)
+  assert.equal(
+    shouldReloadConversationListForSelection(
+      [rows[0], { ...oldTopic, unreadCount: 1 }],
+      "old",
+      "parent",
+      now,
+    ),
+    false,
   )
 })
 

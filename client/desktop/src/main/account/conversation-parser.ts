@@ -4,9 +4,7 @@ import type { StoredConversation, StoredMessage } from "./account-database"
 import type { AvatarDescriptor, AvatarMemberDescriptor } from "./avatar-types"
 import { normalizeDesktopMessageDetails, summarizeDesktopMessageBody } from "./message-normalizer"
 import { parseConversationTopic } from "./conversation-topic"
-import { parseConversationMembers } from "./conversation-members"
-
-const builtinAssistantAppId = "00000000-0000-0000-0000-000000000001"
+import { isBuiltinAssistantConversation, parseConversationMembers } from "./conversation-members"
 
 export function parseConversationBooleanEvent(payload: unknown, field: "pinned" | "muted") {
   if (!isRecord(payload) || typeof payload[field] !== "boolean") {
@@ -31,12 +29,13 @@ export function parseConversation(value: unknown, currentUserId: string): Stored
   const type = requiredString(value.type, 32, "conversation.type")
   const name = requiredString(value.name, 256, "conversation.name")
   const avatarIdentity = conversationAvatarIdentity(value, id, type, currentUserId)
+  const members = parseConversationMembers(value)
   return {
     id,
     type,
     name,
     memberCount: type === "group" ? nonNegativeInteger(value.member_count) : 0,
-    members: parseConversationMembers(value),
+    members,
     avatar: optionalString(value.avatar, 4_096),
     avatarType: avatarIdentity.type,
     avatarId: avatarIdentity.id,
@@ -45,13 +44,7 @@ export function parseConversation(value: unknown, currentUserId: string): Stored
     lastMessageSummary: "",
     pinned: value.pinned === true,
     notificationMuted: value.notification_muted === true,
-    isBuiltinAssistant:
-      type === "app" &&
-      Array.isArray(value.members) &&
-      value.members.some(
-        (member) =>
-          isRecord(member) && member.type === "app" && member.id === builtinAssistantAppId,
-      ),
+    isBuiltinAssistant: type === "app" && isBuiltinAssistantConversation(members),
     unreadCount: nonNegativeInteger(value.unread_count),
     lastMessageSeq: nonNegativeInteger(value.last_message_seq),
     lastReadSeq: nonNegativeInteger(value.last_read_seq),

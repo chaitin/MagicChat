@@ -1,8 +1,16 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react"
+import { Copy01Icon } from "@hugeicons/core-free-icons"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
+import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { Button as BeButton } from "@/components/motion/button/base"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
 import { cn } from "@/lib/utils"
 import type { DesktopContactDirectory } from "../../../shared/account-data"
 
@@ -270,6 +278,20 @@ function ActiveContactProfilePopover({
     Boolean(detail.value?.trim()),
   )
 
+  async function copyDetail(value: string) {
+    try {
+      const result = await window.desktop!.copyText(value)
+      if (!result.ok) throw new Error(result.error.message)
+      showToast({ status: "success", title: "已复制" })
+    } catch (error) {
+      showToast({
+        status: "error",
+        title: "复制失败",
+        description: error instanceof Error ? error.message : undefined,
+      })
+    }
+  }
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
@@ -322,7 +344,12 @@ function ActiveContactProfilePopover({
           {visibleDetails.length > 0 && (
             <div className="divide-y divide-border rounded-lg border border-border px-3 py-1 text-sm">
               {visibleDetails.map((detail) => (
-                <ProfileDetail key={detail.label} label={detail.label} value={detail.value} />
+                <ProfileDetail
+                  key={detail.label}
+                  label={detail.label}
+                  value={detail.value}
+                  onCopy={() => void copyDetail(detail.value)}
+                />
               ))}
             </div>
           )}
@@ -342,11 +369,43 @@ function ActiveContactProfilePopover({
   )
 }
 
-function ProfileDetail({ label, value }: { label: string; value: string }) {
+function ProfileDetail({
+  label,
+  value,
+  onCopy,
+}: {
+  label: string
+  value: string
+  onCopy: () => void
+}) {
+  const valueRef = useRef<HTMLSpanElement>(null)
   return (
-    <div className="flex min-w-0 gap-3 py-2">
-      <span className="w-16 shrink-0 text-muted-foreground">{label}</span>
-      <span className="ml-auto min-w-0 break-words text-right">{value}</span>
-    </div>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          className="flex min-w-0 gap-3 py-2"
+          onContextMenu={() => {
+            if (!valueRef.current) return
+            const selection = window.getSelection()
+            if (!selection) return
+            const range = document.createRange()
+            range.selectNodeContents(valueRef.current)
+            selection.removeAllRanges()
+            selection.addRange(range)
+          }}
+        >
+          <span className="w-16 shrink-0 text-muted-foreground">{label}</span>
+          <span ref={valueRef} className="ml-auto min-w-0 break-words text-right select-text">
+            {value}
+          </span>
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={onCopy}>
+          <HugeiconsIcon icon={Copy01Icon} aria-hidden />
+          复制
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }

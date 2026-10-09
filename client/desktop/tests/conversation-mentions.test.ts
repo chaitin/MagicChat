@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import type { DesktopConversation } from "../src/shared/account-data.ts"
-import { parseConversationMembers } from "../src/main/account/conversation-members.ts"
+import {
+  isBuiltinAssistantConversation,
+  parseConversationMembers,
+} from "../src/main/account/conversation-members.ts"
 import {
   createDraftFromMessage,
   createDraftMentionTemplate,
@@ -26,7 +29,7 @@ function group(): DesktopConversation {
   return { id: "group", type: "group", members } as DesktopConversation
 }
 
-test("群聊及群话题显示所有人与成员候选，私聊不弹候选", () => {
+test("群聊及群话题显示所有人与成员候选，非群会话仅列出内置助手", () => {
   const candidates = createMentionCandidates(group(), [group()])
   assert.deepEqual(
     candidates.map(({ label }) => label),
@@ -45,7 +48,49 @@ test("群聊及群话题显示所有人与成员候选，私聊不弹候选", ()
     topic: { parentConversationId: "group", parentConversationType: "group" },
   } as DesktopConversation
   assert.equal(createMentionCandidates(topic, [group()]).length, 3)
-  assert.deepEqual(createMentionCandidates({ type: "direct" } as DesktopConversation, []), [])
+  const assistantId = "00000000-0000-0000-0000-000000000001"
+  for (const type of ["direct", "app", "topic"] as const) {
+    const conversation = { id: type, type, members: [] } as unknown as DesktopConversation
+    assert.deepEqual(
+      createMentionCandidates(conversation, [conversation]).map(({ id, label }) => ({ id, label })),
+      [{ id: assistantId, label: "茉莉" }],
+    )
+  }
+  assert.equal(
+    createMentionCandidates({ id: "direct", type: "direct", members: [] } as unknown as DesktopConversation, [],
+      ({ id }) => id === assistantId ? "重命名茉莉" : undefined)[0]?.label,
+    "重命名茉莉",
+  )
+  const otherMembers = parseConversationMembers({
+    members: [
+      { id: aliceId, type: "user", name: "张三" },
+      { id: appId, type: "app", name: "其他应用" },
+      { id: assistantId, type: "app", name: "自定义助理名" },
+    ],
+  })
+  for (const type of ["direct", "app", "topic"] as const) {
+    const conversation = {
+      id: type,
+      type,
+      members: otherMembers,
+      ...(type === "topic" ? { topic: { parentConversationType: "direct" } } : {}),
+    } as DesktopConversation
+    const candidates = createMentionCandidates(conversation, [conversation])
+    assert.deepEqual(candidates.map(({ id, label }) => ({ id, label })), [
+      { id: assistantId, label: "自定义助理名" },
+    ])
+  }
+})
+
+test("其他应用对话加入内置助手后不被识别成茉莉自己的对话", () => {
+  const base = parseConversationMembers({
+    members: [
+      { id: appId, type: "app", name: "原应用" },
+      { id: "00000000-0000-0000-0000-000000000001", type: "app", name: "自定义助理名" },
+    ],
+  })
+  assert.equal(isBuiltinAssistantConversation(base), false)
+  assert.equal(isBuiltinAssistantConversation([base[1]]), true)
 })
 
 test("服务端隐藏用户姓名时从联系人或用户名解析补全群聊 @ 候选", () => {

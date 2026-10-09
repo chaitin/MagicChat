@@ -99,6 +99,7 @@ export const DESKTOP_CHANNELS = {
   openExternalLink: "desktop-next:v1:open-external-link",
   openWebLink: "desktop-next:v1:open-web-link",
   copyText: "desktop-next:v1:clipboard-copy-text",
+  editComposer: "desktop-next:v1:edit-composer",
   captureScreenshot: "desktop-next:v1:capture-screenshot",
   checkForUpdates: "desktop-next:v1:check-for-updates",
   downloadUpdate: "desktop-next:v1:download-update",
@@ -153,6 +154,7 @@ export interface DesktopBridge {
   openExternalLink(url: string): Promise<AuthResult<null>>
   openWebLink(url: string): Promise<AuthResult<null>>
   copyText(text: string): Promise<AuthResult<null>>
+  editComposer(action: "copy" | "cut" | "paste" | "delete"): Promise<AuthResult<null>>
   checkForUpdates(): Promise<AuthResult<UpdateInfo>>
   downloadUpdate(): Promise<AuthResult<null>>
   installUpdate(): Promise<AuthResult<null>>

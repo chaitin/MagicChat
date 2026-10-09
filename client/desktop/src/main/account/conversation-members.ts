@@ -1,5 +1,14 @@
 import type { DesktopConversationMember } from "../../shared/account-data.ts"
 
+const builtinAssistantAppId = "00000000-0000-0000-0000-000000000001"
+
+export function isBuiltinAssistantConversation(members: DesktopConversationMember[]) {
+  return (
+    members.some((member) => member.type === "app" && member.id === builtinAssistantAppId) &&
+    !members.some((member) => member.type === "app" && member.id !== builtinAssistantAppId)
+  )
+}
+
 export function parseConversationMembers(value: unknown): DesktopConversationMember[] {
   if (!isRecord(value) || !Array.isArray(value.members)) return []
   return value.members.flatMap((member): DesktopConversationMember[] => {

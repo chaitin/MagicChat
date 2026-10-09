@@ -16,10 +16,14 @@ import {
   Cancel01Icon,
   Camera01Icon,
   Analytics01Icon,
+  ClipboardPasteIcon,
+  Copy01Icon,
+  Delete02Icon,
   CheckmarkSquare02Icon,
   Image01Icon,
   Loading03Icon,
   Mic01Icon,
+  Scissor01Icon,
   SmileIcon,
   SquareMIcon,
   Video01Icon,
@@ -27,6 +31,13 @@ import {
 import type { DesktopMessageReplyTarget } from "../../../../shared/account-data"
 import { HugeiconsIcon, type HugeiconsIconProps } from "@/components/icons/hugeicons-icon"
 import { Button as BeButton } from "@/components/motion/button/base"
+import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
 import { InputGroup, InputGroupAddon, InputGroupTextarea } from "@/components/ui/input-group"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Toggle } from "@/components/ui/toggle"
@@ -104,6 +115,15 @@ export function MessageComposer({
   onSend: () => void
 }) {
   const [dragging, setDragging] = useState(false)
+  const [hasSelection, setHasSelection] = useState(false)
+  const selectionRef = useRef({
+    start: 0,
+    end: 0,
+    direction: "none" as "forward" | "backward" | "none",
+  })
+  const rightClickSelectionRef = useRef<typeof selectionRef.current | null>(null)
+  const keepSelectionFocusedRef = useRef(false)
+  const { showToast } = useAnimatedToast()
   const dragDepth = useRef(0)
   const menuId = useId()
   const [mentionTrigger, setMentionTrigger] = useState<ReturnType<typeof getMentionTrigger>>(null)
@@ -179,6 +199,20 @@ export function MessageComposer({
     if (!importingFile) onFiles(files)
   }
 
+  function editSelection(action: "copy" | "cut" | "paste" | "delete") {
+    requestAnimationFrame(() => {
+      const textarea = composerRef.current
+      if (!textarea) return
+      const { start, end, direction } = selectionRef.current
+      textarea.focus()
+      textarea.setSelectionRange(start, end, direction)
+      if (!window.desktop) return
+      void window.desktop.editComposer(action).then((result) => {
+        if (!result.ok) showToast({ status: "error", title: result.error.message })
+      })
+    })
+  }
+
   function pasteFile(event: ClipboardEvent<HTMLTextAreaElement>) {
     const files = Array.from(event.clipboardData.files)
     if (!files.length) {
@@ -228,30 +262,93 @@ export function MessageComposer({
         }}
         onDrop={dropFile}
       >
-        <InputGroupTextarea
-          ref={composerRef}
-          value={draft}
-          role="combobox"
-          aria-expanded={Boolean(mentionTrigger && filteredCandidates.length)}
-          aria-controls={mentionTrigger && filteredCandidates.length ? menuId : undefined}
-          aria-autocomplete="list"
-          placeholder={markdownMode ? "输入 Markdown 消息" : "输入消息"}
-          className={cn("max-h-48 min-h-24", markdownMode && "font-mono")}
-          onBlur={() => {
-            setMentionTrigger(null)
-            onDraftBlur()
+        <ContextMenu
+          modal={false}
+          onOpenChange={(open) => {
+            if (!open || !keepSelectionFocusedRef.current) return
+            requestAnimationFrame(() => {
+              const textarea = composerRef.current
+              if (!textarea) return
+              const { start, end, direction } = selectionRef.current
+              textarea.focus({ preventScroll: true })
+              textarea.setSelectionRange(start, end, direction)
+            })
           }}
-          onChange={(event) => {
-            onDraftChange(event.target.value)
-            updateMentionTrigger(event.target.value, event.target.selectionStart)
-          }}
-          onFocus={onDraftFocus}
-          onKeyDown={handleKeyDown}
-          onSelect={(event) =>
-            updateMentionTrigger(event.currentTarget.value, event.currentTarget.selectionStart)
-          }
-          onPaste={pasteFile}
-        />
+        >
+          <ContextMenuTrigger asChild>
+            <InputGroupTextarea
+              ref={composerRef}
+              value={draft}
+              role="combobox"
+              aria-expanded={Boolean(mentionTrigger && filteredCandidates.length)}
+              aria-controls={mentionTrigger && filteredCandidates.length ? menuId : undefined}
+              aria-autocomplete="list"
+              placeholder={markdownMode ? "输入 Markdown 消息" : "输入消息"}
+              className={cn("max-h-48 min-h-24 select-text", markdownMode && "font-mono")}
+              onBlur={() => {
+                setMentionTrigger(null)
+                onDraftBlur()
+              }}
+              onChange={(event) => {
+                onDraftChange(event.target.value)
+                updateMentionTrigger(event.target.value, event.target.selectionStart)
+              }}
+              onPointerDownCapture={(event) => {
+                rightClickSelectionRef.current = null
+                if (event.button !== 2) return
+                const textarea = event.currentTarget
+                if (textarea.selectionStart === textarea.selectionEnd) return
+                rightClickSelectionRef.current = {
+                  start: textarea.selectionStart,
+                  end: textarea.selectionEnd,
+                  direction: textarea.selectionDirection,
+                }
+                event.preventDefault()
+              }}
+              onContextMenu={(event) => {
+                const textarea = event.currentTarget
+                keepSelectionFocusedRef.current = rightClickSelectionRef.current !== null
+                const selection = rightClickSelectionRef.current ?? {
+                  start: textarea.selectionStart,
+                  end: textarea.selectionEnd,
+                  direction: textarea.selectionDirection,
+                }
+                rightClickSelectionRef.current = null
+                textarea.setSelectionRange(selection.start, selection.end, selection.direction)
+                selectionRef.current = selection
+                setHasSelection(selection.start !== selection.end)
+              }}
+              onFocus={onDraftFocus}
+              onKeyDown={handleKeyDown}
+              onSelect={(event) =>
+                updateMentionTrigger(event.currentTarget.value, event.currentTarget.selectionStart)
+              }
+              onPaste={pasteFile}
+            />
+          </ContextMenuTrigger>
+          <ContextMenuContent
+            onFocusOutside={(event) => {
+              if (keepSelectionFocusedRef.current) event.preventDefault()
+            }}
+          >
+            <ContextMenuItem disabled={!hasSelection} onSelect={() => editSelection("copy")}>
+              <HugeiconsIcon icon={Copy01Icon} aria-hidden />
+              复制
+            </ContextMenuItem>
+            <ContextMenuItem disabled={!hasSelection} onSelect={() => editSelection("cut")}>
+              <HugeiconsIcon icon={Scissor01Icon} aria-hidden />
+              剪切
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={() => editSelection("paste")}>
+              <HugeiconsIcon icon={ClipboardPasteIcon} aria-hidden />
+              粘贴
+            </ContextMenuItem>
+            <ContextMenuItem disabled={!hasSelection} onSelect={() => editSelection("delete")}>
+              <HugeiconsIcon icon={Delete02Icon} aria-hidden />
+              删除
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
         <InputGroupAddon align="block-end" className="justify-between gap-2">
           <div className="flex items-center gap-1">
             <Toggle

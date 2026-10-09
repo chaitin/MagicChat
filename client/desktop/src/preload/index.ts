@@ -12,6 +12,7 @@ const bridge: DesktopBridge = {
   openExternalLink: (url) => ipcRenderer.invoke(DESKTOP_CHANNELS.openExternalLink, url),
   openWebLink: (url) => ipcRenderer.invoke(DESKTOP_CHANNELS.openWebLink, url),
   copyText: (text) => ipcRenderer.invoke(DESKTOP_CHANNELS.copyText, text),
+  editComposer: (action) => ipcRenderer.invoke(DESKTOP_CHANNELS.editComposer, action),
   captureScreenshot: () => ipcRenderer.invoke(DESKTOP_CHANNELS.captureScreenshot),
   checkForUpdates: () => ipcRenderer.invoke(DESKTOP_CHANNELS.checkForUpdates),
   downloadUpdate: () => ipcRenderer.invoke(DESKTOP_CHANNELS.downloadUpdate),
