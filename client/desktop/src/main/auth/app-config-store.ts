@@ -16,7 +16,7 @@ import {
   DEFAULT_SHORTCUTS,
   DEFAULT_NOTIFICATION_SETTINGS,
   DEFAULT_CONTENT_ZOOM,
-  isContentZoom,
+  normalizeContentZoom,
   normalizeNotificationSettings,
   type ContentZoom,
   type NotificationSettings,
@@ -212,7 +212,7 @@ export class AppConfigStore {
       return {
         version: 1,
         theme,
-        contentZoom: isContentZoom(stored.contentZoom) ? stored.contentZoom : DEFAULT_CONTENT_ZOOM,
+        contentZoom: normalizeContentZoom(stored.contentZoom),
         shortcuts,
         notifications,
         activeServerId,
