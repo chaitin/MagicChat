@@ -124,6 +124,7 @@ type messageCreatedPayload struct {
 }
 
 type conversationPayload struct {
+	OwnerAppID     string                        `json:"owner_app_id,omitempty"`
 	CreatedByAppID string                        `json:"created_by_app_id,omitempty"`
 	ID             string                        `json:"id"`
 	Name           string                        `json:"name"`
@@ -1081,12 +1082,14 @@ func shouldHandleIncomingMessage(appID string, payload messageCreatedPayload, bo
 			parentType = strings.ToLower(strings.TrimSpace(payload.Conversation.Parent.Type))
 		}
 		switch parentType {
-		case "app", "direct":
-			return isAgentTriggerMessageType(body.Type)
-		case "group":
-			if strings.TrimSpace(appID) != "" && strings.EqualFold(strings.TrimSpace(payload.Conversation.CreatedByAppID), strings.TrimSpace(appID)) {
+		case "app":
+			if payload.Conversation.OwnerAppID == "" || (appID != "" && strings.EqualFold(payload.Conversation.OwnerAppID, appID)) {
 				return isAgentTriggerMessageType(body.Type)
 			}
+			return messageDirectlyMentionsApp(appID, body)
+		case "direct":
+			return messageDirectlyMentionsApp(appID, body)
+		case "group":
 			return messageDirectlyMentionsApp(appID, body)
 		default:
 			return messageDirectlyMentionsApp(appID, body)
@@ -1094,9 +1097,12 @@ func shouldHandleIncomingMessage(appID string, payload messageCreatedPayload, bo
 	}
 
 	switch conversationType {
-	case "app", "direct":
-		return isAgentTriggerMessageType(body.Type)
-	case "group", "topic":
+	case "app":
+		if payload.Conversation.OwnerAppID == "" || (appID != "" && strings.EqualFold(payload.Conversation.OwnerAppID, appID)) {
+			return isAgentTriggerMessageType(body.Type)
+		}
+		return messageDirectlyMentionsApp(appID, body)
+	case "direct", "group", "topic":
 		return messageDirectlyMentionsApp(appID, body)
 	default:
 		return false

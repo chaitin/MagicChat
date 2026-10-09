@@ -48,14 +48,10 @@ func (s *Service) CreateDirect(ctx context.Context, cmd CreateDirectCommand) (Op
 	if err != nil {
 		return OpenResult{}, internalError(err)
 	}
-	item := newItem(
-		conversation, current.ID,
-		[]store.ConversationMember{
-			{ConversationID: conversation.ID, MemberType: store.ConversationMemberTypeUser, MemberID: current.ID},
-			{ConversationID: conversation.ID, MemberType: store.ConversationMemberTypeUser, MemberID: target.ID},
-		},
-		map[string]store.User{current.ID: current, target.ID: target}, nil,
-	)
+	item, err := s.loadItem(db, conversation, current.ID)
+	if err != nil {
+		return OpenResult{}, internalError(err)
+	}
 	lastMessageSenders, err := loadLastMessageSenders(db, []store.Conversation{conversation})
 	if err != nil {
 		return OpenResult{}, internalError(err)
@@ -158,6 +154,9 @@ func (s *Service) getOrCreateDirect(db *gorm.DB, current, target store.User) (st
 			{ConversationID: conversation.ID, MemberType: store.ConversationMemberTypeUser, MemberID: target.ID, Role: store.ConversationMemberRoleMember, JoinedAt: now, HistoryVisibleFromSeq: 1},
 		}
 		if err := tx.Create(&members).Error; err != nil {
+			return err
+		}
+		if err := ensureAssistantMember(tx, conversation.ID, 1, now); err != nil {
 			return err
 		}
 		if err := tx.Create(&store.DirectConversation{ConversationID: conversation.ID, UserLowID: lowID, UserHighID: highID, CreatedAt: now}).Error; err != nil {

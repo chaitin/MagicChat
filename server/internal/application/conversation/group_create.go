@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"app/internal/appregistry"
 	"app/internal/store"
 
 	"github.com/google/uuid"
@@ -28,11 +29,12 @@ func (s *Service) CreateGroup(ctx context.Context, cmd CreateGroupCommand) (Crea
 	if err != nil {
 		return CreateGroupResult{}, invalidRequest(err.Error(), err)
 	}
+	apps = withoutAssistantAppID(apps)
 	projects, err := normalizeProjectIDs(cmd.ProjectIDs)
 	if err != nil {
 		return CreateGroupResult{}, invalidRequest("项目 ID 格式错误", err)
 	}
-	if len(members)+len(apps)+1 > MaxGroupMembers {
+	if len(members)+len(apps)+2 > MaxGroupMembers {
 		return CreateGroupResult{}, invalidRequest("群聊成员不能超过 1000 人", ErrMemberCap)
 	}
 	conversation, message, candidates, userIDs, err := s.createGroup(ctx, actor, name, members, apps, projects)
@@ -92,7 +94,11 @@ func (s *Service) createGroup(ctx context.Context, actor store.User, name string
 		if err != nil {
 			return err
 		}
-		candidates = make([]memberCandidate, 0, len(members)+len(apps)+1)
+		var assistant store.App
+		if err := tx.First(&assistant, "id = ?", appregistry.AIAssistantAppID).Error; err != nil {
+			return err
+		}
+		candidates = make([]memberCandidate, 0, len(members)+len(apps)+2)
 		candidates = append(candidates, memberCandidate{memberType: store.ConversationMemberTypeUser, role: store.ConversationMemberRoleOwner, user: actor})
 		for _, member := range members {
 			candidates = append(candidates, memberCandidate{memberType: store.ConversationMemberTypeUser, role: store.ConversationMemberRoleMember, user: member})
@@ -100,6 +106,7 @@ func (s *Service) createGroup(ctx context.Context, actor store.User, name string
 		for _, app := range apps {
 			candidates = append(candidates, memberCandidate{app: app, memberType: store.ConversationMemberTypeApp, role: store.ConversationMemberRoleMember})
 		}
+		candidates = append(candidates, memberCandidate{app: assistant, memberType: store.ConversationMemberTypeApp, role: store.ConversationMemberRoleMember})
 		userIDs = make([]string, 0, len(candidates))
 		projects, err := lockOwnedProjects(tx, projectIDs, actor.ID)
 		if err != nil {

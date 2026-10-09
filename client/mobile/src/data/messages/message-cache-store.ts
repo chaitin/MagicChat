@@ -1,4 +1,4 @@
-import { databaseService, type DatabaseWriter } from "@/data/database/database-service"
+import { databaseService, isDatabasePersistenceAvailable, type DatabaseWriter } from "@/data/database/database-service"
 
 import type {
   ClientMessage,
@@ -59,6 +59,29 @@ export type MessageSyncState = {
 }
 
 export const createMessageServerKey = createServerKey
+
+export async function readLatestCachedMessagePreviews(target: AuthenticatedTarget) {
+  const previews = new Map<string, ClientMessage>()
+  if (!isDatabasePersistenceAvailable) return previews
+
+  const rows = await databaseService.read("messages.previews.list", (database) =>
+    database.getAll<{ conversation_id: string; payload_json: string | null }>(
+      `SELECT c.conversation_id,
+              (SELECT m.payload_json FROM cached_messages m
+                WHERE m.server_key = c.server_key AND m.user_id = c.user_id
+                  AND m.conversation_id = c.conversation_id
+                ORDER BY m.seq DESC LIMIT 1) AS payload_json
+         FROM cached_conversations c
+        WHERE c.server_key = ? AND c.user_id = ? AND c.tombstone_at IS NULL`,
+      createMessageServerKey(target), target.userId
+    )
+  )
+  for (const row of rows) {
+    const message = parseCachedMessage(row.payload_json ?? undefined)
+    if (message) previews.set(row.conversation_id, message)
+  }
+  return previews
+}
 
 export async function readLatestCachedMessages(
   target: AuthenticatedTarget,

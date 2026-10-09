@@ -6,6 +6,7 @@ import {
   persistBeforeHttpPage,
   persistLatestHttpPage,
   persistRealtimeMessages,
+  readLatestCachedMessagePreviews,
   readCachedMessagesBefore,
   readLatestCachedMessages,
   type MessageSyncState,
@@ -26,6 +27,7 @@ export const messageRepository = {
   persistMessages,
   readBeforeLocal,
   readLatestLocal,
+  readLatestPreviewsLocal: readLatestCachedMessagePreviews,
   readSyncStateLocal,
 }
 

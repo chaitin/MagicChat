@@ -7,6 +7,7 @@ import (
 
 	appapp "app/internal/application/app"
 	"app/internal/application/conversationaccess"
+	"app/internal/appregistry"
 	"app/internal/store"
 
 	"gorm.io/gorm"
@@ -21,6 +22,7 @@ type appMessageCreatedPayload struct {
 }
 
 type appMessageConversationPayload struct {
+	OwnerAppID     string                           `json:"owner_app_id,omitempty"`
 	CreatedByAppID string                           `json:"created_by_app_id,omitempty"`
 	ID             string                           `json:"id"`
 	Name           string                           `json:"name"`
@@ -60,24 +62,61 @@ type appMessageSenderPayload struct {
 func createAppMessageEventOutbox(db *gorm.DB, access conversationaccess.Context, sender store.User, message store.Message) ([]AppEvent, error) {
 	conversation := access.Conversation
 	var appIDs []string
+	var ownerAppID string
 	switch conversation.Kind {
 	case store.ConversationKindApp:
-		appID, ok, err := findMessageConversationAppID(db, message.ConversationID)
+		var ok bool
+		var err error
+		ownerAppID, ok, err = findMessageConversationAppID(db, conversation.ID)
 		if err != nil || !ok {
 			return nil, err
 		}
-		appIDs = []string{appID}
+		appIDs = []string{ownerAppID}
+		if !appregistry.IsAIAssistantAppID(ownerAppID) {
+			mentioned, err := findMentionedGroupAppIDs(db, conversation.ID, message.Body)
+			if err != nil {
+				return nil, err
+			}
+			if containsAppID(mentioned, appregistry.AIAssistantAppID) {
+				appIDs = []string{appregistry.AIAssistantAppID}
+			}
+		}
 	case store.ConversationKindGroup:
 		var err error
 		appIDs, err = findMentionedGroupAppIDs(db, conversation.ID, message.Body)
 		if err != nil {
 			return nil, err
 		}
+	case store.ConversationKindDirect:
+		mentioned, err := findMentionedGroupAppIDs(db, conversation.ID, message.Body)
+		if err != nil {
+			return nil, err
+		}
+		if containsAppID(mentioned, appregistry.AIAssistantAppID) {
+			appIDs = []string{appregistry.AIAssistantAppID}
+		}
 	case store.ConversationKindTopic:
 		var err error
 		appIDs, err = conversationaccess.ActiveTopicParticipantIDs(db, access, store.ConversationMemberTypeApp)
 		if err != nil {
 			return nil, err
+		}
+		mentioned, err := findMentionedGroupAppIDs(db, access.MembershipConversationID, message.Body)
+		if err != nil {
+			return nil, err
+		}
+		if access.ParentConversation != nil && access.ParentConversation.Kind == store.ConversationKindApp {
+			ownerAppID, _, err = findMessageConversationAppID(db, access.MembershipConversationID)
+			if err != nil {
+				return nil, err
+			}
+			if !appregistry.IsAIAssistantAppID(ownerAppID) && containsAppID(mentioned, appregistry.AIAssistantAppID) {
+				appIDs = []string{appregistry.AIAssistantAppID}
+			}
+		}
+		if !containsAppID(mentioned, appregistry.AIAssistantAppID) &&
+			!(access.ParentConversation != nil && access.ParentConversation.Kind == store.ConversationKindApp && appregistry.IsAIAssistantAppID(ownerAppID)) {
+			appIDs = withoutAppID(appIDs, appregistry.AIAssistantAppID)
 		}
 	default:
 		return nil, nil
@@ -89,7 +128,7 @@ func createAppMessageEventOutbox(db *gorm.DB, access conversationaccess.Context,
 	if len(appIDs) == 0 {
 		return nil, nil
 	}
-	conversationPayload := appMessageConversationPayload{ID: conversation.ID, Name: conversation.Name, Type: conversation.Kind}
+	conversationPayload := appMessageConversationPayload{ID: conversation.ID, Name: conversation.Name, Type: conversation.Kind, OwnerAppID: ownerAppID}
 	if access.IsTopic() && access.ParentConversation != nil && access.Topic != nil {
 		if access.Topic.CreatedByAppID != nil {
 			conversationPayload.CreatedByAppID = *access.Topic.CreatedByAppID
@@ -203,17 +242,32 @@ func findMentionedGroupAppIDs(db *gorm.DB, conversationID string, body json.RawM
 }
 
 func findMessageConversationAppID(db *gorm.DB, conversationID string) (string, bool, error) {
-	var member store.ConversationMember
-	err := db.First(
-		&member,
-		"conversation_id = ? AND member_type = ? AND left_at IS NULL",
-		conversationID, store.ConversationMemberTypeApp,
-	).Error
+	var relation store.AppConversation
+	err := db.First(&relation, "conversation_id = ?", conversationID).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return "", false, nil
 	}
 	if err != nil {
 		return "", false, err
 	}
-	return member.MemberID, true, nil
+	return relation.AppID, true, nil
+}
+
+func containsAppID(ids []string, target string) bool {
+	for _, id := range ids {
+		if id == target {
+			return true
+		}
+	}
+	return false
+}
+
+func withoutAppID(ids []string, target string) []string {
+	result := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id != target {
+			result = append(result, id)
+		}
+	}
+	return result
 }

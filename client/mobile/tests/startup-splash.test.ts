@@ -24,9 +24,10 @@ test("冷启动验证凭据后先进入本地界面并后台同步", async () =>
     authProvider.indexOf('publish(next, snapshot, "authenticated")') <
       authProvider.indexOf("void completion.catch(() => undefined)")
   )
-  assert.match(messagesScreen, /requestIdleCallback\(\(\) => \{/)
-  assert.match(messagesScreen, /cancelIdleCallback\(task\)/)
-  assert.doesNotMatch(messagesScreen, /InteractionManager/)
+  assert.match(messagesScreen, /useLatestLocalMessages\(session, conversations\)/)
+  assert.match(messagesScreen, /onConversationPressIn=\{handleConversationPressIn\}/)
+  assert.match(messagesScreen, /prepareConversationMessages\(conversationId\)/)
+  assert.doesNotMatch(messagesScreen, /requestIdleCallback|InteractionManager/)
 })
 
 test("初始化页与原生 Splash 使用相同主题背景", async () => {

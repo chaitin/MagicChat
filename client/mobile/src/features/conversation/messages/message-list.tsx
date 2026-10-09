@@ -10,6 +10,7 @@ import {
   type ViewToken,
 } from "react-native"
 import { Text } from "@/components/mi-sans-text"
+import { measureMobilePerf, recordMobilePerf } from "@/diagnostics/mobile-perf"
 import {
   SizableText,
   XStack,
@@ -106,7 +107,13 @@ export function MessageList({
     () => [styles.list, { backgroundColor: colors.background0 }],
     [colors.background0]
   )
-  const listItems = useMemo(() => buildMessageListItems(messages), [messages])
+  const listItems = useMemo(
+    () => measureMobilePerf("conversation.build_items_ms", () => buildMessageListItems(messages)),
+    [messages]
+  )
+  useEffect(() => {
+    recordMobilePerf("conversation.list_commit")
+  })
   const optimisticById = useMemo(
     () => new Map(optimisticMessages.map((item) => [item.message.id, item] as const)),
     [optimisticMessages]

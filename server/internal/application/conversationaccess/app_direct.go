@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	appapp "app/internal/application/app"
+	"app/internal/appregistry"
 	"app/internal/store"
 
 	"gorm.io/gorm"
@@ -53,7 +54,20 @@ func RequireAppDirectUserAccess(db *gorm.DB, value Context, appID string) error 
 		return nil
 	}
 	var relation store.AppConversation
-	if err := db.Select("app_id", "user_id").First(
+	if appregistry.IsAIAssistantAppID(appID) {
+		if _, err := RequireAppMember(db, value, appID); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrDirectAppAccessDenied
+			}
+			return err
+		}
+		if err := db.Select("app_id", "user_id").First(&relation, "conversation_id = ?", conversationID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrDirectAppAccessDenied
+			}
+			return err
+		}
+	} else if err := db.Select("app_id", "user_id").First(
 		&relation,
 		"conversation_id = ? AND app_id = ?",
 		conversationID,

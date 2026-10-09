@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"app/internal/appregistry"
 	"app/internal/store"
 
 	"github.com/glebarez/sqlite"
@@ -395,7 +396,7 @@ func TestServiceUsesInvitingUsersAppAccessForGroupMembers(t *testing.T) {
 	created, err := service.CreateGroup(context.Background(), CreateGroupCommand{
 		Actor: actorFromTestUser(owner), Name: "Private app group", AppIDs: []string{privateApp.ID},
 	})
-	if err != nil || created.Conversation.MemberCount != 2 {
+	if err != nil || created.Conversation.MemberCount != 3 {
 		t.Fatalf("private app group = %#v, err = %v", created, err)
 	}
 	if _, err := service.CreateApp(context.Background(), CreateAppCommand{
@@ -416,7 +417,7 @@ func TestServiceUsesInvitingUsersAppAccessForGroupMembers(t *testing.T) {
 	publicGroup, err := service.CreateGroup(context.Background(), CreateGroupCommand{
 		Actor: actorFromTestUser(owner), Name: "Public app group", AppIDs: []string{publicApp.ID},
 	})
-	if err != nil || publicGroup.Conversation.MemberCount != 2 {
+	if err != nil || publicGroup.Conversation.MemberCount != 3 {
 		t.Fatalf("public app group = %#v, err = %v", publicGroup, err)
 	}
 	if _, err := service.AddMembers(context.Background(), AddMembersCommand{
@@ -576,6 +577,9 @@ func openConversationTestDB(t *testing.T) *gorm.DB {
 		&store.Project{}, &store.ProjectGroup{},
 	); err != nil {
 		t.Fatalf("migrate database: %v", err)
+	}
+	if err := db.Create(&store.App{ID: appregistry.AIAssistantAppID, Name: appregistry.AIAssistantDefaultName, Enabled: true, Visibility: store.AppVisibilityPublic, ConnectionSecret: "test-assistant-secret"}).Error; err != nil {
+		t.Fatalf("create assistant app: %v", err)
 	}
 	return db
 }

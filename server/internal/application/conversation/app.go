@@ -25,7 +25,7 @@ func (s *Service) CreateApp(ctx context.Context, cmd CreateAppCommand) (OpenResu
 		}
 	}
 	db := s.db.WithContext(ctx)
-	conversation, app, created, err := s.getOrCreateAccessibleAppConversation(db, current, appID)
+	conversation, _, created, err := s.getOrCreateAccessibleAppConversation(db, current, appID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return OpenResult{}, notFound("应用不存在", err)
@@ -36,14 +36,10 @@ func (s *Service) CreateApp(ctx context.Context, cmd CreateAppCommand) (OpenResu
 	if err != nil {
 		return OpenResult{}, internalError(err)
 	}
-	item := newItem(
-		conversation, current.ID,
-		[]store.ConversationMember{
-			{ConversationID: conversation.ID, MemberType: store.ConversationMemberTypeUser, MemberID: current.ID},
-			{ConversationID: conversation.ID, MemberType: store.ConversationMemberTypeApp, MemberID: app.ID},
-		},
-		map[string]store.User{current.ID: current}, map[string]store.App{app.ID: app},
-	)
+	item, err := s.loadItem(db, conversation, current.ID)
+	if err != nil {
+		return OpenResult{}, internalError(err)
+	}
 	lastMessageSenders, err := loadLastMessageSenders(db, []store.Conversation{conversation})
 	if err != nil {
 		return OpenResult{}, internalError(err)
@@ -98,6 +94,11 @@ func (s *Service) getOrCreateAccessibleAppConversation(db *gorm.DB, current stor
 		}
 		if err := tx.Create(&members).Error; err != nil {
 			return err
+		}
+		if !appregistry.IsAIAssistantAppID(app.ID) {
+			if err := ensureAssistantMember(tx, conversation.ID, 1, now); err != nil {
+				return err
+			}
 		}
 		if err := tx.Create(&store.AppConversation{AppID: app.ID, UserID: current.ID, ConversationID: conversation.ID, CreatedAt: now}).Error; err != nil {
 			return err

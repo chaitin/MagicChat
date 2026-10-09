@@ -25,6 +25,9 @@ func Run(ctx context.Context, db *gorm.DB, cfg config.Config) error {
 	if err := bootstrapApps(db, cfg); err != nil {
 		return err
 	}
+	if err := ensureAssistantConversationMembership(db); err != nil {
+		return fmt.Errorf("ensure AI assistant conversation membership: %w", err)
+	}
 	if err := bootstrapStorage(ctx, cfg.Storage); err != nil {
 		return err
 	}

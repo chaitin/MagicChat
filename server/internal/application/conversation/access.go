@@ -7,6 +7,7 @@ import (
 
 	appapp "app/internal/application/app"
 	"app/internal/application/conversationaccess"
+	"app/internal/appregistry"
 	"app/internal/store"
 
 	"github.com/google/uuid"
@@ -456,7 +457,7 @@ func newTopicItem(conversation store.Conversation, currentUserID string, members
 		LastMessageAt: conversation.LastMessageAt, LastMessageID: conversation.LastMessageID,
 		LastMessageSeq: conversation.LastMessageSeq, LastMessageSummary: conversation.LastMessageSummary,
 		LastMentionedSeq: lastMentionedSeq, LastChoiceSeq: lastChoiceSeq, LastReadSeq: lastReadSeq,
-		MemberCount: len(members), Members: newMembers(members, users, apps), Name: conversation.Name,
+		MemberCount: listMemberCount(presentation.parent.Kind, members), Members: newMembers(members, users, apps), Name: conversation.Name,
 		Topic: &TopicMetadata{
 			Archived:             presentation.topic.ArchivedAt != nil,
 			ParentConversationID: presentation.parent.ID, ParentConversationName: parentItem.Name,
@@ -493,16 +494,15 @@ func newItem(conversation store.Conversation, currentUserID string, members []st
 			name = "私聊"
 		}
 	} else if conversation.Kind == store.ConversationKindApp {
+		ownerAppID := appregistry.AIAssistantAppID
 		for _, member := range members {
-			if member.MemberType != store.ConversationMemberTypeApp {
-				continue
+			if member.MemberType == store.ConversationMemberTypeApp && !appregistry.IsAIAssistantAppID(member.MemberID) {
+				ownerAppID = member.MemberID
+				break
 			}
-			app, ok := apps[member.MemberID]
-			if !ok {
-				continue
-			}
+		}
+		if app, ok := apps[ownerAppID]; ok {
 			name, avatar = app.Name, app.Avatar
-			break
 		}
 	} else if strings.TrimSpace(name) == "" {
 		name = "群聊"
@@ -575,13 +575,14 @@ func canUserSendConversation(conversation store.Conversation, parent *store.Conv
 		return true
 	}
 	for _, member := range members {
-		if member.MemberType != store.ConversationMemberTypeApp {
+		if member.MemberType != store.ConversationMemberTypeApp || appregistry.IsAIAssistantAppID(member.MemberID) {
 			continue
 		}
 		_, ok := accessibleAppIDs[member.MemberID]
 		return ok
 	}
-	return false
+	_, ok := accessibleAppIDs[appregistry.AIAssistantAppID]
+	return ok
 }
 
 func newGroup(conversation store.Conversation, candidates []memberCandidate, currentUserID string) Group {
@@ -666,7 +667,7 @@ func currentMemberLastChoiceSeq(currentUserID string, members []store.Conversati
 }
 
 func listMemberCount(kind string, members []store.ConversationMember) int {
-	if kind != store.ConversationKindApp {
+	if kind != store.ConversationKindApp && kind != store.ConversationKindDirect {
 		return len(members)
 	}
 	count := 0

@@ -8,7 +8,9 @@ export type MentionCandidate = MentionSelection & {
 }
 
 export function createMentionCandidates(
-  members: ClientConversationMember[]
+  members: ClientConversationMember[],
+  includeEveryone = true,
+  assistantName = "茉莉"
 ): MentionCandidate[] {
   const memberCandidates = members.flatMap((member) => {
     const label =
@@ -32,13 +34,18 @@ export function createMentionCandidates(
   })
 
   return [
-    {
-      avatar: "",
-      description: "所有群成员",
-      id: "all",
-      label: "所有人",
-      targetType: "all",
-    },
+    ...(includeEveryone
+      ? [{ avatar: "", description: "所有群成员", id: "all", label: "所有人", targetType: "all" as const }]
+      : []),
     ...memberCandidates,
+    ...(!includeEveryone && !memberCandidates.some((candidate) => candidate.targetType === "app" && candidate.id === "00000000-0000-0000-0000-000000000001")
+      ? [{
+          avatar: "",
+          description: "应用",
+          id: "00000000-0000-0000-0000-000000000001",
+          label: assistantName.trim() || "茉莉",
+          targetType: "app" as const,
+        }]
+      : []),
   ]
 }

@@ -91,7 +91,7 @@ func TestThirdPartyApplicationOwnsAndManagesGroup(t *testing.T) {
 		}),
 	})
 	var added appGroupMutationResponse
-	if err := json.Unmarshal(addResponse.Payload, &added); err != nil || added.Conversation.MemberCount != 3 {
+	if err := json.Unmarshal(addResponse.Payload, &added); err != nil || added.Conversation.MemberCount != 4 {
 		t.Fatalf("members.add = %#v, err = %v", added, err)
 	}
 
@@ -110,7 +110,7 @@ func TestThirdPartyApplicationOwnsAndManagesGroup(t *testing.T) {
 		Payload: mustMarshalPayloadForTest(t, map[string]any{"conversation_id": conversationID}),
 	})
 	var members appListGroupMembersResponse
-	if err := json.Unmarshal(membersResponse.Payload, &members); err != nil || members.Total != 3 || len(members.Members) != 3 {
+	if err := json.Unmarshal(membersResponse.Payload, &members); err != nil || members.Total != 4 || len(members.Members) != 4 {
 		t.Fatalf("members.list = %#v, err = %v", members, err)
 	}
 
@@ -189,7 +189,7 @@ func TestThirdPartyApplicationOwnsAndManagesGroup(t *testing.T) {
 		}),
 	})
 	var removed appGroupMutationResponse
-	if err := json.Unmarshal(removeResponse.Payload, &removed); err != nil || removed.Conversation.MemberCount != 2 {
+	if err := json.Unmarshal(removeResponse.Payload, &removed); err != nil || removed.Conversation.MemberCount != 3 {
 		t.Fatalf("members.remove = %#v, err = %v", removed, err)
 	}
 
@@ -276,7 +276,7 @@ func TestThirdPartyApplicationCanRemoveDisabledUserButNotLastActiveUser(t *testi
 		}),
 	})
 	var removed appGroupMutationResponse
-	if err := json.Unmarshal(removeDisabledResponse.Payload, &removed); err != nil || removed.Conversation.MemberCount != 2 {
+	if err := json.Unmarshal(removeDisabledResponse.Payload, &removed); err != nil || removed.Conversation.MemberCount != 3 {
 		t.Fatalf("remove disabled user = %#v, err = %v", removed, err)
 	}
 

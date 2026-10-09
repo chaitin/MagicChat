@@ -9,6 +9,7 @@ import {
 import { TamaguiProvider, YStack } from "tamagui"
 
 import { tamaguiConfig } from "../../tamagui.config"
+import { startMobilePerfMonitoring } from "@/diagnostics/mobile-perf"
 import { AppThemeProvider } from "@/providers/app-theme-provider"
 import { createClientQueryClient } from "@/data/query"
 import { AuthProvider } from "@/providers/auth-provider"
@@ -24,11 +25,15 @@ export function AppProviders({ children }: React.PropsWithChildren) {
   const [queryClient] = useState(createClientQueryClient)
 
   useEffect(() => {
+    const stopPerfMonitoring = startMobilePerfMonitoring()
     const subscription = AppState.addEventListener("change", (status) => {
       focusManager.setFocused(status === "active")
     })
 
-    return () => subscription.remove()
+    return () => {
+      subscription.remove()
+      stopPerfMonitoring()
+    }
   }, [])
 
   return (

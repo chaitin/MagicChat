@@ -5,6 +5,32 @@ import { expect, it, vi } from "vitest"
 import { ConversationPanelComposer } from "@/components/conversation/conversation-panel-composer"
 import type { ClientConversation } from "@/lib/client-data-api"
 
+it("shows the assistant mention picker in a direct chat without member metadata", () => {
+  render(
+    <MemoryRouter>
+      <ConversationPanelComposer
+        conversation={conversation}
+        draft=""
+        draftMentions={[]}
+        onCancelReply={vi.fn()}
+        onDraftChange={vi.fn()}
+        onRichTextModeChange={vi.fn()}
+        onSendFile={async () => null}
+        onSendImage={async () => null}
+        onSendMessage={async () => true}
+        onSendVoice={async () => null}
+        replyTarget={null}
+        richTextMode={false}
+        sending={false}
+      />
+    </MemoryRouter>
+  )
+  const editor = screen.getByPlaceholderText("输入消息")
+  fireEvent.change(editor, { target: { value: "@" } })
+  expect(screen.getByRole("button", { name: /茉莉/ })).toBeInTheDocument()
+  expect(screen.queryByRole("button", { name: /所有人/ })).not.toBeInTheDocument()
+})
+
 it("allows Enter text sending while an attachment send is in progress", () => {
   const onSendMessage = vi.fn(async () => true)
 

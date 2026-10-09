@@ -117,9 +117,11 @@ export function isBuiltinAssistantConversation(
   return (
     conversation.type === "app" &&
     conversation.members?.some(
-      (member) =>
-        member.type === "app" && member.id === BUILTIN_ASSISTANT_APP_ID
-    ) === true
+      (member) => member.type === "app" && member.id === BUILTIN_ASSISTANT_APP_ID
+    ) === true &&
+    !conversation.members?.some(
+      (member) => member.type === "app" && member.id !== BUILTIN_ASSISTANT_APP_ID
+    )
   )
 }
 

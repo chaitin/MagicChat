@@ -54,7 +54,7 @@ export type MessageManagerDependencies = {
     setReaction: setConversationMessageReaction
     submitChoice: submitConversationMessageChoiceResponse
   }
-  events: { publishConversationMessagesChanged: typeof Events.publishConversationMessagesChanged }
+  events: { publishConversationMessagesChanged: typeof Events.publishConversationMessagesChanged; publishAllMessageCacheCleared: typeof Events.publishAllMessageCacheCleared }
   telemetry: { reportMessageCacheError: typeof Observability.reportMessageCacheError }
   clearGlobalCache: typeof Database.clearGlobalMessageCache
   getGlobalCacheSize: typeof Database.getGlobalMessageCacheSize
@@ -120,6 +120,7 @@ const manager = {
   loadMessagePage,
   markRead,
   readLatestPage,
+  readLatestLocalPreviews,
   revokeMessage,
   sendFile,
   sendImage,
@@ -145,6 +146,7 @@ function clearAllOfflineMessages() {
     runtimeMessages.clear()
     runtimePageState.clear()
     clearAllMessageTombstones()
+    events.publishAllMessageCacheCleared()
   })().finally(() => {
     if (messageCacheClearOperation === operation) {
       messageCacheClearOperation = null
@@ -152,6 +154,28 @@ function clearAllOfflineMessages() {
   })
   messageCacheClearOperation = operation
   return operation
+}
+
+async function readLatestLocalPreviews(target: AuthenticatedTarget, conversationIds: readonly string[]) {
+  const persisted = await repository.readLatestPreviewsLocal(target).catch((error: unknown) => {
+    reportCacheFailure(target, "", "previews-read", error)
+    return new Map<string, ClientMessage>()
+  })
+  const previews = new Map<string, ClientMessage>()
+  for (const conversationId of conversationIds) {
+    const cached = persisted.get(conversationId)
+    if (cached && !applyChoiceMessageTombstone(target, cached)) {
+      const latest = (await readLatestPage(target, conversationId, 20)).messages[0]
+      if (latest) previews.set(conversationId, latest)
+      continue
+    }
+    const messages = cached
+      ? [cached, ...readRuntimeMessages(target, conversationId)]
+      : readRuntimeMessages(target, conversationId)
+    const latest = mergeMessages(applyMessageTombstones(target, messages))[0]
+    if (latest) previews.set(conversationId, latest)
+  }
+  return previews
 }
 
 async function readLatestPage(

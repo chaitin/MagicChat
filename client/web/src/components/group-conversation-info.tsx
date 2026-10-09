@@ -343,7 +343,8 @@ export function GroupConversationInfo({
                   canRemove={
                     canManageMembers &&
                     (member.type !== "user" || member.id !== me.id) &&
-                    member.role !== "owner"
+                    member.role !== "owner" &&
+                    !(member.type === "app" && member.id === "00000000-0000-0000-0000-000000000001")
                   }
                   key={`${member.type}:${member.id}`}
                   member={member}

@@ -68,7 +68,8 @@ export function isImeCompositionKeyEvent<
 }
 
 export function createMentionCandidates(
-  members: ClientConversationMember[]
+  members: ClientConversationMember[],
+  includeEveryone = true
 ): MentionCandidate[] {
   const memberCandidates = members
     .map((member): MentionCandidate | null => {
@@ -100,15 +101,27 @@ export function createMentionCandidates(
     .filter((candidate): candidate is MentionCandidate => candidate !== null)
 
   return [
-    {
-      avatar: "",
-      description: "所有成员",
-      id: "all",
-      label: "所有人",
-      searchText: createPinyinSearchText(["所有人", "全体", "all", "everyone"]),
-      targetType: "all",
-    },
+    ...(includeEveryone
+      ? [{
+          avatar: "",
+          description: "所有成员",
+          id: "all",
+          label: "所有人",
+          searchText: createPinyinSearchText(["所有人", "全体", "all", "everyone"]),
+          targetType: "all" as const,
+        }]
+      : []),
     ...memberCandidates,
+    ...(!includeEveryone && !memberCandidates.some((candidate) => candidate.targetType === "app" && candidate.id === "00000000-0000-0000-0000-000000000001")
+      ? [{
+          avatar: "",
+          description: "应用",
+          id: "00000000-0000-0000-0000-000000000001",
+          label: "茉莉",
+          searchText: createPinyinSearchText(["茉莉"]),
+          targetType: "app" as const,
+        }]
+      : []),
   ]
 }
 

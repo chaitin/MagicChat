@@ -321,6 +321,18 @@ describe("orderConversations", () => {
     ).toEqual(["assistant", "active-group", "direct", "regular-app"])
   })
 
+  it("does not pin another app conversation that also contains the assistant", () => {
+    const regularApp = createConversation("regular-app", "app", "2026-07-01", [
+      createAppMember("22222222-2222-2222-2222-222222222222"),
+      createAppMember("00000000-0000-0000-0000-000000000001"),
+    ])
+    const recentGroup = createConversation("recent-group", "group", "2026-07-20")
+    expect(orderConversations([regularApp, recentGroup]).map(({ id }) => id)).toEqual([
+      "recent-group",
+      "regular-app",
+    ])
+  })
+
   it("does not pin a group that contains the built-in assistant", () => {
     const recentApp = createConversation("recent-app", "app", "2026-07-20")
     const oldGroup = createConversation("old-group", "group", "2026-07-01", [

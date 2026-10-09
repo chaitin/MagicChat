@@ -103,7 +103,7 @@ func TestCreateGroupConversationLinksOwnedProjects(t *testing.T) {
 					t.Fatalf("project %s updated_at = %v, want after %v", project.ID, storedProject.UpdatedAt, oldUpdatedAt)
 				}
 			}
-			requireRowCount(t, db, &store.ConversationMember{}, 2, "conversation_id = ?", conversationID)
+			requireRowCount(t, db, &store.ConversationMember{}, 3, "conversation_id = ?", conversationID)
 			requireRowCount(t, db, &store.Message{}, 1, "conversation_id = ?", conversationID)
 		})
 	}

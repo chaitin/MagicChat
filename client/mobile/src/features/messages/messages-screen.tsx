@@ -1,19 +1,21 @@
-import { type InfiniteData, useQueries, useQueryClient } from "@tanstack/react-query"
+import { useQueryClient } from "@tanstack/react-query"
 import { useRouter } from "expo-router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
 import {
+  measureMobilePerf,
+  recordConversationNavigation,
+  recordConversationPressIn,
+  recordMobilePerf,
+} from "@/diagnostics/mobile-perf"
+import {
   useDismissConversation,
   useSetConversationMuted,
   useSetConversationPinned,
 } from "@/data/conversations/conversation-hooks"
-import type { ClientConversation, ClientMessageList } from "@/core/models"
-import {
-  hydrateConversationMessagesQuery,
-  subscribeConversationMessages,
-} from "@/data/messages"
-import { applyConversationMessagesChangedEvent } from "@/data/messages/message-query-cache"
+import type { ClientConversation } from "@/core/models"
+import { hydrateConversationMessagesQuery } from "@/data/messages"
 import {
   useAuth,
   useAuthenticatedSession,
@@ -25,19 +27,17 @@ import {
 import { ConversationList } from "@/features/messages/conversation-list"
 import {
   buildConversationListItems,
-  collectLatestConversationMessages,
   type ConversationListItemModel,
 } from "@/features/messages/conversation-list-model"
+import { useLatestLocalMessages } from "@/features/messages/use-latest-local-messages"
 import { DismissConversationActionSheet } from "@/features/messages/dismiss-conversation-dialog"
 import { NetworkFailureDialog } from "@/features/messages/network-failure-dialog"
 import { subscribeToMessagesTabReselected } from "@/features/messages/messages-tab-reselect"
 import { useClientData } from "@/providers/client-data-provider"
 import { useXGUITheme, useXGUIToast } from "@/xgui"
 import { buildConversationHref } from "@/navigation/conversations"
-import { queryKeys } from "@/data/query"
 
 const MESSAGE_PAGE_SIZE = 20
-const PREWARM_CONVERSATION_COUNT = 10
 const CONVERSATION_LIST_CLOCK_INTERVAL_MS = 60_000
 
 export function MessagesScreen() {
@@ -50,30 +50,16 @@ export function MessagesScreen() {
   const pinMutation = useSetConversationPinned(session)
   const muteMutation = useSetConversationMuted(session)
   const dismissMutation = useDismissConversation(session)
-  const conversationPreparationRef = useRef(
-    new Map<string, Promise<boolean>>()
-  )
+  const pressedConversationRef = useRef<string | null>(null)
   const prepareConversationMessages = useCallback(
     (conversationId: string) => {
-      const current = conversationPreparationRef.current.get(conversationId)
-      if (current) return current
-
-      const preparation = hydrateConversationMessagesQuery(
+      recordMobilePerf("messages.prepare")
+      void hydrateConversationMessagesQuery(
         queryClient,
         session,
         conversationId,
         MESSAGE_PAGE_SIZE
-      ).catch(() => false)
-      conversationPreparationRef.current.set(conversationId, preparation)
-      void preparation.finally(() => {
-        if (
-          conversationPreparationRef.current.get(conversationId) ===
-          preparation
-        ) {
-          conversationPreparationRef.current.delete(conversationId)
-        }
-      })
-      return preparation
+      ).catch(() => undefined)
     },
     [queryClient, session]
   )
@@ -92,49 +78,24 @@ export function MessagesScreen() {
     isBootstrapRefreshing,
     refreshBootstrap,
   } = useClientData()
-  const messageQueries = useQueries({
-    queries: conversations.map((conversation) => ({
-      enabled: false,
-      queryKey: queryKeys.conversationMessages(session, conversation.id),
-    })),
-  })
-  const latestMessages = useMemo(() => {
-    return collectLatestConversationMessages(
-      conversations.map((conversation, index) => {
-        const data = messageQueries[index]?.data as
-          | InfiniteData<ClientMessageList, number | null>
-          | undefined
-        return { conversationId: conversation.id, pages: data?.pages }
-      })
-    )
-  }, [conversations, messageQueries])
   useEffect(() => {
-    const unsubscribers = conversations.map((conversation) =>
-      subscribeConversationMessages(session, conversation.id, (event) => {
-        applyConversationMessagesChangedEvent(
-          queryClient,
-          session,
-          conversation.id,
-          event
-        )
-      })
-    )
-    return () => {
-      for (const unsubscribe of unsubscribers) unsubscribe()
-    }
-  }, [conversations, queryClient, session])
+    recordMobilePerf("messages.commit")
+  })
+  const latestMessages = useLatestLocalMessages(session, conversations)
 
   const networkFailure = blockingBootstrapError !== null
   const items = useMemo(
     () =>
-      buildConversationListItems({
-        contacts,
-        conversations,
-        currentUserId: currentUser?.id ?? session.userId,
-        keyword: "",
-        latestMessages,
-        now: listNow,
-      }),
+      measureMobilePerf("messages.build_items_ms", () =>
+        buildConversationListItems({
+          contacts,
+          conversations,
+          currentUserId: currentUser?.id ?? session.userId,
+          keyword: "",
+          latestMessages,
+          now: listNow,
+        })
+      ),
     [contacts, conversations, currentUser?.id, latestMessages, listNow, session.userId]
   )
 
@@ -154,31 +115,19 @@ export function MessagesScreen() {
     []
   )
 
-  useEffect(() => {
-    const task = requestIdleCallback(() => {
-      for (const item of items.slice(0, PREWARM_CONVERSATION_COUNT)) {
-        void prepareConversationMessages(item.conversation.id)
-      }
-    })
-    return () => cancelIdleCallback(task)
-  }, [items, prepareConversationMessages])
-
-  const handleConversationsVisible = useCallback(
-    (conversationIds: string[]) => {
-      for (const conversationId of conversationIds) {
-        void prepareConversationMessages(conversationId)
-      }
-    },
-    [prepareConversationMessages]
-  )
-
   function handleConversationPress(conversationId: string) {
-    void prepareConversationMessages(conversationId)
+    recordConversationNavigation(session, conversationId)
+    if (pressedConversationRef.current !== conversationId) {
+      prepareConversationMessages(conversationId)
+    }
+    pressedConversationRef.current = null
     router.push(buildConversationHref(conversationId))
   }
 
   function handleConversationPressIn(conversationId: string) {
-    void prepareConversationMessages(conversationId)
+    recordConversationPressIn(session, conversationId)
+    pressedConversationRef.current = conversationId
+    prepareConversationMessages(conversationId)
   }
 
   function handleConversationLongPress(item: ConversationListItemModel) {
@@ -317,7 +266,6 @@ export function MessagesScreen() {
           }
           onConversationPress={handleConversationPress}
           onConversationPressIn={handleConversationPressIn}
-          onConversationsVisible={handleConversationsVisible}
           onSearchPress={() => router.push("/search")}
           scrollToUnreadRequest={scrollToUnreadRequest}
           server={session}

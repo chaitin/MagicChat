@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"app/internal/appregistry"
 	"app/internal/store"
 
 	"gorm.io/gorm"
@@ -209,6 +210,9 @@ func (s *Service) SetMemberRole(ctx context.Context, cmd SetMemberRoleCommand) (
 	if err != nil {
 		return ConversationMutationResult{}, invalidRequest(err.Error(), err)
 	}
+	if memberType == store.ConversationMemberTypeApp && appregistry.IsAIAssistantAppID(memberID) {
+		return ConversationMutationResult{}, forbidden("不能修改内置应用角色", ErrAccessDenied)
+	}
 	role := strings.TrimSpace(cmd.Role)
 	if role != store.ConversationMemberRoleAdmin && role != store.ConversationMemberRoleMember {
 		return ConversationMutationResult{}, invalidRequest("成员角色只支持 admin 或 member", nil)
@@ -324,6 +328,9 @@ func (s *Service) RemoveMember(ctx context.Context, cmd RemoveMemberCommand) (Co
 }
 
 func (s *Service) removeMember(db *gorm.DB, actor store.User, conversationID, memberType, memberID string) (store.Conversation, *store.Message, []string, string, []string, error) {
+	if memberType == store.ConversationMemberTypeApp && appregistry.IsAIAssistantAppID(memberID) {
+		return store.Conversation{}, nil, nil, "", nil, ErrAccessDenied
+	}
 	var conversation store.Conversation
 	var message *store.Message
 	userIDs := []string{}

@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import type { AuthenticatedTarget } from "@/core/server-target"
 import { conversationManager } from "@/data/conversations"
+import { measureMobilePerf } from "@/diagnostics/mobile-perf"
 import { projectConversationsSnapshot } from "@/data/manager-query-projector"
 import { conversationsQueryOptions } from "@/data/query"
 import { hydrateClientConversationUsers, toError } from "./helpers"
@@ -20,6 +21,6 @@ export function useConversationsController(target: AuthenticatedTarget, enabled:
   const pollRefresh = useCallback(async (signal: AbortSignal) => { try { await conversationManager.refresh(target, { signal }); setRefreshError(null) } catch (e) { if (signal.aborted) return; const error = toError(e, "加载会话失败"); setRefreshError(error); onError(error) } }, [onError, target])
   useManagerPolling(enabled, poll, pollRefresh)
   const raw = useMemo(() => bridge.data ?? query.data ?? [], [bridge.data, query.data])
-  const data = useMemo(() => raw.map((value) => hydrateClientConversationUsers(value, apps, users)), [apps, raw, users])
+  const data = useMemo(() => measureMobilePerf("conversations.hydrate_ms", () => raw.map((value) => hydrateClientConversationUsers(value, apps, users))), [apps, raw, users])
   return { data, rawData: raw, localReady: bridge.localReady, refreshState: refreshing, error: bridge.error ?? refreshError, refresh }
 }

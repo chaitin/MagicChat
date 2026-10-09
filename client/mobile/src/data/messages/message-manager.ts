@@ -24,7 +24,7 @@ import {
   updatePersistedMessage,
 } from "@/data/messages/message-cache-store"
 import { clearGlobalMessageCache, getGlobalMessageCacheSize } from "@/data/messages/message-cache-database"
-import { publishConversationMessagesChanged } from "@/data/messages/message-events"
+import { publishAllMessageCacheCleared, publishConversationMessagesChanged } from "@/data/messages/message-events"
 import {
   createMessageTombstoneStore,
 } from "@/data/messages/message-tombstones"
@@ -66,7 +66,7 @@ export type { MessageManagerDependencies }
 export const messageManager = createMessageManager({
   repository: messageRepository,
   api: defaultApi,
-  events: { publishConversationMessagesChanged },
+  events: { publishAllMessageCacheCleared, publishConversationMessagesChanged },
   telemetry: { reportMessageCacheError },
   clearGlobalCache: clearGlobalMessageCache,
   getGlobalCacheSize: getGlobalMessageCacheSize,

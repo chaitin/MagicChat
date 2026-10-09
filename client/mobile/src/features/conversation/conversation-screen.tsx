@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { SizableText, YStack } from "tamagui"
 
 import { ContentState } from "@/components/feedback/content-state"
+import { measureMobilePerf, recordConversationReady, recordMobilePerf } from "@/diagnostics/mobile-perf"
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
 import {
   APP_HEADER_HEIGHT,
@@ -104,6 +105,9 @@ export function ConversationScreen() {
   const loadingToast = useXGUIToast()
   const isFocused = useIsFocused()
   const insets = useSafeAreaInsets()
+  useEffect(() => {
+    recordMobilePerf("conversation.commit")
+  })
   const { invalidateSession } = useAuth()
   const { activateConversation, ready: realtimeReady } = useRealtime()
   const session = useAuthenticatedSession()
@@ -234,17 +238,26 @@ export function ConversationScreen() {
     session,
     conversationId
   )
-  const mentionCandidates = useMemo(
-    () =>
-      conversation?.type === "group" ||
-      conversation?.topic?.parentConversationType === "group"
-        ? createMentionCandidates(conversation.members ?? [])
-        : [],
-    [conversation]
-  )
+  const mentionCandidates = useMemo(() => {
+    if (!conversation) return []
+    const group = conversation.type === "group" || conversation.topic?.parentConversationType === "group"
+    const members = conversation.members ?? []
+    return createMentionCandidates(
+      group
+        ? members
+        : members.filter((member) => member.type === "app" && member.id === "00000000-0000-0000-0000-000000000001"),
+      group,
+      contacts.apps.find((app) => app.id === "00000000-0000-0000-0000-000000000001")?.name
+    )
+  }, [contacts.apps, conversation])
   const messagesQuery = useConversationMessages(session, conversationId, {
     fallbackPollingEnabled: !realtimeReady,
   })
+  useEffect(() => {
+    if (isFocused && !messagesQuery.isLoading && conversation && currentUser && (!expectsTopic || topicQuery.data)) {
+      recordConversationReady(session, conversationId)
+    }
+  }, [conversation, conversationId, currentUser, expectsTopic, isFocused, messagesQuery.isLoading, session, topicQuery.data])
   useTargetMessageNavigation({
     fetchOlderMessages: messagesQuery.fetchOlder,
     hasOlder: messagesQuery.hasOlder,
@@ -321,15 +334,17 @@ export function ConversationScreen() {
   }, [messageActions.optimisticMessages, resources.states])
   const presentedMessages = useMemo(
     () =>
-      conversation && currentUser
-        ? buildPresentedMessages({
-            contacts: profileContacts,
-            conversation,
-            currentUser,
-            messages: displayedMessages,
-            resolveMentionLabel,
-          })
-        : [],
+      measureMobilePerf("conversation.present_ms", () =>
+        conversation && currentUser
+          ? buildPresentedMessages({
+              contacts: profileContacts,
+              conversation,
+              currentUser,
+              messages: displayedMessages,
+              resolveMentionLabel,
+            })
+          : []
+      ),
     [
       conversation,
       currentUser,

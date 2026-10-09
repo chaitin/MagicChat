@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"app/internal/appregistry"
 	"app/internal/store"
 
 	"gorm.io/gorm"
@@ -111,6 +112,9 @@ func TopicSourceVisibleToMember(value Context, member store.ConversationMember) 
 }
 
 func SourceMessageVisibleToMember(sourceMessageSeq int64, member store.ConversationMember) bool {
+	if member.MemberType == store.ConversationMemberTypeApp && appregistry.IsAIAssistantAppID(member.MemberID) {
+		return true
+	}
 	visibleFromSeq := member.HistoryVisibleFromSeq
 	if visibleFromSeq < 1 {
 		visibleFromSeq = 1
@@ -145,7 +149,7 @@ func ActiveTopicParticipantIDs(db *gorm.DB, value Context, participantType strin
 		Select("conversation_topic_participants.participant_id").
 		Joins("JOIN conversation_members cm ON cm.conversation_id = ? AND cm.member_type = conversation_topic_participants.participant_type AND cm.member_id = conversation_topic_participants.participant_id AND cm.left_at IS NULL", value.MembershipConversationID).
 		Where("conversation_topic_participants.conversation_id = ? AND conversation_topic_participants.participant_type = ?", value.Conversation.ID, participantType).
-		Where("? >= CASE WHEN cm.history_visible_from_seq < 1 THEN 1 ELSE cm.history_visible_from_seq END", value.Topic.SourceMessageSeq).
+		Where("? >= CASE WHEN cm.history_visible_from_seq < 1 THEN 1 ELSE cm.history_visible_from_seq END OR (cm.member_type = ? AND cm.member_id = ?)", value.Topic.SourceMessageSeq, store.ConversationMemberTypeApp, appregistry.AIAssistantAppID).
 		Order("conversation_topic_participants.joined_at ASC").
 		Pluck("conversation_topic_participants.participant_id", &ids).Error
 	return ids, err

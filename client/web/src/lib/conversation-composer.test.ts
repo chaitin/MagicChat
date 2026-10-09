@@ -3,7 +3,27 @@ import { describe, expect, it } from "vitest"
 import {
   createDraftFromMessageContent,
   createDraftMentionTemplate,
+  createMentionCandidates,
 } from "@/lib/conversation-composer"
+import type { ClientConversationMember } from "@/lib/client-data-api"
+
+it("non-group mentions omit everyone while keeping the assistant name from members", () => {
+  const member = {
+    id: "00000000-0000-0000-0000-000000000001",
+    type: "app",
+    name: "自定义助理名",
+    nickname: "",
+    avatar: "",
+    email: "",
+    phone: "",
+  } as ClientConversationMember
+  expect(createMentionCandidates([member], false).map(({ id, label }) => ({ id, label }))).toEqual([
+    { id: member.id, label: member.name },
+  ])
+  expect(createMentionCandidates([], false).map(({ id, label }) => ({ id, label }))).toEqual([
+    { id: member.id, label: "茉莉" },
+  ])
+})
 
 describe("createDraftFromMessageContent", () => {
   it("restores mention labels and preserves their tokens when sent again", () => {

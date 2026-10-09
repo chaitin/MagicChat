@@ -6,8 +6,14 @@ import type {
   MessageChoiceSnapshot,
   MessageChoiceUpdatedEvent,
 } from "@/core/models"
-import type { ConversationMessagesChangedEvent } from "@/data/messages/message-events"
+import { recordMobilePerf } from "@/diagnostics/mobile-perf"
+import {
+  subscribeAllMessageCacheCleared,
+  subscribeConversationMessages,
+  type ConversationMessagesChangedEvent,
+} from "@/data/messages/message-events"
 import { messageManager } from "@/data/messages/message-manager"
+import { createShortLivedReadCache } from "@/data/messages/short-lived-read-cache"
 import type { AuthenticatedTarget } from "@/core/server-target"
 import { queryKeys } from "@/data/query"
 import {
@@ -21,12 +27,51 @@ type ConversationMessagesData = InfiniteData<
   number | null
 >
 
+// Bridge the press-to-screen transition without keeping a long-lived stale page.
+const ENTRY_READ_REUSE_MS = 1_500
+const entryReads = new WeakMap<QueryClient, ReturnType<typeof createShortLivedReadCache<ClientMessageList>>>()
+let cacheClearGeneration = 0
+subscribeAllMessageCacheCleared(() => { cacheClearGeneration += 1 })
+
+export function readEntryConversationMessagesPage(
+  queryClient: QueryClient,
+  target: AuthenticatedTarget,
+  conversationId: string,
+  limit: number
+): Promise<ClientMessageList> {
+  let cache = entryReads.get(queryClient)
+  if (!cache) {
+    cache = createShortLivedReadCache<ClientMessageList>(ENTRY_READ_REUSE_MS)
+    entryReads.set(queryClient, cache)
+  }
+  const key = createEntryReadKey(target, conversationId, limit)
+  const { promise, reused } = cache.read(
+    key,
+    async () => {
+      const startedAt = performance.now()
+      try {
+        return await messageManager.readLatestPage(target, conversationId, limit)
+      } finally {
+        recordMobilePerf("conversation.local_read_ms", performance.now() - startedAt)
+      }
+    },
+    (invalidate) => subscribeConversationMessages(target, conversationId, invalidate)
+  )
+  if (reused) recordMobilePerf("conversation.local_read_reused")
+  return promise
+}
+
+function createEntryReadKey(target: AuthenticatedTarget, conversationId: string, limit: number) {
+  return JSON.stringify([queryKeys.conversationMessages(target, conversationId), limit, cacheClearGeneration])
+}
+
 export function cacheBootstrappedConversationMessages(
   queryClient: QueryClient,
   target: AuthenticatedTarget,
   pages: ReadonlyMap<string, ClientMessageList>
 ) {
   for (const [conversationId, page] of pages) {
+    entryReads.get(queryClient)?.invalidate(createEntryReadKey(target, conversationId, page.page.limit))
     queryClient.setQueryData<ConversationMessagesData>(
       queryKeys.conversationMessages(target, conversationId),
       (current) =>
@@ -49,11 +94,9 @@ export async function hydrateConversationMessagesQuery(
   // advanced since then (including bootstrap work that finished after timeout).
   // The messages tab can hydrate while a conversation screen remains mounted
   // above it, so hydration must preserve every history page already in use.
-  const page = await messageManager.readLatestPage(
-    target,
-    conversationId,
-    limit
-  )
+  const generation = cacheClearGeneration
+  const page = await readEntryConversationMessagesPage(queryClient, target, conversationId, limit)
+  if (generation !== cacheClearGeneration) return false
   if (page.messages.length === 0) return false
 
   queryClient.setQueryData<ConversationMessagesData>(

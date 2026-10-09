@@ -8,6 +8,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { conversationManager } from "@/data/conversations/index"
+import { recordMobilePerf } from "@/diagnostics/mobile-perf"
 import { FALLBACK_POLLING_INTERVAL_MS } from "@/data/query/fallback-polling"
 import {
   messageManager,
@@ -16,6 +17,8 @@ import {
 import {
   applyConversationMessagesChangedEvent,
   compactConversationMessagesQuery,
+  hydrateConversationMessagesQuery,
+  readEntryConversationMessagesPage,
 } from "@/data/messages/message-query-cache"
 import type {
   ClientConversation,
@@ -54,15 +57,14 @@ export function useConversationMessages(
       lastPage.page.hasMoreBefore ? lastPage.page.oldestSeq : undefined,
     initialPageParam: null as number | null,
     queryFn: ({ pageParam, signal }) =>
-      messageManager.loadMessagePage(
-        server,
-        conversationId,
-        {
-          beforeSeq: pageParam ?? undefined,
-          limit: MESSAGE_PAGE_SIZE,
-        },
-        { signal }
-      ),
+      pageParam === null
+        ? readEntryConversationMessagesPage(queryClient, server, conversationId, MESSAGE_PAGE_SIZE)
+        : messageManager.loadMessagePage(
+            server,
+            conversationId,
+            { beforeSeq: pageParam, limit: MESSAGE_PAGE_SIZE },
+            { signal }
+          ),
     queryKey,
     staleTime: Infinity,
     structuralSharing: (current, incoming) =>
@@ -89,6 +91,12 @@ export function useConversationMessages(
     [conversationId, live, queryClient, queryKey, server]
   )
 
+  useEffect(() => {
+    if (!conversationId || !live) return
+    void hydrateConversationMessagesQuery(queryClient, server, conversationId, MESSAGE_PAGE_SIZE)
+      .catch(() => undefined)
+  }, [conversationId, live, queryClient, server])
+
   useEffect(
     () => () => {
       if (!live) return
@@ -106,6 +114,7 @@ export function useConversationMessages(
 
     let active = true
     const synchronize = () => {
+      const startedAt = performance.now()
       void messageManager
         .synchronizeLatest(server, conversationId, MESSAGE_PAGE_SIZE)
         .then(() => {
@@ -117,6 +126,9 @@ export function useConversationMessages(
               error instanceof Error ? error : new Error("加载消息失败")
             )
           }
+        })
+        .finally(() => {
+          recordMobilePerf("conversation.sync_elapsed_ms", performance.now() - startedAt)
         })
     }
 

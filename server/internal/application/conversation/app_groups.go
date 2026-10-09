@@ -8,6 +8,7 @@ import (
 	"time"
 
 	appapp "app/internal/application/app"
+	"app/internal/appregistry"
 	"app/internal/store"
 
 	"github.com/google/uuid"
@@ -136,8 +137,12 @@ func (s *Service) CreateGroupAsApplication(ctx context.Context, cmd CreateGroupA
 	if err != nil {
 		return ApplicationGroupMutationResult{}, invalidRequest(err.Error(), err)
 	}
-	appIDs = removeApplicationGroupID(appIDs, appID)
-	if len(memberIDs)+len(appIDs)+1 > MaxGroupMembers {
+	appIDs = withoutAssistantAppID(removeApplicationGroupID(appIDs, appID))
+	assistantMemberCount := 1
+	if appregistry.IsAIAssistantAppID(appID) {
+		assistantMemberCount = 0
+	}
+	if len(memberIDs)+len(appIDs)+1+assistantMemberCount > MaxGroupMembers {
 		return ApplicationGroupMutationResult{}, invalidRequest("群聊成员不能超过 1000 人", ErrMemberCap)
 	}
 
@@ -200,6 +205,11 @@ func (s *Service) CreateGroupAsApplication(ctx context.Context, cmd CreateGroupA
 		}
 		if err := tx.Create(&members).Error; err != nil {
 			return err
+		}
+		if assistantMemberCount > 0 {
+			if err := ensureAssistantMember(tx, conversation.ID, 1, now); err != nil {
+				return err
+			}
 		}
 		created, err := createGroupMembersInvitedByApplicationSystemMessage(
 			tx, &conversation, actor, makeInviteeRefs(users, apps), now,
@@ -428,6 +438,9 @@ func (s *Service) RemoveGroupMemberAsApplication(ctx context.Context, cmd Remove
 	if err != nil {
 		return ApplicationGroupMutationResult{}, err
 	}
+	if memberType == store.ConversationMemberTypeApp && appregistry.IsAIAssistantAppID(memberID) {
+		return ApplicationGroupMutationResult{}, forbidden("不能移除内置应用", ErrAccessDenied)
+	}
 	if memberType == store.ConversationMemberTypeApp && memberID == appID {
 		return ApplicationGroupMutationResult{}, forbidden("不能移出自己", ErrCannotRemoveSelf)
 	}
@@ -528,6 +541,9 @@ func (s *Service) SetGroupMemberRoleAsApplication(ctx context.Context, cmd SetGr
 	memberType, memberID, err := normalizeApplicationGroupMember(cmd.MemberType, cmd.MemberID)
 	if err != nil {
 		return ApplicationGroupMutationResult{}, err
+	}
+	if memberType == store.ConversationMemberTypeApp && appregistry.IsAIAssistantAppID(memberID) {
+		return ApplicationGroupMutationResult{}, forbidden("不能修改内置应用角色", ErrAccessDenied)
 	}
 	role := strings.TrimSpace(cmd.Role)
 	if role != store.ConversationMemberRoleAdmin && role != store.ConversationMemberRoleMember {

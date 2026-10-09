@@ -158,12 +158,16 @@ export const ConversationPanelComposer = React.forwardRef<
   const [imageCaption, setImageCaption] = React.useState("")
   const [selectedVideo, setSelectedVideo] = React.useState<File | null>(null)
   const [videoCaption, setVideoCaption] = React.useState("")
-  const mentionCandidates = React.useMemo(
-    () =>
-      conversation.type === "group" ||
-      conversation.topic?.parentConversationType === "group"
-        ? createMentionCandidates(conversation.members ?? [])
-        : [],
+  const mentionCandidates = React.useMemo(() => {
+    const group = conversation.type === "group" || conversation.topic?.parentConversationType === "group"
+    const members = conversation.members ?? []
+    return createMentionCandidates(
+      group
+        ? members
+        : members.filter((member) => member.type === "app" && member.id === "00000000-0000-0000-0000-000000000001"),
+      group
+    )
+  },
     [
       conversation.members,
       conversation.topic?.parentConversationType,
@@ -337,11 +341,7 @@ export const ConversationPanelComposer = React.forwardRef<
   }
 
   function updateMentionTrigger(value: string, cursor: number) {
-    if (
-      (conversation.type !== "group" &&
-        conversation.topic?.parentConversationType !== "group") ||
-      mentionCandidates.length === 0
-    ) {
+    if (mentionCandidates.length === 0) {
       setMentionTrigger(null)
       setSelectedMentionIndex(0)
       return

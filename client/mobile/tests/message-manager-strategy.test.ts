@@ -37,6 +37,7 @@ function list(messages: ClientMessage[], overrides: Partial<ClientMessageList["p
 
 type FakeOptions = Partial<{
   readLatestLocal: () => Promise<ClientMessage[]>
+  readLatestPreviewsLocal: () => Promise<Map<string, ClientMessage>>
   readBeforeLocal: () => Promise<ClientMessage[]>
   readSyncStateLocal: () => Promise<{ hasMoreBefore: boolean; httpSyncedThroughSeq: number } | null>
   fetchLatestRemote: () => Promise<ClientMessageList>
@@ -53,6 +54,7 @@ function fakeManager(options: FakeOptions = {}) {
   const deleted = new Set<string>()
   const repository = {
     readLatestLocal: options.readLatestLocal ?? (async () => []),
+    readLatestPreviewsLocal: options.readLatestPreviewsLocal ?? (async () => new Map()),
     readBeforeLocal: options.readBeforeLocal ?? (async () => []),
     readSyncStateLocal: options.readSyncStateLocal ?? (async () => null),
     fetchLatestRemote: async () => { calls.latest++; return (options.fetchLatestRemote ?? (async () => list([])))() },
@@ -67,7 +69,7 @@ function fakeManager(options: FakeOptions = {}) {
   const dependencies = {
     repository,
     api: new Proxy({}, { get: () => noop }),
-    events: { publishConversationMessagesChanged: () => undefined },
+    events: { publishAllMessageCacheCleared: () => undefined, publishConversationMessagesChanged: () => undefined },
     telemetry: { reportMessageCacheError: (event: unknown) => calls.telemetry.push(event) },
     clearGlobalCache: async () => { calls.clear++; await options.clearGlobalCache?.() },
     getGlobalCacheSize: async () => 0,
@@ -112,6 +114,45 @@ test("latest local page merges persisted and newer runtime messages", async () =
   const result = await manager.readLatestPage(target, conversationId, 10)
   assert.deepEqual(result.messages.map((item) => item.seq), [3, 2, 1])
   assert.equal(result.messages.find((item) => item.seq === 2)?.reactionVersion, 2)
+})
+
+test("local previews merge persisted and runtime messages without network or history reads", async () => {
+  const { manager, calls } = fakeManager({
+    readLatestPreviewsLocal: async () => new Map([[conversationId, message(2)]]),
+  })
+  await manager.writeMessages(target, [message(3)])
+  const previews = await manager.readLatestLocalPreviews(target, [conversationId, "missing"])
+  assert.equal(previews.get(conversationId)?.seq, 3)
+  assert.equal(previews.has("missing"), false)
+  assert.equal(calls.latest, 0)
+})
+
+test("a newer runtime message wins while the local preview query is in flight", async () => {
+  const pending = deferred<Map<string, ClientMessage>>()
+  const { manager } = fakeManager({ readLatestPreviewsLocal: () => pending.promise })
+  const previews = manager.readLatestLocalPreviews(target, [conversationId])
+  await manager.writeMessages(target, [message(4)])
+  pending.resolve(new Map([[conversationId, message(3)]]))
+  assert.equal((await previews).get(conversationId)?.seq, 4)
+})
+
+test("failed local preview query still returns runtime messages", async () => {
+  const { manager, calls } = fakeManager({
+    readLatestPreviewsLocal: async () => { throw new Error("sqlite") },
+  })
+  await manager.writeMessages(target, [message(1)])
+  assert.equal((await manager.readLatestLocalPreviews(target, [conversationId])).get(conversationId)?.seq, 1)
+  assert.equal(calls.telemetry.length, 1)
+})
+
+test("deleted latest local preview falls back to the next local message", async () => {
+  const { manager } = fakeManager({
+    readLatestPreviewsLocal: async () => new Map([[conversationId, message(3, "deleted")]]),
+    readLatestLocal: async () => [message(3, "deleted"), message(2)],
+  })
+  await manager.applyChoiceSnapshot(target, { conversationId, messageId: "deleted", status: "deleted" } as never)
+  const previews = await manager.readLatestLocalPreviews(target, [conversationId])
+  assert.equal(previews.get(conversationId)?.seq, 2)
 })
 
 test("before uses contiguous cache, but gaps and cache read failures use remote", async () => {

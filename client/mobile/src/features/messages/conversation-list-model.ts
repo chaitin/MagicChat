@@ -2,7 +2,6 @@ import type {
   ClientContacts,
   ClientConversation,
   ClientMessage,
-  ClientMessageList,
 } from "@/core/models"
 import { flattenVisibleConversations } from "@/domain/conversations/conversation-order"
 import { getContactDisplayName } from "@/domain/contacts/contact-display"
@@ -16,26 +15,6 @@ export type ConversationListItemModel = {
   nested: boolean
   pinnedBackground: boolean
   unreadAlertLabel: "[选择]" | "[有人 @ 我]" | null
-}
-
-export function collectLatestConversationMessages(
-  entries: readonly {
-    conversationId: string
-    pages: readonly ClientMessageList[] | undefined
-  }[]
-) {
-  const latest = new Map<string, ClientMessage>()
-  for (const entry of entries) {
-    for (const page of entry.pages ?? []) {
-      for (const message of page.messages) {
-        const current = latest.get(entry.conversationId)
-        if (!current || message.seq > current.seq) {
-          latest.set(entry.conversationId, message)
-        }
-      }
-    }
-  }
-  return latest
 }
 
 export function buildConversationListItems({
@@ -170,15 +149,6 @@ function getConversationListRows({
   }
 
   return rows
-}
-
-export function getBoundedConversationIds(
-  items: readonly ConversationListItemModel[],
-  limit: number
-) {
-  if (limit <= 0) return []
-
-  return items.slice(0, limit).map((item) => item.conversation.id)
 }
 
 export function findLatestUnreadConversationIndex(

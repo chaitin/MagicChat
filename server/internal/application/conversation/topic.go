@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"app/internal/application/conversationaccess"
+	"app/internal/appregistry"
 	"app/internal/store"
 
 	"github.com/google/uuid"
@@ -1033,11 +1034,12 @@ func initialTopicParticipants(parent store.Conversation, source store.Message, m
 	mentioned := topicMentionedMemberKeys(source.Summary)
 	participants := make([]store.ConversationTopicParticipant, 0, len(members))
 	for _, member := range members {
-		if !conversationaccess.SourceMessageVisibleToMember(source.Seq, member) {
+		assistant := member.MemberType == store.ConversationMemberTypeApp && appregistry.IsAIAssistantAppID(member.MemberID)
+		if !assistant && !conversationaccess.SourceMessageVisibleToMember(source.Seq, member) {
 			continue
 		}
 		key := memberKey(member.MemberType, member.MemberID)
-		include := parent.Kind != store.ConversationKindGroup ||
+		include := assistant || parent.Kind != store.ConversationKindGroup ||
 			(member.MemberType == creator.memberType && member.MemberID == creator.id) ||
 			(source.SenderID != nil && member.MemberType == source.SenderType && member.MemberID == *source.SenderID)
 		if _, ok := mentioned[key]; ok {

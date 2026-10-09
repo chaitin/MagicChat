@@ -53,7 +53,7 @@ func newTestRouterWithRealtimeOptions(t *testing.T, options realtime.Options) (*
 		t.Fatalf("migrate test schema: %v", err)
 	}
 
-	router := NewRouterWithRealtimeOptions(db, config.Config{
+	serverConfig := config.Config{
 		Server: config.ServerConfig{
 			PublicHostname:  "chat.example.test",
 			ClientHTTPSPort: 443,
@@ -62,7 +62,11 @@ func newTestRouterWithRealtimeOptions(t *testing.T, options realtime.Options) (*
 		Database: config.DatabaseConfig{DSN: "sqlite-test"},
 		Admin:    config.AdminConfig{Password: "admin-secret"},
 		Apps:     config.AppsConfig{AIAssistantSecret: "test-ai-assistant-secret"},
-	}, options)
+	}
+	if _, err := appregistry.EnsureAIAssistantApp(db, serverConfig.Apps); err != nil {
+		t.Fatalf("seed assistant app: %v", err)
+	}
+	router := NewRouterWithRealtimeOptions(db, serverConfig, options)
 
 	return httptest.NewServer(router), db
 }
@@ -351,7 +355,11 @@ func insertTestApp(t *testing.T, db *gorm.DB, input store.App) store.App {
 		input.UpdatedAt = input.CreatedAt
 	}
 
-	if err := db.Select("*").Create(&input).Error; err != nil {
+	if appregistry.IsAIAssistantAppID(input.ID) {
+		if err := db.Select("*").Save(&input).Error; err != nil {
+			t.Fatalf("update test assistant app: %v", err)
+		}
+	} else if err := db.Select("*").Create(&input).Error; err != nil {
 		t.Fatalf("create test app: %v", err)
 	}
 
@@ -3075,8 +3083,8 @@ func TestAppWebSocketGroupConversationCreateUsesTriggeringUser(t *testing.T) {
 	if conversation["created_by_user_id"] != alice.ID {
 		t.Fatalf("conversation.created_by_user_id = %v, want %s", conversation["created_by_user_id"], alice.ID)
 	}
-	if conversation["member_count"] != float64(3) {
-		t.Fatalf("conversation.member_count = %v, want 3", conversation["member_count"])
+	if conversation["member_count"] != float64(4) {
+		t.Fatalf("conversation.member_count = %v, want 4 including the assistant", conversation["member_count"])
 	}
 	message := payload["message"].(map[string]any)
 	if message["summary"] != "Alice 邀请 Bob,Carol 加入群聊" {
@@ -3094,8 +3102,8 @@ func TestAppWebSocketGroupConversationCreateUsesTriggeringUser(t *testing.T) {
 	if err := db.Where("conversation_id = ?", storedConversation.ID).Find(&members).Error; err != nil {
 		t.Fatalf("find group members: %v", err)
 	}
-	if len(members) != 3 {
-		t.Fatalf("member count = %d, want 3", len(members))
+	if len(members) != 4 {
+		t.Fatalf("member count = %d, want 4 including assistant", len(members))
 	}
 	var messageCount int64
 	if err := db.Model(&store.Message{}).Where("conversation_id = ?", storedConversation.ID).Count(&messageCount).Error; err != nil {
@@ -5142,8 +5150,8 @@ func TestCreateDirectConversationCreatesConversationAndReturnsExisting(t *testin
 	if err := db.Where("conversation_id = ?", conversationID).Find(&storedMembers).Error; err != nil {
 		t.Fatalf("find stored members: %v", err)
 	}
-	if len(storedMembers) != 2 {
-		t.Fatalf("stored member count = %d, want 2", len(storedMembers))
+	if len(storedMembers) != 3 {
+		t.Fatalf("stored member count = %d, want 3 including the assistant", len(storedMembers))
 	}
 	rolesByID := map[string]string{}
 	for _, member := range storedMembers {
@@ -5273,8 +5281,8 @@ func TestClientAppConversationCreatesAndReturnsExistingForVisibleApp(t *testing.
 	if err := db.Where("conversation_id = ?", conversationID).Find(&members).Error; err != nil {
 		t.Fatalf("find app conversation members: %v", err)
 	}
-	if len(members) != 2 {
-		t.Fatalf("member count = %d, want 2", len(members))
+	if len(members) != 3 {
+		t.Fatalf("member count = %d, want 3 including assistant", len(members))
 	}
 
 	existingResp, existingBody := postJSON(t, server, "/api/client/conversations/apps", map[string]any{
@@ -9703,14 +9711,9 @@ func TestCreateGroupConversationCreatesConversationAndMembers(t *testing.T) {
 	alice := insertTestUser(t, db, "alice@example.com", "Alice", store.UserStatusActive, now)
 	bob := insertTestUser(t, db, "bob@example.com", "Bob", store.UserStatusActive, now)
 	app := insertTestApp(t, db, store.App{
-		ID:               appregistry.AIAssistantAppID,
-		Name:             "茉莉",
-		Avatar:           "/assets/apps/assistant.webp",
-		Enabled:          true,
-		Visibility:       store.AppVisibilityPublic,
-		ConnectionSecret: "test-ai-assistant-secret",
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		ID: uuid.NewString(), Name: "提醒应用", Enabled: true,
+		Visibility: store.AppVisibilityPublic, ConnectionSecret: uuid.NewString(),
+		CreatedAt: now, UpdatedAt: now,
 	})
 	userCookie := loginAsUser(t, server, creator.Email)
 
@@ -9740,16 +9743,16 @@ func TestCreateGroupConversationCreatesConversationAndMembers(t *testing.T) {
 	if conversation["created_by_user_id"] != creator.ID {
 		t.Fatalf("conversation.created_by_user_id = %v, want %s", conversation["created_by_user_id"], creator.ID)
 	}
-	if conversation["member_count"] != float64(4) {
-		t.Fatalf("conversation.member_count = %v, want 4", conversation["member_count"])
+	if conversation["member_count"] != float64(5) {
+		t.Fatalf("conversation.member_count = %v, want 5", conversation["member_count"])
 	}
-	if conversation["last_message_summary"] != "Creator 邀请 Alice,Bob,茉莉 加入群聊" {
+	if conversation["last_message_summary"] != "Creator 邀请 Alice,Bob,提醒应用 加入群聊" {
 		t.Fatalf("conversation.last_message_summary = %v, want app invite", conversation["last_message_summary"])
 	}
 
 	members := conversation["members"].([]any)
-	if len(members) != 4 {
-		t.Fatalf("member count = %d, want 4", len(members))
+	if len(members) != 5 {
+		t.Fatalf("member count = %d, want 5", len(members))
 	}
 	rolesByID := map[string]string{}
 	typesByID := map[string]string{}
@@ -9792,8 +9795,8 @@ func TestCreateGroupConversationCreatesConversationAndMembers(t *testing.T) {
 	if err := db.Where("conversation_id = ?", storedConversation.ID).Find(&storedMembers).Error; err != nil {
 		t.Fatalf("find stored members: %v", err)
 	}
-	if len(storedMembers) != 4 {
-		t.Fatalf("stored member count = %d, want 4", len(storedMembers))
+	if len(storedMembers) != 5 {
+		t.Fatalf("stored member count = %d, want 5", len(storedMembers))
 	}
 	storedRolesByID := map[string]string{}
 	storedTypesByID := map[string]string{}
@@ -9830,8 +9833,8 @@ func TestCreateGroupConversationAllowsOwnerOnlyGroup(t *testing.T) {
 		t.Fatalf("status = %d, want 201, body = %#v", resp.StatusCode, body)
 	}
 	conversation := requireSuccess(t, body)["conversation"].(map[string]any)
-	if conversation["member_count"] != float64(1) {
-		t.Fatalf("conversation.member_count = %v, want 1", conversation["member_count"])
+	if conversation["member_count"] != float64(2) {
+		t.Fatalf("conversation.member_count = %v, want 2 including assistant", conversation["member_count"])
 	}
 	if conversation["last_message_seq"] != float64(0) || conversation["last_message_summary"] != "" {
 		t.Fatalf("owner-only last message = seq %v summary %v, want empty", conversation["last_message_seq"], conversation["last_message_summary"])
@@ -9940,16 +9943,16 @@ func TestCreateGroupConversationIgnoresCreatorIDCaseInsensitively(t *testing.T) 
 		t.Fatalf("status = %d, want 201, body = %#v", resp.StatusCode, body)
 	}
 	conversation := requireSuccess(t, body)["conversation"].(map[string]any)
-	if conversation["member_count"] != float64(2) {
-		t.Fatalf("member_count = %v, want 2", conversation["member_count"])
+	if conversation["member_count"] != float64(3) {
+		t.Fatalf("member_count = %v, want 3 including the assistant", conversation["member_count"])
 	}
 
 	var storedMembers []store.ConversationMember
 	if err := db.Where("conversation_id = ?", conversation["id"]).Find(&storedMembers).Error; err != nil {
 		t.Fatalf("find stored members: %v", err)
 	}
-	if len(storedMembers) != 2 {
-		t.Fatalf("stored member count = %d, want 2", len(storedMembers))
+	if len(storedMembers) != 3 {
+		t.Fatalf("stored member count = %d, want 3 including the assistant", len(storedMembers))
 	}
 }
 
@@ -10973,13 +10976,9 @@ func TestRemoveGroupConversationMemberCanRemoveApp(t *testing.T) {
 	alice := insertTestUser(t, db, "alice@example.com", "Alice", store.UserStatusActive, now)
 	bob := insertTestUser(t, db, "bob@example.com", "Bob", store.UserStatusActive, now)
 	app := insertTestApp(t, db, store.App{
-		ID:               appregistry.AIAssistantAppID,
-		Name:             "茉莉",
-		Enabled:          true,
-		Visibility:       store.AppVisibilityPublic,
-		ConnectionSecret: "test-ai-assistant-secret",
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		ID: uuid.NewString(), Name: "提醒应用", Enabled: true,
+		Visibility: store.AppVisibilityPublic, ConnectionSecret: uuid.NewString(),
+		CreatedAt: now, UpdatedAt: now,
 	})
 	conversation := insertTestConversation(t, db, testConversationInput{
 		createdByUserID: alice.ID,
@@ -11006,7 +11005,7 @@ func TestRemoveGroupConversationMemberCanRemoveApp(t *testing.T) {
 	}
 	data := requireSuccess(t, body)
 	updatedConversation := data["conversation"].(map[string]any)
-	summary := "Alice 已将 茉莉 移出群聊"
+	summary := "Alice 已将 提醒应用 移出群聊"
 	if updatedConversation["member_count"] != float64(2) {
 		t.Fatalf("conversation.member_count = %v, want 2", updatedConversation["member_count"])
 	}
@@ -11034,6 +11033,39 @@ func TestRemoveGroupConversationMemberCanRemoveApp(t *testing.T) {
 	}
 	if storedMessage.Summary != summary {
 		t.Fatalf("stored summary = %v, want %s", storedMessage.Summary, summary)
+	}
+}
+
+func TestRemoveGroupConversationMemberRejectsBuiltinAssistant(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+
+	now := time.Now().UTC()
+	alice := insertTestUser(t, db, "assistant-group-owner@example.com", "Alice", store.UserStatusActive, now)
+	conversation := insertTestConversation(t, db, testConversationInput{
+		createdByUserID: alice.ID,
+		kind:            store.ConversationKindGroup,
+		memberIDs:       []string{alice.ID},
+		name:            "产品讨论组",
+		now:             now,
+	})
+	if err := db.Create(&store.ConversationMember{
+		ConversationID: conversation.ID, MemberType: store.ConversationMemberTypeApp,
+		MemberID: appregistry.AIAssistantAppID, Role: store.ConversationMemberRoleMember,
+		JoinedAt: now, HistoryVisibleFromSeq: 1,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	resp, body := requestJSON(t, server, http.MethodDelete,
+		"/api/client/conversations/groups/"+conversation.ID+"/members/app/"+appregistry.AIAssistantAppID,
+		map[string]any{}, loginAsUser(t, server, alice.Email))
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("remove assistant status = %d, want 403, body = %#v", resp.StatusCode, body)
+	}
+	var member store.ConversationMember
+	if err := db.First(&member, "conversation_id = ? AND member_type = ? AND member_id = ?",
+		conversation.ID, store.ConversationMemberTypeApp, appregistry.AIAssistantAppID).Error; err != nil || member.LeftAt != nil {
+		t.Fatalf("assistant still active = %#v, err = %v", member, err)
 	}
 }
 
