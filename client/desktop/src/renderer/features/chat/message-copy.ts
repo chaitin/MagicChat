@@ -23,6 +23,8 @@ export function resolveMessageBodyCopyPayload(
 // 消息摘要带类型前缀（如 [文件]），复制时按类型取原文。
 function copyTextForBody(body: DesktopMessage["body"], summary: string) {
   switch (body.type) {
+    case "markdown":
+      return body.content
     case "link":
       return body.url
     case "file":

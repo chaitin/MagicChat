@@ -19,6 +19,17 @@ test("消息复制优先使用选中文字", () => {
   )
 })
 
+test("Markdown 消息无选区时复制原文，有选区时只复制选中内容", () => {
+  const markdown = "# 标题\n\n**加粗**与[链接](https://example.com)\n```ts\nconst a = 1\n```"
+  const value = message({ type: "markdown", content: markdown }, "标题\n加粗与链接\nconst a = 1")
+  assert.deepEqual(resolveMessageCopyPayload(value, ""), { type: "text", text: markdown })
+  assert.deepEqual(resolveMessageCopyPayload(value, "加粗"), { type: "text", text: "加粗" })
+  assert.deepEqual(
+    resolveMessageBodyCopyPayload({ type: "markdown", content: markdown }, "摘要", ""),
+    { type: "text", text: markdown },
+  )
+})
+
 test("合并聊天记录中的消息使用自己的摘要", () => {
   assert.deepEqual(
     resolveMessageBodyCopyPayload({ type: "text", content: "内层正文" }, "内层摘要", ""),
