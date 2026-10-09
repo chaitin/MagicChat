@@ -9,6 +9,7 @@ import {
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import type { MentionTarget } from "@/lib/message-mentions"
 import { shouldReloadConversationListForSelection } from "@/features/chat/conversation-list-order"
+import { createCoalescedConversationListLoader } from "@/features/chat/conversation-list-loader"
 
 export function useChatData({
   targetId,
@@ -58,6 +59,9 @@ export function useChatData({
   const [revokingMessageIds, setRevokingMessageIds] = useState<Set<string>>(new Set())
   const [newMessageCount, setNewMessageCount] = useState(0)
   const realtimeRevisionRef = useRef(0)
+  const conversationListLoaderRef = useRef<ReturnType<
+    typeof createCoalescedConversationListLoader
+  > | null>(null)
   const loadingBeforeRef = useRef(false)
   const loadingAfterRef = useRef(false)
   const messageWindowRevisionRef = useRef(0)
@@ -211,29 +215,35 @@ export function useChatData({
   }, [selectedId, targetId])
 
   useEffect(() => {
-    let cancelled = false
-    async function loadConversations() {
-      if (!window.desktop || !targetId) return
-      try {
-        const result = await window.desktop.accountData.listConversations({
+    if (!window.desktop || !targetId) return
+    const loader = createCoalescedConversationListLoader(
+      () =>
+        window.desktop!.accountData.listConversations({
           targetId,
           selectedConversationId: selectedIdRef.current,
-        })
-        if (cancelled) return
+        }),
+      (result) => {
         if (result.ok) setConversations(result.data)
         else
           showToast({ status: "error", title: "无法读取对话", description: result.error.message })
-      } catch {
-        if (!cancelled) showToast({ status: "error", title: "无法读取对话" })
-      } finally {
-        if (!cancelled) setLoadingConversations(false)
-      }
-    }
-    void loadConversations()
+        setLoadingConversations(false)
+      },
+      () => {
+        showToast({ status: "error", title: "无法读取对话" })
+        setLoadingConversations(false)
+      },
+    )
+    conversationListLoaderRef.current = loader
+    loader.request()
     return () => {
-      cancelled = true
+      loader.dispose()
+      if (conversationListLoaderRef.current === loader) conversationListLoaderRef.current = null
     }
-  }, [conversationRevision, showToast, targetId])
+  }, [showToast, targetId])
+
+  useEffect(() => {
+    if (conversationRevision > 0) conversationListLoaderRef.current?.request()
+  }, [conversationRevision])
 
   useEffect(() => {
     if (!window.desktop || !targetId) return

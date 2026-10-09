@@ -28,8 +28,7 @@ export function hydrateContacts(directory: ClientContactDirectory | undefined, u
   }) }))
   return { apps: directory.apps, groups, users: directory.userIds.flatMap((id) => users[id] ? [users[id]] : []) }
 }
-export function hydrateClientConversationUsers(value: ClientConversation, appList: ContactApp[], users: Readonly<Record<string, ContactUser>>): ClientConversation {
-  const apps = Object.fromEntries(appList.map((app) => [app.id, app]))
+export function hydrateClientConversationUsers(value: ClientConversation, appList: ContactApp[], users: Readonly<Record<string, ContactUser>>, apps = Object.fromEntries(appList.map((app) => [app.id, app]))): ClientConversation {
   const members = value.members?.map((member) => { const p = profile(member.type, member.id, users, apps); return p ? { ...member, avatar: p.avatar, email: p.email, name: p.name, nickname: p.nickname, phone: p.phone } : member })
   const sender = value.lastMessageSender; const senderProfile = sender && profile(sender.type, sender.id, users, apps)
   const lastMessageSender = sender && senderProfile ? { ...sender, name: senderProfile.name, nickname: senderProfile.nickname } : sender

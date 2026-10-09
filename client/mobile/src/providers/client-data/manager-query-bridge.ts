@@ -3,19 +3,47 @@ import { useEffect, useRef, useState } from "react"
 
 export type BridgeState<T> = { data?: T; error: Error | null; localReady: boolean }
 
+export function subscribeCoalescedSnapshot<T>(
+  subscribe: (onChange: () => void) => () => void,
+  getSnapshot: () => Promise<T>,
+  listener: (snapshot: T) => void
+) {
+  let closed = false
+  let reading = false
+  let dirty = false
+  const read = async () => {
+    if (reading) { dirty = true; return }
+    reading = true
+    do {
+      dirty = false
+      try {
+        const snapshot = await getSnapshot()
+        if (!closed && !dirty) listener(snapshot)
+      } catch { /* Keep the previous projection if a notification read fails. */ }
+    } while (!closed && dirty)
+    reading = false
+  }
+  const unsubscribe = subscribe(() => { void read() })
+  return () => { closed = true; unsubscribe() }
+}
+
 export function startManagerQueryBridge<T>({ generation, getSnapshot, onState, project, queryClient, subscribe }: {
   generation: number; getSnapshot: (signal: AbortSignal) => Promise<T>; onState: (state: BridgeState<T>, generation: number) => void
   project: (queryClient: Pick<QueryClient, "setQueryData">, snapshot: T) => void
   queryClient: Pick<QueryClient, "setQueryData">; subscribe: (listener: (snapshot: T) => void) => () => void
 }) {
   const abort = new AbortController()
+  let eventVersion = 0
   const apply = (data: T) => {
     if (abort.signal.aborted) return
     project(queryClient, data); onState({ data, error: null, localReady: true }, generation)
   }
-  const unsubscribe = subscribe(apply)
-  void getSnapshot(abort.signal).then(apply, (value: unknown) => {
-    if (!abort.signal.aborted) onState({ error: value instanceof Error ? value : new Error("加载本地缓存失败"), localReady: true }, generation)
+  const unsubscribe = subscribe((data) => { eventVersion += 1; apply(data) })
+  const initialVersion = eventVersion
+  void getSnapshot(abort.signal).then((data) => {
+    if (initialVersion === eventVersion) apply(data)
+  }, (value: unknown) => {
+    if (!abort.signal.aborted && initialVersion === eventVersion) onState({ error: value instanceof Error ? value : new Error("加载本地缓存失败"), localReady: true }, generation)
   })
   return () => { abort.abort(); unsubscribe() }
 }

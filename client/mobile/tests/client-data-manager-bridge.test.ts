@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { startManagerQueryBridge, type BridgeState } from "@/providers/client-data/manager-query-bridge"
+import { startManagerQueryBridge, subscribeCoalescedSnapshot, type BridgeState } from "@/providers/client-data/manager-query-bridge"
 import { startManagerPolling } from "@/providers/client-data/use-manager-polling"
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -17,6 +17,70 @@ test("fake manager mirrors initial snapshot and subscribed events into Query", a
   await tick(); listener?.(2)
   assert.deepEqual(writes, [1, 2]); assert.equal(states.at(-1)?.data, 2)
   stop(); assert.equal(unsubscribed, 1)
+})
+
+test("an initial read cannot overwrite a later event snapshot", async () => {
+  let resolveInitial!: (value: string) => void
+  let listener!: (value: string) => void
+  const writes: string[] = []
+  const stop = startManagerQueryBridge({
+    generation: 1,
+    getSnapshot: () => new Promise((resolve) => { resolveInitial = resolve }),
+    queryClient: { setQueryData: () => undefined },
+    project: (_query, value) => { writes.push(value) },
+    subscribe: (next) => { listener = next; return () => undefined },
+    onState: () => undefined,
+  })
+  listener("new")
+  resolveInitial("old")
+  await tick()
+  assert.deepEqual(writes, ["new"])
+  stop()
+})
+
+test("burst notifications share reads and discard stale intermediate snapshots", async () => {
+  let notify!: () => void
+  let resolveFirst!: (value: string) => void
+  let reads = 0
+  let unsubscribed = false
+  const received: string[] = []
+  const stop = subscribeCoalescedSnapshot(
+    (onChange) => { notify = onChange; return () => { unsubscribed = true } },
+    () => {
+      reads += 1
+      return reads === 1
+        ? new Promise<string>((resolve) => { resolveFirst = resolve })
+        : Promise.resolve("latest")
+    },
+    (snapshot) => { received.push(snapshot) }
+  )
+  notify(); notify(); notify()
+  assert.equal(reads, 1)
+  resolveFirst("stale")
+  await tick()
+  assert.equal(reads, 2)
+  assert.deepEqual(received, ["latest"])
+  notify()
+  await tick()
+  assert.deepEqual(received, ["latest", "latest"])
+  stop()
+  assert.equal(unsubscribed, true)
+})
+
+test("an unsubscribed conversation reader cannot publish an in-flight snapshot", async () => {
+  let notify!: () => void
+  let resolveRead!: (value: string) => void
+  const received: string[] = []
+  const stop = subscribeCoalescedSnapshot(
+    (onChange) => { notify = onChange; return () => undefined },
+    () => new Promise<string>((resolve) => { resolveRead = resolve }),
+    (value) => { received.push(value) }
+  )
+  notify()
+  stop()
+  resolveRead("previous-account")
+  await tick()
+  assert.deepEqual(received, [])
 })
 
 test("target generation discards stale snapshot and unsubscribes old target", async () => {

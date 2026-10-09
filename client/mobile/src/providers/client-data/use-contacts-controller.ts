@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import type { AuthenticatedTarget } from "@/core/server-target"
+import type { ContactUser } from "@/core/models"
 import { contactManager } from "@/data/contacts"
 import { projectContactsSnapshot } from "@/data/manager-query-projector"
 import { contactsQueryOptions } from "@/data/query"
 import { collectContactUserIds, hydrateContacts, toError } from "./helpers"
 import { useManagerQueryBridge } from "./manager-query-bridge"
 import { useManagerPolling } from "./use-manager-polling"
+
+const EMPTY_USER_PROFILES: Record<string, ContactUser> = {}
 
 export function useContactsController(target: AuthenticatedTarget, enabled: boolean, poll: number | false, onError: (error: unknown) => void) {
   const queryClient = useQueryClient(); const query = useQuery({ ...contactsQueryOptions(target), enabled: false })
@@ -22,8 +25,13 @@ export function useContactsController(target: AuthenticatedTarget, enabled: bool
   useManagerPolling(enabled, poll, pollRefresh)
   const directory = snapshot?.directory ?? query.data
   const required = collectContactUserIds(directory)
-  useEffect(() => { if (enabled && required.length) queueMicrotask(() => void ensureUsers(required).catch(() => undefined)) }, [enabled, ensureUsers, required])
-  const usersById = snapshot?.usersById ?? {}; const unavailable = snapshot?.unavailableUserIds ?? new Set<string>()
+  useEffect(() => {
+    if (!enabled) return
+    const ids = collectContactUserIds(directory)
+    if (ids.length) queueMicrotask(() => void ensureUsers(ids).catch(() => undefined))
+  }, [directory, enabled, ensureUsers])
+  const usersById = snapshot?.usersById ?? EMPTY_USER_PROFILES; const unavailable = snapshot?.unavailableUserIds ?? new Set<string>()
   const profilesReady = required.every((id) => Boolean(usersById[id]) || unavailable.has(id))
-  return { data: hydrateContacts(directory, usersById), directory, usersById, profilesReady, localReady: bridge.localReady, refreshState: refreshing, error: bridge.error ?? refreshError, refresh, ensureUsers }
+  const data = useMemo(() => hydrateContacts(directory, usersById), [directory, usersById])
+  return { data, directory, usersById, profilesReady, localReady: bridge.localReady, refreshState: refreshing, error: bridge.error ?? refreshError, refresh, ensureUsers }
 }

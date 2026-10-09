@@ -1,5 +1,7 @@
 import { Platform } from "react-native"
 
+import { recordMobilePerf } from "@/diagnostics/mobile-perf"
+
 import { DATABASE_VERSION } from "@/data/database/database-version"
 import { emitDatabaseTelemetry } from "@/data/database/database-telemetry"
 import { createDatabaseMigrationSQL } from "@/data/database/migrations"
@@ -83,6 +85,12 @@ async function openNativeAdapter(): Promise<DatabaseAdapter> {
 }
 
 function observeDatabaseOperation(metric: DatabaseOperationMetric) {
+  if (metric.name === "conversations.list") {
+    recordMobilePerf("conversations.sqlite_list_ms", metric.executionDurationMs)
+  } else if (metric.name === "conversations.upsert-batch") {
+    recordMobilePerf("conversations.sqlite_upsert_ms", metric.executionDurationMs)
+    recordMobilePerf("conversations.sqlite_upsert_queue_ms", metric.queueDurationMs)
+  }
   emitDatabaseTelemetry({
     operation: metric.name,
     kind: metric.kind,
