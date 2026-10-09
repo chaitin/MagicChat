@@ -23,9 +23,14 @@ func Configure() func() {
 		log.Printf("create log directory failed path=%s error=%v", filepath.Dir(logFile), err)
 		return func() {}
 	}
-	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		log.Printf("open log file failed path=%s error=%v", logFile, err)
+		return func() {}
+	}
+	if err := file.Chmod(0o600); err != nil {
+		log.Printf("secure log file failed path=%s error=%v", logFile, err)
+		_ = file.Close()
 		return func() {}
 	}
 

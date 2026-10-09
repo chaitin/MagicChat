@@ -1,10 +1,12 @@
 package appclient
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"testing"
 
@@ -49,6 +51,10 @@ func TestTopicRouterPromptUsesThinkingAndExecutionComplexity(t *testing.T) {
 func TestModelTopicRouterReturnsBooleanDecision(t *testing.T) {
 	for _, needsTopic := range []bool{false, true} {
 		t.Run(fmt.Sprintf("needs_topic=%t", needsTopic), func(t *testing.T) {
+			var logs bytes.Buffer
+			previous := log.Writer()
+			log.SetOutput(&logs)
+			t.Cleanup(func() { log.SetOutput(previous) })
 			var gotRequest llm.Request
 			model := llmModelFunc(func(_ context.Context, request llm.Request) (llm.Response, error) {
 				gotRequest = request
@@ -77,6 +83,9 @@ func TestModelTopicRouterReturnsBooleanDecision(t *testing.T) {
 			}
 			if got != needsTopic {
 				t.Fatalf("NeedsTopic() = %t, want %t", got, needsTopic)
+			}
+			if want := fmt.Sprintf("assistant topic route conversation_id=conversation-1 needs_topic=%t", needsTopic); !strings.Contains(logs.String(), want) || strings.Contains(logs.String(), "最近一个月") {
+				t.Fatalf("route log = %s, want %q without request content", logs.String(), want)
 			}
 			if gotRequest.System != topicRouterSystemPrompt || len(gotRequest.Tools) != 1 || gotRequest.Tools[0].Name != decideTopicToolName {
 				t.Fatalf("model request = %#v", gotRequest)

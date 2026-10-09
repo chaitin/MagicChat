@@ -77,6 +77,30 @@ func TestLoadFromEnvDefaultsMaxSessionsToOneThousand(t *testing.T) {
 	}
 }
 
+func TestLoadFromEnvControlsModelContentLogging(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		want  bool
+	}{
+		{value: "", want: false},
+		{value: "false", want: false},
+		{value: "true", want: true},
+		{value: "1", want: true},
+	} {
+		values := requiredEnvironment()
+		values["ASSISTANT_LOG_MODEL_CONTENT"] = tc.value
+		cfg, err := LoadFromEnv(mapGetenv(values))
+		if err != nil || cfg.Agent.LogModelContent != tc.want {
+			t.Fatalf("value=%q: log model content=%t, err=%v", tc.value, cfg.Agent.LogModelContent, err)
+		}
+	}
+	values := requiredEnvironment()
+	values["ASSISTANT_LOG_MODEL_CONTENT"] = "on please"
+	if _, err := LoadFromEnv(mapGetenv(values)); err == nil {
+		t.Fatal("invalid logging flag must be rejected")
+	}
+}
+
 func TestLoadReadsProcessEnvironment(t *testing.T) {
 	for name, value := range requiredEnvironment() {
 		t.Setenv(name, value)

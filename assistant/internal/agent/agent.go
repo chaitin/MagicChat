@@ -278,6 +278,7 @@ var eastEightTimeZone = time.FixedZone("UTC+8", 8*60*60)
 type Agent struct {
 	model                llm.Model
 	registry             ToolRegistry
+	logModelContent      bool
 	maxTurns             int
 	systemPrompt         string
 	contextWindowTokens  int
@@ -287,6 +288,7 @@ type Agent struct {
 
 type Session struct {
 	agent          *Agent
+	conversationID string
 	mu             sync.Mutex
 	messages       []llm.Message
 	pending        []pendingSessionMessage
@@ -428,6 +430,12 @@ func WithToolRegistry(registry ToolRegistry) Option {
 	}
 }
 
+func WithModelContentLogging(enabled bool) Option {
+	return func(agent *Agent) {
+		agent.logModelContent = enabled
+	}
+}
+
 func WithMaxTurns(maxTurns int) Option {
 	return func(agent *Agent) {
 		agent.maxTurns = maxTurns
@@ -478,8 +486,9 @@ func (a *Agent) NewSession(request Request) (*Session, error) {
 	}
 
 	return &Session{
-		agent:    a,
-		messages: messages,
+		agent:          a,
+		conversationID: request.Conversation.ID,
+		messages:       messages,
 	}, nil
 }
 
@@ -570,6 +579,7 @@ func (s *Session) RunCycleWithProgress(ctx context.Context, sink OutputSink, obs
 			}
 			return err
 		}
+		s.logModelTurn(turn+1, response.Blocks)
 		s.appendMessage(llm.Message{
 			Role:   llm.RoleAssistant,
 			Blocks: response.Blocks,
@@ -660,6 +670,35 @@ func reportResponsePhases(observer ProgressObserver, response llm.Response) {
 			reportPhase(observer, PhaseTool)
 		case llm.BlockTypeText:
 			reportPhase(observer, PhaseText)
+		}
+	}
+}
+
+func (s *Session) logModelTurn(turn int, blocks []llm.Block) {
+	var thinking, text, tools int
+	for _, block := range blocks {
+		switch block.Type {
+		case llm.BlockTypeThinking:
+			thinking++
+		case llm.BlockTypeText:
+			text++
+		case llm.BlockTypeToolUse:
+			tools++
+		}
+	}
+	log.Printf("assistant model turn conversation_id=%s turn=%d thinking_blocks=%d text_blocks=%d tool_calls=%d", s.conversationID, turn, thinking, text, tools)
+	for _, block := range blocks {
+		switch block.Type {
+		case llm.BlockTypeThinking:
+			if s.agent.logModelContent && strings.TrimSpace(block.Thinking) != "" {
+				log.Printf("assistant model thinking conversation_id=%s turn=%d content=%q", s.conversationID, turn, block.Thinking)
+			}
+		case llm.BlockTypeText:
+			if s.agent.logModelContent && strings.TrimSpace(block.Text) != "" {
+				log.Printf("assistant model text conversation_id=%s turn=%d content=%q", s.conversationID, turn, block.Text)
+			}
+		case llm.BlockTypeToolUse:
+			log.Printf("assistant model tool conversation_id=%s turn=%d name=%q", s.conversationID, turn, block.ToolName)
 		}
 	}
 }
@@ -1190,6 +1229,7 @@ func (s *Session) callTools(ctx context.Context, toolUses []llm.Block) ([]llm.Bl
 			return results, hasFinalOutput, true
 		}
 		result, finalOutput := s.agent.callTool(ctx, toolUse)
+		log.Printf("assistant tool result conversation_id=%s name=%q error=%t final=%t", s.conversationID, toolUse.ToolName, result.IsError, finalOutput)
 		results = append(results, result)
 		if finalOutput {
 			hasFinalOutput = true

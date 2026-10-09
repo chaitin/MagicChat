@@ -1,10 +1,12 @@
 package builtintools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"slices"
 	"strings"
 	"testing"
@@ -1244,6 +1246,10 @@ func TestReplyToolCallsMessageSendForCurrentConversation(t *testing.T) {
 }
 
 func TestReplyToolTargetsCurrentDirectConversation(t *testing.T) {
+	var logs bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(previous) })
 	requester := &fakeRequester{}
 	ctx := WithScope(context.Background(), Scope{
 		ConversationID: "private-conversation", ConversationType: "direct", Requester: requester,
@@ -1261,6 +1267,17 @@ func TestReplyToolTargetsCurrentDirectConversation(t *testing.T) {
 	}
 	if payload.Target.Type != "conversation" || payload.Target.ConversationID != "private-conversation" || payload.Message.Content != "在的" {
 		t.Fatalf("private reply payload = %#v", payload)
+	}
+	if !strings.Contains(logs.String(), `assistant reply sent conversation_id=private-conversation type=text content="在的"`) {
+		t.Fatalf("reply log = %s", logs.String())
+	}
+	logs.Reset()
+	failedRequester := &fakeRequester{handle: func(context.Context, string, any) (json.RawMessage, error) {
+		return nil, errors.New("server rejected reply")
+	}}
+	failedCtx := WithScope(context.Background(), Scope{ConversationID: "private-conversation", ConversationType: "direct", Requester: failedRequester})
+	if _, err := callReply(failedCtx, json.RawMessage(`{"type":"text","content":"未发送"}`)); err == nil || strings.Contains(logs.String(), "未发送") {
+		t.Fatalf("failed reply err=%v, logs=%s", err, logs.String())
 	}
 }
 
@@ -1373,6 +1390,10 @@ func TestReplyToolCallsMessageSendForCard(t *testing.T) {
 }
 
 func TestReplyToolSendsChoiceAndEndsTheCurrentCycle(t *testing.T) {
+	var logs bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(previous) })
 	requester := &fakeRequester{}
 	ctx := WithScope(context.Background(), Scope{
 		ConversationID: "conversation-1", ConversationType: "app", Requester: requester,
@@ -1403,6 +1424,11 @@ func TestReplyToolSendsChoiceAndEndsTheCurrentCycle(t *testing.T) {
 	if payload.Message.Type != messageTypeChoice || payload.Message.ContentType != messageTypeMarkdown ||
 		payload.Message.Selection != "multiple" || len(payload.Message.Options) != 2 || payload.Message.Options[1].ID != "project_b" {
 		t.Fatalf("choice payload = %#v", payload.Message)
+	}
+	for _, want := range []string{`type=choice content="**请选择项目**"`, `selection=multiple`, `项目 A`, `项目 B`} {
+		if !strings.Contains(logs.String(), want) {
+			t.Fatalf("missing %q in choice reply log: %s", want, logs.String())
+		}
 	}
 }
 

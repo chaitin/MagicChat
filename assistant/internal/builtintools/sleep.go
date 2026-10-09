@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"regexp"
 	"strings"
@@ -884,7 +885,23 @@ func callReply(ctx context.Context, input json.RawMessage) (mcpclient.ToolResult
 	if message.Type == messageTypeChoice {
 		result.Final = true
 	}
+	logAssistantReply(scope.ConversationID, message)
 	return result, nil
+}
+
+func logAssistantReply(conversationID string, message scopedMessagePayload) {
+	switch message.Type {
+	case "text", "markdown":
+		log.Printf("assistant reply sent conversation_id=%s type=%s content=%q", conversationID, message.Type, message.Content)
+	case messageTypeChoice:
+		labels := make([]string, 0, len(message.Options))
+		for _, option := range message.Options {
+			labels = append(labels, option.Label)
+		}
+		log.Printf("assistant reply sent conversation_id=%s type=choice content=%q selection=%s options=%q", conversationID, message.Content, message.Selection, labels)
+	default:
+		log.Printf("assistant reply sent conversation_id=%s type=%s caption=%q title=%q", conversationID, message.Type, message.Caption, message.Title)
+	}
 }
 
 func callSendAsUser(ctx context.Context, input json.RawMessage) (mcpclient.ToolResult, error) {
@@ -945,6 +962,7 @@ func callReplyEntityCard(ctx context.Context, input json.RawMessage) (mcpclient.
 	if err != nil {
 		return mcpclient.ToolResult{}, err
 	}
+	logAssistantReply(scope.ConversationID, message)
 	return result, nil
 }
 

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"strings"
 	"time"
 
@@ -118,7 +119,12 @@ func (r *modelTopicRouter) NeedsTopic(ctx context.Context, request agent.Request
 	if err != nil {
 		return false, fmt.Errorf("route topic with model: %w", err)
 	}
-	return parseTopicDecision(response)
+	needsTopic, err := parseTopicDecision(response)
+	if err != nil {
+		return false, err
+	}
+	log.Printf("assistant topic route conversation_id=%s needs_topic=%t", request.Conversation.ID, needsTopic)
+	return needsTopic, nil
 }
 
 func buildTopicRoutingPayload(request agent.Request, historyLimit int) ([]byte, error) {

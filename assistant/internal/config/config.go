@@ -25,8 +25,9 @@ type Config struct {
 }
 
 type AgentConfig struct {
-	MaxSessions int
-	MaxTurns    int
+	LogModelContent bool
+	MaxSessions     int
+	MaxTurns        int
 }
 
 type LLMConfig struct {
@@ -69,6 +70,13 @@ func LoadFromEnv(getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	logModelContent := false
+	if value := strings.TrimSpace(getenv("ASSISTANT_LOG_MODEL_CONTENT")); value != "" {
+		logModelContent, err = strconv.ParseBool(value)
+		if err != nil {
+			return Config{}, fmt.Errorf("ASSISTANT_LOG_MODEL_CONTENT must be a boolean: %w", err)
+		}
+	}
 
 	llmBaseURL, err := requiredEnv(getenv, "LLM_BASE_URL")
 	if err != nil {
@@ -99,7 +107,7 @@ func LoadFromEnv(getenv func(string) string) (Config, error) {
 	}
 
 	return Config{
-		Agent:        AgentConfig{MaxSessions: maxSessions, MaxTurns: maxTurns},
+		Agent:        AgentConfig{LogModelContent: logModelContent, MaxSessions: maxSessions, MaxTurns: maxTurns},
 		AppID:        AIAssistantAppID,
 		AppSecret:    appSecret,
 		WebSocketURL: webSocketURL,

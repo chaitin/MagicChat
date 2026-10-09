@@ -1,10 +1,12 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"testing"
@@ -456,6 +458,56 @@ func TestAgentBuildsEmptyHistoryAsArray(t *testing.T) {
 	contextMessage := gotRequest.Messages[0]
 	if !strings.Contains(contextMessage.Content, `"messages":[]`) {
 		t.Fatalf("context content = %q, want messages to be an empty array", contextMessage.Content)
+	}
+}
+
+func TestModelTurnLoggingIncludesContentOnlyWhenEnabled(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("enabled=%t", enabled), func(t *testing.T) {
+			var logs bytes.Buffer
+			previous := log.Writer()
+			log.SetOutput(&logs)
+			t.Cleanup(func() { log.SetOutput(previous) })
+			calls := 0
+			model := modelFunc(func(context.Context, llm.Request) (llm.Response, error) {
+				calls++
+				if calls == 1 {
+					return llm.Response{Blocks: []llm.Block{
+						{Type: llm.BlockTypeThinking, Thinking: "敏感思考文本"},
+						{Type: llm.BlockTypeToolUse, ToolName: "test__lookup", ToolUseID: "tool-1", ToolInput: json.RawMessage(`{"token":"PRIVATE_TOOL_ARGUMENT"}`)},
+					}}, nil
+				}
+				return llm.Response{Blocks: []llm.Block{{Type: llm.BlockTypeText, Text: "最终回复"}}}, nil
+			})
+			registry := &fakeToolRegistry{tools: []mcpclient.Tool{{Name: "test__lookup"}}, results: map[string]mcpclient.ToolResult{
+				"test__lookup": {Content: "PRIVATE_TOOL_RESULT"},
+			}}
+			a := New(model, WithToolRegistry(registry), WithModelContentLogging(enabled))
+			var reply string
+			err := a.Run(context.Background(), Request{Conversation: Conversation{ID: "conversation-1"}, Content: "test"}, sinkFunc(func(_ context.Context, content string) error {
+				reply = content
+				return nil
+			}))
+			if err != nil || calls != 2 || reply != "最终回复" {
+				t.Fatalf("calls=%d reply=%q err=%v", calls, reply, err)
+			}
+			text := logs.String()
+			for _, want := range []string{"conversation_id=conversation-1 turn=1", "conversation_id=conversation-1 turn=2", `name="test__lookup"`, "error=false"} {
+				if !strings.Contains(text, want) {
+					t.Fatalf("missing %q in logs: %s", want, text)
+				}
+			}
+			for _, secret := range []string{"PRIVATE_TOOL_ARGUMENT", "PRIVATE_TOOL_RESULT"} {
+				if strings.Contains(text, secret) {
+					t.Fatalf("tool data leaked in logs: %s", text)
+				}
+			}
+			for _, content := range []string{"敏感思考文本", "最终回复"} {
+				if strings.Contains(text, content) != enabled {
+					t.Fatalf("model content %q logging=%t, enabled=%t: %s", content, strings.Contains(text, content), enabled, text)
+				}
+			}
+		})
 	}
 }
 

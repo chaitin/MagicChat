@@ -1,10 +1,12 @@
 package appclient
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -738,6 +740,10 @@ func TestMentionedAssistantSendsModelTextToCurrentConversation(t *testing.T) {
 }
 
 func TestDirectConversationReplyFallbackAndTopicNotice(t *testing.T) {
+	var logs bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(previous) })
 	conversation := conversationPayload{ID: "private-1", Type: "direct"}
 	var sent sendMessageRequestPayload
 	if err := sendMarkdownReply(context.Background(), func(_ context.Context, message envelope) error {
@@ -761,6 +767,18 @@ func TestDirectConversationReplyFallbackAndTopicNotice(t *testing.T) {
 	notice, err := sendMarkdownReplyRequest(context.Background(), requester, conversation, "正在处理", "message-1")
 	if err != nil || notice.ID != "notice-1" {
 		t.Fatalf("direct topic notice = %#v, err = %v", notice, err)
+	}
+	for _, want := range []string{"assistant reply queued conversation_id=private-1", "content=\"" + agent.ProcessingErrorFallback + "\"", "assistant reply sent conversation_id=private-1", "message_id=notice-1", "content=\"正在处理\""} {
+		if !strings.Contains(logs.String(), want) {
+			t.Fatalf("missing %q in logs: %s", want, logs.String())
+		}
+	}
+	logs.Reset()
+	err = sendMarkdownReply(context.Background(), func(context.Context, envelope) error {
+		return errors.New("websocket unavailable")
+	}, conversation, "未送达")
+	if err == nil || strings.Contains(logs.String(), "未送达") {
+		t.Fatalf("failed reply err=%v, logs=%s", err, logs.String())
 	}
 }
 

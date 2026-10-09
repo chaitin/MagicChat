@@ -310,7 +310,7 @@ func New(ctx context.Context, cfg config.Config) (*Client, error) {
 	return &Client{
 		cfg:            cfg,
 		dialer:         websocket.DefaultDialer,
-		assistantAgent: agent.New(agentModel, agent.WithToolRegistry(registry), agent.WithMaxTurns(cfg.Agent.MaxTurns)),
+		assistantAgent: agent.New(agentModel, agent.WithToolRegistry(registry), agent.WithMaxTurns(cfg.Agent.MaxTurns), agent.WithModelContentLogging(cfg.Agent.LogModelContent)),
 		topicRouter:    newModelTopicRouter(routerModel),
 		mcpSources:     sources,
 		runner: newConversationAgentRunner(ctx, conversationAgentRunnerOptions{
@@ -1456,13 +1456,17 @@ func sendMarkdownReply(ctx context.Context, writeJSON func(context.Context, enve
 		return err
 	}
 
-	return writeJSON(ctx, envelope{
+	if err := writeJSON(ctx, envelope{
 		V:       protocolVersion,
 		Kind:    kindRequest,
 		ID:      newRequestID(),
 		Method:  methodMessageSend,
 		Payload: payload,
-	})
+	}); err != nil {
+		return err
+	}
+	log.Printf("assistant reply queued conversation_id=%s type=markdown content=%q", conversation.ID, content)
+	return nil
 }
 
 func sendMarkdownReplyRequest(
@@ -1501,6 +1505,7 @@ func sendMarkdownReplyRequest(
 	if strings.TrimSpace(response.Message.ID) == "" {
 		return messagePayload{}, errors.New("message send response is invalid")
 	}
+	log.Printf("assistant reply sent conversation_id=%s type=markdown message_id=%s content=%q", conversation.ID, response.Message.ID, content)
 	return response.Message, nil
 }
 
