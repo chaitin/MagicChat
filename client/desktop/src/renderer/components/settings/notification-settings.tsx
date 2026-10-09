@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import { Switch } from "@/components/motion/switch"
+import { useNotificationPermission } from "@/notification-permission-provider"
 import {
   Item,
   ItemActions,
@@ -16,6 +17,7 @@ import {
 
 export function NotificationSettings({ disabled }: { disabled: boolean }) {
   const { showToast } = useAnimatedToast()
+  const { ensureNotificationPermission } = useNotificationPermission()
   const [settings, setSettings] = useState(DEFAULT_NOTIFICATION_SETTINGS)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -78,7 +80,10 @@ export function NotificationSettings({ disabled }: { disabled: boolean }) {
           description="收到新消息时显示系统桌面通知"
           checked={settings.desktopEnabled}
           disabled={switchDisabled}
-          onCheckedChange={(checked) => void update({ ...settings, desktopEnabled: checked })}
+          onCheckedChange={(checked) => {
+            if (checked) void ensureNotificationPermission({ request: true })
+            void update({ ...settings, desktopEnabled: checked })
+          }}
         />
         <NotificationSettingItem
           title="显示消息内容"

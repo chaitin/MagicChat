@@ -80,6 +80,7 @@ let isQuitting = false
 const appIconPath = app.isPackaged
   ? path.join(process.resourcesPath, "tray-icon.png")
   : path.join(__dirname, "../../resources/icon.png")
+const developmentDockIconPath = path.join(__dirname, "../../resources/mac-dev-dock-icon.png")
 
 function createWindow() {
   if (mainWindow) return
@@ -314,7 +315,9 @@ void app.whenReady().then(async () => {
   if (process.platform === "win32") app.setAppUserModelId("chat.jiying.desktop.next")
   if (process.platform === "darwin") {
     app.setActivationPolicy("regular")
-    if (!app.isPackaged) app.dock?.setIcon(appIconPath)
+    // Icon Composer is compiled into the packaged app's asset catalog. Development
+    // builds need its rendered fallback instead of the full-bleed cross-platform PNG.
+    if (!app.isPackaged) app.dock?.setIcon(developmentDockIconPath)
     await app.dock?.show()
   }
   let notificationSettings: NotificationSettings = DEFAULT_NOTIFICATION_SETTINGS
@@ -646,6 +649,19 @@ void app.whenReady().then(async () => {
   handleIpc(DESKTOP_CHANNELS.setNotificationSettings, async (input) => {
     await auth.setNotificationSettings(input as NotificationSettings)
     notificationSettings = (await auth.getAppSettings()).notifications
+    return null
+  })
+  handleIpc(DESKTOP_CHANNELS.openNotificationSettings, async () => {
+    const settingsUrl =
+      process.platform === "darwin"
+        ? "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+        : process.platform === "win32"
+          ? "ms-settings:notifications"
+          : null
+    if (!settingsUrl) {
+      throw new AuthFailure("notification_settings_unavailable", "请在系统设置中开启通知权限")
+    }
+    await shell.openExternal(settingsUrl)
     return null
   })
   handleIpc(DESKTOP_CHANNELS.setUnreadAttention, async (input) => {

@@ -31,6 +31,7 @@ const bridge: DesktopBridge = {
   setContentZoom: (zoom) => ipcRenderer.invoke(DESKTOP_CHANNELS.setContentZoom, zoom),
   setNotificationSettings: (settings) =>
     ipcRenderer.invoke(DESKTOP_CHANNELS.setNotificationSettings, settings),
+  openNotificationSettings: () => ipcRenderer.invoke(DESKTOP_CHANNELS.openNotificationSettings),
   setActiveConversation: (input) =>
     ipcRenderer.invoke(DESKTOP_CHANNELS.setActiveConversation, input),
   setUnreadAttention: (input) => ipcRenderer.invoke(DESKTOP_CHANNELS.setUnreadAttention, input),

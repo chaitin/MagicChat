@@ -113,6 +113,7 @@ export const DESKTOP_CHANNELS = {
   setTheme: "desktop-next:v1:set-theme",
   setContentZoom: "desktop-next:v1:set-content-zoom",
   setNotificationSettings: "desktop-next:v1:set-notification-settings",
+  openNotificationSettings: "desktop-next:v1:open-notification-settings",
   setShortcutSettings: "desktop-next:v1:set-shortcut-settings",
   setShortcutRecording: "desktop-next:v1:set-shortcut-recording",
   openSettings: "desktop-next:v1:open-settings",
@@ -167,6 +168,7 @@ export interface DesktopBridge {
   setTheme(theme: ThemePreference): Promise<AuthResult<null>>
   setContentZoom(zoom: ContentZoom): Promise<AuthResult<null>>
   setNotificationSettings(settings: NotificationSettings): Promise<AuthResult<null>>
+  openNotificationSettings(): Promise<AuthResult<null>>
   setActiveConversation(input: {
     targetId: string
     conversationId: string | null
