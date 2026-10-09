@@ -1435,9 +1435,11 @@ func conversationStatusSender(writeJSON func(context.Context, envelope) error, c
 func sendMarkdownReply(ctx context.Context, writeJSON func(context.Context, envelope) error, conversation conversationPayload, content string) error {
 	targetType := conversation.Type
 	switch targetType {
+	case "direct":
+		targetType = "conversation"
 	case "app", "group", "topic":
 	default:
-		return nil
+		return fmt.Errorf("unsupported reply conversation type %q", targetType)
 	}
 
 	payload, err := json.Marshal(sendMessageRequestPayload{
@@ -1472,6 +1474,8 @@ func sendMarkdownReplyRequest(
 ) (messagePayload, error) {
 	targetType := conversation.Type
 	switch targetType {
+	case "direct":
+		targetType = "conversation"
 	case "app", "group", "topic":
 	default:
 		return messagePayload{}, fmt.Errorf("unsupported reply conversation type %q", targetType)

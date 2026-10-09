@@ -673,6 +673,97 @@ func TestHandleParsedServerMessageRunsGroupMessageWithDirectAppMention(t *testin
 	}
 }
 
+func TestMentionedAssistantSendsModelTextToCurrentConversation(t *testing.T) {
+	appID := "00000000-0000-0000-0000-000000000001"
+	for _, tc := range []struct {
+		name         string
+		conversation conversationPayload
+		wantTarget   string
+	}{
+		{name: "private", conversation: conversationPayload{ID: "private-1", Type: "direct"}, wantTarget: "conversation"},
+		{name: "other app", conversation: conversationPayload{ID: "other-app-1", Type: "app", OwnerAppID: "11111111-1111-1111-1111-111111111111"}, wantTarget: "app"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			content := "{(@app/" + appID + ")} nihao"
+			body, err := json.Marshal(messageBody{Type: "text", Content: content})
+			if err != nil {
+				t.Fatal(err)
+			}
+			payload, err := json.Marshal(messageCreatedPayload{
+				Conversation: tc.conversation,
+				Message:      messagePayload{ID: "message-1", Seq: 1, Body: body, Summary: content},
+				Sender:       senderPayload{ID: "user-1", Type: "user", Name: "Alice"},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			requester := appRequestFunc(func(_ context.Context, method string, _ any) (json.RawMessage, error) {
+				if method != methodConversationMessagesList {
+					t.Fatalf("unexpected request method %q", method)
+				}
+				return json.Marshal(appListConversationMessagesResponsePayload{Messages: []historyMessagePayload{
+					historyTextMessage("message-1", 1, "user-1", "Alice", content),
+				}})
+			})
+			var sent []sendMessageRequestPayload
+			var modelCalled bool
+			handled := handleParsedServerMessage(context.Background(), envelope{
+				V: protocolVersion, Kind: kindEvent, Event: eventMessageCreated, Payload: payload,
+			}, appID, requester, replyAgentFunc(func(ctx context.Context, request agent.Request, sink agent.OutputSink) error {
+				modelCalled = true
+				if request.Conversation.ID != tc.conversation.ID {
+					t.Fatalf("model conversation = %q", request.Conversation.ID)
+				}
+				return sink.SendMarkdown(ctx, "你好！")
+			}), directAgentRunner{}, func(_ context.Context, message envelope) error {
+				if message.Method == methodConversationStatus {
+					return nil
+				}
+				if message.Method != methodMessageSend {
+					t.Fatalf("message method = %q", message.Method)
+				}
+				var reply sendMessageRequestPayload
+				if err := json.Unmarshal(message.Payload, &reply); err != nil {
+					return err
+				}
+				sent = append(sent, reply)
+				return nil
+			})
+			if !handled || !modelCalled || len(sent) != 1 || sent[0].Target.Type != tc.wantTarget ||
+				sent[0].Target.ConversationID != tc.conversation.ID || sent[0].Message.Content != "你好！" {
+				t.Fatalf("handled=%t modelCalled=%t sent=%#v, want current conversation reply", handled, modelCalled, sent)
+			}
+		})
+	}
+}
+
+func TestDirectConversationReplyFallbackAndTopicNotice(t *testing.T) {
+	conversation := conversationPayload{ID: "private-1", Type: "direct"}
+	var sent sendMessageRequestPayload
+	if err := sendMarkdownReply(context.Background(), func(_ context.Context, message envelope) error {
+		return json.Unmarshal(message.Payload, &sent)
+	}, conversation, agent.ProcessingErrorFallback); err != nil {
+		t.Fatal(err)
+	}
+	if sent.Target.Type != "conversation" || sent.Target.ConversationID != conversation.ID || sent.Message.Content != agent.ProcessingErrorFallback {
+		t.Fatalf("direct fallback = %#v", sent)
+	}
+	requester := appRequestFunc(func(_ context.Context, method string, payload any) (json.RawMessage, error) {
+		if method != methodMessageSend {
+			t.Fatalf("request method = %q", method)
+		}
+		request, ok := payload.(sendMessageRequestPayload)
+		if !ok || request.Target.Type != "conversation" || request.Target.ConversationID != conversation.ID || request.ReplyToMessageID != "message-1" {
+			t.Fatalf("direct topic notice = %#v", payload)
+		}
+		return json.Marshal(sendMessageResponsePayload{Message: messagePayload{ID: "notice-1"}})
+	})
+	notice, err := sendMarkdownReplyRequest(context.Background(), requester, conversation, "正在处理", "message-1")
+	if err != nil || notice.ID != "notice-1" {
+		t.Fatalf("direct topic notice = %#v, err = %v", notice, err)
+	}
+}
+
 func TestTopicSetupFailureUsesProcessingFallback(t *testing.T) {
 	appID := "00000000-0000-0000-0000-000000000001"
 	for _, failedMethod := range []string{methodMessageSend, methodConversationTopicCreate} {
