@@ -107,8 +107,8 @@ export function AppearanceSettings({
             <MorphSelectItem value="0.8">很小</MorphSelectItem>
             <MorphSelectItem value="0.9">略小</MorphSelectItem>
             <MorphSelectItem value="1">标准</MorphSelectItem>
-            <MorphSelectItem value="1.1">略大</MorphSelectItem>
-            <MorphSelectItem value="1.2">很大</MorphSelectItem>
+            <MorphSelectItem value="1.15">略大</MorphSelectItem>
+            <MorphSelectItem value="1.3">很大</MorphSelectItem>
           </MorphSelectContent>
         </MorphSelect>
       </div>

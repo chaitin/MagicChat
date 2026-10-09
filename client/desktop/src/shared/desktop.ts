@@ -3,7 +3,7 @@ import type { AuthBridge, AuthResult } from "./auth"
 import type { MediaBridge } from "./media"
 
 export type ThemePreference = "light" | "dark" | "system"
-export const CONTENT_ZOOM_OPTIONS = [0.8, 0.9, 1, 1.1, 1.2] as const
+export const CONTENT_ZOOM_OPTIONS = [0.8, 0.9, 1, 1.15, 1.3] as const
 export type ContentZoom = (typeof CONTENT_ZOOM_OPTIONS)[number]
 export const DEFAULT_CONTENT_ZOOM: ContentZoom = 1
 export function isContentZoom(value: unknown): value is ContentZoom {
@@ -11,7 +11,8 @@ export function isContentZoom(value: unknown): value is ContentZoom {
 }
 export function normalizeContentZoom(value: unknown): ContentZoom {
   if (value === 0.75) return 0.8
-  if (value === 1.25) return 1.2
+  if (value === 1.1 || value === 1.2) return 1.15
+  if (value === 1.25) return 1.3
   return isContentZoom(value) ? value : DEFAULT_CONTENT_ZOOM
 }
 export type DesktopPlatform = "windows" | "macos" | "linux"

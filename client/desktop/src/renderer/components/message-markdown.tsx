@@ -1,4 +1,4 @@
-import { Children, isValidElement, useMemo, type ReactNode } from "react"
+import { Children, isValidElement, useMemo, type MouseEvent, type ReactNode } from "react"
 import katex from "katex"
 import ReactMarkdown from "react-markdown"
 import remarkFlexibleMarkers from "remark-flexible-markers"
@@ -8,6 +8,7 @@ import remarkSupersub from "remark-supersub"
 import "katex/dist/katex.min.css"
 import { MarkdownCodeBlock } from "@/components/markdown-code-block"
 import { ContactProfilePopover } from "@/components/avatar/contact-profile-popover"
+import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   createRemarkMentionPlugin,
@@ -90,19 +91,7 @@ export function MessageMarkdown({
 
 function createComponents(currentUserId: string): MarkdownComponents {
   return {
-    a: ({ children, href }) =>
-      href ? (
-        <a
-          className="text-xgui-link underline-offset-2 hover:underline"
-          href={safeLink(href)}
-          rel="noreferrer"
-          target="_blank"
-        >
-          {children}
-        </a>
-      ) : (
-        <span>{children}</span>
-      ),
+    a: ({ children, href }) => <MarkdownLink href={href}>{children}</MarkdownLink>,
     blockquote: ({ children }) => (
       <blockquote className="border-l-2 border-border bg-foreground/5 py-2 pl-3 text-muted-foreground">
         {children}
@@ -219,6 +208,37 @@ function createComponents(currentUserId: string): MarkdownComponents {
       )
     },
   } as MarkdownComponents
+}
+
+function MarkdownLink({ children, href }: { children: ReactNode; href?: string }) {
+  const { showToast } = useAnimatedToast()
+  const url = href ? safeLink(href) : undefined
+  if (!url) return <span>{children}</span>
+
+  const openLink = async (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault()
+    if (typeof window.desktop?.openWebLink !== "function") {
+      showToast({ status: "error", title: "请重启桌面端后再打开链接" })
+      return
+    }
+    try {
+      const result = await window.desktop.openWebLink(url)
+      if (!result.ok) showToast({ status: "error", title: result.error.message })
+    } catch {
+      showToast({ status: "error", title: "无法打开链接" })
+    }
+  }
+
+  return (
+    <a
+      className="cursor-pointer text-xgui-link no-underline visited:text-xgui-link hover:text-xgui-link hover:no-underline"
+      href={url}
+      rel="noreferrer"
+      onClick={(event) => void openLink(event)}
+    >
+      {children}
+    </a>
+  )
 }
 
 type MentionProps = {
