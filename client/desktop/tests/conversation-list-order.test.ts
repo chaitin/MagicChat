@@ -77,6 +77,22 @@ test("普通会话切换不刷新列表，缺失会话与离开的旧话题需�
   )
 })
 
+test("只保留真正茉莉会话的特殊置顶，其他应用残留会话仍可取消", () => {
+  const archivedApp = conversation("old-app", "2026-09-22T08:00:00Z", {
+    type: "app", isBuiltinAssistant: false, pinned: false,
+  })
+  const assistant = conversation("assistant", "2026-09-21T08:00:00Z", {
+    type: "app", isBuiltinAssistant: true, pinned: true,
+  })
+  const result = groupConversationList([
+    archivedApp,
+    conversation("regular", "2026-09-22T12:00:00Z"),
+    assistant,
+  ])
+  assert.deepEqual(result.pinned.map(({ id }) => id), ["assistant"])
+  assert.deepEqual(result.regular.map(({ id }) => id), ["regular", "old-app"])
+})
+
 test("置顶父会话与其话题保持在置顶区域", () => {
   const result = groupConversationList([
     conversation("regular", "2026-09-22T12:00:00Z"),

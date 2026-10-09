@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"app/internal/appregistry"
+	"app/internal/config"
 	"app/internal/store"
 
 	"github.com/google/uuid"
@@ -76,6 +77,64 @@ func TestAssistantIsDefaultMemberInNewConversations(t *testing.T) {
 	var count int64
 	if err := db.Model(&store.ConversationMember{}).Where("conversation_id = ? AND member_id = ? AND left_at IS NULL", additional.Conversation.ID, appregistry.AIAssistantAppID).Count(&count).Error; err != nil || count != 1 {
 		t.Fatalf("disabled assistant member count = %d, err = %v", count, err)
+	}
+}
+
+func TestRemovedAppConversationKeepsOriginalIdentity(t *testing.T) {
+	db := openConversationTestDB(t)
+	now := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
+	owner := insertConversationTestUser(t, db, "removed-app-owner@example.com", "Owner", now)
+	app := store.App{ID: uuid.NewString(), Name: "原应用", Avatar: "/original.png", Enabled: true, Visibility: store.AppVisibilityPublic, ConnectionSecret: "removed-app-secret"}
+	if err := db.Create(&app).Error; err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(Dependencies{Apps: config.AppsConfig{AIAssistantSecret: "assistant-secret"}, DB: db, Now: func() time.Time { return now }})
+	opened, err := service.CreateApp(context.Background(), CreateAppCommand{Actor: actorFromTestUser(owner), AppID: app.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := opened.Conversation.ID
+	if err := db.Model(&store.ConversationMember{}).Where("conversation_id = ? AND member_type = ? AND member_id = ?", id, store.ConversationMemberTypeApp, app.ID).Update("left_at", now).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Where("app_id = ?", app.ID).Delete(&store.AppConversation{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Delete(&app).Error; err != nil {
+		t.Fatal(err)
+	}
+	var conversation store.Conversation
+	if err := db.First(&conversation, "id = ?", id).Error; err != nil {
+		t.Fatal(err)
+	}
+	item, err := service.loadItem(db, conversation, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item.Name != "原应用" || item.Avatar != "/original.png" || item.IsBuiltinAssistant || item.Pinned {
+		t.Fatalf("removed app item = %#v", item)
+	}
+	listed, err := service.List(context.Background(), ListCommand{AccountID: owner.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundRemoved, foundAssistant := false, false
+	for _, entry := range listed.Conversations {
+		if entry.ID == id {
+			foundRemoved = true
+			if entry.Name != "原应用" || entry.Avatar != "/original.png" || entry.IsBuiltinAssistant || entry.Pinned {
+				t.Fatalf("removed app list entry = %#v", entry)
+			}
+		}
+		if entry.ID == builtinAssistantConversationID(owner.ID) {
+			foundAssistant = true
+			if !entry.IsBuiltinAssistant || !entry.Pinned {
+				t.Fatalf("assistant list entry = %#v", entry)
+			}
+		}
+	}
+	if !foundRemoved || !foundAssistant {
+		t.Fatalf("missing old app or assistant: old = %v, assistant = %v", foundRemoved, foundAssistant)
 	}
 }
 

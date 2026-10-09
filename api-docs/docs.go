@@ -10916,6 +10916,10 @@ const docTemplate = `{
                     "type": "string",
                     "example": "7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"
                 },
+                "is_builtin_assistant": {
+                    "type": "boolean",
+                    "example": false
+                },
                 "last_choice_seq": {
                     "type": "integer",
                     "example": 0

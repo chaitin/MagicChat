@@ -494,11 +494,15 @@ func newItem(conversation store.Conversation, currentUserID string, members []st
 			name = "私聊"
 		}
 	} else if conversation.Kind == store.ConversationKindApp {
-		ownerAppID := appregistry.AIAssistantAppID
-		for _, member := range members {
-			if member.MemberType == store.ConversationMemberTypeApp && !appregistry.IsAIAssistantAppID(member.MemberID) {
-				ownerAppID = member.MemberID
-				break
+		ownerAppID := ""
+		if conversation.ID == builtinAssistantConversationID(currentUserID) {
+			ownerAppID = appregistry.AIAssistantAppID
+		} else {
+			for _, member := range members {
+				if member.MemberType == store.ConversationMemberTypeApp && !appregistry.IsAIAssistantAppID(member.MemberID) {
+					ownerAppID = member.MemberID
+					break
+				}
 			}
 		}
 		if app, ok := apps[ownerAppID]; ok {
@@ -510,7 +514,8 @@ func newItem(conversation store.Conversation, currentUserID string, members []st
 	return Item{
 		Announcement: conversation.Announcement,
 		Avatar:       avatar, CanSend: true, CreatedAt: conversation.CreatedAt, ID: conversation.ID,
-		LastMessageAt: conversation.LastMessageAt, LastMessageID: conversation.LastMessageID,
+		IsBuiltinAssistant: conversation.Kind == store.ConversationKindApp && conversation.ID == builtinAssistantConversationID(currentUserID),
+		LastMessageAt:      conversation.LastMessageAt, LastMessageID: conversation.LastMessageID,
 		LastMessageSeq: conversation.LastMessageSeq, LastMessageSummary: conversation.LastMessageSummary,
 		LastMentionedSeq: lastMentionedSeq, LastChoiceSeq: lastChoiceSeq, LastReadSeq: lastReadSeq,
 		MemberCount: listMemberCount(conversation.Kind, members), Members: newMembers(members, users, apps),

@@ -1,12 +1,7 @@
 import type { DesktopConversationMember } from "../../shared/account-data.ts"
 
-const builtinAssistantAppId = "00000000-0000-0000-0000-000000000001"
-
-export function isBuiltinAssistantConversation(members: DesktopConversationMember[]) {
-  return (
-    members.some((member) => member.type === "app" && member.id === builtinAssistantAppId) &&
-    !members.some((member) => member.type === "app" && member.id !== builtinAssistantAppId)
-  )
+export function isBuiltinAssistantConversation(value: { type: string; is_builtin_assistant?: unknown }) {
+  return value.type === "app" && value.is_builtin_assistant === true
 }
 
 export function parseConversationMembers(value: unknown): DesktopConversationMember[] {

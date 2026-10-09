@@ -95,6 +95,7 @@ type Item struct {
 	CanSend            bool
 	CreatedAt          time.Time
 	ID                 string
+	IsBuiltinAssistant bool
 	LastMessageAt      *time.Time
 	LastMessageID      *string
 	LastMessageSeq     int64

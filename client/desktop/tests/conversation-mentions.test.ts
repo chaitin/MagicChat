@@ -82,15 +82,11 @@ test("群聊及群话题显示所有人与成员候选，非群会话仅列出�
   }
 })
 
-test("其他应用对话加入内置助手后不被识别成茉莉自己的对话", () => {
-  const base = parseConversationMembers({
-    members: [
-      { id: appId, type: "app", name: "原应用" },
-      { id: "00000000-0000-0000-0000-000000000001", type: "app", name: "自定义助理名" },
-    ],
-  })
-  assert.equal(isBuiltinAssistantConversation(base), false)
-  assert.equal(isBuiltinAssistantConversation([base[1]]), true)
+test("只有服务端确认的茉莉自有会话才具有内置助手身份", () => {
+  assert.equal(isBuiltinAssistantConversation({ type: "app", is_builtin_assistant: true }), true)
+  assert.equal(isBuiltinAssistantConversation({ type: "app", is_builtin_assistant: false }), false)
+  assert.equal(isBuiltinAssistantConversation({ type: "app" }), false)
+  assert.equal(isBuiltinAssistantConversation({ type: "group", is_builtin_assistant: true }), false)
 })
 
 test("服务端隐藏用户姓名时从联系人或用户名解析补全群聊 @ 候选", () => {
