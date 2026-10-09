@@ -76,6 +76,7 @@ let isQuitting = false
 const appIconPath = app.isPackaged
   ? path.join(process.resourcesPath, "tray-icon.png")
   : path.join(__dirname, "../../resources/icon.png")
+const developmentDockIconPath = path.join(__dirname, "../../resources/mac-dev-dock-icon.png")
 
 function createWindow() {
   if (mainWindow) return
@@ -288,7 +289,9 @@ void app.whenReady().then(async () => {
   if (process.platform === "win32") app.setAppUserModelId("chat.jiying.desktop.next")
   if (process.platform === "darwin") {
     app.setActivationPolicy("regular")
-    if (!app.isPackaged) app.dock?.setIcon(appIconPath)
+    // Icon Composer is compiled into the packaged app's asset catalog. Development
+    // builds need its rendered fallback instead of the full-bleed cross-platform PNG.
+    if (!app.isPackaged) app.dock?.setIcon(developmentDockIconPath)
     await app.dock?.show()
   }
   let notificationSettings: NotificationSettings = DEFAULT_NOTIFICATION_SETTINGS
