@@ -9,6 +9,7 @@ import {
   nativeImage,
   Notification as SystemNotification,
   session,
+  screen,
   shell,
   Tray,
   type IpcMainInvokeEvent,
@@ -42,6 +43,7 @@ import { registerContactIpc } from "./ipc/register-contact-ipc"
 import { registerMediaIpc } from "./ipc/register-media-ipc"
 import { decodePreviewImage } from "./media-preview-image-decoder"
 import { MediaPreviewWindow } from "./media-preview-window"
+import { MainWindowSizeStore, MIN_MAIN_WINDOW_SIZE } from "./main-window-size"
 import { SelectedMessageFileStore } from "./message-files/selected-message-file-store"
 import {
   registerPrivilegedSchemes,
@@ -52,6 +54,7 @@ import { ShortcutManager } from "./shortcut-manager"
 import { isTrustedReleaseUrl } from "./update-service"
 import { UpdateManager, updateCacheDirectory } from "./update-manager"
 import { createUnreadAttention } from "./unread-attention"
+import { centerWindowWithinWorkArea } from "./window-position"
 
 // WSLg 不会稳定继承 Windows 的 DPI，且硬件视频合成可能只播放声音而显示黑屏。
 if (!app.isPackaged && process.platform === "linux" && process.env.WSL_DISTRO_NAME) {
@@ -67,6 +70,7 @@ app.setPath("userData", path.join(app.getPath("appData"), "jiying-desktop-next")
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) app.quit()
 
+const mainWindowSizeStore = new MainWindowSizeStore(app.getPath("userData"))
 let mainWindow: BrowserWindow | null = null
 let contentZoom: ContentZoom = DEFAULT_CONTENT_ZOOM
 let tray: Tray | null = null
@@ -79,11 +83,12 @@ const appIconPath = app.isPackaged
 
 function createWindow() {
   if (mainWindow) return
+  const workArea = screen.getPrimaryDisplay().workArea
+  const bounds = centerWindowWithinWorkArea(workArea, workArea, mainWindowSizeStore.load())
   const window = new BrowserWindow({
-    width: 1080,
-    height: 760,
-    minWidth: 760,
-    minHeight: 560,
+    ...bounds,
+    minWidth: Math.min(MIN_MAIN_WINDOW_SIZE.width, bounds.width),
+    minHeight: Math.min(MIN_MAIN_WINDOW_SIZE.height, bounds.height),
     title: "即应",
     icon: appIconPath,
     ...(process.platform === "darwin"
@@ -107,7 +112,24 @@ function createWindow() {
   window.webContents.on("did-finish-load", () => window.webContents.setZoomFactor(contentZoom))
   window.removeMenu()
   window.once("ready-to-show", () => window.show())
+  let saveSizeTimer: ReturnType<typeof setTimeout> | undefined
+  function saveNormalSize() {
+    clearTimeout(saveSizeTimer)
+    saveSizeTimer = undefined
+    const { width, height } = window.getNormalBounds()
+    try {
+      mainWindowSizeStore.save({ width, height })
+    } catch (error) {
+      console.warn("无法保存主窗口大小", error)
+    }
+  }
+  window.on("resize", () => {
+    if (window.isMaximized() || window.isMinimized() || window.isFullScreen()) return
+    clearTimeout(saveSizeTimer)
+    saveSizeTimer = setTimeout(saveNormalSize, 300)
+  })
   window.on("close", (event) => {
+    saveNormalSize()
     if (isQuitting) return
     event.preventDefault()
     window.hide()
@@ -116,6 +138,7 @@ function createWindow() {
   window.on("blur", () => unreadAttention?.setWindowFocused(false))
   window.on("hide", () => unreadAttention?.setWindowFocused(false))
   window.on("closed", () => {
+    clearTimeout(saveSizeTimer)
     clearUnreadAttention()
     mainWindow = null
   })
