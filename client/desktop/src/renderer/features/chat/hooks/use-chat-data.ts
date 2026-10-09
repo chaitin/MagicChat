@@ -139,7 +139,7 @@ export function useChatData({
     targetId,
   ])
 
-  const setSelectedId = useCallback((conversationId: string) => {
+  const setSelectedId = useCallback((conversationId: string | null) => {
     setTransientConversation(null)
     setSelectedIdState(conversationId)
   }, [])

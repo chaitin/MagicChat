@@ -701,7 +701,14 @@ export function ChatPage({
             onSetPinned={setConversationPinned}
             onSetMuted={setConversationMuted}
             onDismiss={dismissConversation}
-            onSelect={setSelectedId}
+            onSelect={(conversationId) => {
+              if (conversationId === selectedId) {
+                setSearchMessageTarget(null)
+                setSelectedId(null)
+              } else {
+                setSelectedId(conversationId)
+              }
+            }}
             onCreateGroup={() => void openActionDialog("group")}
             onCreateApp={() => void openActionDialog("app")}
             onRefresh={onRefresh}
