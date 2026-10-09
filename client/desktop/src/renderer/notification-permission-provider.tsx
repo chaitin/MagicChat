@@ -42,13 +42,17 @@ function notificationApi() {
 export function NotificationPermissionProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false)
   const [permission, setPermission] = useState<NotificationPermissionState>(() =>
-    getNotificationPermission(notificationApi()),
+    getNotificationPermission(notificationApi(), window.desktop?.windowControls.platform),
   )
   const reminded = useRef(false)
 
   const ensureNotificationPermission = useCallback(
     async ({ request = false, remindOnce = false }: PermissionCheckOptions = {}) => {
-      const next = await checkNotificationPermission(notificationApi(), request)
+      const next = await checkNotificationPermission(
+        notificationApi(),
+        request,
+        window.desktop?.windowControls.platform,
+      )
       setPermission(next)
       if (next === "granted" || next === "unsupported") {
         setOpen(false)
@@ -66,7 +70,10 @@ export function NotificationPermissionProvider({ children }: { children: ReactNo
   useEffect(() => {
     const handleFocus = () => {
       if (!open) return
-      const next = getNotificationPermission(notificationApi())
+      const next = getNotificationPermission(
+        notificationApi(),
+        window.desktop?.windowControls.platform,
+      )
       setPermission(next)
       if (next === "granted") setOpen(false)
     }

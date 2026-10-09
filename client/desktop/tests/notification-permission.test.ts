@@ -35,6 +35,23 @@ test("requests a decision only for the default permission", async () => {
   assert.equal(requests, 1)
 })
 
+test("Windows native notifications do not depend on renderer web permission", async () => {
+  let requests = 0
+  const api: NotificationPermissionApi = {
+    permission: "default",
+    requestPermission: async () => {
+      requests += 1
+      return "denied"
+    },
+  }
+
+  assert.equal(getNotificationPermission(api, "windows"), "unsupported")
+  assert.equal(await checkNotificationPermission(api, true, "windows"), "unsupported")
+  assert.equal(requests, 0)
+  assert.equal(getNotificationPermission({ ...api, permission: "denied" }, "windows"), "unsupported")
+  assert.equal(getNotificationPermission(api, "macos"), "default")
+})
+
 test("treats a missing notification API as unsupported", async () => {
   assert.equal(getNotificationPermission(undefined), "unsupported")
   assert.equal(await checkNotificationPermission(undefined, true), "unsupported")
