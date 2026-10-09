@@ -45,6 +45,7 @@ import { decodePreviewImage } from "./media-preview-image-decoder"
 import { MediaPreviewWindow } from "./media-preview-window"
 import { MainWindowSizeStore, MIN_MAIN_WINDOW_SIZE } from "./main-window-size"
 import { SelectedMessageFileStore } from "./message-files/selected-message-file-store"
+import { isAllowedMainWindowPermission } from "./permission-policy"
 import {
   registerPrivilegedSchemes,
   registerResourceProtocolHandlers,
@@ -730,10 +731,23 @@ void app.whenReady().then(async () => {
     shortcuts.setRecording(input)
     return null
   })
-  session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) =>
-    callback(false),
+  session.defaultSession.setPermissionRequestHandler(
+    (contents, permission, callback, details) =>
+      callback(
+        isAllowedMainWindowPermission(
+          permission,
+          contents === mainWindow?.webContents,
+          details.isMainFrame,
+        ),
+      ),
   )
-  session.defaultSession.setPermissionCheckHandler(() => false)
+  session.defaultSession.setPermissionCheckHandler((contents, permission, _origin, details) =>
+    isAllowedMainWindowPermission(
+      permission,
+      contents === mainWindow?.webContents,
+      details.isMainFrame,
+    ),
+  )
   session.defaultSession.on("will-download", (event) => event.preventDefault())
 
   createWindow()
