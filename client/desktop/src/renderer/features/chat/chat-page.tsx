@@ -545,8 +545,11 @@ export function ChatPage({
     setReplyTarget(restored?.replyTarget ?? null)
     setMarkdownMode(restored?.markdownMode ?? false)
     pendingComposerCursorRef.current = null
-    if (selectedId) focusComposer()
-  }, [draft, draftKey, draftMentions, focusComposer, markdownMode, replyTarget, selectedId])
+  }, [draft, draftKey, draftMentions, markdownMode, replyTarget])
+
+  useEffect(() => {
+    if (activeSection === "chat" && selected?.id) focusComposer()
+  }, [activeSection, focusComposer, selected?.id, targetId])
 
   const draftConversationIds = useMemo(() => {
     const ids = new Set<string>()
@@ -713,6 +716,7 @@ export function ChatPage({
             onCreateApp={() => void openActionDialog("app")}
             onRefresh={onRefresh}
             onSelectSearchResult={selectSearchResult}
+            onSearchResultCloseAutoFocus={focusComposer}
           />
 
           <section className="flex min-h-0 min-w-0 flex-col bg-card" aria-label="聊天区域">
@@ -723,6 +727,7 @@ export function ChatPage({
               currentUserEmail={userEmail}
               theme={resolvedTheme}
               onOpenConversation={openProfileConversation}
+              onFocusConversation={focusComposer}
             >
               {selected ? (
                 <>
@@ -900,6 +905,7 @@ export function ChatPage({
           onCreateApp={() => void openActionDialog("app")}
           onRefresh={onRefresh}
           onSelectSearchResult={selectSearchResult}
+          onSearchResultCloseAutoFocus={focusComposer}
           mentionLabelResolver={resolveMentionLabel}
         />
       ) : (

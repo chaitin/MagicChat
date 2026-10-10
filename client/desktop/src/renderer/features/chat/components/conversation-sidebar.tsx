@@ -53,6 +53,7 @@ export function ConversationSidebar({
   onCreateApp,
   onRefresh,
   onSelectSearchResult,
+  onSearchResultCloseAutoFocus,
   onSetPinned,
   onSetMuted,
   onDismiss,
@@ -70,6 +71,7 @@ export function ConversationSidebar({
   onCreateApp: () => void
   onRefresh: () => void
   onSelectSearchResult: (result: LocalSearchResult) => void
+  onSearchResultCloseAutoFocus: () => void
   onSetPinned: (conversationId: string, pinned: boolean) => Promise<void>
   onSetMuted: (conversationId: string, muted: boolean) => Promise<void>
   onDismiss: (conversationId: string) => Promise<void>
@@ -144,6 +146,7 @@ export function ConversationSidebar({
           theme={resolvedTheme}
           mentionLabelResolver={mentionLabelResolver}
           onSelectSearchResult={onSelectSearchResult}
+          onSearchResultCloseAutoFocus={onSearchResultCloseAutoFocus}
           onCreateGroup={onCreateGroup}
           onCreateApp={onCreateApp}
           onRefresh={onRefresh}

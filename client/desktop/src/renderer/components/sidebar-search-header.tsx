@@ -24,6 +24,7 @@ export function SidebarSearchHeader({
   theme,
   mentionLabelResolver,
   onSelectSearchResult,
+  onSearchResultCloseAutoFocus,
   onCreateGroup,
   onCreateApp,
   onRefresh,
@@ -33,6 +34,7 @@ export function SidebarSearchHeader({
   theme: "light" | "dark"
   mentionLabelResolver: MentionLabelResolver
   onSelectSearchResult: (result: LocalSearchResult) => void
+  onSearchResultCloseAutoFocus: () => void
   onCreateGroup: () => void
   onCreateApp: () => void
   onRefresh: () => void
@@ -111,6 +113,7 @@ export function SidebarSearchHeader({
         mentionLabelResolver={mentionLabelResolver}
         onOpenChange={setSearchOpen}
         onSelectResult={onSelectSearchResult}
+        onResultCloseAutoFocus={onSearchResultCloseAutoFocus}
       />
     </>
   )

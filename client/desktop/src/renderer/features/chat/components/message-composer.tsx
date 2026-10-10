@@ -277,6 +277,7 @@ export function MessageComposer({
         >
           <ContextMenuTrigger asChild>
             <InputGroupTextarea
+              data-slot="input-group-control"
               ref={composerRef}
               value={draft}
               role="combobox"

@@ -52,6 +52,7 @@ export function ContactsPage({
   onCreateApp,
   onRefresh,
   onSelectSearchResult,
+  onSearchResultCloseAutoFocus,
   mentionLabelResolver,
 }: {
   targetId: string
@@ -64,6 +65,7 @@ export function ContactsPage({
   onCreateApp: () => void
   onRefresh: () => void
   onSelectSearchResult: (result: LocalSearchResult) => void
+  onSearchResultCloseAutoFocus: () => void
   mentionLabelResolver: MentionLabelResolver
 }) {
   const { showToast } = useAnimatedToast()
@@ -260,6 +262,7 @@ export function ContactsPage({
           theme={resolvedTheme}
           mentionLabelResolver={mentionLabelResolver}
           onSelectSearchResult={onSelectSearchResult}
+          onSearchResultCloseAutoFocus={onSearchResultCloseAutoFocus}
           onCreateGroup={onCreateGroup}
           onCreateApp={onCreateApp}
           onRefresh={onRefresh}

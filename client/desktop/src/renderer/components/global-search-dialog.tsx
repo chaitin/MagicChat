@@ -43,6 +43,7 @@ export function GlobalSearchDialog({
   mentionLabelResolver,
   onOpenChange,
   onSelectResult,
+  onResultCloseAutoFocus,
 }: {
   open: boolean
   targetId: string
@@ -50,8 +51,10 @@ export function GlobalSearchDialog({
   mentionLabelResolver: MentionLabelResolver
   onOpenChange: (open: boolean) => void
   onSelectResult: (result: LocalSearchResult) => void
+  onResultCloseAutoFocus: () => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const selectedResultRef = useRef(false)
   const requestRevision = useRef(0)
   const [query, setQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")
@@ -112,6 +115,7 @@ export function GlobalSearchDialog({
   }
 
   function selectResult(result: LocalSearchResult) {
+    selectedResultRef.current = true
     onSelectResult(result)
     onOpenChange(false)
   }
@@ -129,6 +133,13 @@ export function GlobalSearchDialog({
     <CommandDialog
       open={open}
       onOpenChange={onOpenChange}
+      onCloseAutoFocus={(event) => {
+        if (selectedResultRef.current) {
+          event.preventDefault()
+          onResultCloseAutoFocus()
+        }
+        selectedResultRef.current = false
+      }}
       title="搜索"
       description="搜索联系人、应用、群聊和聊天记录"
       className="top-1/2! h-[65vh] max-h-[35rem] -translate-y-1/2! sm:max-w-2xl"

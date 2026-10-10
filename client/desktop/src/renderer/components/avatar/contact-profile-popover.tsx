@@ -23,6 +23,7 @@ type ProfileContextValue = {
   currentUserEmail: string
   theme: "light" | "dark"
   onOpenConversation: (type: "user" | "app", id: string) => Promise<void>
+  onFocusConversation: () => void
 }
 
 const ProfileContext = createContext<ProfileContextValue | null>(null)
@@ -78,6 +79,7 @@ function ActiveContactProfilePopover({
   currentUserEmail,
   theme,
   onOpenConversation,
+  onFocusConversation,
 }: ProfileContextValue & {
   children: ReactNode
   type: ProfileType
@@ -88,6 +90,7 @@ function ActiveContactProfilePopover({
 }) {
   const { showToast } = useAnimatedToast()
   const [open, setOpen] = useState(false)
+  const navigatedToConversationRef = useRef(false)
   const [busy, setBusy] = useState(false)
   const [openingAvatar, setOpeningAvatar] = useState(false)
   const [snapshot, setSnapshot] = useState<{
@@ -217,6 +220,7 @@ function ActiveContactProfilePopover({
         return
       }
       await onOpenConversation(type, id)
+      navigatedToConversationRef.current = true
       setOpen(false)
     } catch (error) {
       showToast({ title: error instanceof Error ? error.message : "操作失败", status: "error" })
@@ -305,6 +309,13 @@ function ActiveContactProfilePopover({
         {children}
       </PopoverTrigger>
       <PopoverContent
+        onCloseAutoFocus={(event) => {
+          if (navigatedToConversationRef.current) {
+            event.preventDefault()
+            onFocusConversation()
+          }
+          navigatedToConversationRef.current = false
+        }}
         align="start"
         side="right"
         sideOffset={8}
