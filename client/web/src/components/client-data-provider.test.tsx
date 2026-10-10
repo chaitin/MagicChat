@@ -12,49 +12,30 @@ describe("ClientDataProvider", () => {
     vi.useRealTimers()
   })
 
-  it("preloads at most 30 conversations with five workers before becoming ready", async () => {
+  it("starts with conversation summaries without preloading 30 message pages", async () => {
     vi.useFakeTimers()
-    const conversations = Array.from({ length: 31 }, (_, index) => ({
-      ...createConversationResponse(`conversation-${index + 1}`),
-      created_at: `2026-07-${String(index + 1).padStart(2, "0")}T00:00:00Z`,
-    }))
-    const pending = new Map<string, (response: Response) => void>()
-    let activeRequests = 0
-    let maximumActiveRequests = 0
+    const conversations = Array.from({ length: 31 }, (_, index) =>
+      createConversationResponse(`conversation-${index + 1}`)
+    )
     const requestedIds: string[] = []
-    const fetchMock = vi.fn((input: RequestInfo | URL) => {
-      const url = String(input)
-      if (url === "/api/client/me")
-        return Promise.resolve(jsonResponse(createCurrentUserResponse()))
-      if (url === "/api/client/contacts")
-        return Promise.resolve(jsonResponse(createContactsResponse()))
-      if (url === "/api/client/conversations")
-        return Promise.resolve(
-          jsonResponse(createConversationsResponse(conversations))
-        )
-      if (url === "/api/client/projects?limit=100")
-        return Promise.resolve(jsonResponse(createProjectsResponse()))
-      const match = url.match(
-        /^\/api\/client\/conversations\/(.+)\/messages\?limit=20$/
-      )
-      if (match) {
-        const id = match[1]
-        requestedIds.push(id)
-        if (id === "conversation-3")
-          return Promise.reject(new Error("failed preload"))
-        activeRequests += 1
-        maximumActiveRequests = Math.max(maximumActiveRequests, activeRequests)
-        return new Promise<Response>((resolve) => {
-          pending.set(id, (response) => {
-            activeRequests -= 1
-            resolve(response)
-          })
-        })
-      }
-      return Promise.reject(new Error(`unexpected request: ${url}`))
-    })
-    vi.stubGlobal("fetch", fetchMock)
-
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url === "/api/client/me")
+          return Promise.resolve(jsonResponse(createCurrentUserResponse()))
+        if (url === "/api/client/contacts")
+          return Promise.resolve(jsonResponse(createContactsResponse()))
+        if (url === "/api/client/conversations")
+          return Promise.resolve(
+            jsonResponse(createConversationsResponse(conversations))
+          )
+        if (url === "/api/client/projects?limit=100")
+          return Promise.resolve(jsonResponse(createProjectsResponse()))
+        if (url.includes("/messages")) requestedIds.push(url)
+        return Promise.reject(new Error(`unexpected request: ${url}`))
+      })
+    )
     render(
       <MemoryRouter initialEntries={["/chat"]}>
         <ClientDataProvider>
@@ -62,36 +43,10 @@ describe("ClientDataProvider", () => {
         </ClientDataProvider>
       </MemoryRouter>
     )
-    await act(async () => undefined)
-    expect(screen.queryByTestId("preloaded-count")).not.toBeInTheDocument()
-    expect(pending.size).toBe(5)
-
-    while (requestedIds.length < 30) {
-      const [id, resolve] = pending.entries().next().value as [
-        string,
-        (response: Response) => void,
-      ]
-      pending.delete(id)
-      await act(async () => {
-        resolve(jsonResponse(createMessagesResponseFor(id)))
-      })
-    }
-    for (const [id, resolve] of [...pending]) {
-      pending.delete(id)
-      await act(async () =>
-        resolve(jsonResponse(createMessagesResponseFor(id)))
-      )
-    }
     await act(async () => vi.advanceTimersByTimeAsync(1_000))
-
-    expect(maximumActiveRequests).toBe(5)
-    expect(requestedIds).toHaveLength(30)
-    expect(requestedIds).not.toContain("conversation-1")
-    expect(screen.getByTestId("preloaded-count")).toHaveTextContent("29")
+    expect(screen.getByTestId("preloaded-count")).toHaveTextContent("0")
     expect(screen.getByTestId("failed-loaded")).toHaveTextContent("false")
-    expect(screen.getByTestId("latest-message")).toHaveTextContent(
-      "message-conversation-31"
-    )
+    expect(requestedIds).toEqual([])
   })
 
   it("refreshes workspace data including the directory", async () => {

@@ -31,6 +31,7 @@ import { topicOpenMode } from "./conversation-topic"
 import {
   contiguousMessageSuffix,
   isCompleteLocalPage,
+  MAX_VISIBLE_MESSAGES,
   MESSAGE_PAGE_SIZE,
 } from "../../shared/message-window"
 import { normalizeOutgoingRichMessageBody } from "./rich-message-input"
@@ -40,6 +41,9 @@ export class ConversationManager {
   private readonly outgoingMessages: OutgoingMessageService
   private readonly virtualMessages = new Map<string, DesktopMessage[]>()
   private readonly viewedTopics = new Map<string, DesktopConversation>()
+  private readonly latestOnOpen = new Map<string, Promise<void>>()
+  private readonly checkedLatestAt = new Map<string, number>()
+  private refreshGeneration = 0
 
   constructor(
     private readonly database: AccountDatabase,
@@ -64,6 +68,7 @@ export class ConversationManager {
 
   async refresh() {
     const conversations = await retryNetworkAction(() => this.fetchConversations())
+    this.refreshGeneration += 1
     this.database.upsertCurrentConversations(conversations)
     const currentConversationIds = new Set(conversations.map((conversation) => conversation.id))
     for (const conversationId of this.virtualMessages.keys()) {
@@ -71,10 +76,76 @@ export class ConversationManager {
         this.virtualMessages.delete(conversationId)
       }
     }
-    await mapConcurrent(conversations, 4, async (conversation) => {
-      const messages = await retryNetworkAction(() => this.fetchMessages(conversation.id))
-      this.database.upsertMessages(messages)
+    let remaining = 100
+    for (const conversation of [...conversations].sort(
+      (left, right) => Number(right.unreadCount > 0) - Number(left.unreadCount > 0),
+    )) {
+      const previous = this.database.getMessageSyncSeq(conversation.id)
+      const targetSeq = conversation.lastMessageSeq ?? 0
+      const missing = targetSeq - previous
+      if (missing <= 0 || missing > 100 || missing > remaining) continue
+      remaining -= missing
+      await retryNetworkAction(() => this.catchUpConversation(conversation.id, previous, targetSeq))
+    }
+  }
+
+  async ensureLatestOnOpen(conversationId: string) {
+    const existing = this.latestOnOpen.get(conversationId)
+    if (existing) return existing
+    const work = (async () => {
+      const serverSeq =
+        this.database.listConversations().find((conversation) => conversation.id === conversationId)
+          ?.lastMessageSeq ?? 0
+      const cached =
+        this.database.listMessages(conversationId, this.currentUserId, 1).at(-1)?.seq ?? 0
+      if (
+        serverSeq <= 0 ||
+        (serverSeq <= cached && this.checkedLatestAt.get(conversationId) === this.refreshGeneration)
+      )
+        return
+      const page = await this.fetchMessagePage(conversationId)
+      this.database.upsertMessages(this.captureVirtualMessages(conversationId, page.messages))
+      this.checkedLatestAt.set(conversationId, this.refreshGeneration)
+    })().finally(() => {
+      this.latestOnOpen.delete(conversationId)
     })
+    this.latestOnOpen.set(conversationId, work)
+    return work
+  }
+
+  private async catchUpConversation(conversationId: string, previous: number, targetSeq: number) {
+    if (previous === 0) {
+      const latest = await this.fetchMessagePage(conversationId)
+      const messages = [...latest.messages]
+      let beforeSeq = messages[0]?.seq
+      let hasMoreBefore = latest.hasMoreBefore
+      while (hasMoreBefore && beforeSeq !== undefined && messages.length < 100) {
+        const older = await this.fetchMessagePage(conversationId, beforeSeq)
+        if (!older.messages.length || older.messages[0]!.seq >= beforeSeq) break
+        messages.unshift(...older.messages)
+        beforeSeq = older.messages[0]!.seq
+        hasMoreBefore = older.hasMoreBefore
+      }
+      if (messages.length && !hasMoreBefore) {
+        this.database.commitSyncedMessages(
+          conversationId,
+          this.captureVirtualMessages(conversationId, messages),
+          messages.at(-1)!.seq,
+        )
+      } else if (messages.length) {
+        this.database.upsertMessages(this.captureVirtualMessages(conversationId, messages))
+      }
+      return
+    }
+    let cursor = previous
+    for (let pageIndex = 0; pageIndex < 5 && cursor < targetSeq; pageIndex++) {
+      const page = await this.fetchMessagePage(conversationId, undefined, cursor)
+      const next = page.messages.at(-1)?.seq ?? cursor
+      if (next <= cursor) break
+      this.database.commitSyncedMessages(conversationId, page.messages, next)
+      cursor = next
+      if (!page.hasMoreAfter) break
+    }
   }
 
   async applyRealtimeEvent(
@@ -1074,7 +1145,10 @@ export class ConversationManager {
     )
     if (isCompleteLocalPage(localMessages, beforeSeq)) {
       return {
-        messages: this.listMessages(conversationId, loadedCount + localMessages.length),
+        messages:
+          loadedCount >= MAX_VISIBLE_MESSAGES
+            ? localMessages
+            : this.listMessages(conversationId, loadedCount + localMessages.length),
         hasMoreBefore: localMessages[0].seq > 1,
       }
     }
@@ -1082,7 +1156,15 @@ export class ConversationManager {
     const storedMessages = this.captureVirtualMessages(conversationId, page.messages)
     this.database.upsertMessages(storedMessages)
     return {
-      messages: this.listMessages(conversationId, loadedCount + storedMessages.length),
+      messages:
+        loadedCount >= MAX_VISIBLE_MESSAGES
+          ? this.database.listMessages(
+              conversationId,
+              this.currentUserId,
+              MESSAGE_PAGE_SIZE,
+              beforeSeq,
+            )
+          : this.listMessages(conversationId, loadedCount + storedMessages.length),
       hasMoreBefore: page.hasMoreBefore,
     }
   }
@@ -1177,21 +1259,26 @@ export class ConversationManager {
     return [...virtualMessages, ...messages.filter((message) => !virtualIds.has(message.id))]
   }
 
-  private async fetchMessagePage(conversationId: string, beforeSeq?: number) {
+  private async fetchMessagePage(conversationId: string, beforeSeq?: number, afterSeq?: number) {
     const search = new URLSearchParams({ limit: String(MESSAGE_PAGE_SIZE) })
     if (beforeSeq !== undefined) search.set("before_seq", String(beforeSeq))
+    if (afterSeq !== undefined) search.set("after_seq", String(afterSeq))
     const data = await this.client.get(
       `/api/client/conversations/${encodeURIComponent(conversationId)}/messages?${search}`,
     )
     if (!isRecord(data) || !Array.isArray(data.messages) || !isRecord(data.page)) {
       throw new AuthFailure("invalid_response", "聊天记录响应格式不正确")
     }
-    if (typeof data.page.has_more_before !== "boolean") {
+    if (
+      typeof data.page.has_more_before !== "boolean" ||
+      typeof data.page.has_more_after !== "boolean"
+    ) {
       throw new AuthFailure("invalid_response", "聊天记录分页信息格式不正确")
     }
     return {
       messages: data.messages.map((message) => parseMessage(message, conversationId)),
       hasMoreBefore: data.page.has_more_before,
+      hasMoreAfter: data.page.has_more_after,
     }
   }
 }
@@ -1207,22 +1294,4 @@ function validEntityIds(values: string[], label: string) {
     return value
   })
   return Array.from(new Set(result))
-}
-
-async function mapConcurrent<T>(
-  values: T[],
-  concurrency: number,
-  operation: (value: T) => Promise<void>,
-) {
-  let index = 0
-  const workers = Array.from({ length: Math.min(concurrency, values.length) }, async () => {
-    while (index < values.length) {
-      const value = values[index]
-      index += 1
-      await operation(value)
-    }
-  })
-  const outcomes = await Promise.allSettled(workers)
-  const failure = outcomes.find((outcome) => outcome.status === "rejected")
-  if (failure?.status === "rejected") throw failure.reason
 }

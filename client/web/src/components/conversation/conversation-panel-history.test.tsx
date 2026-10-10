@@ -423,6 +423,22 @@ describe("ConversationPanelHistory", () => {
     expect(onReturnToLatest).toHaveBeenCalledOnce()
   })
 
+  it("lets users fetch the latest page when automatic catch-up exceeds 100", () => {
+    const onReturnToLatest = vi.fn()
+    render(
+      <ConversationPanelHistory
+        {...createProps([createMessage("message-1", "other")])}
+        navigation={createHistoryNavigation({
+          hasMoreAfter: true,
+          viewMode: "latest",
+          onReturnToLatest,
+        })}
+      />
+    )
+    fireEvent.click(screen.getByRole("button", { name: "查看最新消息" }))
+    expect(onReturnToLatest).toHaveBeenCalledOnce()
+  })
+
   it("loads newer messages when scrolling down in history mode", () => {
     const onLoadAfterMessages = vi.fn()
     render(

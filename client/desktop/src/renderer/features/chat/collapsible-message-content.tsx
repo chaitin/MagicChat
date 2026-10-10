@@ -17,13 +17,17 @@ const collapsedContentMask = {
 export function CollapsibleMessageContent({
   children,
   variant,
+  initialExpanded = false,
+  onExpand,
 }: {
   children: ReactNode
   variant: keyof typeof collapsedHeights
+  initialExpanded?: boolean
+  onExpand?: () => void
 }) {
   const contentId = useId()
   const contentRef = useRef<HTMLDivElement>(null)
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(initialExpanded)
   const [canExpand, setCanExpand] = useState(false)
   const maxHeight = collapsedHeights[variant]
 
@@ -70,6 +74,7 @@ export function CollapsibleMessageContent({
           onClick={(event) => {
             event.stopPropagation()
             setExpanded(true)
+            onExpand?.()
           }}
         >
           <span className="flex h-6 items-center justify-center gap-1">

@@ -259,10 +259,13 @@ export function ClientConversationRealtimeSync() {
     }
 
     if (hasSeenRealtimeReadyRef.current) {
-      void refreshConversations().catch(() => undefined)
+      void refreshConversations()
+        .then((snapshot) => syncLoadedConversationMessages(snapshot))
+        .catch(() => undefined)
+    } else {
+      syncLoadedConversationMessages()
     }
     hasSeenRealtimeReadyRef.current = true
-    syncLoadedConversationMessages()
   }, [realtimeReady, refreshConversations, syncLoadedConversationMessages])
 
   return null

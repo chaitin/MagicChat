@@ -10,7 +10,7 @@ import {
 } from "./database/contact-repository"
 import { ConversationRepository, type StoredConversation } from "./database/conversation-repository"
 import { initializeAccountSchema } from "./database/account-schema"
-import { MessageRepository } from "./database/message-repository"
+import { MessageRepository, type StoredMessage } from "./database/message-repository"
 import { SearchRepository } from "./database/search-repository"
 
 export type { StoredConversation } from "./database/conversation-repository"
@@ -103,6 +103,18 @@ export class AccountDatabase {
 
   upsertMessages(...args: Parameters<MessageRepository["upsertMessages"]>) {
     return this.messages.upsertMessages(...args)
+  }
+
+  getMessageSyncSeq(conversationId: string): number {
+    const row = this.database
+      .prepare("SELECT value FROM metadata WHERE key = ?")
+      .get(`message_sync:${conversationId}`) as { value: string } | undefined
+    const seq = Number(row?.value)
+    return Number.isSafeInteger(seq) && seq > 0 ? seq : 0
+  }
+
+  commitSyncedMessages(conversationId: string, messages: StoredMessage[], seq: number) {
+    this.messages.upsertMessages(messages, { conversationId, seq })
   }
 
   hasMessage(conversationId: string, id: string) {

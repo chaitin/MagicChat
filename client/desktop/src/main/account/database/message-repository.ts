@@ -52,7 +52,7 @@ export class MessageRepository {
     return { items, nextOffset: rows.length > 50 ? offset + 50 : null }
   }
 
-  upsertMessages(messages: StoredMessage[]) {
+  upsertMessages(messages: StoredMessage[], sync?: { conversationId: string; seq: number }) {
     const statement = this.database.prepare(`
       INSERT INTO messages (
         conversation_id, id, seq, created_at, sender_id, sender_type, sender_name,
@@ -94,6 +94,13 @@ export class MessageRepository {
           message.deliveryStatus ?? "",
           JSON.stringify(message.payload),
         )
+      }
+      if (sync && sync.seq > 0) {
+        this.database
+          .prepare(
+            "INSERT INTO metadata (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = CAST(MAX(CAST(value AS INTEGER), CAST(excluded.value AS INTEGER)) AS TEXT)",
+          )
+          .run(`message_sync:${sync.conversationId}`, String(sync.seq))
       }
     })
   }

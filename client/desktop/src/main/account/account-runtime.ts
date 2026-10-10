@@ -292,8 +292,13 @@ export class AccountRuntime {
     return this.conversationManager!.listLocalMessagesAfter(conversationId, afterSeq)
   }
 
-  listMessages(conversationId: string, latestLimit: number): DesktopMessage[] {
+  async listMessages(conversationId: string, latestLimit: number): Promise<DesktopMessage[]> {
     this.assertInitialized()
+    try {
+      await this.conversationManager!.ensureLatestOnOpen(conversationId)
+    } catch (error) {
+      if (!(error instanceof AuthFailure && error.code === "network")) throw error
+    }
     return this.conversationManager!.listMessages(conversationId, latestLimit)
   }
 

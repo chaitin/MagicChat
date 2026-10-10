@@ -29,6 +29,8 @@ export function MessageBodyContent({
   flushMedia = false,
   flushInteractiveCard = false,
   collapseLongContent = false,
+  initialExpanded = false,
+  onExpand,
 }: {
   body: DesktopMessageBody
   targetId: string
@@ -40,11 +42,17 @@ export function MessageBodyContent({
   flushMedia?: boolean
   flushInteractiveCard?: boolean
   collapseLongContent?: boolean
+  initialExpanded?: boolean
+  onExpand?: () => void
 }) {
   switch (body.type) {
     case "text":
       return collapseLongContent ? (
-        <CollapsibleMessageContent variant="text">
+        <CollapsibleMessageContent
+          variant="text"
+          initialExpanded={initialExpanded}
+          onExpand={onExpand}
+        >
           <TextBody content={body.content} />
         </CollapsibleMessageContent>
       ) : (
@@ -52,7 +60,11 @@ export function MessageBodyContent({
       )
     case "markdown":
       return collapseLongContent ? (
-        <CollapsibleMessageContent variant="markdown">
+        <CollapsibleMessageContent
+          variant="markdown"
+          initialExpanded={initialExpanded}
+          onExpand={onExpand}
+        >
           <MarkdownBody content={body.content} />
         </CollapsibleMessageContent>
       ) : (

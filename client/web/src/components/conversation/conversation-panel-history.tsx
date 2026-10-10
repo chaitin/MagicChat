@@ -368,7 +368,7 @@ export const ConversationPanelHistory = React.memo(
     }
 
     function handleJumpToLatest() {
-      if (navigation?.viewMode === "history") {
+      if (navigation?.viewMode === "history" || navigation?.hasMoreAfter) {
         navigation.onReturnToLatest()
         return
       }
@@ -600,7 +600,9 @@ export const ConversationPanelHistory = React.memo(
             )}
           </div>
         </ScrollArea>
-        {(pendingNewMessageCount > 0 || navigation?.viewMode === "history") && (
+        {(pendingNewMessageCount > 0 ||
+          navigation?.viewMode === "history" ||
+          navigation?.hasMoreAfter) && (
           <Button
             className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full shadow-md"
             onClick={handleJumpToLatest}
@@ -613,7 +615,9 @@ export const ConversationPanelHistory = React.memo(
               ? navigation.pendingLatestMessageCount > 0
                 ? `${navigation.pendingLatestMessageCount} 条新消息`
                 : "回到最新消息"
-              : `${pendingNewMessageCount} 条新消息`}
+              : navigation?.hasMoreAfter
+                ? "查看最新消息"
+                : `${pendingNewMessageCount} 条新消息`}
           </Button>
         )}
       </div>
@@ -622,6 +626,7 @@ export const ConversationPanelHistory = React.memo(
 )
 
 export type ConversationHistoryNavigation = {
+  hasMoreAfter?: boolean
   focus: ClientConversationMessageFocus | null
   loadingAfter: boolean
   onFocusHandled: (requestKey: number) => void

@@ -1,6 +1,7 @@
 import {
   Fragment,
   forwardRef,
+  memo,
   useMemo,
   useRef,
   type ComponentPropsWithoutRef,
@@ -39,7 +40,7 @@ import { MessageReactionChips } from "../message-reaction-chips"
 import { MessageReactionPicker } from "../message-reaction-picker"
 import { TopicReplyPreview } from "../topic-reply-preview"
 
-export function MessageList({
+export const MessageList = memo(function MessageList({
   messages,
   loading,
   loadingBefore,
@@ -74,6 +75,7 @@ export function MessageList({
   onCreateTopic,
   onReeditRevokedMessage,
   onReplyMessage,
+  onReplyCloseFocus,
   onForwardMessage,
   onStartMessageSelection,
   onToggleMessageSelection,
@@ -116,6 +118,7 @@ export function MessageList({
   onCreateTopic: (message: DesktopMessage) => void
   onReeditRevokedMessage: (message: DesktopMessage) => void
   onReplyMessage: (message: DesktopMessage) => void
+  onReplyCloseFocus: () => void
   onForwardMessage: (message: DesktopMessage) => void
   onStartMessageSelection: (message: DesktopMessage) => void
   onToggleMessageSelection: (message: DesktopMessage) => void
@@ -126,6 +129,11 @@ export function MessageList({
 }) {
   const gapRef = useRef<HTMLDivElement>(null)
   const gapAutoArmedRef = useRef(true)
+  const expandedMessageIdsRef = useRef({ conversationId: "", ids: new Set<string>() })
+  const conversationId = messages[0]?.conversationId
+  if (conversationId && expandedMessageIdsRef.current.conversationId !== conversationId) {
+    expandedMessageIdsRef.current = { conversationId, ids: new Set() }
+  }
   const senderMentions = useMemo(
     () =>
       new Map(
@@ -231,6 +239,8 @@ export function MessageList({
                     )}
                     <MessageRow
                       message={message}
+                      initialExpanded={expandedMessageIdsRef.current.ids.has(message.id)}
+                      onExpand={() => expandedMessageIdsRef.current.ids.add(message.id)}
                       targetId={targetId}
                       userId={userId}
                       userName={userName}
@@ -258,6 +268,7 @@ export function MessageList({
                       onCreateTopic={onCreateTopic}
                       onReeditRevokedMessage={onReeditRevokedMessage}
                       onReplyMessage={onReplyMessage}
+                      onReplyCloseFocus={onReplyCloseFocus}
                       onForwardMessage={onForwardMessage}
                       onStartMessageSelection={onStartMessageSelection}
                       onToggleMessageSelection={onToggleMessageSelection}
@@ -287,10 +298,12 @@ export function MessageList({
       )}
     </div>
   )
-}
+})
 
 function MessageRow({
   message,
+  initialExpanded,
+  onExpand,
   targetId,
   userId,
   userName,
@@ -312,6 +325,7 @@ function MessageRow({
   onCreateTopic,
   onReeditRevokedMessage,
   onReplyMessage,
+  onReplyCloseFocus,
   onForwardMessage,
   onStartMessageSelection,
   onToggleMessageSelection,
@@ -321,6 +335,8 @@ function MessageRow({
   onRetryMessage,
 }: {
   message: DesktopMessage
+  initialExpanded: boolean
+  onExpand: () => void
   targetId: string
   userId: string
   userName: string
@@ -342,6 +358,7 @@ function MessageRow({
   onCreateTopic: (message: DesktopMessage) => void
   onReeditRevokedMessage: (message: DesktopMessage) => void
   onReplyMessage: (message: DesktopMessage) => void
+  onReplyCloseFocus: () => void
   onForwardMessage: (message: DesktopMessage) => void
   onStartMessageSelection: (message: DesktopMessage) => void
   onToggleMessageSelection: (message: DesktopMessage) => void
@@ -480,6 +497,7 @@ function MessageRow({
             targetId={targetId}
             menuTriggerRef={menuTriggerRef}
             onReply={replyAction}
+            onReplyCloseFocus={onReplyCloseFocus}
             onForward={forwardAction}
             onMultiSelect={selectAction}
             onCreateTopic={createTopicAction}
@@ -510,6 +528,8 @@ function MessageRow({
               mentionLabelResolver={mentionLabelResolver}
               conversationName={conversationName}
               messageId={message.id}
+              initialExpanded={initialExpanded}
+              onExpand={onExpand}
               choice={message.choice}
               showChoiceResponseCounts={showChoiceResponseCounts}
               onReeditRevoked={
@@ -562,6 +582,7 @@ function MessageRow({
                 targetId={targetId}
                 selectionContainerRef={menuTriggerRef}
                 onReply={replyAction}
+                onReplyCloseFocus={onReplyCloseFocus}
                 onForward={forwardAction}
                 onMultiSelect={selectAction}
                 onCreateTopic={createTopicAction}

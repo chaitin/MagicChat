@@ -73,6 +73,41 @@ describe("useConversationMessageWindow", () => {
     expect(result.current.state.viewMode).toBe("history")
   })
 
+  it("catches up a changed conversation through every page up to its snapshot seq", async () => {
+    mocks.listConversationMessages.mockImplementation(
+      (_id: string, options: { afterSeq?: number }) => {
+        const afterSeq = options.afterSeq ?? 0
+        const end = Math.min(afterSeq + 20, 61)
+        return Promise.resolve(createPage(afterSeq + 1, end, true, end < 61))
+      }
+    )
+    const { result } = renderHook(() => useMessageWindowHarness(61))
+    const initial = createPage(1, 20, false, true)
+    act(() =>
+      result.current.updateState((state) => ({
+        ...state,
+        loaded: true,
+        messages: initial.messages,
+        page: initial.page,
+      }))
+    )
+    act(() =>
+      result.current.actions.syncAfterConversationMessages(
+        "conversation-1",
+        20,
+        61
+      )
+    )
+    await waitFor(() =>
+      expect(result.current.state.messages.at(-1)?.seq).toBe(61)
+    )
+    expect(
+      mocks.listConversationMessages.mock.calls.map(
+        ([, options]) => options.afterSeq
+      )
+    ).toEqual([20, 40, 60])
+  })
+
   it("replaces the history window when returning to latest messages", async () => {
     mocks.listConversationMessages.mockImplementation(
       (
@@ -183,7 +218,9 @@ describe("useConversationMessageWindow", () => {
     mocks.listConversationMessages.mockReturnValue(stalePage.promise)
     const { result } = renderHook(useMessageWindowHarness)
 
-    act(() => result.current.actions.ensureConversationMessages("conversation-1"))
+    act(() =>
+      result.current.actions.ensureConversationMessages("conversation-1")
+    )
     act(() => {
       result.current.actions.invalidateConversationMessageRequests()
       result.current.updateState(() => ({
@@ -197,9 +234,9 @@ describe("useConversationMessageWindow", () => {
       await stalePage.promise
     })
 
-    expect(result.current.state.messages.map((message) => message.seq)).toEqual([
-      300,
-    ])
+    expect(result.current.state.messages.map((message) => message.seq)).toEqual(
+      [300]
+    )
   })
 
   it("deduplicates concurrent requests for newer history messages", async () => {

@@ -265,7 +265,7 @@ describe("ConversationSidebar", () => {
     expect(screen.getByText("小张：群聊话题消息")).toBeInTheDocument()
   })
 
-  it("uses only cached messages for the summary and group sender", () => {
+  it("prefers cached messages and falls back to server summaries without preloading", () => {
     const conversation = createAppConversation({
       id: "group",
       lastMessageSender: {
@@ -311,9 +311,8 @@ describe("ConversationSidebar", () => {
     )
 
     expect(screen.getByText("小张：缓存摘要")).toBeInTheDocument()
-    expect(screen.getByText("暂无消息")).toBeInTheDocument()
+    expect(screen.getByText("不能回退")).toBeInTheDocument()
     expect(screen.queryByText("服务端摘要")).not.toBeInTheDocument()
-    expect(screen.queryByText("不能回退")).not.toBeInTheDocument()
   })
 
   it("keeps mention and draft preview priority", () => {

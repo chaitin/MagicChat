@@ -6,11 +6,14 @@ import { createMessageBootstrap } from "@/features/bootstrap/message-bootstrap"
 
 const run = createMessageBootstrap({
   listLocalConversations: (target) => conversationManager.list(target),
-  refreshConversations: (target) => conversationManager.refresh(target),
+  refreshConversations: async (target) => (await conversationManager.refreshSnapshot(target)).snapshot,
   synchronizeLatest: (target, conversationId, limit) =>
     messageManager.synchronizeLatest(target, conversationId, limit),
   readLatestPage: (target, conversationId, limit) =>
     messageManager.readLatestPage(target, conversationId, limit),
+  listSyncStates: (target) => messageManager.listSyncStates(target),
+  catchUpAfter: (target, conversationId, afterSeq, limit) =>
+    messageManager.catchUpAfter(target, conversationId, afterSeq, limit),
   isUnauthorizedError,
 })
 

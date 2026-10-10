@@ -484,7 +484,7 @@ export function useConversationMessageWindow({
   )
 
   const syncAfterConversationMessages = useCallback(
-    (conversationId: string, afterSeq: number) => {
+    (conversationId: string, afterSeq: number, targetSeq: number) => {
       const state = conversationMessageStatesRef.current[conversationId]
       if (
         coordinator.getDesiredMode(conversationId) === "history" ||
@@ -493,19 +493,21 @@ export function useConversationMessageWindow({
         return
       }
       const requestToken = coordinator.tryBeginRequest("sync", conversationId)
-      if (!requestToken) {
-        return
-      }
+      if (!requestToken) return
       const version = coordinator.getRequestVersion(conversationId)
 
-      void listConversationMessages(conversationId, {
-        afterSeq,
-        limit: messagePageLimit,
-      })
-        .then((result) => {
-          if (!coordinator.requestIsCurrent(conversationId, version)) {
-            return
-          }
+      void (async () => {
+        let cursor = afterSeq
+        for (
+          let pageIndex = 0;
+          pageIndex < 5 && cursor < targetSeq;
+          pageIndex++
+        ) {
+          const result = await listConversationMessages(conversationId, {
+            afterSeq: cursor,
+            limit: messagePageLimit,
+          })
+          if (!coordinator.requestIsCurrent(conversationId, version)) return
           const lastReceivedMessage = result.messages.at(-1)
           updateConversationMessageState(conversationId, (currentState) => {
             const messages = mergeConversationMessages(
@@ -527,18 +529,21 @@ export function useConversationMessageWindow({
               ),
             }
           })
-          if (lastReceivedMessage) {
+          if (lastReceivedMessage)
             rememberConversationMessage(lastReceivedMessage)
-          }
-        })
+          if (result.page.newestSeq <= cursor || !result.page.hasMoreAfter)
+            return
+          cursor = result.page.newestSeq
+        }
+      })()
         .catch((error: unknown) => {
           if (coordinator.requestIsCurrent(conversationId, version)) {
             toast.error(getClientDataErrorMessage(error, "同步新消息失败"))
           }
         })
-        .finally(() => {
+        .finally(() =>
           coordinator.finishRequest("sync", conversationId, requestToken)
-        })
+        )
     },
     [
       conversationMessageStatesRef,

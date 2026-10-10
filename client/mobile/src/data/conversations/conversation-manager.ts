@@ -37,7 +37,7 @@ type Dependencies = {
 }
 
 export function createConversationManager(dependencies: Dependencies) {
-  const refreshTasks = new SharedTaskPool<ClientConversation[]>()
+  const refreshTasks = new SharedTaskPool<{ snapshot: ClientConversation[]; local: ClientConversation[] }>()
   const now = dependencies.now ?? Date.now
   const observedAtByTarget = new Map<string, number>()
 
@@ -58,6 +58,25 @@ export function createConversationManager(dependencies: Dependencies) {
     return observedAt
   }
 
+  function refreshSnapshot(target: AuthenticatedTarget, options: RefreshOptions = {}) {
+    const requestStartedAt = nextObservedAt(target)
+    return refreshTasks.run(
+      targetKey(target),
+      async () => {
+        // A caller's signal only stops that caller waiting, not the shared HTTP operation.
+        const snapshot = await dependencies.fetch(target, { fetcher: options.fetcher })
+        await dependencies.store.upsertBatch(target, snapshot, {
+          observedAt: requestStartedAt,
+          source: "http",
+          startedAt: requestStartedAt,
+        })
+        dependencies.notify(target)
+        return { snapshot, local: await dependencies.store.list(target) }
+      },
+      options.signal
+    )
+  }
+
   return {
     list(target: AuthenticatedTarget) {
       return dependencies.store.list(target)
@@ -73,27 +92,13 @@ export function createConversationManager(dependencies: Dependencies) {
       return nextObservedAt(target)
     },
 
-    refresh(target: AuthenticatedTarget, options: RefreshOptions = {}) {
-      const requestStartedAt = nextObservedAt(target)
-      return refreshTasks.run(
-        targetKey(target),
-        async () => {
-          // A caller's signal only stops that caller waiting. It is deliberately
-          // not passed to the shared HTTP operation.
-          const conversations = await dependencies.fetch(target, {
-            fetcher: options.fetcher,
-          })
-          await dependencies.store.upsertBatch(target, conversations, {
-            observedAt: requestStartedAt,
-            source: "http",
-            startedAt: requestStartedAt,
-          })
-          dependencies.notify(target)
-          return dependencies.store.list(target)
-        },
-        options.signal
-      )
+    async refresh(target: AuthenticatedTarget, options: RefreshOptions = {}) {
+      return (await refreshSnapshot(target, options)).local
     },
+
+    refreshSnapshot,
+
+
 
     async upsert(
       target: AuthenticatedTarget,

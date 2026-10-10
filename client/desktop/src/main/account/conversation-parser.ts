@@ -41,10 +41,13 @@ export function parseConversation(value: unknown, currentUserId: string): Stored
     avatarId: avatarIdentity.id,
     createdAt: requiredString(value.created_at, 64, "conversation.created_at"),
     lastMessageAt: nullableString(value.last_message_at, 64),
-    lastMessageSummary: "",
+    lastMessageSummary: optionalString(value.last_message_summary, 4_096),
     pinned: value.pinned === true,
     notificationMuted: value.notification_muted === true,
-    isBuiltinAssistant: isBuiltinAssistantConversation({ type, is_builtin_assistant: value.is_builtin_assistant }),
+    isBuiltinAssistant: isBuiltinAssistantConversation({
+      type,
+      is_builtin_assistant: value.is_builtin_assistant,
+    }),
     unreadCount: nonNegativeInteger(value.unread_count),
     lastMessageSeq: nonNegativeInteger(value.last_message_seq),
     lastReadSeq: nonNegativeInteger(value.last_read_seq),
@@ -136,7 +139,9 @@ function conversationAvatarIdentity(
     const members = parseAvatarMembers(value.members)
     const preferred = members.find((member) =>
       conversationType === "app"
-        ? member.type === "app" && (value.is_builtin_assistant === true || member.id !== "00000000-0000-0000-0000-000000000001")
+        ? member.type === "app" &&
+          (value.is_builtin_assistant === true ||
+            member.id !== "00000000-0000-0000-0000-000000000001")
         : member.id !== currentUserId,
     )
     if (preferred) return { type: preferred.type, id: preferred.id }

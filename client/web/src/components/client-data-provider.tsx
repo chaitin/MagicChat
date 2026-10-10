@@ -19,7 +19,6 @@ import {
   isClientMessageInitiatedByUser,
   listClientContacts,
   listClientConversations,
-  listConversationMessages,
   listFriendRequests,
   listConversationMessageChoiceSnapshots,
   listConversationMessageReactionSnapshots,
@@ -64,7 +63,6 @@ import {
   mergeBootstrapConversationMessageStates,
   mergeConversationMessages,
   mergeConversationSnapshot,
-  mergeLatestCachedMessages,
   isLatestConversationSnapshot,
   orderConversations,
   shouldReplaceConversationSnapshot,
@@ -90,10 +88,6 @@ const minimumBootstrapLoadingMs = 1_000
 const refreshIntervalMs = 15_000
 const reactionSnapshotBatchSize = 100
 const choiceSnapshotBatchSize = 100
-const bootstrapMessageConcurrency = 5
-const bootstrapMessageLimit = 20
-const bootstrapConversationLimit = 30
-const bootstrapMessageTimeoutMs = 30_000
 const maxReactionSnapshotCatchUpAttempts = 3
 const userProfileCacheTtlMs = 5 * 60 * 1_000
 const unavailableUserCacheTtlMs = 30 * 1_000
@@ -668,6 +662,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
           removedConversationIdsRef.current
         )
       )
+      return snapshot
     } catch (error) {
       throw handleError(error, "加载会话列表失败")
     }
@@ -1586,43 +1581,85 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     [handleError]
   )
 
-  const syncLoadedConversationMessages = useCallback(() => {
-    for (const [conversationId, state] of Object.entries(
-      conversationMessageStatesRef.current
-    )) {
-      if (!state.loaded) {
-        continue
-      }
-
-      const newestSeq = getNewestMessageSeq(state)
-      if (newestSeq > 0) {
-        syncAfterConversationMessages(conversationId, newestSeq)
-      }
-      void refreshMessageReactions(
-        conversationId,
-        state.messages.map((message) => message.id)
-      ).catch(() => undefined)
-      const choiceMessageIds = state.messages
-        .filter((message) => message.body.type === "choice")
-        .map((message) => message.id)
-      for (
-        let index = 0;
-        index < choiceMessageIds.length;
-        index += choiceSnapshotBatchSize
-      ) {
-        void listConversationMessageChoiceSnapshots(
-          conversationId,
-          choiceMessageIds.slice(index, index + choiceSnapshotBatchSize)
+  const syncLoadedConversationMessages = useCallback(
+    (snapshot?: ClientConversation[]) => {
+      const serverSeqById = new Map(
+        (Array.isArray(snapshot) ? snapshot : conversationsRef.current).map(
+          (conversation) => [conversation.id, conversation.lastMessageSeq]
         )
-          .then(applyChoiceSnapshots)
-          .catch(() => undefined)
+      )
+      let remaining = 100
+      for (const [conversationId, state] of Object.entries(
+        conversationMessageStatesRef.current
+      ).sort(
+        ([left], [right]) =>
+          Number(right === includedConversationIdRef.current) -
+          Number(left === includedConversationIdRef.current)
+      )) {
+        if (!state.loaded) {
+          continue
+        }
+
+        const newestSeq = getNewestMessageSeq(state)
+        const missing =
+          (serverSeqById.get(conversationId) ?? newestSeq) - newestSeq
+        if (
+          newestSeq > 0 &&
+          missing > 0 &&
+          missing <= 100 &&
+          missing <= remaining
+        ) {
+          remaining -= missing
+          syncAfterConversationMessages(
+            conversationId,
+            newestSeq,
+            newestSeq + missing
+          )
+        } else if (missing > 0 && state.page) {
+          updateConversationMessageState(conversationId, (current) => ({
+            ...current,
+            latestKnownSeq: Math.max(
+              current.latestKnownSeq,
+              newestSeq + missing
+            ),
+            page: current.page ? { ...current.page, hasMoreAfter: true } : null,
+          }))
+        } else if (
+          missing === 0 &&
+          conversationId === includedConversationIdRef.current &&
+          state.viewMode === "latest"
+        ) {
+          returnToLatestConversationMessages(conversationId)
+        }
+        void refreshMessageReactions(
+          conversationId,
+          state.messages.map((message) => message.id)
+        ).catch(() => undefined)
+        const choiceMessageIds = state.messages
+          .filter((message) => message.body.type === "choice")
+          .map((message) => message.id)
+        for (
+          let index = 0;
+          index < choiceMessageIds.length;
+          index += choiceSnapshotBatchSize
+        ) {
+          void listConversationMessageChoiceSnapshots(
+            conversationId,
+            choiceMessageIds.slice(index, index + choiceSnapshotBatchSize)
+          )
+            .then(applyChoiceSnapshots)
+            .catch(() => undefined)
+        }
       }
-    }
-  }, [
-    applyChoiceSnapshots,
-    refreshMessageReactions,
-    syncAfterConversationMessages,
-  ])
+    },
+    [
+      applyChoiceSnapshots,
+      refreshMessageReactions,
+      returnToLatestConversationMessages,
+      syncAfterConversationMessages,
+      updateConversationMessageState,
+    ]
+  )
 
   const getConversationAccountGeneration = useCallback(
     () => conversationAccountGenerationRef.current,
@@ -1721,62 +1758,6 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
           listClientProjects({ limit: 100 }),
         ])
 
-      const preloadedMessageStates: Record<
-        string,
-        ClientConversationMessageState
-      > = {}
-      const preloadedLatestMessages: Record<string, ClientMessage> = {}
-      const conversationsToPreload = orderConversations(
-        nextConversations
-      ).slice(0, bootstrapConversationLimit)
-      let nextConversationIndex = 0
-      let acceptingPreloadResults = true
-      const preloadWorker = async () => {
-        while (nextConversationIndex < conversationsToPreload.length) {
-          const conversation = conversationsToPreload[nextConversationIndex++]
-          try {
-            const result = await listConversationMessages(conversation.id, {
-              limit: bootstrapMessageLimit,
-            })
-            if (!isCurrent() || !acceptingPreloadResults) return
-            preloadedMessageStates[conversation.id] = {
-              ...createConversationMessageState(),
-              loaded: true,
-              latestKnownSeq: result.page.newestSeq,
-              messages: result.messages,
-              page: result.page,
-            }
-            const latestMessage = result.messages.at(-1)
-            if (latestMessage) {
-              preloadedLatestMessages[conversation.id] = latestMessage
-            }
-          } catch {
-            // Leave failures absent so opening the conversation retries normally.
-          }
-        }
-      }
-      const preloadTasks = Promise.all(
-        Array.from(
-          {
-            length: Math.min(
-              bootstrapMessageConcurrency,
-              conversationsToPreload.length
-            ),
-          },
-          () => preloadWorker()
-        )
-      )
-      let timeoutId: ReturnType<typeof setTimeout> | undefined
-      await Promise.race([
-        preloadTasks,
-        new Promise<void>((resolve) => {
-          timeoutId = setTimeout(resolve, bootstrapMessageTimeoutMs)
-        }),
-      ])
-      acceptingPreloadResults = false
-      if (timeoutId !== undefined) clearTimeout(timeoutId)
-      if (!isCurrent()) return
-
       await ensureUsers(nextContacts.userIds)
       if (nextContacts.directoryMode === "friends") {
         await refreshFriendRequests()
@@ -1832,15 +1813,11 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
       setConversationMessageStates((currentStates) =>
         mergeBootstrapConversationMessageStates(
           currentStates,
-          preloadedMessageStates,
+          {},
           accountChanged
         )
       )
-      setLatestCachedMessages((currentMessages) =>
-        accountChanged
-          ? preloadedLatestMessages
-          : mergeLatestCachedMessages(currentMessages, preloadedLatestMessages)
-      )
+      if (accountChanged) setLatestCachedMessages({})
       setPersonalProject(nextProjects.personalProject)
       setProjects(nextProjects.projects)
       setProjectsNextCursor(nextProjects.nextCursor)

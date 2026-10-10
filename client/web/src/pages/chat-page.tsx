@@ -287,6 +287,7 @@ export function ChatPage() {
         ? {
             focus: activeMessageState.focus,
             loadingAfter: activeMessageState.loadingAfter,
+            hasMoreAfter: activeMessageState.page?.hasMoreAfter,
             onFocusHandled: (requestKey: number) =>
               consumeConversationMessageFocus(activeConversationId, requestKey),
             onLoadAfterMessages: () =>

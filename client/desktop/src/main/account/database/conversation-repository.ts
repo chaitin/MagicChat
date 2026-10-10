@@ -173,10 +173,14 @@ export class ConversationRepository {
         `SELECT conversations.id, conversations.type, conversations.name,
                 conversations.member_count, conversations.avatar_type, conversations.avatar_id,
                 conversations.created_at, conversations.last_message_at,
-                COALESCE(last_message.content, '') AS last_message_summary,
-                last_message.sender_id AS last_message_sender_id,
-                last_message.sender_name AS last_message_sender_name,
-                last_message.sender_type AS last_message_sender_type,
+                CASE WHEN last_message.seq >= conversations.last_message_seq
+                  THEN COALESCE(last_message.content, '') ELSE conversations.last_message_summary END AS last_message_summary,
+                CASE WHEN last_message.seq >= conversations.last_message_seq THEN last_message.sender_id
+                  WHEN json_valid(conversations.payload_json) THEN json_extract(conversations.payload_json, '$.last_message_sender.id') END AS last_message_sender_id,
+                CASE WHEN last_message.seq >= conversations.last_message_seq THEN last_message.sender_name
+                  WHEN json_valid(conversations.payload_json) THEN COALESCE(json_extract(conversations.payload_json, '$.last_message_sender.nickname'), json_extract(conversations.payload_json, '$.last_message_sender.name')) END AS last_message_sender_name,
+                CASE WHEN last_message.seq >= conversations.last_message_seq THEN last_message.sender_type
+                  WHEN json_valid(conversations.payload_json) THEN json_extract(conversations.payload_json, '$.last_message_sender.type') END AS last_message_sender_type,
                 conversations.pinned, conversations.notification_muted,
                 conversations.is_builtin_assistant, conversations.unread_count,
                 conversations.last_message_seq, conversations.last_read_seq,
@@ -211,10 +215,14 @@ export class ConversationRepository {
       .prepare(
         `SELECT c.id, c.type, c.name, c.member_count, c.avatar_type, c.avatar_id,
                 c.created_at, c.last_message_at,
-                COALESCE(last_message.content, '') AS last_message_summary,
-                last_message.sender_id AS last_message_sender_id,
-                last_message.sender_name AS last_message_sender_name,
-                last_message.sender_type AS last_message_sender_type,
+                CASE WHEN last_message.seq >= c.last_message_seq
+                  THEN COALESCE(last_message.content, '') ELSE c.last_message_summary END AS last_message_summary,
+                CASE WHEN last_message.seq >= c.last_message_seq THEN last_message.sender_id
+                  WHEN json_valid(c.payload_json) THEN json_extract(c.payload_json, '$.last_message_sender.id') END AS last_message_sender_id,
+                CASE WHEN last_message.seq >= c.last_message_seq THEN last_message.sender_name
+                  WHEN json_valid(c.payload_json) THEN COALESCE(json_extract(c.payload_json, '$.last_message_sender.nickname'), json_extract(c.payload_json, '$.last_message_sender.name')) END AS last_message_sender_name,
+                CASE WHEN last_message.seq >= c.last_message_seq THEN last_message.sender_type
+                  WHEN json_valid(c.payload_json) THEN json_extract(c.payload_json, '$.last_message_sender.type') END AS last_message_sender_type,
                 c.pinned, c.notification_muted, c.is_builtin_assistant, c.unread_count,
                 c.last_message_seq, c.last_read_seq, c.last_mentioned_seq, c.payload_json
          FROM conversations c

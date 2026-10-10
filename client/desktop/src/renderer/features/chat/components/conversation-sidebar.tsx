@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { memo, useMemo, useState } from "react"
 import {
   ArrowMoveDownRightIcon,
   Delete02Icon,
@@ -39,7 +39,7 @@ import { formatConversationSummary } from "../conversation-list-preview"
 import { canPinConversation } from "../conversation-action-policy"
 import { conversationUnreadIndicator, hasUnreadMention } from "../conversation-unread"
 
-export function ConversationSidebar({
+export const ConversationSidebar = memo(function ConversationSidebar({
   conversations,
   currentUserId,
   draftConversationIds,
@@ -77,7 +77,7 @@ export function ConversationSidebar({
   onDismiss: (conversationId: string) => Promise<void>
 }) {
   const { showToast } = useAnimatedToast()
-  const { pinned, regular } = groupConversationList(conversations)
+  const { pinned, regular } = useMemo(() => groupConversationList(conversations), [conversations])
   const [pendingAction, setPendingAction] = useState<PendingConversationAction>(null)
   const [dismissCandidate, setDismissCandidate] = useState<DesktopConversation | null>(null)
 
@@ -244,7 +244,7 @@ export function ConversationSidebar({
       </AlertDialog>
     </>
   )
-}
+})
 
 type PendingConversationAction = {
   conversationId: string

@@ -8,6 +8,7 @@ import { flattenVisibleConversations } from "@/domain/conversations/conversation
 const target = { id: "server", url: "https://example.test", userId: "user" }
 const conversations = Array.from({ length: 40 }, (_, index) => ({
   id: `c${index}`,
+  lastMessageSeq: 1,
 })) as ClientConversation[]
 const page = { messages: [], page: { hasMoreBefore: false, newestSeq: 0, oldestSeq: 0 } }
 
@@ -20,6 +21,8 @@ test("message bootstrap limits work, uses five workers, tolerates items, and ded
     refreshConversations: async () => conversations,
     readLatestPage: async () => page,
     isUnauthorizedError: () => false,
+    listSyncStates: async () => [],
+    catchUpAfter: async () => { throw new Error("unexpected catch-up") },
     synchronizeLatest: async (_target, id, limit) => {
       assert.equal(limit, 20)
       active += 1
@@ -47,6 +50,7 @@ test("network synchronization follows the visible UI order instead of raw storag
     id: `raw-${index}`,
     pinned: index === 30,
     type: "direct",
+    lastMessageSeq: 1,
   })) as ClientConversation[]
   const synchronized: string[] = []
   const run = createMessageBootstrap({
@@ -58,12 +62,44 @@ test("network synchronization follows the visible UI order instead of raw storag
       return page
     },
     isUnauthorizedError: () => false,
+    listSyncStates: async () => [],
+    catchUpAfter: async () => { throw new Error("unexpected catch-up") },
   })
 
   await run({ ...target, id: "visible-order" })
   assert.equal(synchronized.length, 30)
   assert.ok(synchronized.includes("raw-30"))
   assert.ok(!synchronized.includes("raw-9"))
+})
+
+test("cold start only catches up changed conversations and stops beyond 100", async () => {
+  const snapshot = [
+    { id: "same", lastMessageSeq: 80 },
+    { id: "updated", lastMessageSeq: 121 },
+    { id: "too-far", lastMessageSeq: 201 },
+  ] as ClientConversation[]
+  const fetched: string[] = []
+  const after: number[] = []
+  const run = createMessageBootstrap({
+    listLocalConversations: async () => snapshot,
+    refreshConversations: async () => snapshot,
+    readLatestPage: async () => page,
+    listSyncStates: async () => [
+      { conversationId: "same", httpSyncedThroughSeq: 80 },
+      { conversationId: "updated", httpSyncedThroughSeq: 100 },
+      { conversationId: "too-far", httpSyncedThroughSeq: 100 },
+    ] as never,
+    catchUpAfter: async (_target, id, seq) => {
+      fetched.push(id)
+      after.push(seq)
+      return { committedSeq: seq + 20, result: { ...page, page: { ...page.page, hasMoreAfter: true } } }
+    },
+    synchronizeLatest: async (_target, id) => { fetched.push(id); return page },
+    isUnauthorizedError: () => false,
+  })
+  await run(target)
+  assert.deepEqual(fetched, ["updated", "updated"])
+  assert.deepEqual(after, [100, 120])
 })
 
 test("message bootstrap has a bounded successful timeout", async () => {
@@ -74,6 +110,8 @@ test("message bootstrap has a bounded successful timeout", async () => {
       readLatestPage: async () => page,
       synchronizeLatest: () => new Promise(() => undefined),
       isUnauthorizedError: () => false,
+    listSyncStates: async () => [],
+    catchUpAfter: async () => { throw new Error("unexpected catch-up") },
     },
     5
   )
@@ -96,6 +134,8 @@ test("timed-out bootstrap continues publishing late pages and can run again", as
         resolveNetwork = resolve
       }),
       isUnauthorizedError: () => false,
+    listSyncStates: async () => [],
+    catchUpAfter: async () => { throw new Error("unexpected catch-up") },
     },
     5,
     5
@@ -125,6 +165,8 @@ test("an unauthorized conversation refresh is propagated and can be retried", as
     readLatestPage: async () => page,
     synchronizeLatest: async () => page,
     isUnauthorizedError: (error) => error === unauthorized,
+    listSyncStates: async () => [],
+    catchUpAfter: async () => { throw new Error("unexpected catch-up") },
   })
   await assert.rejects(run(target), unauthorized)
   await run(target)
@@ -157,6 +199,8 @@ test("message bootstrap hydrates local messages beyond the network synchronizati
       return page
     },
     isUnauthorizedError: () => false,
+    listSyncStates: async () => [],
+    catchUpAfter: async () => { throw new Error("unexpected catch-up") },
   })
 
   const results = await run({ ...target, id: "local-hydration" })
@@ -195,6 +239,8 @@ test("offline refresh still hydrates all local conversations", async () => {
       return page
     },
     isUnauthorizedError: () => false,
+    listSyncStates: async () => [],
+    catchUpAfter: async () => { throw new Error("unexpected catch-up") },
   })
 
   const results = await run({ ...target, id: "offline-local-hydration" })

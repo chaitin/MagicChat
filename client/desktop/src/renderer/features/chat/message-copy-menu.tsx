@@ -32,6 +32,7 @@ type MessageActionMenuProps = {
   summary: string
   targetId: string
   onReply?: () => void
+  onReplyCloseFocus?: () => void
   onForward?: () => void
   onMultiSelect?: () => void
   onCreateTopic?: () => void
@@ -46,6 +47,7 @@ export function MessageCopyMenu({
   menuTriggerRef,
   children,
   onReply,
+  onReplyCloseFocus,
   onForward,
   onMultiSelect,
   onCreateTopic,
@@ -58,6 +60,7 @@ export function MessageCopyMenu({
   const internalTriggerRef = useRef<HTMLDivElement>(null)
   const triggerRef = menuTriggerRef ?? internalTriggerRef
   const selectedCopyTextRef = useRef("")
+  const replySelectedRef = useRef(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const copyMessage = useMessageCopy(body, summary, targetId)
 
@@ -84,7 +87,14 @@ export function MessageCopyMenu({
           {children}
         </div>
       </ContextMenuTrigger>
-      <ContextMenuContent>
+      <ContextMenuContent
+        onCloseAutoFocus={(event) => {
+          if (!replySelectedRef.current) return
+          event.preventDefault()
+          replySelectedRef.current = false
+          onReplyCloseFocus?.()
+        }}
+      >
         <MessageActionMenuItems
           kind="context"
           onCopy={() => {
@@ -93,7 +103,14 @@ export function MessageCopyMenu({
             void copyMessage(selectedText)
           }}
           onCreateTopic={onCreateTopic}
-          onReply={onReply}
+          onReply={
+            onReply
+              ? () => {
+                  replySelectedRef.current = true
+                  onReply()
+                }
+              : undefined
+          }
           onForward={onForward}
           onMultiSelect={onMultiSelect}
           onRevoke={onRevoke}
@@ -110,6 +127,7 @@ export function MessageActionsDropdown({
   selectionContainerRef,
   children,
   onReply,
+  onReplyCloseFocus,
   onForward,
   onMultiSelect,
   onCreateTopic,
@@ -119,6 +137,7 @@ export function MessageActionsDropdown({
   children: ReactNode
 }) {
   const selectedCopyTextRef = useRef("")
+  const replySelectedRef = useRef(false)
   const copyMessage = useMessageCopy(body, summary, targetId)
 
   return (
@@ -130,7 +149,15 @@ export function MessageActionsDropdown({
       }}
     >
       <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent
+        align="end"
+        onCloseAutoFocus={(event) => {
+          if (!replySelectedRef.current) return
+          event.preventDefault()
+          replySelectedRef.current = false
+          onReplyCloseFocus?.()
+        }}
+      >
         <MessageActionMenuItems
           kind="dropdown"
           onCopy={() => {
@@ -139,7 +166,14 @@ export function MessageActionsDropdown({
             void copyMessage(selectedText)
           }}
           onCreateTopic={onCreateTopic}
-          onReply={onReply}
+          onReply={
+            onReply
+              ? () => {
+                  replySelectedRef.current = true
+                  onReply()
+                }
+              : undefined
+          }
           onForward={onForward}
           onMultiSelect={onMultiSelect}
           onRevoke={onRevoke}

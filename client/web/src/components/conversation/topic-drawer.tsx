@@ -179,6 +179,7 @@ function TopicDrawerContent({
         ? {
             focus: messageState.focus,
             loadingAfter: messageState.loadingAfter,
+            hasMoreAfter: messageState.page?.hasMoreAfter,
             onFocusHandled: (requestKey: number) =>
               consumeConversationMessageFocus(conversation.id, requestKey),
             onLoadAfterMessages: () =>

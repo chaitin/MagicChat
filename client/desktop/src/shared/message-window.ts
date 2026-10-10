@@ -1,6 +1,7 @@
 import type { DesktopMessage } from "./account-data"
 
 export const MESSAGE_PAGE_SIZE = 20
+export const MAX_VISIBLE_MESSAGES = 200
 
 export type MessageGap = { afterSeq: number; beforeSeq: number; unavailable?: boolean }
 

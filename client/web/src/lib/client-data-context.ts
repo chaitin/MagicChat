@@ -213,7 +213,7 @@ export type ClientDataContextValue = {
     conversationId: string,
     announcement: string
   ) => Promise<ClientConversation>
-  refreshConversations: () => Promise<void>
+  refreshConversations: () => Promise<ClientConversation[] | undefined>
   refreshRestoredConversation: (conversationId: string) => Promise<void>
   refreshContacts: () => Promise<void>
   refreshFriendRequests: () => Promise<void>
@@ -261,7 +261,7 @@ export type ClientDataContextValue = {
     options?: SendConversationMessageOptions
   ) => Promise<ClientMessage | null>
   setForegroundConversationId?: (conversationId: string) => void
-  syncLoadedConversationMessages: () => void
+  syncLoadedConversationMessages: (snapshot?: ClientConversation[]) => void
   updateConversationLastMessage: (message: ClientMessage) => void
   updateConversationPinned: (conversationId: string, pinned: boolean) => void
   updateConversationMuted: (conversationId: string, muted: boolean) => void

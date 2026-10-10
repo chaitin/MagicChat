@@ -60,6 +60,9 @@ import { centerWindowWithinWorkArea } from "./window-position"
 // WSLg 不会稳定继承 Windows 的 DPI，且硬件视频合成可能只播放声音而显示黑屏。
 if (!app.isPackaged && process.platform === "linux" && process.env.WSL_DISTRO_NAME) {
   app.commandLine.appendSwitch("force-device-scale-factor", "1")
+  if (!app.commandLine.hasSwitch("password-store")) {
+    app.commandLine.appendSwitch("password-store", "gnome-libsecret")
+  }
   app.disableHardwareAcceleration()
 }
 

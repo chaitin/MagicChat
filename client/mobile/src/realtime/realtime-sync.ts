@@ -4,20 +4,20 @@ import type { AuthenticatedTarget } from "@/core/server-target"
 import { conversationManager } from "@/data/conversations"
 import { contactManager } from "@/data/contacts"
 import { messageManager } from "@/data/messages"
+import { AUTO_MESSAGE_PAGE_SIZE, catchUpMessagesTo, createMessageSyncBudget } from "@/features/bootstrap/message-sync-budget"
 import { projectManager } from "@/data/projects"
 import { queryKeys } from "@/data/query"
 import { synchronizeConversationMessageChoices } from "./choice-sync"
 import { synchronizeConversationMessageReactions } from "./reaction-sync"
 
 type MessageInfiniteData = InfiniteData<ClientMessageList, number | null>
-const CATCH_UP_PAGE_SIZE = 20
 
 export async function synchronizeRealtimeData(
   queryClient: QueryClient,
   server: AuthenticatedTarget,
   options: { activeConversationId?: string } = {}
 ) {
-  const conversations = await conversationManager.refresh(server)
+  const { snapshot: conversations } = await conversationManager.refreshSnapshot(server)
   const conversationById = new Map(
     conversations.map((conversation) => [conversation.id, conversation])
   )
@@ -27,6 +27,7 @@ export async function synchronizeRealtimeData(
   const syncStateConversationIds = new Set(
     syncStates.map((state) => state.conversationId)
   )
+  const budget = createMessageSyncBudget()
   const prioritizedStates = [...syncStates].sort((left, right) =>
     compareCatchUpPriority(
       left.conversationId,
@@ -38,27 +39,12 @@ export async function synchronizeRealtimeData(
 
   for (const state of prioritizedStates) {
     const conversation = conversationById.get(state.conversationId)
-    const isActive = state.conversationId === options.activeConversationId
-    if (!conversation && !isActive) continue
-
-    if (state.httpSyncedThroughSeq === 0) {
-      await messageManager.synchronizeLatest(
-        server,
-        state.conversationId,
-        CATCH_UP_PAGE_SIZE
-      )
-      continue
-    }
-
-    if (
-      isActive ||
-      (conversation?.lastMessageSeq ?? 0) > state.httpSyncedThroughSeq
-    ) {
-      await catchUpConversationMessages(
-        server,
-        state.conversationId,
-        state.httpSyncedThroughSeq
-      )
+    if (!conversation) continue
+    const decision = budget.decide(conversation, state)
+    if (decision.type === "latest") {
+      await messageManager.synchronizeLatest(server, state.conversationId, AUTO_MESSAGE_PAGE_SIZE)
+    } else if (decision.type === "after") {
+      await catchUpMessagesTo(server, state.conversationId, decision.afterSeq, decision.targetSeq, messageManager.catchUpAfter)
     }
   }
 
@@ -78,12 +64,12 @@ export async function synchronizeRealtimeData(
     }
 
     const newestSeq = getNewestMessageSeq(data)
-    if (newestSeq > 0) {
-      await catchUpConversationMessages(
-        server,
-        conversationId,
-        newestSeq
-      )
+    const conversation = conversationById.get(conversationId)
+    if (conversation && newestSeq > 0) {
+      const decision = budget.decide(conversation, { httpSyncedThroughSeq: newestSeq })
+      if (decision.type === "after") {
+        await catchUpMessagesTo(server, conversationId, decision.afterSeq, decision.targetSeq, messageManager.catchUpAfter)
+      }
     }
   }
 
@@ -136,35 +122,6 @@ export async function refreshClientDataOnForeground(
   ])
 }
 
-async function catchUpConversationMessages(
-  server: AuthenticatedTarget,
-  conversationId: string,
-  initialAfterSeq: number
-) {
-  let afterSeq = initialAfterSeq
-
-  for (let pageIndex = 0; ; pageIndex += 1) {
-    const { committedSeq, result } = await messageManager.catchUpAfter(
-      server,
-      conversationId,
-      afterSeq,
-      CATCH_UP_PAGE_SIZE
-    )
-
-    if (!result.page.hasMoreAfter) {
-      return
-    }
-
-    if (committedSeq <= afterSeq) {
-      throw new Error("消息增量同步游标没有向前推进")
-    }
-    afterSeq = committedSeq
-
-    if (pageIndex > 0 && pageIndex % 10 === 0) {
-      await yieldToEventLoop()
-    }
-  }
-}
 
 function compareCatchUpPriority(
   leftId: string,
@@ -192,9 +149,6 @@ function catchUpPriority(
   return active + unread + (Number.isFinite(recent) ? recent : 0)
 }
 
-function yieldToEventLoop() {
-  return new Promise<void>((resolve) => setTimeout(resolve, 0))
-}
 
 function getLoadedMessageIds(data: MessageInfiniteData) {
   return data.pages.flatMap((page) =>

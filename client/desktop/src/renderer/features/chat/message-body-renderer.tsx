@@ -16,6 +16,8 @@ export function MessageBodyRenderer({
   onReeditRevoked,
   flushMedia = false,
   flushInteractiveCard = false,
+  initialExpanded = false,
+  onExpand,
 }: {
   body: DesktopMessageBody
   targetId: string
@@ -29,6 +31,8 @@ export function MessageBodyRenderer({
   onReeditRevoked?: () => void
   flushMedia?: boolean
   flushInteractiveCard?: boolean
+  initialExpanded?: boolean
+  onExpand?: () => void
 }) {
   return (
     <MediaContext.Provider value={{ targetId, conversationName }}>
@@ -44,6 +48,8 @@ export function MessageBodyRenderer({
           flushMedia={flushMedia}
           flushInteractiveCard={flushInteractiveCard}
           collapseLongContent
+          initialExpanded={initialExpanded}
+          onExpand={onExpand}
         />
       </MentionContext.Provider>
     </MediaContext.Provider>

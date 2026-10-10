@@ -1,6 +1,8 @@
 import type { ClientConversation, ClientMessageList } from "@/core/models"
 import type { AuthenticatedTarget } from "@/core/server-target"
 import { flattenVisibleConversations } from "@/domain/conversations/conversation-order"
+import { AUTO_MESSAGE_PAGE_SIZE, catchUpMessagesTo, createMessageSyncBudget } from "@/features/bootstrap/message-sync-budget"
+import type { MessageSyncState } from "@/data/messages/message-cache-store"
 
 export const MESSAGE_BOOTSTRAP_CONVERSATION_LIMIT = 30
 export const MESSAGE_BOOTSTRAP_MESSAGE_LIMIT = 20
@@ -25,6 +27,8 @@ export type MessageBootstrapDependencies = {
     conversationId: string,
     limit: number
   ) => Promise<ClientMessageList>
+  listSyncStates: (target: AuthenticatedTarget) => Promise<MessageSyncState[]>
+  catchUpAfter: (target: AuthenticatedTarget, conversationId: string, afterSeq: number, limit: number) => Promise<{ committedSeq: number; result: ClientMessageList }>
   isUnauthorizedError: (error: unknown) => boolean
 }
 
@@ -95,31 +99,31 @@ async function runBoundedBootstrap(
 
   const synchronizeNetwork = dependencies
     .refreshConversations(target)
-    .then((conversations) =>
-      // Network synchronization deliberately remains limited to the refreshed top 30.
-      runWithConcurrency(
-        flattenVisibleConversations(conversations).slice(
-          0,
-          MESSAGE_BOOTSTRAP_CONVERSATION_LIMIT
-        ),
-        MESSAGE_BOOTSTRAP_CONCURRENCY,
-        async (conversation) => {
-          await dependencies
-            .synchronizeLatest(
-              target,
-              conversation.id,
-              MESSAGE_BOOTSTRAP_MESSAGE_LIMIT
-            )
-            .then((page) => {
-              results.set(conversation.id, page)
-              onPage?.(conversation.id, page)
-            })
-            .catch((error: unknown) => {
-              if (dependencies.isUnauthorizedError(error)) throw error
-            })
+    .then(async (conversations) => {
+      // Only the HTTP snapshot is authoritative; local-only conversations may be outside the server's top 30.
+      const states = await dependencies.listSyncStates(target)
+      const byId = new Map(states.map((state) => [state.conversationId, state]))
+      const budget = createMessageSyncBudget()
+      const selected = flattenVisibleConversations(conversations)
+        .slice(0, MESSAGE_BOOTSTRAP_CONVERSATION_LIMIT)
+        .sort((left, right) => Number(right.unreadCount > 0) - Number(left.unreadCount > 0))
+        .map((conversation) => ({ conversation, decision: budget.decide(conversation, byId.get(conversation.id)) }))
+        .filter(({ decision }) => decision.type !== "skip")
+      await runWithConcurrency(selected, MESSAGE_BOOTSTRAP_CONCURRENCY, async ({ conversation, decision }) => {
+        try {
+          const page = decision.type === "after"
+            ? await (async () => {
+                await catchUpMessagesTo(target, conversation.id, decision.afterSeq, decision.targetSeq, dependencies.catchUpAfter)
+                return dependencies.readLatestPage(target, conversation.id, MESSAGE_BOOTSTRAP_MESSAGE_LIMIT)
+              })()
+            : await dependencies.synchronizeLatest(target, conversation.id, AUTO_MESSAGE_PAGE_SIZE)
+          results.set(conversation.id, page)
+          onPage?.(conversation.id, page)
+        } catch (error) {
+          if (dependencies.isUnauthorizedError(error)) throw error
         }
-      )
-    )
+      })
+    })
     .catch((error: unknown) => {
       // Offline refresh is non-fatal, but authentication failures must keep logging out.
       if (dependencies.isUnauthorizedError(error)) throw error

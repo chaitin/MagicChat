@@ -651,7 +651,29 @@ function getConversationListDescription(
   appsById: ReadonlyMap<string, ContactApp>
 ) {
   if (!message) {
-    return "暂无消息"
+    if (!conversation.lastMessageSummary) return "暂无消息"
+    const summary = formatMentionTemplateText(
+      conversation.lastMessageSummary,
+      mentionLabelResolver
+    )
+    const showsSender =
+      conversation.type === "group" ||
+      (conversation.type === "topic" &&
+        conversation.topic?.parentConversationType === "group")
+    if (!showsSender || !conversation.lastMessageSender) return summary
+    const sender = conversation.lastMessageSender
+    const senderName =
+      sender.type === "system"
+        ? "系统"
+        : sender.type === "user" && sender.id === currentUser.id
+          ? "我"
+          : sender.type === "user"
+            ? contactsById.get(sender.id)?.nickname ||
+              contactsById.get(sender.id)?.name ||
+              sender.nickname ||
+              sender.name
+            : appsById.get(sender.id)?.name || sender.name
+    return senderName ? `${senderName}：${summary}` : summary
   }
 
   const description = formatMentionTemplateText(

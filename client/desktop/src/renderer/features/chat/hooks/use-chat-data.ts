@@ -10,6 +10,16 @@ import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import type { MentionTarget } from "@/lib/message-mentions"
 import { shouldReloadConversationListForSelection } from "@/features/chat/conversation-list-order"
 import { createCoalescedConversationListLoader } from "@/features/chat/conversation-list-loader"
+import {
+  boundMessageWindow,
+  MAX_VISIBLE_MESSAGES,
+  visibleMessageGap,
+} from "../bounded-message-window"
+import {
+  captureMessageScroll,
+  restoreMessageScroll,
+  type MessageScrollSnapshot,
+} from "../message-scroll-anchor"
 
 export function useChatData({
   targetId,
@@ -67,7 +77,7 @@ export function useChatData({
   const messageWindowRevisionRef = useRef(0)
   const locatingWindowRef = useRef<number | null>(null)
   const browsingOlderWindowRef = useRef(false)
-  const prependSnapshotRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null)
+  const scrollSnapshotRef = useRef<MessageScrollSnapshot | null>(null)
   const scrollToBottomRef = useRef(true)
   const isAtBottomRef = useRef(true)
   const messagesRef = useRef(messages)
@@ -596,7 +606,7 @@ export function useChatData({
       scrollToBottomRef.current = true
       isAtBottomRef.current = true
       setNewMessageCount(0)
-      prependSnapshotRef.current = null
+      scrollSnapshotRef.current = null
       setHasMoreBeforeMessages(false)
       setHasMoreAfterMessages(false)
       setMessageGap(null)
@@ -611,7 +621,10 @@ export function useChatData({
         conversationId: selectedId,
         latestLimit: switchingConversation
           ? 50
-          : Math.max(50, messagesRef.current.filter((message) => !message.virtualType).length),
+          : Math.min(
+              MAX_VISIBLE_MESSAGES,
+              Math.max(50, messagesRef.current.filter((message) => !message.virtualType).length),
+            ),
       })
       .then((result) => {
         if (
@@ -632,8 +645,9 @@ export function useChatData({
               else setNewMessageCount((count) => count + receivedCount)
             }
           }
-          setMessages(result.data)
-          const oldestMessage = result.data.find((message) => !message.virtualType)
+          const bounded = boundMessageWindow(result.data, "newer")
+          setMessages(bounded.messages)
+          const oldestMessage = bounded.messages.find((message) => !message.virtualType)
           setHasMoreBeforeMessages(Boolean(oldestMessage && oldestMessage.seq > 1))
           setHasMoreAfterMessages(false)
           setMessageGap(null)
@@ -704,15 +718,16 @@ export function useChatData({
             ? currentAndLatest.messages
             : latest.data
         const { messages: merged, gap } = mergeLocalMessageWindows(result.data.messages, recent)
-        browsingOlderWindowRef.current = result.data.hasMoreAfter
+        const bounded = boundMessageWindow(merged, "older")
+        browsingOlderWindowRef.current = result.data.hasMoreAfter || bounded.removedAfter
         scrollToBottomRef.current = false
         isAtBottomRef.current = false
-        prependSnapshotRef.current = null
+        scrollSnapshotRef.current = null
         setNewMessageCount(0)
-        setMessages(merged)
-        setMessageGap(gap)
+        setMessages(bounded.messages)
+        setMessageGap(visibleMessageGap(gap, bounded.messages))
         setHasMoreBeforeMessages(result.data.hasMoreBefore)
-        setHasMoreAfterMessages(result.data.hasMoreAfter)
+        setHasMoreAfterMessages(result.data.hasMoreAfter || bounded.removedAfter)
         return true
       } finally {
         if (locatingWindowRef.current === revision) locatingWindowRef.current = null
@@ -729,7 +744,6 @@ export function useChatData({
       !conversationId ||
       !last ||
       !hasMoreAfterMessages ||
-      browsingOlderWindowRef.current ||
       locatingWindowRef.current !== null ||
       loadingAfterRef.current
     )
@@ -745,11 +759,24 @@ export function useChatData({
       if (selectedIdRef.current !== conversationId || messageWindowRevisionRef.current !== revision)
         return
       if (!result.ok) throw new Error(result.error.message)
+      const viewport = historyRef.current
+      if (viewport) scrollSnapshotRef.current = captureMessageScroll(viewport)
+      const ids = new Set(messagesRef.current.map((message) => message.id))
+      const merged = [
+        ...messagesRef.current,
+        ...result.data.messages.filter((message) => !ids.has(message.id)),
+      ]
+      const bounded = boundMessageWindow(merged, "newer")
       isAtBottomRef.current = false
-      setMessages((current) => {
-        const ids = new Set(current.map((message) => message.id))
-        return [...current, ...result.data.messages.filter((message) => !ids.has(message.id))]
-      })
+      setMessages(bounded.messages)
+      setHasMoreBeforeMessages(
+        Boolean(
+          result.data.hasMoreBefore ||
+          bounded.removedBefore ||
+          bounded.messages.some((message) => message.seq > 1),
+        ),
+      )
+      setMessageGap((gap) => visibleMessageGap(gap, bounded.messages))
       browsingOlderWindowRef.current = result.data.hasMoreAfter
       setHasMoreAfterMessages(result.data.hasMoreAfter)
     } catch (error) {
@@ -788,8 +815,18 @@ export function useChatData({
       if (selectedIdRef.current !== conversationId || messageWindowRevisionRef.current !== revision)
         return
       if (!result.ok) throw new Error(result.error.message)
-      setMessages((current) => mergeLocalMessageWindows(current, result.data.messages).messages)
-      setMessageGap(advanceLocalMessageGap(gap, result.data.messages))
+      const viewport = historyRef.current
+      if (viewport) scrollSnapshotRef.current = captureMessageScroll(viewport)
+      const merged = mergeLocalMessageWindows(messagesRef.current, result.data.messages).messages
+      const bounded = boundMessageWindow(merged, "older")
+      setMessages(bounded.messages)
+      setMessageGap(
+        visibleMessageGap(advanceLocalMessageGap(gap, result.data.messages), bounded.messages),
+      )
+      if (bounded.removedAfter) {
+        browsingOlderWindowRef.current = true
+        setHasMoreAfterMessages(true)
+      }
     } catch (error) {
       if (
         selectedIdRef.current === conversationId &&
@@ -860,10 +897,10 @@ export function useChatData({
     if (!selected || loadingMessages) return
     const viewport = historyRef.current
     if (!viewport) return
-    const snapshot = prependSnapshotRef.current
+    const snapshot = scrollSnapshotRef.current
     if (snapshot) {
-      viewport.scrollTop = snapshot.scrollTop + viewport.scrollHeight - snapshot.scrollHeight
-      prependSnapshotRef.current = null
+      restoreMessageScroll(viewport, snapshot)
+      scrollSnapshotRef.current = null
       return
     }
     if (!scrollToBottomRef.current) return
@@ -892,30 +929,20 @@ export function useChatData({
     if (!viewport) return
     const conversationId = selectedId
     const revision = messageWindowRevisionRef.current
-    const localWindow = browsingOlderWindowRef.current
     loadingBeforeRef.current = true
     setLoadingBeforeMessages(true)
-    prependSnapshotRef.current = {
-      scrollHeight: viewport.scrollHeight,
-      scrollTop: viewport.scrollTop,
-    }
+    scrollSnapshotRef.current = captureMessageScroll(viewport)
     try {
-      const result = localWindow
-        ? await window.desktop.accountData.getLocalMessageContext({
-            targetId,
-            conversationId,
-            messageId: oldestMessage.id,
-          })
-        : await window.desktop.accountData.loadBeforeMessages({
-            targetId,
-            conversationId,
-            beforeSeq: oldestMessage.seq,
-            loadedCount: messages.filter((message) => !message.virtualType).length,
-          })
+      const result = await window.desktop.accountData.loadBeforeMessages({
+        targetId,
+        conversationId,
+        beforeSeq: oldestMessage.seq,
+        loadedCount: messages.filter((message) => !message.virtualType).length,
+      })
       if (selectedIdRef.current !== conversationId || messageWindowRevisionRef.current !== revision)
         return
       if (!result.ok) {
-        prependSnapshotRef.current = null
+        scrollSnapshotRef.current = null
         showToast({
           status: "error",
           title: "无法加载更早消息",
@@ -923,18 +950,26 @@ export function useChatData({
         })
         return
       }
-      setMessages((current) =>
-        localWindow
-          ? mergeLocalMessageWindows(result.data.messages, current).messages
-          : result.data.messages,
-      )
-      setHasMoreBeforeMessages(result.data.hasMoreBefore)
+      const merged = mergeLocalMessageWindows(result.data.messages, messagesRef.current).messages
+      const bounded = boundMessageWindow(merged, "older")
+      if (bounded.messages[0]?.id === messagesRef.current[0]?.id) {
+        scrollSnapshotRef.current = null
+        setHasMoreBeforeMessages(false)
+        return
+      }
+      setMessages(bounded.messages)
+      setMessageGap((gap) => visibleMessageGap(gap, bounded.messages))
+      setHasMoreBeforeMessages(result.data.hasMoreBefore || bounded.removedBefore)
+      if (bounded.removedAfter) {
+        browsingOlderWindowRef.current = true
+        setHasMoreAfterMessages(true)
+      }
     } catch {
       if (
         selectedIdRef.current === conversationId &&
         messageWindowRevisionRef.current === revision
       ) {
-        prependSnapshotRef.current = null
+        scrollSnapshotRef.current = null
         showToast({ status: "error", title: "无法加载更早消息" })
       }
     } finally {
@@ -982,10 +1017,11 @@ export function useChatData({
 }
 
 function retainMessageWindow(next: DesktopMessage[], current: DesktopMessage[]) {
-  const visibleCount = Math.max(50, current.filter((message) => !message.virtualType).length)
-  const virtualMessages = next.filter((message) => message.virtualType)
-  const regularMessages = contiguousMessageSuffix(
-    next.filter((message) => !message.virtualType),
-  ).slice(-visibleCount)
-  return [...virtualMessages, ...regularMessages]
+  const virtualMessages = next.filter((message) => message.virtualType).slice(-MAX_VISIBLE_MESSAGES)
+  const visibleCount = Math.min(
+    MAX_VISIBLE_MESSAGES - virtualMessages.length,
+    Math.max(50, current.filter((message) => !message.virtualType).length),
+  )
+  const regularMessages = contiguousMessageSuffix(next.filter((message) => !message.virtualType))
+  return [...virtualMessages, ...(visibleCount ? regularMessages.slice(-visibleCount) : [])]
 }

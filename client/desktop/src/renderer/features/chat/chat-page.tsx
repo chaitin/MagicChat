@@ -76,6 +76,8 @@ type ForwardOperation = {
   mode: "separate" | "merged"
 }
 
+const noMentionCandidates: MentionCandidate[] = []
+
 export function ChatPage({
   targetId,
   serverUrl,
@@ -411,14 +413,13 @@ export function ChatPage({
     [draft, draftMentions, focusComposer],
   )
 
-  const mentionMessageSender = useCallback(
-    (candidate: MentionCandidate) => {
-      const composer = composerRef.current
-      const start = composer?.selectionStart ?? draft.length
-      insertMention(candidate, start, composer?.selectionEnd ?? start)
-    },
-    [draft.length, insertMention],
-  )
+  const mentionInsertionRef = useRef({ insertMention, draftLength: draft.length })
+  mentionInsertionRef.current = { insertMention, draftLength: draft.length }
+  const mentionMessageSender = useCallback((candidate: MentionCandidate) => {
+    const composer = composerRef.current
+    const start = composer?.selectionStart ?? mentionInsertionRef.current.draftLength
+    mentionInsertionRef.current.insertMention(candidate, start, composer?.selectionEnd ?? start)
+  }, [])
 
   const sendRichMessage = useCallback(
     async (body: SendRichMessageBody) => {
@@ -551,6 +552,7 @@ export function ChatPage({
     if (activeSection === "chat" && selected?.id) focusComposer()
   }, [activeSection, focusComposer, selected?.id, targetId])
 
+  const hasCurrentDraft = Boolean(draft.trim())
   const draftConversationIds = useMemo(() => {
     const ids = new Set<string>()
     const prefix = `${targetId}\0`
@@ -558,11 +560,11 @@ export function ChatPage({
       if (key.startsWith(prefix) && saved.text.trim()) ids.add(key.slice(prefix.length))
     }
     if (selectedId) {
-      if (draft.trim()) ids.add(selectedId)
+      if (hasCurrentDraft) ids.add(selectedId)
       else ids.delete(selectedId)
     }
     return ids
-  }, [draft, draftKey, draftRevision, selectedId, targetId])
+  }, [hasCurrentDraft, draftKey, draftRevision, selectedId, targetId])
 
   const openProfileConversation = useCallback(
     async (type: "user" | "app", id: string) => {
@@ -634,26 +636,62 @@ export function ChatPage({
     setActionDirectory(null)
   }, [])
 
-  function openForwardOperation(messageIds: string[], mode: "separate" | "merged") {
-    if (!selectedId || !messageIds.length || (mode === "merged" && messageIds.length < 2)) return
-    setForwardOperation({
-      sourceConversationId: selectedId,
-      clientForwardId: crypto.randomUUID(),
-      messageIds,
-      mode,
-    })
-  }
+  const openForwardOperation = useCallback(
+    (messageIds: string[], mode: "separate" | "merged") => {
+      if (!selectedId || !messageIds.length || (mode === "merged" && messageIds.length < 2)) return
+      setForwardOperation({
+        sourceConversationId: selectedId,
+        clientForwardId: crypto.randomUUID(),
+        messageIds,
+        mode,
+      })
+    },
+    [selectedId],
+  )
 
-  function toggleForwardSelection(message: DesktopMessage) {
-    if (
-      !selection.selected.has(message.id) &&
-      selection.selected.size >= selection.maxSelectedMessages
-    ) {
-      showToast({ status: "warning", title: "一次最多选择 50 条消息" })
-      return
-    }
-    selection.toggle(message)
-  }
+  const toggleForwardSelection = useCallback(
+    (message: DesktopMessage) => {
+      if (
+        !selection.selected.has(message.id) &&
+        selection.selected.size >= selection.maxSelectedMessages
+      ) {
+        showToast({ status: "warning", title: "一次最多选择 50 条消息" })
+        return
+      }
+      selection.toggle(message)
+    },
+    [selection.selected, selection.maxSelectedMessages, selection.toggle, showToast],
+  )
+  const forwardMessage = useCallback(
+    (message: DesktopMessage) => openForwardOperation([message.id], "separate"),
+    [openForwardOperation],
+  )
+  const reachGap = useCallback(() => {
+    void loadMessageGap()
+  }, [loadMessageGap])
+  const reachTop = useCallback(() => {
+    if (!searchMessageTarget) void loadBeforeMessages()
+  }, [loadBeforeMessages, searchMessageTarget])
+  const reachBottom = useCallback(() => {
+    if (!searchMessageTarget) void loadAfterMessages()
+  }, [loadAfterMessages, searchMessageTarget])
+  const selectConversation = useCallback(
+    (conversationId: string) => {
+      if (conversationId === selectedId) {
+        setSearchMessageTarget(null)
+        setSelectedId(null)
+      } else {
+        setSelectedId(conversationId)
+      }
+    },
+    [selectedId, setSelectedId],
+  )
+  const createGroup = useCallback(() => {
+    void openActionDialog("group")
+  }, [openActionDialog])
+  const createApp = useCallback(() => {
+    void openActionDialog("app")
+  }, [openActionDialog])
 
   async function submitForward(targetConversationIds: string[]) {
     if (!forwardOperation || !window.desktop) throw new Error("转发操作不可用")
@@ -704,16 +742,9 @@ export function ChatPage({
             onSetPinned={setConversationPinned}
             onSetMuted={setConversationMuted}
             onDismiss={dismissConversation}
-            onSelect={(conversationId) => {
-              if (conversationId === selectedId) {
-                setSearchMessageTarget(null)
-                setSelectedId(null)
-              } else {
-                setSelectedId(conversationId)
-              }
-            }}
-            onCreateGroup={() => void openActionDialog("group")}
-            onCreateApp={() => void openActionDialog("app")}
+            onSelect={selectConversation}
+            onCreateGroup={createGroup}
+            onCreateApp={createApp}
             onRefresh={onRefresh}
             onSelectSearchResult={selectSearchResult}
             onSearchResultCloseAutoFocus={focusComposer}
@@ -778,7 +809,9 @@ export function ChatPage({
                     canModerateMessages={Boolean(selected.canModerateMessages)}
                     mentionLabelResolver={resolveMentionLabel}
                     mentionCandidates={
-                      selected.canSend === false || selection.active ? [] : mentionCandidates
+                      selected.canSend === false || selection.active
+                        ? noMentionCandidates
+                        : mentionCandidates
                     }
                     onMentionSender={mentionMessageSender}
                     pendingReactionKeys={pendingReactionKeys}
@@ -792,24 +825,21 @@ export function ChatPage({
                     hasMoreAfterMessages={hasMoreAfterMessages}
                     messageGap={messageGap}
                     loadingGap={loadingGap}
-                    onReachGap={() => void loadMessageGap()}
+                    onReachGap={reachGap}
                     onViewportScroll={updateHistoryScrollPosition}
                     onScrollToBottom={scrollToLatestMessage}
-                    onReachTop={() => {
-                      if (!searchMessageTarget) void loadBeforeMessages()
-                    }}
-                    onReachBottom={() => {
-                      if (!searchMessageTarget) void loadAfterMessages()
-                    }}
+                    onReachTop={reachTop}
+                    onReachBottom={reachBottom}
                     onSetReaction={setMessageReaction}
                     onSubmitChoice={submitChoiceResponse}
                     onOpenTopic={openTopicConversation}
                     onCreateTopic={setCreateTopicMessage}
                     onReeditRevokedMessage={reeditRevokedMessage}
                     onReplyMessage={replyToMessage}
+                    onReplyCloseFocus={focusComposer}
                     selectionActive={selection.active}
                     selectedMessageIds={selection.selected}
-                    onForwardMessage={(message) => openForwardOperation([message.id], "separate")}
+                    onForwardMessage={forwardMessage}
                     onStartMessageSelection={selection.start}
                     onToggleMessageSelection={toggleForwardSelection}
                     onRevokeMessage={revokeMessage}

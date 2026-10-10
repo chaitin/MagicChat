@@ -129,6 +129,23 @@ test("会话仓储稳定读取最后一条消息", () => {
   database.close()
 })
 
+test("大缺口尚未下载消息时以服务端摘要展示最新会话预览", () => {
+  const database = new DatabaseSync(":memory:")
+  initializeAccountSchema(database)
+  const repository = new ConversationRepository(database)
+  repository.upsertCurrent([
+    conversation("large-gap", {
+      lastMessageSeq: 200,
+      lastMessageSummary: "最新服务端消息",
+      payload: { last_message_sender: { id: "user-2", type: "user", name: "张三" } },
+    }),
+  ])
+  const item = repository.list().find((entry) => entry.id === "large-gap")!
+  assert.equal(item.lastMessageSummary, "最新服务端消息")
+  assert.equal(item.lastMessageSender?.name, "张三")
+  database.close()
+})
+
 test("会话列表保留历史普通会话并过滤长期无活动的已读话题", () => {
   const database = new DatabaseSync(":memory:")
   initializeAccountSchema(database)
