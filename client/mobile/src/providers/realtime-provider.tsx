@@ -68,7 +68,6 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
       onUnauthorized: (accountId) => {
         if (accountId === identity.accountId && runtimeSlot.isCurrent(identity, client)) void markReauthRequired(accountId)
       },
-      reconnectDelaysMs: isPreparingSignIn ? [30_000] : undefined,
       url: buildRealtimeWebSocketUrl(activeServer.url, __DEV__),
     })
     const record = { client, targetKey: createRealtimeTargetKey(activeServer) }

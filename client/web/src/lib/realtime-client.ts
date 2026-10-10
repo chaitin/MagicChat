@@ -48,7 +48,6 @@ type RealtimeClientOptions = {
 }
 
 const protocolVersion = 1
-const defaultReconnectDelaysMs = [500, 1_000, 2_000, 5_000, 10_000, 30_000]
 
 export class RealtimeClient {
   private authCheck?: () => boolean | Promise<boolean>
@@ -59,7 +58,7 @@ export class RealtimeClient {
   private pendingRequests = new Map<string, PendingRequest>()
   private ready = false
   private reconnectAttempt = 0
-  private reconnectDelaysMs: number[]
+  private reconnectDelaysMs: number[] | null
   private reconnectSequence = 0
   private reconnectTimer: number | null = null
   private shouldReconnect = false
@@ -73,21 +72,20 @@ export class RealtimeClient {
     this.createWebSocket =
       options.createWebSocket ?? ((url) => new WebSocket(url))
     this.onUnauthorized = options.onUnauthorized
-    this.reconnectDelaysMs =
-      options.reconnectDelaysMs ?? defaultReconnectDelaysMs
+    this.reconnectDelaysMs = options.reconnectDelaysMs?.length
+      ? options.reconnectDelaysMs
+      : null
   }
 
   connect() {
-    if (this.socket && this.socket.readyState !== WebSocket.CLOSED) {
-      return
-    }
-
     this.shouldReconnect = true
+    if (this.socket || this.reconnectTimer !== null) return
     this.openSocket("connecting")
   }
 
   disconnect() {
     this.shouldReconnect = false
+    this.reconnectAttempt = 0
     this.reconnectSequence += 1
     this.clearReconnectTimer()
     this.rejectPendingRequests(new Error("实时连接已断开"))
@@ -163,12 +161,12 @@ export class RealtimeClient {
     const socket = this.createWebSocket(this.url)
     this.socket = socket
     socket.onopen = () => {
-      this.reconnectAttempt = 0
+      if (this.socket !== socket) return
       this.status = "connected"
       this.notify()
     }
     socket.onmessage = (event) => {
-      this.handleMessage(event.data)
+      if (this.socket === socket) this.handleMessage(event.data)
     }
     socket.onerror = () => undefined
     socket.onclose = () => {
@@ -177,9 +175,8 @@ export class RealtimeClient {
   }
 
   private async handleSocketClose(socket: RealtimeWebSocketLike) {
-    if (this.socket === socket) {
-      this.socket = null
-    }
+    if (this.socket !== socket) return
+    this.socket = null
     this.rejectPendingRequests(new Error("实时连接已断开"))
     this.ready = false
     if (!this.shouldReconnect) {
@@ -227,15 +224,21 @@ export class RealtimeClient {
   }
 
   private scheduleReconnect() {
-    const delay =
-      this.reconnectDelaysMs[
-        Math.min(this.reconnectAttempt, this.reconnectDelaysMs.length - 1)
-      ] ?? defaultReconnectDelaysMs[defaultReconnectDelaysMs.length - 1]
+    const delay = this.reconnectDelaysMs
+      ? this.reconnectDelaysMs[
+          Math.min(this.reconnectAttempt, this.reconnectDelaysMs.length - 1)
+        ]!
+      : Math.min(this.reconnectAttempt + 1, 30) * 1_000
     this.reconnectAttempt += 1
+    const sequence = this.reconnectSequence
     this.reconnectTimer = window.setTimeout(() => {
-      if (!this.shouldReconnect) {
+      this.reconnectTimer = null
+      if (
+        !this.shouldReconnect ||
+        sequence !== this.reconnectSequence ||
+        this.socket
+      )
         return
-      }
       this.openSocket("connecting")
     }, delay)
   }
@@ -266,6 +269,7 @@ export class RealtimeClient {
 
   private handleEvent(envelope: RealtimeEnvelope) {
     if (envelope.event === "system.ready") {
+      this.reconnectAttempt = 0
       this.ready = true
       this.notify()
       return

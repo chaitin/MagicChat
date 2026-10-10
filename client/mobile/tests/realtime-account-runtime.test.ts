@@ -63,6 +63,39 @@ test("every connect resolves immutable account credential and never puts token i
   client.disconnect()
 })
 
+test("default reconnect delays match desktop and reset only after system.ready", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] })
+  const sockets: MockSocket[] = []
+  const client = new RealtimeClient({
+    url: "wss://chat.example/ws",
+    createSocket: () => { const socket = new MockSocket(); sockets.push(socket); return socket as unknown as WebSocket },
+  })
+  try {
+    client.connect()
+    await Promise.resolve()
+    for (let attempt = 1; attempt <= 31; attempt++) {
+      sockets.at(-1)!.serverClose()
+      await Promise.resolve()
+      await Promise.resolve()
+      const delay = Math.min(attempt, 30) * 1_000
+      t.mock.timers.tick(delay - 1)
+      assert.equal(sockets.length, attempt)
+      t.mock.timers.tick(1)
+      await Promise.resolve()
+      assert.equal(sockets.length, attempt + 1)
+    }
+    sockets.at(-1)!.message(ready)
+    sockets.at(-1)!.serverClose()
+    await Promise.resolve()
+    await Promise.resolve()
+    t.mock.timers.tick(999)
+    assert.equal(sockets.length, 32)
+    t.mock.timers.tick(1)
+    await Promise.resolve()
+    assert.equal(sockets.length, 33)
+  } finally { client.disconnect() }
+})
+
 test("slot disconnects old account before installing one new connection", () => {
   const slot = new RealtimeClientSlot()
   const a = { disconnectCalls: 0, disconnect() { this.disconnectCalls++ } }

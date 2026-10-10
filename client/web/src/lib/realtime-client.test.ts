@@ -209,6 +209,35 @@ describe("RealtimeClient", () => {
     expect(FakeWebSocket.instances).toHaveLength(1)
   })
 
+  it("matches desktop's 1–30 second backoff and resets only after system.ready", () => {
+    const client = new RealtimeClient({
+      createWebSocket: (url) => new FakeWebSocket(url),
+      url: "ws://example.test/api/client/ws",
+    })
+    client.connect()
+    for (let attempt = 1; attempt <= 31; attempt++) {
+      FakeWebSocket.instances.at(-1)!.open()
+      FakeWebSocket.instances.at(-1)!.failClose()
+      const delay = Math.min(attempt, 30) * 1_000
+      client.connect()
+      expect(FakeWebSocket.instances).toHaveLength(attempt)
+      vi.advanceTimersByTime(delay - 1)
+      expect(FakeWebSocket.instances).toHaveLength(attempt)
+      vi.advanceTimersByTime(1)
+      expect(FakeWebSocket.instances).toHaveLength(attempt + 1)
+    }
+    FakeWebSocket.instances.at(-1)!.open()
+    FakeWebSocket.instances
+      .at(-1)!
+      .receive({ v: 1, kind: "event", event: "system.ready" })
+    FakeWebSocket.instances.at(-1)!.failClose()
+    vi.advanceTimersByTime(999)
+    expect(FakeWebSocket.instances).toHaveLength(32)
+    vi.advanceTimersByTime(1)
+    expect(FakeWebSocket.instances).toHaveLength(33)
+    client.disconnect()
+  })
+
   it("reconnects after abnormal close and stops reconnecting after disconnect", () => {
     const client = createClient()
     client.connect()

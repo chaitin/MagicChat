@@ -22,7 +22,6 @@ type RealtimeClientOptions = {
   url: string
 }
 type RealtimeEventHandler = (event: string, payload: unknown) => void
-const DEFAULT_RECONNECT_DELAYS_MS = [500, 1_000, 2_000, 5_000, 10_000, 30_000]
 
 export class RealtimeClient {
   private readonly auth?: AuthResolver
@@ -32,7 +31,7 @@ export class RealtimeClient {
   private readonly isCurrent?: (snapshot: AccountAuthSnapshot) => boolean | Promise<boolean>
   private readonly listeners = new Set<() => void>()
   private readonly onUnauthorized?: (accountId: string) => void
-  private readonly reconnectDelaysMs: number[]
+  private readonly reconnectDelaysMs: number[] | null
   private readonly url: string
   private ready = false
   private reconnectAttempt = 0
@@ -48,7 +47,7 @@ export class RealtimeClient {
     this.createSocket = options.createSocket ?? createReactNativeRealtimeSocket
     this.isCurrent = options.isCurrent
     this.onUnauthorized = options.onUnauthorized
-    this.reconnectDelaysMs = options.reconnectDelaysMs?.length ? options.reconnectDelaysMs : DEFAULT_RECONNECT_DELAYS_MS
+    this.reconnectDelaysMs = options.reconnectDelaysMs?.length ? options.reconnectDelaysMs : null
     this.url = options.url
   }
 
@@ -145,7 +144,9 @@ export class RealtimeClient {
   }
 
   private scheduleReconnect() {
-    const delay = this.reconnectDelaysMs[Math.min(this.reconnectAttempt, this.reconnectDelaysMs.length - 1)] ?? DEFAULT_RECONNECT_DELAYS_MS.at(-1)!
+    const delay = this.reconnectDelaysMs
+      ? this.reconnectDelaysMs[Math.min(this.reconnectAttempt, this.reconnectDelaysMs.length - 1)]!
+      : Math.min(this.reconnectAttempt + 1, 30) * 1_000
     this.reconnectAttempt += 1
     const sequence = this.reconnectSequence
     this.reconnectTimer = setTimeout(() => {
