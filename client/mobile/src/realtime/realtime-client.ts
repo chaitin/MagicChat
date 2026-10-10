@@ -97,7 +97,7 @@ export class RealtimeClient {
       }
       socket.onmessage = (event) => { if (this.socket === socket) this.handleMessage(event.data) }
       socket.onerror = () => undefined
-      socket.onclose = (event) => { void this.handleSocketClose(socket, snapshot, event?.code) }
+      socket.onclose = () => { void this.handleSocketClose(socket, snapshot) }
     } catch {
       if (!this.shouldReconnect || sequence !== this.reconnectSequence) return
       this.status = "reconnecting"
@@ -117,7 +117,7 @@ export class RealtimeClient {
     for (const listener of this.eventListeners) listener(envelope.event, envelope.payload)
   }
 
-  private async handleSocketClose(socket: RealtimeSocket, snapshot: AccountAuthSnapshot | undefined, code: number | undefined) {
+  private async handleSocketClose(socket: RealtimeSocket, snapshot: AccountAuthSnapshot | undefined) {
     if (this.socket !== socket) return
     this.socket = null
     this.ready = false
@@ -126,9 +126,7 @@ export class RealtimeClient {
     this.status = "reconnecting"
     this.notify()
     if (snapshot && this.isCurrent && !(await this.isCurrent(snapshot))) return
-    const explicitlyUnauthorized =
-      code === 401 || code === 4001 || code === 4401
-    const authorized = explicitlyUnauthorized ? false : await this.checkReconnectAuthorization()
+    const authorized = await this.checkReconnectAuthorization()
     if (reconnectSequence !== this.reconnectSequence || !this.shouldReconnect || this.socket) return
     if (!authorized) {
       this.shouldReconnect = false

@@ -31,6 +31,20 @@ type SessionCredential struct {
 	ExpiresAt time.Time
 }
 
+type NativeSessionCredential struct {
+	SessionCredential
+	RefreshToken             string
+	RefreshExpiresAt         time.Time
+	RefreshAbsoluteExpiresAt time.Time
+}
+
+type NativeSessionService interface {
+	BeginNativeSession(context.Context, string) (NativeSessionCredential, error)
+	ExchangeNativeSession(context.Context, string) (NativeSessionCredential, error)
+	RefreshNativeSession(context.Context, string) (NativeSessionCredential, error)
+	RevokeNativeSession(context.Context, string) error
+}
+
 type AuthenticatedSession struct {
 	ID      string
 	Account Account

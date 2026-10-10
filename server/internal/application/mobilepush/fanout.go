@@ -96,8 +96,8 @@ func (s *Service) pushJobStillEligible(
 	if err := db.Model(&store.UserSession{}).
 		Joins("JOIN users ON users.id = user_sessions.user_id").
 		Where(
-			"user_sessions.id = ? AND user_sessions.user_id = ? AND user_sessions.expires_at > ? AND users.status = ?",
-			job.Grant.SessionID, job.UserID, now, store.UserStatusActive,
+			"user_sessions.id = ? AND user_sessions.user_id = ? AND users.status = ? AND (user_sessions.expires_at > ? OR (user_sessions.refresh_token_hash IS NOT NULL AND user_sessions.refresh_expires_at > ? AND user_sessions.refresh_absolute_expires_at > ?))",
+			job.Grant.SessionID, job.UserID, store.UserStatusActive, now, now, now,
 		).Count(&sessionCount).Error; err != nil {
 		return false, err
 	}

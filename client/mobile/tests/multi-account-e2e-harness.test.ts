@@ -19,6 +19,7 @@ class MemoryStorage {
 }
 
 const future = "2099-01-01T00:00:00Z"
+const refreshFields = (id: string) => ({ refreshToken: `refresh-fixture-${id}`, refreshExpiresAt: future, refreshAbsoluteExpiresAt: future })
 const credentials = new Map([
   ["A", "opaque-fixture-A"], ["B", "opaque-fixture-B"], ["C", "opaque-fixture-C"],
 ])
@@ -33,7 +34,7 @@ test("three-account automated harness validates scoped transport, restart and li
     createAccountRecord({ serverId: "same", url: "https://same.example.com", userId: "B", name: "B", lastUsedAt: "2026-01-02T00:00:00Z" }),
     createAccountRecord({ serverId: "other", url: "https://other.example.com", userId: "C", name: "C", lastUsedAt: "2026-01-03T00:00:00Z" }),
   ]
-  for (const record of records) await store.installAccount(record, { token: credentials.get(record.userId)!, expiresAt: future })
+  for (const record of records) await store.installAccount(record, { token: credentials.get(record.userId)!, expiresAt: future, ...refreshFields(record.userId) })
   let index = await store.hydrate()
   await store.commitActive(records[2]!.id, index.revision) // add C auto-activates
 
@@ -63,27 +64,25 @@ test("three-account automated harness validates scoped transport, restart and li
   assert.equal(headers[0], `Bearer ${credentials.get("A")}`)
 
   // Current A logout removes A and activates the most recent remaining C.
-  await logout(records[0]!.url, { account: { accountId: records[0]!.id,
-    auth: runtime.optionsForStoredAccount(records[0]!.id, { id: "same", url: records[0]!.url, userId: "A" }) },
+  await logout(records[0]!.url, { account: { accountId: records[0]!.id, refreshToken: refreshFields("A").refreshToken },
     fetcher: async () => Response.json({ success: true }) })
   await restarted.removeAccount(records[0]!.id)
   index = await restarted.hydrate()
   await restarted.commitActive(records[2]!.id, index.revision)
   assert.equal((await restarted.hydrate()).activeAccountId, records[2]!.id)
 
-  // Inactive B logout captures B Bearer; offline C logout retains C locally.
-  let inactiveHeader = ""
-  await logout(records[1]!.url, { account: { accountId: records[1]!.id,
-    auth: runtime.optionsForStoredAccount(records[1]!.id, { id: "same", url: records[1]!.url, userId: "B" }) },
-    fetcher: async (_url, init) => { inactiveHeader = new Headers(init?.headers).get("authorization") ?? ""; return Response.json({ success: true }) } })
-  assert.equal(inactiveHeader, `Bearer ${credentials.get("B")}`)
+  // Inactive B logout revokes B's refresh credential; offline C retains its local account.
+  let inactiveRefresh = ""
+  await logout(records[1]!.url, { account: { accountId: records[1]!.id, refreshToken: refreshFields("B").refreshToken },
+    fetcher: async (_url, init) => { inactiveRefresh = JSON.parse(String(init?.body)).refresh_token; return Response.json({ success: true }) } })
+  assert.equal(inactiveRefresh, refreshFields("B").refreshToken)
   await restarted.removeAccount(records[1]!.id)
   await assert.rejects(async () => { throw new Error("offline fixture") }, /offline/)
   assert.equal((await restarted.hydrate()).accounts.some((account) => account.id === records[2]!.id), true)
 
   // Re-add A, then expire only A; SQLite-like scopes remain distinct and retained.
-  await restarted.installAccount(records[0]!, { token: credentials.get("A")!, expiresAt: future })
-  secureStore.values.set(createCredentialStorageKey(records[0]!.id), JSON.stringify({ token: credentials.get("A"), expiresAt: "2020-01-01T00:00:00Z" }))
+  await restarted.installAccount(records[0]!, { token: credentials.get("A")!, expiresAt: future, ...refreshFields("A") })
+  secureStore.values.set(createCredentialStorageKey(records[0]!.id), JSON.stringify({ token: credentials.get("A"), expiresAt: future, ...refreshFields("A"), refreshExpiresAt: "2020-01-01T00:00:00Z" }))
   const expired = await restarted.hydrate()
   assert.equal(expired.accounts.find((account) => account.id === records[0]!.id)?.status, "reauth-required")
   const sqliteScopes = new Set(records.map((record) => JSON.stringify(createAuthenticatedScopeKey({ id: record.serverId, url: record.url, userId: record.userId }))))

@@ -39,6 +39,7 @@ export class RealtimeManager {
   private synchronizing = false
   private bufferedEvents: RealtimeEvent[] = []
   private overflowed = false
+  private unauthorizedRecoveryAttempted = false
   private eventQueue = Promise.resolve()
   private readyWaiters: Array<{ resolve: () => void; reject: (error: unknown) => void }> = []
   private pendingRequests = new Map<string, PendingRequest>()
@@ -46,7 +47,7 @@ export class RealtimeManager {
   constructor(
     private readonly options: {
       serverUrl: string
-      token: string
+      token: string | ((previousToken?: string) => Promise<string>)
       synchronize: () => Promise<void>
       applyEvent: (event: RealtimeEvent) => Promise<void>
       onStateChange: (state: RealtimeState) => void
@@ -109,8 +110,37 @@ export class RealtimeManager {
   private connect() {
     if (!this.running || this.socket || this.reconnectTimer) return
     const generation = ++this.generation
+    void this.connectWithToken(generation)
+  }
+
+  private async connectWithToken(generation: number) {
+    let token: string
+    try {
+      token =
+        typeof this.options.token === "string" ? this.options.token : await this.options.token()
+    } catch (error) {
+      if (
+        this.running &&
+        generation === this.generation &&
+        error instanceof AuthFailure &&
+        ["unauthorized", "invalid_session", "expired_session"].includes(error.code)
+      ) {
+        this.failPermanently(new AuthFailure("unauthorized", "登录已失效，请重新登录"))
+        return
+      }
+      if (this.running && generation === this.generation) {
+        this.setLoading()
+        const delaySeconds = Math.min(++this.reconnectAttempt, 30)
+        this.reconnectTimer = setTimeout(() => {
+          this.reconnectTimer = undefined
+          this.connect()
+        }, delaySeconds * 1_000)
+      }
+      return
+    }
+    if (!this.running || generation !== this.generation) return
     const socket = new WebSocket(buildRealtimeWebSocketUrl(this.options.serverUrl), {
-      headers: { Authorization: `Bearer ${this.options.token}` },
+      headers: { Authorization: `Bearer ${token}` },
       handshakeTimeout: 20_000,
       maxPayload: MAX_MESSAGE_BYTES,
       perMessageDeflate: false,
@@ -130,11 +160,31 @@ export class RealtimeManager {
     socket.on("error", () => undefined)
     socket.on("unexpected-response", (_request, response) => {
       response.resume()
-      if (response.statusCode === 401 || response.statusCode === 403) {
+      if (
+        response.statusCode === 401 &&
+        typeof this.options.token !== "string" &&
+        !this.unauthorizedRecoveryAttempted
+      ) {
+        this.unauthorizedRecoveryAttempted = true
+        void this.options
+          .token(token)
+          .then((replacement) => {
+            if (!this.isCurrent(socket, generation)) return
+            if (replacement !== token) socket.terminate()
+            else this.failPermanently(new AuthFailure("unauthorized", "登录已失效，请重新登录"))
+          })
+          .catch((error: unknown) => {
+            if (!this.isCurrent(socket, generation)) return
+            if (
+              error instanceof AuthFailure &&
+              ["unauthorized", "invalid_session", "expired_session"].includes(error.code)
+            ) {
+              this.failPermanently(new AuthFailure("unauthorized", "登录已失效，请重新登录"))
+            } else socket.terminate()
+          })
+      } else if (response.statusCode === 401 || response.statusCode === 403) {
         this.failPermanently(new AuthFailure("unauthorized", "登录已失效，请重新登录"))
-      } else {
-        socket.terminate()
-      }
+      } else socket.terminate()
     })
   }
 
@@ -175,6 +225,7 @@ export class RealtimeManager {
       if (!this.isCurrent(socket, generation) || this.overflowed) return
       this.synchronizing = false
       this.ready = true
+      this.unauthorizedRecoveryAttempted = false
       this.reconnectAttempt = 0
       this.options.onStateChange("ready")
       this.resolveReadyWaiters()

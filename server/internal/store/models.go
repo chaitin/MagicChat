@@ -145,16 +145,29 @@ type AdminSession struct {
 }
 
 type UserSession struct {
-	ID         string    `gorm:"type:uuid;primaryKey"`
-	TokenHash  string    `gorm:"size:64;not null;uniqueIndex"`
-	UserID     string    `gorm:"type:uuid;not null;index"`
-	User       User      `gorm:"constraint:OnDelete:CASCADE;"`
-	ExpiresAt  time.Time `gorm:"not null;index"`
-	CreatedAt  time.Time `gorm:"not null"`
-	LastSeenAt time.Time `gorm:"not null"`
-	UserAgent  string    `gorm:"size:512"`
-	IP         string    `gorm:"size:64"`
+	ID                       string    `gorm:"type:uuid;primaryKey"`
+	TokenHash                string    `gorm:"size:64;not null;uniqueIndex"`
+	UserID                   string    `gorm:"type:uuid;not null;index"`
+	User                     User      `gorm:"constraint:OnDelete:CASCADE;"`
+	ExpiresAt                time.Time `gorm:"not null;index"`
+	RefreshTokenHash         *string   `gorm:"size:64;uniqueIndex"`
+	RefreshExpiresAt         *time.Time
+	RefreshAbsoluteExpiresAt *time.Time
+	NativeExchangeUntil      *time.Time
+	CreatedAt                time.Time `gorm:"not null"`
+	LastSeenAt               time.Time `gorm:"not null"`
+	UserAgent                string    `gorm:"size:512"`
+	IP                       string    `gorm:"size:64"`
 }
+
+type UsedNativeRefreshToken struct {
+	TokenHash string      `gorm:"size:64;primaryKey"`
+	SessionID string      `gorm:"type:uuid;not null;index"`
+	Session   UserSession `gorm:"constraint:OnDelete:CASCADE;"`
+	ExpiresAt time.Time   `gorm:"not null;index"`
+}
+
+func (UsedNativeRefreshToken) TableName() string { return "used_native_refresh_tokens" }
 
 type AccountDeactivationChallenge struct {
 	ID             string    `gorm:"type:uuid;primaryKey"`

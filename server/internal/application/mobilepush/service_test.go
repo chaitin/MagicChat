@@ -133,6 +133,46 @@ func TestGrantRegistrationRequiresLiveSessionWhenProvided(t *testing.T) {
 	}
 }
 
+func TestNativePushGrantSurvivesShortAccessExpiry(t *testing.T) {
+	service, db, _, now := newPushTestService(t)
+	user := insertPushUser(t, db, "native-push@example.com")
+	hash := uuid.NewString()
+	refreshExpiry := now.Add(30 * 24 * time.Hour)
+	absoluteExpiry := now.Add(365 * 24 * time.Hour)
+	session := store.UserSession{
+		ID: uuid.NewString(), TokenHash: uuid.NewString(), UserID: user.ID,
+		ExpiresAt: now.Add(time.Hour), RefreshTokenHash: &hash,
+		RefreshExpiresAt: &refreshExpiry, RefreshAbsoluteExpiresAt: &absoluteExpiry,
+		CreatedAt: now, LastSeenAt: now,
+	}
+	if err := db.Create(&session).Error; err != nil {
+		t.Fatal(err)
+	}
+	grant, err := registerPushTestGrant(t, service, db, RegisterGrantCommand{
+		UserID: user.ID, SessionID: session.ID, InstallationID: uuid.NewString(), GatewayGrantID: uuid.NewString(),
+		SendToken: "native-push-send-token-abcdefghijklmnopqrstuvwxyz", Platform: "ios", ExpiresAt: now.Add(24 * time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !grant.ExpiresAt.Equal(now.Add(24 * time.Hour)) {
+		t.Fatalf("native grant expired with access token: %v", grant.ExpiresAt)
+	}
+	other := insertPushUser(t, db, "native-sender@example.com")
+	conversation := insertPushConversation(t, db, user, other, now)
+	laterGateway := &fakeGateway{}
+	laterService, err := NewService(Dependencies{DB: db, Cipher: service.cipher, Gateway: laterGateway, Enabled: true, Now: func() time.Time { return now.Add(2 * time.Hour) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := enqueueTestMessage(laterService, MessageDelivery{UserID: user.ID, ConversationID: conversation.ID, MessageID: uuid.NewString(), SenderType: store.MessageSenderTypeUser, SenderID: other.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := laterService.DispatchBatch(t.Context(), 1); err != nil || len(laterGateway.calls) != 1 {
+		t.Fatalf("push after access expiry: %v calls=%d", err, len(laterGateway.calls))
+	}
+}
+
 func TestStaleGrantRevocationCannotDeleteReplacement(t *testing.T) {
 	service, db, _, now := newPushTestService(t)
 	user := insertPushUser(t, db, "generation-safe-revoke@example.com")

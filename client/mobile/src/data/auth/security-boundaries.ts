@@ -1,6 +1,6 @@
 import type { AuthenticatedTarget } from "@/core/server-target"
 
-const SENSITIVE_KEY = /^(authorization|cookie|set-cookie|token|access_token|session_token)$/i
+const SENSITIVE_KEY = /^(authorization|cookie|set-cookie|token|access_token|session_token|refresh_token|refreshToken)$/i
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"])
 
 /** Remove credential-bearing fields before an error or diagnostic value is logged. */

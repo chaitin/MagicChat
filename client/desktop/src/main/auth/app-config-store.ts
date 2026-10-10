@@ -38,8 +38,7 @@ export type StoredAccountSession = {
   userId: string
   userEmail: string
   userName: string
-  token: string
-  expiresAt: string
+  encryptedCredential: string
   lastUsedAt: number
 }
 
@@ -150,11 +149,9 @@ export class AppConfigStore {
             typeof value.userId !== "string" ||
             !value.userId ||
             value.userId.length > 128 ||
-            typeof value.token !== "string" ||
-            !value.token ||
-            value.token.length > 8_192 ||
-            typeof value.expiresAt !== "string" ||
-            !Number.isFinite(Date.parse(value.expiresAt)) ||
+            typeof value.encryptedCredential !== "string" ||
+            !value.encryptedCredential ||
+            value.encryptedCredential.length > 32_768 ||
             typeof value.lastUsedAt !== "number" ||
             !Number.isFinite(value.lastUsedAt)
           ) {
@@ -173,8 +170,7 @@ export class AppConfigStore {
               typeof value.userName === "string" && value.userName.length <= 300
                 ? value.userName
                 : "",
-            token: value.token,
-            expiresAt: value.expiresAt,
+            encryptedCredential: value.encryptedCredential,
             lastUsedAt: value.lastUsedAt,
           }
         }
@@ -212,7 +208,7 @@ export class AppConfigStore {
           ? stored.activeServerId
           : OFFICIAL_SERVER_ID
       const notifications = normalizeNotificationSettings(stored.notifications)
-      return {
+      const config: AppConfig = {
         version: 1,
         theme,
         contentZoom: normalizeContentZoom(stored.contentZoom, stored.contentZoomVersion),
@@ -225,7 +221,17 @@ export class AppConfigStore {
         accountSessions,
         lastAccountKey,
       }
-    } catch {
+      if (
+        isRecord(stored.accountSessions) &&
+        Object.values(stored.accountSessions).some(
+          (value) => isRecord(value) && typeof value.token === "string",
+        )
+      ) {
+        await this.save(config)
+      }
+      return config
+    } catch (error) {
+      if (error instanceof AuthFailure) throw error
       return fallback
     }
   }

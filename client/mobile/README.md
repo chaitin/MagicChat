@@ -2,7 +2,7 @@
 
 MagicChat 的 Expo / React Native 手机客户端，包含：
 
-- 多服务器管理与 Cookie 会话登录
+- 多服务器管理与原生 Bearer 登录（1 小时访问凭据、90 天闲置过期的轮换刷新凭据；最长 365 天，安全存于 SecureStore）
 - 左侧抽屉导航
 - 共享页面 Header
 - 消息、通讯录、项目三个底部 Tab

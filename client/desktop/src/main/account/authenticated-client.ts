@@ -10,8 +10,12 @@ export class AuthenticatedClient {
   constructor(
     private readonly serverUrl: string,
     private readonly serverSession: Session,
-    private readonly token: string,
+    private readonly token: string | ((previousToken?: string) => Promise<string>),
   ) {}
+
+  private accessToken(previousToken?: string): Promise<string> {
+    return typeof this.token === "string" ? Promise.resolve(this.token) : this.token(previousToken)
+  }
 
   get(path: string): Promise<unknown> {
     return this.request(path, "GET")
@@ -52,16 +56,20 @@ export class AuthenticatedClient {
           : new Blob([file.bytes], { type: file.contentType }),
         file.name,
       )
-      const response = await this.serverSession.fetch(`${this.serverUrl}${endpoint}`, {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${this.token}`,
-        },
-        body: formData,
-        credentials: "omit",
-        signal: AbortSignal.timeout(10 * 60_000),
-      })
+      const send = (token: string) =>
+        this.serverSession.fetch(`${this.serverUrl}${endpoint}`, {
+          method: "POST",
+          headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+          body: formData,
+          credentials: "omit",
+          signal: AbortSignal.timeout(10 * 60_000),
+        })
+      const token = await this.accessToken()
+      let response = await send(token)
+      if (response.status === 401 && typeof this.token !== "string") {
+        const replacement = await this.accessToken(token)
+        if (replacement !== token) response = await send(replacement)
+      }
       const payload = await readJson(response)
       if (!response.ok || (isRecord(payload) && payload.success === false)) {
         const error = isRecord(payload) && isRecord(payload.error) ? payload.error : undefined
@@ -95,15 +103,22 @@ export class AuthenticatedClient {
     }
     const serverOrigin = new URL(this.serverUrl).origin
     try {
-      const response = await this.serverSession.fetch(url.toString(), {
-        method: "GET",
-        headers: {
-          Accept: AVATAR_ACCEPT,
-          ...(url.origin === serverOrigin ? { Authorization: `Bearer ${this.token}` } : {}),
-        },
-        credentials: "omit",
-        signal: AbortSignal.timeout(20_000),
-      })
+      const token = url.origin === serverOrigin ? await this.accessToken() : null
+      const send = (value: string | null) =>
+        this.serverSession.fetch(url.toString(), {
+          method: "GET",
+          headers: {
+            Accept: AVATAR_ACCEPT,
+            ...(value ? { Authorization: `Bearer ${value}` } : {}),
+          },
+          credentials: "omit",
+          signal: AbortSignal.timeout(20_000),
+        })
+      let response = await send(token)
+      if (response.status === 401 && token && typeof this.token !== "string") {
+        const replacement = await this.accessToken(token)
+        if (replacement !== token) response = await send(replacement)
+      }
       if (!response.ok) throw new AuthFailure("avatar_download", "头像下载失败")
       if (response.url) {
         const finalUrl = new URL(response.url)
@@ -134,17 +149,24 @@ export class AuthenticatedClient {
   ): Promise<unknown> {
     this.assertEndpoint(endpoint)
     try {
-      const response = await this.serverSession.fetch(`${this.serverUrl}${endpoint}`, {
-        method,
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${this.token}`,
-          ...(body ? { "Content-Type": "application/json" } : {}),
-        },
-        body: body ? JSON.stringify(body) : undefined,
-        credentials: "omit",
-        signal: AbortSignal.timeout(20_000),
-      })
+      const send = (token: string) =>
+        this.serverSession.fetch(`${this.serverUrl}${endpoint}`, {
+          method,
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+            ...(body ? { "Content-Type": "application/json" } : {}),
+          },
+          body: body ? JSON.stringify(body) : undefined,
+          credentials: "omit",
+          signal: AbortSignal.timeout(20_000),
+        })
+      const token = await this.accessToken()
+      let response = await send(token)
+      if (response.status === 401 && typeof this.token !== "string") {
+        const replacement = await this.accessToken(token)
+        if (replacement !== token) response = await send(replacement)
+      }
       const payload = await readJson(response)
       if (!response.ok || (isRecord(payload) && payload.success === false)) {
         const error = isRecord(payload) && isRecord(payload.error) ? payload.error : undefined

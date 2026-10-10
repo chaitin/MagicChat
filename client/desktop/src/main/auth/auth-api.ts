@@ -7,12 +7,17 @@ import {
   type ThirdPartyProvider,
 } from "../../shared/auth"
 
-export type NativeSessionCredential = { token: string; expiresAt: string }
+export type NativeSessionCredential = {
+  token: string
+  expiresAt: string
+  refreshToken: string
+  refreshExpiresAt: string
+  refreshAbsoluteExpiresAt: string
+}
 
 type RequestOptions = {
   headers?: Record<string, string>
   omitOrigin?: boolean
-  credentials?: "include" | "omit"
 }
 
 const maxResponseBytes = 128 * 1024
@@ -36,7 +41,7 @@ export async function request(
         ...options.headers,
       },
       body: body ? JSON.stringify(body) : undefined,
-      credentials: options.credentials ?? "include",
+      credentials: "omit",
       redirect: "error",
       signal,
     })
@@ -121,21 +126,35 @@ export function parseNativeSession(data: unknown): {
       "服务器不支持桌面客户端 Token 登录，请升级服务器后重试",
     )
   }
-  const token = data.mobile_session.token
-  const expiresAt = data.mobile_session.expires_at
+  return { credential: parseNativeCredential(data.mobile_session), user: parseUser(data) }
+}
+
+export function parseNativeCredential(value: unknown): NativeSessionCredential {
+  if (!isRecord(value)) throw new AuthFailure("invalid_session", "服务器返回的登录凭据格式不正确")
+  const token = value.token
+  const expiresAt = value.expires_at
+  const refreshToken = value.refresh_token
+  const refreshExpiresAt = value.refresh_expires_at
+  const refreshAbsoluteExpiresAt = value.refresh_absolute_expires_at
   if (
     typeof token !== "string" ||
     !token ||
     token.length > 8_192 ||
+    typeof refreshToken !== "string" ||
+    !refreshToken ||
+    refreshToken.length > 8_192 ||
     typeof expiresAt !== "string" ||
-    !Number.isFinite(Date.parse(expiresAt))
+    typeof refreshExpiresAt !== "string" ||
+    typeof refreshAbsoluteExpiresAt !== "string"
   ) {
     throw new AuthFailure("invalid_session", "服务器返回的登录凭据格式不正确")
   }
-  if (Date.parse(expiresAt) <= Date.now()) {
+  const expiries = [expiresAt, refreshExpiresAt, refreshAbsoluteExpiresAt].map(Date.parse)
+  if (expiries.some((expiry) => !Number.isFinite(expiry)))
+    throw new AuthFailure("invalid_session", "服务器返回的登录凭据格式不正确")
+  if (expiries.some((expiry) => expiry <= Date.now()))
     throw new AuthFailure("expired_session", "服务器返回的登录凭据已过期")
-  }
-  return { credential: { token, expiresAt }, user: parseUser(data) }
+  return { token, expiresAt, refreshToken, refreshExpiresAt, refreshAbsoluteExpiresAt }
 }
 
 export function parseUser(data: unknown): AuthUser {

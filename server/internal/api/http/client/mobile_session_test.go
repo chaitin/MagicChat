@@ -30,7 +30,7 @@ func TestLoginMobileSessionCapabilityNegotiation(t *testing.T) {
 		{
 			name: "password", path: "/api/client/auth/login", body: `{"email":"alice@example.com","password":"secret"}`,
 			register: func(router *echo.Echo) {
-				service := &fakeAccountService{loginResult: loginResult}
+				service := &mobileSessionAccountService{fakeAccountService: &fakeAccountService{loginResult: loginResult}}
 				NewAccountAPI(service, service, nil).RegisterPublicRoutes(router)
 			},
 		},
@@ -47,7 +47,7 @@ func TestLoginMobileSessionCapabilityNegotiation(t *testing.T) {
 	}{
 		{name: "supported native", version: MobileSessionCapabilityVersion, wantMobile: true},
 		{name: "no header"},
-		{name: "unknown version", version: "2"},
+		{name: "unknown version", version: "1"},
 		{name: "browser origin", version: MobileSessionCapabilityVersion, origin: "https://app.example.com"},
 	}
 
@@ -71,15 +71,19 @@ func TestLoginMobileSessionCapabilityNegotiation(t *testing.T) {
 					t.Fatalf("status = %d", recorder.Code)
 				}
 				cookies := recorder.Result().Cookies()
-				if len(cookies) != 1 || cookies[0].Name != UserSessionCookieName || cookies[0].Value != loginResult.Session.Token {
+				if capability.wantMobile && len(cookies) != 0 {
+					t.Fatal("native login unexpectedly wrote a Cookie")
+				}
+				if !capability.wantMobile && (len(cookies) != 1 || cookies[0].Name != UserSessionCookieName || cookies[0].Value != loginResult.Session.Token) {
 					t.Fatal("compatibility session cookie was not preserved")
 				}
 				var response struct {
 					Data struct {
 						User          json.RawMessage `json:"user"`
 						MobileSession *struct {
-							Token     string    `json:"token"`
-							ExpiresAt time.Time `json:"expires_at"`
+							Token        string    `json:"token"`
+							RefreshToken string    `json:"refresh_token"`
+							ExpiresAt    time.Time `json:"expires_at"`
 						} `json:"mobile_session"`
 					} `json:"data"`
 				}
@@ -90,7 +94,7 @@ func TestLoginMobileSessionCapabilityNegotiation(t *testing.T) {
 					t.Fatal("response does not contain user")
 				}
 				if capability.wantMobile {
-					if response.Data.MobileSession == nil || response.Data.MobileSession.Token != loginResult.Session.Token || !response.Data.MobileSession.ExpiresAt.Equal(expiresAt) {
+					if response.Data.MobileSession == nil || response.Data.MobileSession.Token != loginResult.Session.Token || response.Data.MobileSession.RefreshToken == "" || !response.Data.MobileSession.ExpiresAt.Equal(expiresAt) {
 						t.Fatal("supported native response does not contain the created session credential")
 					}
 				} else {
@@ -103,6 +107,32 @@ func TestLoginMobileSessionCapabilityNegotiation(t *testing.T) {
 	}
 }
 
+type mobileSessionAccountService struct {
+	*fakeAccountService
+	refreshToken string
+	revokedToken string
+}
+
+func (*mobileSessionAccountService) BeginNativeSession(_ context.Context, token string) (account.NativeSessionCredential, error) {
+	return testNativeCredential(token), nil
+}
+func (*mobileSessionAccountService) ExchangeNativeSession(_ context.Context, token string) (account.NativeSessionCredential, error) {
+	return testNativeCredential(token), nil
+}
+func (s *mobileSessionAccountService) RefreshNativeSession(_ context.Context, token string) (account.NativeSessionCredential, error) {
+	s.refreshToken = token
+	return testNativeCredential("rotated-access-token"), nil
+}
+func (s *mobileSessionAccountService) RevokeNativeSession(_ context.Context, token string) error {
+	s.revokedToken = token
+	return nil
+}
+
+func testNativeCredential(token string) account.NativeSessionCredential {
+	return account.NativeSessionCredential{SessionCredential: account.SessionCredential{Token: token, ExpiresAt: time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)},
+		RefreshToken: "refresh-placeholder", RefreshExpiresAt: time.Date(2026, 10, 3, 0, 0, 0, 0, time.UTC), RefreshAbsoluteExpiresAt: time.Date(2027, 9, 3, 0, 0, 0, 0, time.UTC)}
+}
+
 type mobileSessionEmailAuthService struct {
 	result account.LoginResult
 }
@@ -113,4 +143,7 @@ func (s *mobileSessionEmailAuthService) RequestCode(context.Context, emailauth.R
 
 func (s *mobileSessionEmailAuthService) Login(context.Context, emailauth.LoginCommand) (account.LoginResult, error) {
 	return s.result, nil
+}
+func (*mobileSessionEmailAuthService) BeginNativeSession(_ context.Context, token string) (account.NativeSessionCredential, error) {
+	return testNativeCredential(token), nil
 }

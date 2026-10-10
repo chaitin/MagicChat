@@ -3,7 +3,6 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import type { ApiFetch } from "@/data/api-client"
-import { logoutLegacyCookieSession } from "@/data/auth/auth-api"
 import {
   createActivePushGrant,
   registerPushInstallation,
@@ -209,23 +208,6 @@ test("uses the fixed public gateway and installation authorization", async () =>
   assert.equal(renewed.expiresAt, "2026-10-27T00:00:00Z")
 })
 
-test("logout binds private grant revocation to the current installation", async () => {
-  let request: { init?: RequestInit; url: string } | undefined
-  const fetcher: ApiFetch = async (url, init) => {
-    request = { init, url }
-    return Response.json({ data: {}, success: true })
-  }
-  await logoutLegacyCookieSession("https://private.example", {
-    fetcher,
-    pushInstallationId: "installation-1",
-  })
-  assert.equal(request?.url, "https://private.example/api/client/auth/logout")
-  assert.equal(
-    new Headers(request?.init?.headers).get("x-push-installation-id"),
-    "installation-1"
-  )
-})
-
 test("registers grants and resolves routes only through the mapped private server", async () => {
   const requests: Array<{ init?: RequestInit; url: string }> = []
   const target = {
@@ -270,7 +252,7 @@ test("registers grants and resolves routes only through the mapped private serve
     requests[0]?.url,
     "https://private.example/api/client/push/grants"
   )
-  assert.equal(requests[0]?.init?.credentials, "include")
+  assert.equal(requests[0]?.init?.credentials, "omit")
   assert.equal(
     requests[1]?.url,
     "https://private.example/api/client/push/routes/resolve"

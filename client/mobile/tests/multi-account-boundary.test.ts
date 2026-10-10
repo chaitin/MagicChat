@@ -84,7 +84,7 @@ test("Native AccountStore 不得通过平台解析循环导入自身", async () 
 test("target、脱敏、传输与能力 CORS 安全边界", () => {
   assertSafeAuthenticatedTarget(sameServerAlice)
   assert.throws(() => assertSafeAuthenticatedTarget({ ...sameServerAlice, token: "secret" }))
-  assert.deepEqual(redactSensitiveValue({ Authorization: "Bearer secret", nested: { token: "secret", ok: 1 } }), { Authorization: "[REDACTED]", nested: { token: "[REDACTED]", ok: 1 } })
+  assert.deepEqual(redactSensitiveValue({ Authorization: "Bearer secret", nested: { token: "secret", refreshToken: "refresh-secret", refresh_token: "refresh-secret", ok: 1 } }), { Authorization: "[REDACTED]", nested: { token: "[REDACTED]", refreshToken: "[REDACTED]", refresh_token: "[REDACTED]", ok: 1 } })
   assert.doesNotThrow(() => assertSecureTransport("https://chat.example.test"))
   assert.doesNotThrow(() => assertSecureTransport("wss://chat.example.test/socket"))
   assert.doesNotThrow(() => assertSecureTransport("http://127.0.0.1:3000", true))

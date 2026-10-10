@@ -2545,7 +2545,7 @@ const docTemplate = `{
         },
         "/api/client/auth/email-code/login": {
             "post": {
-                "description": "验证 8 位邮箱验证码，创建普通用户 Session 并写入登录 Cookie。验证码仅能使用一次；仅 Native Mobile 在发送 X-Dianbao-Mobile-Session: 1 且请求不带 Origin 时，响应 data 才可包含可选 mobile_session。",
+                "description": "验证 8 位邮箱验证码。原生客户端发送 X-Dianbao-Mobile-Session: 2 且不带 Origin 时返回访问与刷新凭据，不设置 Cookie；Web 继续使用 Cookie。",
                 "consumes": [
                     "application/json"
                 ],
@@ -2559,10 +2559,10 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "enum": [
-                            "1"
+                            "2"
                         ],
                         "type": "string",
-                        "description": "Native Mobile Session 能力版本；仅值 1 启用可选 mobile_session 响应（带 Origin 时忽略）",
+                        "description": "原生客户端会话能力版本；仅值 2 生效（带 Origin 时忽略）",
                         "name": "X-Dianbao-Mobile-Session",
                         "in": "header"
                     },
@@ -2694,7 +2694,7 @@ const docTemplate = `{
         },
         "/api/client/auth/login": {
             "post": {
-                "description": "普通用户使用管理员创建的邮箱和密码登录。仅 Native Mobile 在发送 X-Dianbao-Mobile-Session: 1 且请求不带 Origin 时，响应 data 才可包含可选 mobile_session；普通 Web 响应不保证且不会要求该字段。",
+                "description": "普通用户使用管理员创建的邮箱和密码登录。原生客户端发送 X-Dianbao-Mobile-Session: 2 且不带 Origin 时返回访问与刷新凭据，不设置 Cookie；Web 继续使用 Cookie。",
                 "consumes": [
                     "application/json"
                 ],
@@ -2708,10 +2708,10 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "enum": [
-                            "1"
+                            "2"
                         ],
                         "type": "string",
-                        "description": "Native Mobile Session 能力版本；仅值 1 启用可选 mobile_session 响应（带 Origin 时忽略）",
+                        "description": "原生客户端会话能力版本；仅值 2 生效（带 Origin 时忽略）",
                         "name": "X-Dianbao-Mobile-Session",
                         "in": "header"
                     },
@@ -12379,6 +12379,17 @@ const docTemplate = `{
                 "expires_at": {
                     "type": "string",
                     "format": "date-time"
+                },
+                "refresh_absolute_expires_at": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "refresh_expires_at": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "refresh_token": {
+                    "type": "string"
                 },
                 "token": {
                     "type": "string"

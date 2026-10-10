@@ -186,6 +186,8 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
     const isCurrent = old?.accountId === accountId
     const pushIdentity = isCurrent ? pushIdentityOf(old) : { accountId, generation: -1, target: targetOf(account) }
     const candidate = isCurrent ? selectRecentReadyAccount(before.accounts, accountId) : undefined
+    const endRefresh = localOnly ? () => undefined : await accountAuthRuntime.beginSignOut(accountId)
+    try {
     await runAccountSignOutTransaction({
       isCurrent,
       prepareCandidate: () => candidate ? bootstrapBeforeCommit(candidate) : Promise.resolve(undefined),
@@ -195,10 +197,10 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
           await pushCoordinator.deactivate(pushIdentity)
           return false
         }
-        const pushInstallationId = await pushCoordinator.getInstallationId(pushIdentity)
+        const credential = await accountStore.getCredential(accountId)
+        if (credential.status !== "valid") return false
         await logout(account.url, {
-          account: { accountId, auth: accountAuthRuntime.optionsForStoredAccount(accountId, targetOf(account)) },
-          pushInstallationId,
+          account: { accountId, refreshToken: credential.credential.refreshToken },
         })
         return true
       },
@@ -228,6 +230,7 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
         publish(await accountStore.hydrate().catch(() => before), null, "degraded")
       },
     })
+    } finally { endRefresh() }
   }), [bootstrapBeforeCommit, publish, pushCoordinator, serialize])
 
   const deactivateActiveAccount = useCallback((code: string) => serialize(async () => {
@@ -300,10 +303,7 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
         old && sessionBootstrapCoordinator.invalidate(old.target)
         publish(next, { accountId: record.id, account: next.accounts.find((a) => a.id === record.id)!, target: targetOf(record), generation: preparation.generation }, "authenticated")
       },
-      revokeNewSession: () => logout(server.url, { account: { accountId: record.id, auth: {
-        auth: async () => ({ accountId: record.id, generation: -1, token: credential.token }),
-        isCurrent: (snapshot) => snapshot.accountId === record.id && snapshot.generation === -1,
-      } } }),
+      revokeNewSession: () => logout(server.url, { account: { accountId: record.id, refreshToken: credential.refreshToken } }),
       restore: async () => {
         if (previousRecord) {
           const previousValue = previousCredential?.status === "valid" ? previousCredential.credential : null

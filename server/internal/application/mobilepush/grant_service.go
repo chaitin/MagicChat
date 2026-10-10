@@ -126,7 +126,11 @@ func (s *grantService) Register(ctx context.Context, cmd RegisterGrantCommand) (
 		stored.GatewayGrantID = gatewayGrantID
 		stored.SendTokenCiphertext = ciphertext
 		stored.Platform = cmd.Platform
-		stored.ExpiresAt = minTime(cmd.ExpiresAt.UTC(), session.ExpiresAt.UTC())
+		sessionExpiry := session.ExpiresAt.UTC()
+		if session.RefreshTokenHash != nil && session.RefreshExpiresAt != nil && session.RefreshAbsoluteExpiresAt != nil {
+			sessionExpiry = minTime(*session.RefreshExpiresAt, *session.RefreshAbsoluteExpiresAt)
+		}
+		stored.ExpiresAt = minTime(cmd.ExpiresAt.UTC(), sessionExpiry)
 		stored.Status = GrantStatusActive
 		stored.LastSeenAt = now
 		stored.UpdatedAt = now

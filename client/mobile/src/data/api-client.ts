@@ -5,6 +5,8 @@ const PUBLIC_CLIENT_PATHS = new Set([
   "/api/client/auth/email-code/request",
   "/api/client/auth/login",
   "/api/client/auth/logout",
+  "/api/client/auth/native/refresh",
+  "/api/client/auth/native/revoke",
 ])
 
 export type ApiFetch = (
@@ -24,6 +26,7 @@ export type ApiClientAuthOptions = {
   auth: AuthResolver
   isCurrent: (snapshot: AccountAuthSnapshot) => boolean | Promise<boolean>
   onUnauthorized?: (accountId: string, error: AccountUnauthorizedError) => void | Promise<void>
+  refresh?: (snapshot: AccountAuthSnapshot) => Promise<AccountAuthSnapshot>
 }
 
 export type ApiClientOptions = {
@@ -154,17 +157,30 @@ export function createApiClient(
           callerHeaders.set("Authorization", `Bearer ${snapshot.token}`)
         }
 
-        const response = await fetcher(endpoint, {
+        const fetchOnce = () => fetcher(endpoint, {
           ...requestInit,
           headers: callerHeaders,
-          credentials: "include",
+          credentials: "omit",
           signal: controller.signal,
         })
+        let response = await fetchOnce()
         await assertCurrent()
-        const payload = await readJson<
-          ApiErrorEnvelope | ApiSuccessEnvelope<T>
-        >(response)
+        let payload = await readJson<ApiErrorEnvelope | ApiSuccessEnvelope<T>>(response)
         await assertCurrent()
+        if (response.status === 401 && snapshot && clientOptions.auth?.refresh &&
+          !nonSessionUnauthorizedCodes.includes((payload as ApiErrorEnvelope | undefined)?.error?.code ?? "")) {
+          const refreshed = await clientOptions.auth.refresh(snapshot)
+          await assertCurrent()
+          if (refreshed.accountId !== snapshot.accountId || refreshed.generation !== snapshot.generation || !refreshed.token) {
+            throw new StaleAccountOperationError(snapshot.accountId)
+          }
+          snapshot = Object.freeze({ ...refreshed })
+          callerHeaders.set("Authorization", `Bearer ${snapshot.token}`)
+          response = await fetchOnce()
+          await assertCurrent()
+          payload = await readJson<ApiErrorEnvelope | ApiSuccessEnvelope<T>>(response)
+          await assertCurrent()
+        }
 
         if (!response.ok || payload?.success === false) {
           const error = (payload as ApiErrorEnvelope | undefined)?.error

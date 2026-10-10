@@ -108,6 +108,38 @@ func TestServiceStartsAndFinishesLoginWithoutChangingLegacyFlow(t *testing.T) {
 	}
 }
 
+func TestDesktopOAuthMarksOnlyItsOwnTemporarySessionForExchange(t *testing.T) {
+	db := openExternalAuthTestDB(t)
+	now := time.Date(2026, 7, 15, 9, 0, 0, 0, time.UTC)
+	provider := externalAuthTestProvider(t, db)
+	values := []string{"desktop-state", "desktop-verifier"}
+	service := NewService(Dependencies{
+		DB: db, Providers: externalAuthProviderStub{provider: provider},
+		OAuth:                &externalAuthOAuthStub{profile: Profile{ExternalUserID: "desktop-user", Email: "desktop@example.test", Name: "Desktop"}},
+		Now:                  func() time.Time { return now },
+		GenerateRandomValue:  func(int) (string, error) { value := values[0]; values = values[1:]; return value, nil },
+		GenerateSessionToken: func() (string, error) { return "desktop-temporary-token", nil },
+		RandomAvatar:         func() string { return "/assets/avatars/builtin/01.webp" },
+	})
+	if _, err := service.Start(context.Background(), StartCommand{ProviderKey: provider.Key, Redirect: "/init?desktop-auth=complete"}); err != nil {
+		t.Fatal(err)
+	}
+	finished, err := service.Finish(context.Background(), FinishCommand{ProviderKey: provider.Key, Code: "code", State: "desktop-state", CookieState: "desktop-state"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if finished.RedirectPath != "/init?desktop-auth=complete" {
+		t.Fatalf("redirect changed: %q", finished.RedirectPath)
+	}
+	var session store.UserSession
+	if err := db.First(&session, "token_hash = ?", auth.HashSessionToken(finished.Session.Token)).Error; err != nil {
+		t.Fatal(err)
+	}
+	if session.NativeExchangeUntil == nil || !session.NativeExchangeUntil.Equal(now.Add(5*time.Minute)) {
+		t.Fatalf("native exchange window = %v", session.NativeExchangeUntil)
+	}
+}
+
 func TestServiceValidatesStateAndProfileBeforeCreatingSession(t *testing.T) {
 	db := openExternalAuthTestDB(t)
 	now := time.Date(2026, 7, 15, 9, 0, 0, 0, time.UTC)

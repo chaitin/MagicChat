@@ -1,19 +1,20 @@
 import {
-  AccountUnauthorizedError,
   ApiRequestError,
   createApiClient,
-  type ApiClientAuthOptions,
   type ApiFetch,
 } from "@/data/api-client"
 import type { AuthenticatedUser } from "@/core/models"
 
 export const MOBILE_SESSION_HEADER = "X-Dianbao-Mobile-Session"
-export const MOBILE_SESSION_VERSION = "1"
+export const MOBILE_SESSION_VERSION = "2"
 
-export type MobileSessionCredential = Readonly<{ token: string; expiresAt: string }>
+export type MobileSessionCredential = Readonly<{
+  token: string; expiresAt: string; refreshToken: string
+  refreshExpiresAt: string; refreshAbsoluteExpiresAt: string
+}>
 
 type LoginResponse = {
-  mobile_session?: { token?: unknown; expires_at?: unknown }
+  mobile_session?: { token?: unknown; expires_at?: unknown; refresh_token?: unknown; refresh_expires_at?: unknown; refresh_absolute_expires_at?: unknown }
   user?: { avatar?: unknown; email?: unknown; id?: unknown; name?: unknown }
 }
 
@@ -45,7 +46,7 @@ export async function login(serverUrl: string, input: { account: string; passwor
     headers: { "Content-Type": "application/json", [MOBILE_SESSION_HEADER]: MOBILE_SESSION_VERSION },
     method: "POST",
   })
-  return consumeLoginResponseWithLegacyCleanup(serverUrl, data, options)
+  return consumeLoginResponse(serverUrl, data, options)
 }
 
 export async function requestEmailLoginCode(serverUrl: string, email: string, options: { fetcher?: ApiFetch } = {}): Promise<EmailCodeRequestResult> {
@@ -70,33 +71,12 @@ export async function loginWithEmailCode(serverUrl: string, input: { code: strin
     headers: { "Content-Type": "application/json", [MOBILE_SESSION_HEADER]: MOBILE_SESSION_VERSION },
     method: "POST",
   })
-  return consumeLoginResponseWithLegacyCleanup(serverUrl, data, options)
-}
-
-async function consumeLoginResponseWithLegacyCleanup(
-  serverUrl: string,
-  data: LoginResponse | undefined,
-  options: LoginOptions
-) {
-  try {
-    return await consumeLoginResponse(serverUrl, data, options)
-  } catch (error) {
-    if (error instanceof MobileSessionCompatibilityError) {
-      await logoutLegacyCookieSession(serverUrl, { fetcher: options.fetcher }).catch(() => undefined)
-    }
-    throw error
-  }
+  return consumeLoginResponse(serverUrl, data, options)
 }
 
 type AccountLogoutOptions = {
-  account: { accountId: string; auth: ApiClientAuthOptions }
+  account: { accountId: string; refreshToken: string }
   fetcher?: ApiFetch
-  pushInstallationId?: string
-}
-
-type LegacyCookieLogoutOptions = {
-  fetcher?: ApiFetch
-  pushInstallationId?: string
 }
 
 export async function logout(
@@ -106,54 +86,28 @@ export async function logout(
   if (!options.account.accountId) {
     throw new ApiRequestError("必须指定待登出的账号")
   }
-  const auth: ApiClientAuthOptions = {
-    ...options.account.auth,
-    auth: async () => {
-      const snapshot = await options.account.auth.auth()
-      if (snapshot.accountId !== options.account.accountId) {
-        throw new ApiRequestError("登出凭据与指定账号不匹配")
-      }
-      return snapshot
-    },
-    onUnauthorized: undefined,
-  }
-  await performLogout(serverUrl, options, auth)
-}
-
-/** Temporary compatibility path for the pre-migration single Cookie session. */
-export async function logoutLegacyCookieSession(
-  serverUrl: string,
-  options: LegacyCookieLogoutOptions = {}
-) {
-  await performLogout(serverUrl, options)
-}
-
-async function performLogout(
-  serverUrl: string,
-  options: LegacyCookieLogoutOptions,
-  auth?: ApiClientAuthOptions
-) {
+  if (!options.account.refreshToken) throw new ApiRequestError("登出凭据不可用")
   try {
-    await createApiClient(
-      serverUrl,
-      options.fetcher,
-      auth ? { auth } : {}
-    ).request<void>("/api/client/auth/logout", {
+    await createApiClient(serverUrl, options.fetcher).request<void>("/api/client/auth/native/revoke", {
+      body: JSON.stringify({ refresh_token: options.account.refreshToken }),
       errorMessage: "退出登录失败",
-      headers: options.pushInstallationId
-        ? { "X-Push-Installation-ID": options.pushInstallationId }
-        : undefined,
+      headers: { "Content-Type": "application/json", [MOBILE_SESSION_HEADER]: MOBILE_SESSION_VERSION },
       method: "POST",
     })
   } catch (error) {
-    if (
-      error instanceof AccountUnauthorizedError ||
-      (error instanceof ApiRequestError && error.status === 401)
-    ) {
-      return
-    }
+    if (error instanceof ApiRequestError && error.status === 401) return
     throw error
   }
+}
+
+export async function refreshNativeSession(serverUrl: string, refreshToken: string, fetcher?: ApiFetch): Promise<MobileSessionCredential> {
+  const data = await createApiClient(serverUrl, fetcher).request<{ token?: unknown; expires_at?: unknown; refresh_token?: unknown; refresh_expires_at?: unknown; refresh_absolute_expires_at?: unknown }>("/api/client/auth/native/refresh", {
+    body: JSON.stringify({ refresh_token: refreshToken }),
+    errorMessage: "续期失败",
+    headers: { "Content-Type": "application/json", [MOBILE_SESSION_HEADER]: MOBILE_SESSION_VERSION },
+    method: "POST",
+  })
+  return parseMobileCredential(data)
 }
 
 async function consumeLoginResponse(
@@ -171,19 +125,28 @@ async function consumeLoginResponse(
     await logout(serverUrl, {
       account: {
         accountId,
-        auth: {
-          auth: async () => ({
-            accountId,
-            generation: 0,
-            token: credential.token,
-          }),
-          isCurrent: () => true,
-        },
+        refreshToken: credential.refreshToken,
       },
       fetcher: options.fetcher,
     }).catch(() => undefined)
     throw error
   }
+}
+
+function parseMobileCredential(data: LoginResponse["mobile_session"]): MobileSessionCredential {
+  const token = data?.token
+  const expiresAt = data?.expires_at
+  const refreshToken = data?.refresh_token
+  const refreshExpiresAt = data?.refresh_expires_at
+  const refreshAbsoluteExpiresAt = data?.refresh_absolute_expires_at
+  if (typeof token !== "string" || !token || typeof refreshToken !== "string" || !refreshToken ||
+    typeof expiresAt !== "string" || typeof refreshExpiresAt !== "string" || typeof refreshAbsoluteExpiresAt !== "string") {
+    throw new MobileSessionCompatibilityError("invalid")
+  }
+  const times = [expiresAt, refreshExpiresAt, refreshAbsoluteExpiresAt].map(Date.parse)
+  if (times.some((time) => !Number.isFinite(time))) throw new MobileSessionCompatibilityError("invalid")
+  if (times.some((time) => time <= Date.now())) throw new MobileSessionCompatibilityError("expired")
+  return Object.freeze({ token, expiresAt, refreshToken, refreshExpiresAt, refreshAbsoluteExpiresAt })
 }
 
 function normalizeLoginResponse(data: LoginResponse | undefined): {
@@ -204,24 +167,8 @@ function normalizeLoginResponse(data: LoginResponse | undefined): {
   if (!data?.mobile_session) {
     throw new MobileSessionCompatibilityError("missing")
   }
-  const token = data.mobile_session.token
-  const expiresAt = data.mobile_session.expires_at
-  if (
-    typeof token !== "string" ||
-    token.length === 0 ||
-    typeof expiresAt !== "string"
-  ) {
-    throw new MobileSessionCompatibilityError("invalid")
-  }
-  const expiry = Date.parse(expiresAt)
-  if (!Number.isFinite(expiry)) {
-    throw new MobileSessionCompatibilityError("invalid")
-  }
-  if (expiry <= Date.now()) {
-    throw new MobileSessionCompatibilityError("expired")
-  }
   return {
-    credential: Object.freeze({ token, expiresAt }),
+    credential: parseMobileCredential(data.mobile_session),
     user: {
       avatar: typeof user.avatar === "string" ? user.avatar : "",
       email: user.email,

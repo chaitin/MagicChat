@@ -163,7 +163,7 @@ func (s *Service) Finish(ctx context.Context, cmd FinishCommand) (FinishResult, 
 	if err != nil {
 		return FinishResult{}, err
 	}
-	session, err := s.createSession(ctx, user.ID, cmd.UserAgent, cmd.IP)
+	session, err := s.createSession(ctx, user.ID, cmd.UserAgent, cmd.IP, loginState.RedirectPath == "/init?desktop-auth=complete")
 	if err != nil {
 		return FinishResult{}, internalError(err)
 	}
@@ -288,7 +288,7 @@ func (s *Service) consumeLoginState(ctx context.Context, providerID, state strin
 	return loginState, nil
 }
 
-func (s *Service) createSession(ctx context.Context, userID, userAgent, ip string) (SessionCredential, error) {
+func (s *Service) createSession(ctx context.Context, userID, userAgent, ip string, desktopExchange bool) (SessionCredential, error) {
 	token, err := s.generateSessionToken()
 	if err != nil {
 		return SessionCredential{}, err
@@ -297,6 +297,10 @@ func (s *Service) createSession(ctx context.Context, userID, userAgent, ip strin
 	session := store.UserSession{
 		ID: s.newID(), TokenHash: auth.HashSessionToken(token), UserID: userID,
 		ExpiresAt: now.Add(s.sessionTTL), CreatedAt: now, LastSeenAt: now, UserAgent: userAgent, IP: ip,
+	}
+	if desktopExchange {
+		until := now.Add(5 * time.Minute)
+		session.NativeExchangeUntil = &until
 	}
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var user store.User

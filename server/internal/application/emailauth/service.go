@@ -172,6 +172,14 @@ func (s *Service) TestSMTP(ctx context.Context, rawRecipient string) error {
 	return nil
 }
 
+func (s *Service) BeginNativeSession(ctx context.Context, accessToken string) (account.NativeSessionCredential, error) {
+	native, ok := s.accounts.(account.NativeSessionService)
+	if !ok {
+		return account.NativeSessionCredential{}, newError(CodeUnavailable, "原生会话不可用", nil)
+	}
+	return native.BeginNativeSession(ctx, accessToken)
+}
+
 func (s *Service) Login(ctx context.Context, cmd LoginCommand) (account.LoginResult, error) {
 	email, err := normalizeEmail(cmd.Email)
 	if err != nil || len(cmd.Code) != CodeLength || strings.Trim(cmd.Code, "0123456789") != "" {

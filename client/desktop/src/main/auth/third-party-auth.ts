@@ -1,6 +1,7 @@
 import { BrowserWindow, type Session } from "electron"
 import { AuthFailure, type ThirdPartyProvider } from "../../shared/auth"
-import type { NativeSessionCredential } from "./auth-api"
+
+export type TemporaryOAuthSession = { token: string; expiresAt: string }
 
 const userSessionCookie = "user_session"
 const thirdPartyStateCookie = "third_party_login_state"
@@ -17,7 +18,7 @@ export function openThirdPartyLoginWindow({
   serverUrl: string
   provider: ThirdPartyProvider
   parent: BrowserWindow
-}): Promise<NativeSessionCredential> {
+}): Promise<TemporaryOAuthSession> {
   const serverOrigin = new URL(serverUrl).origin
   const redirectPath = `${redirectPathname}?desktop-auth=complete`
   const startUrl = new URL(

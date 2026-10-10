@@ -91,6 +91,26 @@ test("old close/event and reconnect sequence cannot affect replacement account",
   assert.deepEqual(client.getSnapshot(), { ready: false, status: "disconnected" })
 })
 
+test("an old WebSocket token close does not revoke a refreshed account", async () => {
+  const socket = new MockSocket()
+  const marked: string[] = []
+  const client = new RealtimeClient({
+    url: "wss://chat.example/ws",
+    auth: async () => ({ accountId: "A", generation: 4, token: "old-access" }),
+    isCurrent: () => true,
+    createSocket: () => socket as unknown as WebSocket,
+    authCheck: async () => true,
+    onUnauthorized: (accountId) => { marked.push(accountId) },
+  })
+  client.connect()
+  await tick()
+  socket.serverClose(4401)
+  await tick()
+  assert.deepEqual(marked, [])
+  assert.equal(client.getSnapshot().status, "reconnecting")
+  client.disconnect()
+})
+
 test("WS unauthorized close marks only captured account", async () => {
   for (const closeCode of [401, 4001, 4401]) {
     const socket = new MockSocket()
@@ -105,6 +125,7 @@ test("WS unauthorized close marks only captured account", async () => {
       isCurrent: (snapshot) =>
         snapshot.accountId === "A" && snapshot.generation === 4,
       createSocket: () => socket as unknown as WebSocket,
+      authCheck: async () => false,
       onUnauthorized: (accountId) => marked.push(accountId),
     })
     client.connect()

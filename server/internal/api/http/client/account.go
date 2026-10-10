@@ -56,6 +56,7 @@ func sessionCredentialFromRequest(r *http.Request) (sessionCredential, bool) {
 type AccountAPI struct {
 	accounts        account.ClientService
 	sessions        account.SessionAuthenticator
+	nativeSessions  account.NativeSessionService
 	onAuthenticated AuthenticatedHook
 }
 
@@ -82,8 +83,19 @@ type accountResponse struct {
 }
 
 type mobileSessionResponse struct {
-	Token     string    `json:"token"`
-	ExpiresAt time.Time `json:"expires_at" format:"date-time"`
+	Token                    string    `json:"token"`
+	ExpiresAt                time.Time `json:"expires_at" format:"date-time"`
+	RefreshToken             string    `json:"refresh_token"`
+	RefreshExpiresAt         time.Time `json:"refresh_expires_at" format:"date-time"`
+	RefreshAbsoluteExpiresAt time.Time `json:"refresh_absolute_expires_at" format:"date-time"`
+}
+
+func newMobileSessionResponse(value account.NativeSessionCredential) *mobileSessionResponse {
+	return &mobileSessionResponse{
+		Token: value.Token, ExpiresAt: value.ExpiresAt,
+		RefreshToken: value.RefreshToken, RefreshExpiresAt: value.RefreshExpiresAt,
+		RefreshAbsoluteExpiresAt: value.RefreshAbsoluteExpiresAt,
+	}
 }
 
 type accountEnvelope struct {
@@ -107,9 +119,11 @@ type errorEnvelope struct {
 }
 
 func NewAccountAPI(accounts account.ClientService, sessions account.SessionAuthenticator, onAuthenticated AuthenticatedHook) *AccountAPI {
+	nativeSessions, _ := accounts.(account.NativeSessionService)
 	return &AccountAPI{
 		accounts:        accounts,
 		sessions:        sessions,
+		nativeSessions:  nativeSessions,
 		onAuthenticated: onAuthenticated,
 	}
 }
@@ -117,6 +131,9 @@ func NewAccountAPI(accounts account.ClientService, sessions account.SessionAuthe
 func (a *AccountAPI) RegisterPublicRoutes(router *echo.Echo) {
 	router.POST("/api/client/auth/login", a.login)
 	router.POST("/api/client/auth/logout", a.logout)
+	router.POST("/api/client/auth/native/exchange", a.nativeExchange)
+	router.POST("/api/client/auth/native/refresh", a.nativeRefresh)
+	router.POST("/api/client/auth/native/revoke", a.nativeRevoke)
 }
 
 func (a *AccountAPI) RegisterProtectedRoutes(group *echo.Group) {
@@ -148,11 +165,11 @@ func (a *AccountAPI) RequireSession(next echo.HandlerFunc) echo.HandlerFunc {
 // login godoc
 //
 // @Summary 普通用户登录
-// @Description 普通用户使用管理员创建的邮箱和密码登录。仅 Native Mobile 在发送 X-Dianbao-Mobile-Session: 1 且请求不带 Origin 时，响应 data 才可包含可选 mobile_session；普通 Web 响应不保证且不会要求该字段。
+// @Description 普通用户使用管理员创建的邮箱和密码登录。原生客户端发送 X-Dianbao-Mobile-Session: 2 且不带 Origin 时返回访问与刷新凭据，不设置 Cookie；Web 继续使用 Cookie。
 // @Tags 客户端认证
 // @Accept json
 // @Produce json
-// @Param X-Dianbao-Mobile-Session header string false "Native Mobile Session 能力版本；仅值 1 启用可选 mobile_session 响应（带 Origin 时忽略）" Enums(1)
+// @Param X-Dianbao-Mobile-Session header string false "原生客户端会话能力版本；仅值 2 生效（带 Origin 时忽略）" Enums(2)
 // @Param body body loginRequest true "登录参数"
 // @Success 200 {object} successEnvelope{data=accountEnvelope}
 // @Failure 400 {object} errorEnvelope
@@ -175,12 +192,18 @@ func (a *AccountAPI) login(c echo.Context) error {
 		return writeAccountError(c, err)
 	}
 
-	setSessionCookie(c, result.Session.Token, result.Session.ExpiresAt)
 	response := accountEnvelope{Account: newAccountResponse(result.Account)}
 	if supportsMobileSessionResponse(c.Request()) {
-		response.MobileSession = &mobileSessionResponse{
-			Token: result.Session.Token, ExpiresAt: result.Session.ExpiresAt,
+		if a.nativeSessions == nil {
+			return writeFailure(c, http.StatusInternalServerError, string(account.CodeInternal), "服务端不支持原生会话")
 		}
+		credential, err := a.nativeSessions.BeginNativeSession(c.Request().Context(), result.Session.Token)
+		if err != nil {
+			return writeAccountError(c, err)
+		}
+		response.MobileSession = newMobileSessionResponse(credential)
+	} else {
+		setSessionCookie(c, result.Session.Token, result.Session.ExpiresAt)
 	}
 	return writeSuccess(c, http.StatusOK, response)
 }
@@ -210,7 +233,9 @@ func (a *AccountAPI) logout(c echo.Context) error {
 		return writeAccountError(c, err)
 	}
 
-	clearSessionCookie(c)
+	if credential.source == "cookie" {
+		clearSessionCookie(c)
+	}
 	return writeSuccess(c, http.StatusOK, map[string]any{})
 }
 

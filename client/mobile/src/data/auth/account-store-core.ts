@@ -23,7 +23,13 @@ export type AccountIndexV2 = {
   pendingCredentialCleanup: AccountId[]
 }
 
-export type SessionCredential = { token: string; expiresAt: string }
+export type SessionCredential = {
+  token: string
+  expiresAt: string
+  refreshToken: string
+  refreshExpiresAt: string
+  refreshAbsoluteExpiresAt: string
+}
 export type AccountProfileMetadata = { avatar: string; email: string; name: string }
 
 export type CredentialResult =
@@ -118,11 +124,17 @@ export function parseCredential(value: string | null, now = Date.now()): Credent
   try {
     const candidate: unknown = JSON.parse(value)
     if (!isObject(candidate) || typeof candidate.token !== "string" || !candidate.token ||
-      typeof candidate.expiresAt !== "string") return { status: "corrupt" }
+      typeof candidate.expiresAt !== "string" || typeof candidate.refreshToken !== "string" || !candidate.refreshToken ||
+      typeof candidate.refreshExpiresAt !== "string" || typeof candidate.refreshAbsoluteExpiresAt !== "string") return { status: "corrupt" }
     const expiry = Date.parse(candidate.expiresAt)
-    if (!Number.isFinite(expiry)) return { status: "corrupt" }
-    if (expiry <= now) return { status: "expired" }
-    return { status: "valid", credential: { token: candidate.token, expiresAt: candidate.expiresAt } }
+    const refreshExpiry = Date.parse(candidate.refreshExpiresAt)
+    const absoluteExpiry = Date.parse(candidate.refreshAbsoluteExpiresAt)
+    if (![expiry, refreshExpiry, absoluteExpiry].every(Number.isFinite)) return { status: "corrupt" }
+    if (refreshExpiry <= now || absoluteExpiry <= now) return { status: "expired" }
+    return { status: "valid", credential: {
+      token: candidate.token, expiresAt: candidate.expiresAt, refreshToken: candidate.refreshToken,
+      refreshExpiresAt: candidate.refreshExpiresAt, refreshAbsoluteExpiresAt: candidate.refreshAbsoluteExpiresAt,
+    } }
   } catch {
     return { status: "corrupt" }
   }
@@ -192,6 +204,15 @@ export function createAccountStore(options: {
     }),
 
     getCredential: (accountId: AccountId) => serialized(() => credential(accountId)),
+
+    rotateCredential: (accountId: AccountId, previousRefreshToken: string, next: SessionCredential) => serialized(async () => {
+      if (parseCredential(JSON.stringify(next), now()).status !== "valid") throw new Error("续期凭据无效")
+      const index = await readIndex()
+      if (!index.accounts.some((account) => account.id === accountId && account.status === "ready")) throw new Error("账号已退出登录")
+      const current = await credential(accountId)
+      if (current.status !== "valid" || current.credential.refreshToken !== previousRefreshToken) throw new Error("续期凭据已变化")
+      await options.credentialStore.setItem(createCredentialStorageKey(accountId), JSON.stringify(next))
+    }),
 
     updateAccountProfile: (accountId: AccountId, profile: AccountProfileMetadata) => serialized(async () => {
       const index = await readIndex()

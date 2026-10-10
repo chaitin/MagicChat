@@ -46,6 +46,7 @@ import {
   invalidResponse,
   parseAppInfo,
   parseNativeSession,
+  parseNativeCredential,
   parseUser,
   request,
   validSeconds,
@@ -53,6 +54,7 @@ import {
 } from "./auth/auth-api"
 import { clearServerAuthCookies, openThirdPartyLoginWindow } from "./auth/third-party-auth"
 import { encryptPassword, readSavedLogin } from "./auth/login-credential"
+import { protectNativeSession, restoreNativeSession } from "./auth/native-credential-store"
 import { ServerManager } from "./auth/server-manager"
 
 type ActiveConnection = Connection & {
@@ -60,7 +62,7 @@ type ActiveConnection = Connection & {
   credential: NativeSessionCredential | null
 }
 const NATIVE_SESSION_HEADER = "X-Dianbao-Mobile-Session"
-const NATIVE_SESSION_VERSION = "1"
+const NATIVE_SESSION_VERSION = "2"
 
 export class AuthController {
   private readonly configStore: AppConfigStore
@@ -73,6 +75,11 @@ export class AuthController {
   private readonly settings: AppSettingsManager
   private busy = false
   private readonly cooldowns = new Map<string, number>()
+  private refreshTask: {
+    active: ActiveConnection
+    promise: Promise<NativeSessionCredential>
+  } | null = null
+  private signingOutTarget: ActiveConnection | null = null
 
   constructor(
     private readonly userDataPath: string,
@@ -135,23 +142,46 @@ export class AuthController {
       if (!accountKey || !stored) return { catalog: this.servers.catalog(), connection: null }
 
       const profile = this.config.servers.find((server) => server.id === stored.serverId)
-      const token = stored.token
-      if (!profile || !token || Date.parse(stored.expiresAt) <= Date.now()) {
+      if (!profile) {
         await this.forgetStoredAccount(accountKey)
         return { catalog: this.servers.catalog(), connection: null }
       }
 
       const serverSession = this.servers.createSession(profile.url)
       try {
+        let credential = restoreNativeSession(stored.encryptedCredential)
+        if (Date.parse(credential.expiresAt) <= Date.now() + 5 * 60_000) {
+          credential = parseNativeCredential(
+            await request(
+              serverSession,
+              profile.url,
+              "/api/client/auth/native/refresh",
+              { refresh_token: credential.refreshToken },
+              15_000,
+              {
+                headers: { [NATIVE_SESSION_HEADER]: NATIVE_SESSION_VERSION },
+                omitOrigin: true,
+              },
+            ),
+          )
+          const encryptedCredential = protectNativeSession(credential)
+          if (!encryptedCredential)
+            throw new AuthFailure("secure_storage_unavailable", "系统安全存储不可用，请重新登录")
+          const accountSessions = {
+            ...this.config.accountSessions,
+            [accountKey]: { ...stored, encryptedCredential },
+          }
+          const refreshedConfig = { ...this.config, accountSessions }
+          await this.configStore.save(refreshedConfig)
+          this.config = refreshedConfig
+        }
         const [infoData, accountData] = await Promise.all([
           request(serverSession, profile.url, "/api/client/info", undefined, 3_000, {
             omitOrigin: true,
-            credentials: "omit",
           }),
           request(serverSession, profile.url, "/api/client/me", undefined, 8_000, {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${credential.token}` },
             omitOrigin: true,
-            credentials: "omit",
           }),
         ])
         const info = parseAppInfo(infoData)
@@ -168,13 +198,13 @@ export class AuthController {
         this.active = {
           ...connection,
           session: serverSession,
-          credential: { token, expiresAt: stored.expiresAt },
+          credential,
         }
         this.createAccountRuntime(this.active)
         const accountSessions = {
           ...this.config.accountSessions,
           [accountKey]: {
-            ...stored,
+            ...this.config.accountSessions[accountKey],
             userEmail: user.email,
             userName: user.name,
             lastUsedAt: Date.now(),
@@ -190,7 +220,15 @@ export class AuthController {
         this.config = config
         return { catalog: this.servers.catalog(), connection }
       } catch (error) {
-        if (error instanceof AuthFailure && error.code === "unauthorized") {
+        if (
+          error instanceof AuthFailure &&
+          [
+            "unauthorized",
+            "invalid_session",
+            "expired_session",
+            "secure_storage_unavailable",
+          ].includes(error.code)
+        ) {
           await this.forgetStoredAccount(accountKey)
           return { catalog: this.servers.catalog(), connection: null }
         }
@@ -532,7 +570,6 @@ export class AuthController {
       const serverSession = this.servers.createSession(server.url)
       const data = await request(serverSession, server.url, "/api/client/info", undefined, 3_000, {
         omitOrigin: true,
-        credentials: "omit",
       })
       const info = parseAppInfo(data)
       const connection: Connection = {
@@ -619,7 +656,6 @@ export class AuthController {
           {
             headers: { [NATIVE_SESSION_HEADER]: NATIVE_SESSION_VERSION },
             omitOrigin: true,
-            credentials: "omit",
           },
         )
         const nativeSession = parseNativeSession(data)
@@ -628,25 +664,16 @@ export class AuthController {
           await request(active.session, active.server.url, "/api/client/me", undefined, 15_000, {
             headers: { Authorization: `Bearer ${nativeSession.credential.token}` },
             omitOrigin: true,
-            credentials: "omit",
           }),
         )
         if (nativeSession.user.id !== user.id)
           throw new AuthFailure("invalid_session", "登录会话与账号不一致，请重试")
         active.credential = credential
-        await active.session.clearStorageData({ storages: ["cookies"] })
-        await active.session.cookies.flushStore()
       } catch (error) {
         active.credential = null
         if (credential) {
-          await request(active.session, active.server.url, "/api/client/auth/logout", {}, 15_000, {
-            headers: { Authorization: `Bearer ${credential.token}` },
-            omitOrigin: true,
-            credentials: "omit",
-          }).catch(() => undefined)
+          await this.revokeCredential(active, credential).catch(() => undefined)
         }
-        await active.session.clearStorageData({ storages: ["cookies"] })
-        await active.session.cookies.flushStore()
         throw error
       }
       active.user = user
@@ -687,17 +714,42 @@ export class AuthController {
       await clearServerAuthCookies(active.session, active.server.url)
       let credential: NativeSessionCredential | null = null
       try {
-        credential = await openThirdPartyLoginWindow({
+        const temporarySession = await openThirdPartyLoginWindow({
           serverSession: active.session,
           serverUrl: active.server.url,
           provider,
           parent,
         })
+        try {
+          credential = parseNativeCredential(
+            await request(
+              active.session,
+              active.server.url,
+              "/api/client/auth/native/exchange",
+              {},
+              15_000,
+              {
+                headers: {
+                  Authorization: `Bearer ${temporarySession.token}`,
+                  [NATIVE_SESSION_HEADER]: NATIVE_SESSION_VERSION,
+                },
+                omitOrigin: true,
+              },
+            ),
+          )
+        } catch (error) {
+          await request(active.session, active.server.url, "/api/client/auth/logout", {}, 15_000, {
+            headers: { Authorization: `Bearer ${temporarySession.token}` },
+            omitOrigin: true,
+          }).catch(() => undefined)
+          throw error
+        } finally {
+          await clearServerAuthCookies(active.session, active.server.url)
+        }
         const user = parseUser(
           await request(active.session, active.server.url, "/api/client/me", undefined, 15_000, {
             headers: { Authorization: `Bearer ${credential.token}` },
             omitOrigin: true,
-            credentials: "omit",
           }),
         )
         active.credential = credential
@@ -714,7 +766,7 @@ export class AuthController {
         return { user }
       } catch (error) {
         active.credential = null
-        if (credential) await this.revokeCredential(active, credential)
+        if (credential) await this.revokeCredential(active, credential).catch(() => undefined)
         await clearServerAuthCookies(active.session, active.server.url)
         throw error
       }
@@ -725,33 +777,40 @@ export class AuthController {
     return this.exclusive(async () => {
       const active = this.requireTarget(targetId)
       const accountKey = active.user ? createAccountKey(active.server.url, active.user.id) : null
-      this.destroyAccountRuntime()
+      this.signingOutTarget = active
       try {
-        await request(active.session, active.server.url, "/api/client/auth/logout", {}, 15_000, {
-          headers: active.credential
-            ? { Authorization: `Bearer ${active.credential.token}` }
-            : undefined,
-          omitOrigin: Boolean(active.credential),
-          credentials: active.credential ? "omit" : "include",
-        })
-      } catch {
-        // 无论服务端是否响应，都清理本地认证状态。
+        if (this.refreshTask?.active === active) await this.refreshTask.promise
+        if (active.credential) await this.revokeCredential(active, active.credential)
+        this.destroyAccountRuntime()
+        await active.session.clearStorageData({ storages: ["cookies"] })
+        await active.session.cookies.flushStore()
+        if (accountKey) await this.forgetStoredAccount(accountKey).catch(() => undefined)
+        active.user = null
+        active.credential = null
+        return null
+      } finally {
+        this.signingOutTarget = null
       }
-      await active.session.clearStorageData({ storages: ["cookies"] })
-      await active.session.cookies.flushStore()
-      if (accountKey) await this.forgetStoredAccount(accountKey).catch(() => undefined)
-      active.user = null
-      active.credential = null
-      return null
     })
   }
 
   private async revokeCredential(active: ActiveConnection, credential: NativeSessionCredential) {
-    await request(active.session, active.server.url, "/api/client/auth/logout", {}, 15_000, {
-      headers: { Authorization: `Bearer ${credential.token}` },
-      omitOrigin: true,
-      credentials: "omit",
-    }).catch(() => undefined)
+    try {
+      await request(
+        active.session,
+        active.server.url,
+        "/api/client/auth/native/revoke",
+        { refresh_token: credential.refreshToken },
+        15_000,
+        {
+          headers: { [NATIVE_SESSION_HEADER]: NATIVE_SESSION_VERSION },
+          omitOrigin: true,
+        },
+      )
+    } catch (error) {
+      if (error instanceof AuthFailure && error.code === "unauthorized") return
+      throw error
+    }
   }
 
   private async initializeAccountRuntime(
@@ -781,6 +840,51 @@ export class AuthController {
     }
   }
 
+  private async accessToken(active: ActiveConnection, previousToken?: string): Promise<string> {
+    if (this.signingOutTarget === active) throw new AuthFailure("signing_out", "账号正在退出登录")
+    if (this.active !== active || !active.credential)
+      throw new AuthFailure("stale_target", "账号已切换，请重新登录")
+    if (previousToken && active.credential.token !== previousToken) return active.credential.token
+    if (!previousToken && Date.parse(active.credential.expiresAt) > Date.now() + 5 * 60_000)
+      return active.credential.token
+    if (this.refreshTask?.active === active) return (await this.refreshTask.promise).token
+    const old = active.credential
+    const task = (async () => {
+      const next = parseNativeCredential(
+        await request(
+          active.session,
+          active.server.url,
+          "/api/client/auth/native/refresh",
+          { refresh_token: old.refreshToken },
+          15_000,
+          {
+            headers: { [NATIVE_SESSION_HEADER]: NATIVE_SESSION_VERSION },
+            omitOrigin: true,
+          },
+        ),
+      )
+      if (this.active !== active || active.credential !== old)
+        throw new AuthFailure("stale_target", "账号已切换，请重新登录")
+      active.credential = next
+      try {
+        const config = this.withRememberedAccount(this.config, active)
+        await this.configStore.save(config)
+        this.config = config
+      } catch (error) {
+        active.credential = null
+        throw error
+      }
+      return next
+    })()
+    this.refreshTask = { active, promise: task }
+    void task
+      .finally(() => {
+        if (this.refreshTask?.promise === task) this.refreshTask = null
+      })
+      .catch(() => undefined)
+    return (await task).token
+  }
+
   private createAccountRuntime(active: ActiveConnection) {
     if (!active.user || !active.credential) {
       throw new AuthFailure("not_authenticated", "请重新登录账号")
@@ -794,7 +898,7 @@ export class AuthController {
       userName: active.user.name,
       userAvatar: active.user.avatar,
       session: active.session,
-      token: active.credential.token,
+      token: (previousToken) => this.accessToken(active, previousToken),
       onSyncStateChange: this.accountEvents.onSyncStateChange,
       onDataChanged: this.accountEvents.onDataChanged,
       onConversationPresenceChanged: this.accountEvents.onConversationPresenceChanged,
@@ -836,22 +940,23 @@ export class AuthController {
   private withRememberedAccount(config: AppConfig, active: ActiveConnection): AppConfig {
     if (!active.user || !active.credential) return config
     const key = createAccountKey(active.server.url, active.user.id)
+    const encryptedCredential = protectNativeSession(active.credential)
+    const accountSessions = { ...config.accountSessions }
+    if (encryptedCredential) {
+      accountSessions[key] = {
+        serverId: active.server.id,
+        userId: active.user.id,
+        userEmail: active.user.email,
+        userName: active.user.name,
+        encryptedCredential,
+        lastUsedAt: Date.now(),
+      }
+    } else delete accountSessions[key]
     return {
       ...config,
       activeServerId: active.server.id,
-      lastAccountKey: key,
-      accountSessions: {
-        ...config.accountSessions,
-        [key]: {
-          serverId: active.server.id,
-          userId: active.user.id,
-          userEmail: active.user.email,
-          userName: active.user.name,
-          token: active.credential.token,
-          expiresAt: active.credential.expiresAt,
-          lastUsedAt: Date.now(),
-        },
-      },
+      lastAccountKey: encryptedCredential ? key : null,
+      accountSessions,
     }
   }
 

@@ -75,7 +75,7 @@ export class AccountRuntime {
       userName: string
       userAvatar: string
       session: Session
-      token: string
+      token: string | ((previousToken?: string) => Promise<string>)
       onSyncStateChange: (event: AccountDataSyncEvent) => void
       onDataChanged: (event: AccountDataChangedEvent) => void
       onConversationPresenceChanged: (event: ConversationPresenceEvent) => void
@@ -693,9 +693,13 @@ export class AccountRuntime {
         this.projectManager,
         currentUserAvatar,
       )
+      const credential = this.input.token
       this.realtimeManager = new RealtimeManager({
         serverUrl: this.input.serverUrl,
-        token: this.input.token,
+        token:
+          typeof credential === "string"
+            ? credential
+            : (previousToken) => credential(previousToken),
         synchronize: () => this.synchronize(),
         applyEvent: (event) => this.applyRealtimeEvent(event),
         onStateChange: (state) =>

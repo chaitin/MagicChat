@@ -132,8 +132,8 @@ func TestAccountAPILogoutUsesExactCredential(t *testing.T) {
 	if recorder.Code != http.StatusOK || service.logoutToken != "selected-token" {
 		t.Fatalf("status = %d, revoked selected credential = %t", recorder.Code, service.logoutToken == "selected-token")
 	}
-	if len(recorder.Result().Cookies()) == 0 || recorder.Result().Cookies()[0].Value != "" {
-		t.Fatal("logout did not clear compatibility cookie")
+	if len(recorder.Result().Cookies()) != 0 {
+		t.Fatal("bearer logout unexpectedly wrote a Cookie")
 	}
 
 	anonymous := httptest.NewRequest(http.MethodPost, "/api/client/auth/logout", nil)

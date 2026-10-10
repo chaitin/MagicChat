@@ -4,7 +4,7 @@ import "net/http"
 
 const (
 	MobileSessionCapabilityHeader  = "X-Dianbao-Mobile-Session"
-	MobileSessionCapabilityVersion = "1"
+	MobileSessionCapabilityVersion = "2"
 )
 
 // supportsMobileSessionResponse restricts the token-bearing response to a

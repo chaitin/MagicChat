@@ -32,6 +32,7 @@ class MemoryStore implements SecureKeyValueStore {
 
 const future = "2099-01-01T00:00:00.000Z"
 const token = "SENSITIVE_TEST_VALUE"
+const refreshFields = { refreshToken: "REFRESH_TEST_VALUE", refreshExpiresAt: future, refreshAbsoluteExpiresAt: future }
 function record(url = "https://example.com", userId = "user-a", serverId = "display-a") {
   return createAccountRecord({ serverId, url, userId, name: "A", email: "a@example.com", lastUsedAt: "2026-01-01T00:00:00Z" })
 }
@@ -55,14 +56,15 @@ test("strict index and credential parsing covers schema version and invalid valu
   assert.equal(parseCredential(null).status, "missing")
   assert.equal(parseCredential("broken").status, "corrupt")
   assert.equal(parseCredential('{"token":"x","expiresAt":"bad"}').status, "corrupt")
-  assert.equal(parseCredential('{"token":"x","expiresAt":"2020-01-01T00:00:00Z"}').status, "expired")
+  assert.equal(parseCredential(JSON.stringify({ token: "x", expiresAt: "2020-01-01T00:00:00Z", ...refreshFields })).status, "valid")
+  assert.equal(parseCredential(JSON.stringify({ token: "x", expiresAt: future, ...refreshFields, refreshExpiresAt: "2020-01-01T00:00:00Z" })).status, "expired")
 })
 
 test("install/upsert stores only metadata in AsyncStorage and replaces same identity", async () => {
   const { store, index, secure } = fixture()
   const first = record()
-  await store.installAccount(first, { token, expiresAt: future })
-  await store.installAccount({ ...first, avatar: "/avatars/user.webp", serverId: "renamed", name: "Renamed" }, { token: `${token}_NEW`, expiresAt: future })
+  await store.installAccount(first, { token, expiresAt: future, ...refreshFields })
+  await store.installAccount({ ...first, avatar: "/avatars/user.webp", serverId: "renamed", name: "Renamed" }, { token: `${token}_NEW`, expiresAt: future, ...refreshFields })
   const hydrated = await store.hydrate()
   assert.equal(hydrated.accounts.length, 1)
   assert.equal(hydrated.accounts[0]?.avatar, "/avatars/user.webp")
@@ -75,7 +77,7 @@ test("install/upsert stores only metadata in AsyncStorage and replaces same iden
 test("profile metadata refresh persists avatar without touching credentials", async () => {
   const { store, index } = fixture()
   const account = record()
-  await store.installAccount(account, { token, expiresAt: future })
+  await store.installAccount(account, { token, expiresAt: future, ...refreshFields })
   const before = await store.hydrate()
   const updated = await store.updateAccountProfile(account.id, {
     avatar: "/avatars/user.webp",
@@ -98,8 +100,8 @@ test("active account commit uses revision CAS and maintains one active id", asyn
   const { store } = fixture()
   const a = record()
   const b = record("https://other.example.com", "user-b")
-  await store.installAccount(a, { token, expiresAt: future })
-  await store.installAccount(b, { token, expiresAt: future })
+  await store.installAccount(a, { token, expiresAt: future, ...refreshFields })
+  await store.installAccount(b, { token, expiresAt: future, ...refreshFields })
   const before = await store.hydrate()
   const revision = await store.commitActive(a.id, before.revision)
   await assert.rejects(store.commitActive(b.id, before.revision), AccountRevisionConflictError)
@@ -109,10 +111,10 @@ test("active account commit uses revision CAS and maintains one active id", asyn
 })
 
 test("hydrate marks missing/corrupt/expired credentials and clears invalid active", async () => {
-  for (const value of [null, "broken", JSON.stringify({ token, expiresAt: "2020-01-01T00:00:00Z" })]) {
+  for (const value of [null, "broken", JSON.stringify({ token, expiresAt: future, ...refreshFields, refreshExpiresAt: "2020-01-01T00:00:00Z" })]) {
     const { store, secure } = fixture()
     const account = record()
-    await store.installAccount(account, { token, expiresAt: future })
+    await store.installAccount(account, { token, expiresAt: future, ...refreshFields })
     const revision = (await store.hydrate()).revision
     await store.commitActive(account.id, revision)
     const key = createCredentialStorageKey(account.id)
@@ -124,17 +126,35 @@ test("hydrate marks missing/corrupt/expired credentials and clears invalid activ
   }
 })
 
+test("rotation writes only the matching account refresh credential and keeps the old value on write failure", async () => {
+  const { store, secure } = fixture()
+  const first = record()
+  const second = record("https://other.example.com", "user-b")
+  await store.installAccount(first, { token: "access-one", expiresAt: future, ...refreshFields })
+  await store.installAccount(second, { token: "access-two", expiresAt: future, ...refreshFields, refreshToken: "second-refresh" })
+  const rotated = { token: "new-access", expiresAt: future, ...refreshFields, refreshToken: "next-refresh" }
+  await assert.rejects(store.rotateCredential(first.id, "second-refresh", rotated), /凭据已变化/)
+  secure.failSet = 1
+  await assert.rejects(store.rotateCredential(first.id, refreshFields.refreshToken, rotated), /write failed/)
+  assert.equal((await store.getCredential(first.id)).status, "valid")
+  await store.rotateCredential(first.id, refreshFields.refreshToken, rotated)
+  const current = await store.getCredential(first.id)
+  assert.equal(current.status === "valid" && current.credential.refreshToken, "next-refresh")
+  const other = await store.getCredential(second.id)
+  assert.equal(other.status === "valid" && other.credential.token, "access-two")
+})
+
 test("SecureStore write failure leaves index unchanged; index failure restores old credential", async () => {
   const { store, index, secure } = fixture()
   const account = record()
   secure.failSet = 1
-  await assert.rejects(store.installAccount(account, { token, expiresAt: future }), /write failed/)
+  await assert.rejects(store.installAccount(account, { token, expiresAt: future, ...refreshFields }), /write failed/)
   assert.deepEqual(parseAccountIndex(index.values.get(ACCOUNT_INDEX_STORAGE_KEY) ?? null)?.accounts, [])
   assert.deepEqual(parseAccountIndex(index.values.get(ACCOUNT_INDEX_STORAGE_KEY) ?? null)?.pendingCredentialCleanup, [])
 
-  await store.installAccount(account, { token: "OLD_VALUE", expiresAt: future })
+  await store.installAccount(account, { token: "OLD_VALUE", expiresAt: future, ...refreshFields })
   index.failSet = 1
-  await assert.rejects(store.installAccount({ ...account, name: "new" }, { token, expiresAt: future }), /write failed/)
+  await assert.rejects(store.installAccount({ ...account, name: "new" }, { token, expiresAt: future, ...refreshFields }), /write failed/)
   const restored = await store.getCredential(account.id)
   assert.equal(restored.status, "valid")
   if (restored.status === "valid") assert.equal(restored.credential.token, "OLD_VALUE")
@@ -143,10 +163,10 @@ test("SecureStore write failure leaves index unchanged; index failure restores o
 test("failed same-identity replacement can restore old record and credential without duplicates", async () => {
   const { store } = fixture()
   const account = record()
-  await store.installAccount(account, { token: "OLD_VALUE", expiresAt: future })
+  await store.installAccount(account, { token: "OLD_VALUE", expiresAt: future, ...refreshFields })
   const oldRecord = (await store.hydrate()).accounts[0]!
-  await store.installAccount({ ...account, name: "New name" }, { token: "NEW_VALUE", expiresAt: future })
-  await store.restoreAccount(oldRecord, { token: "OLD_VALUE", expiresAt: future })
+  await store.installAccount({ ...account, name: "New name" }, { token: "NEW_VALUE", expiresAt: future, ...refreshFields })
+  await store.restoreAccount(oldRecord, { token: "OLD_VALUE", expiresAt: future, ...refreshFields })
   const restored = await store.hydrate()
   assert.equal(restored.accounts.length, 1)
   assert.equal(restored.accounts[0]?.name, oldRecord.name)
@@ -157,9 +177,9 @@ test("failed same-identity replacement can restore old record and credential wit
 test("restoreAccount rolls SecureStore back when its index commit fails", async () => {
   const { store, index } = fixture()
   const account = record()
-  await store.installAccount(account, { token: "NEW_VALUE", expiresAt: future })
+  await store.installAccount(account, { token: "NEW_VALUE", expiresAt: future, ...refreshFields })
   index.failSet = 1
-  await assert.rejects(store.restoreAccount({ ...account, name: "Old" }, { token: "OLD_VALUE", expiresAt: future }), /write failed/)
+  await assert.rejects(store.restoreAccount({ ...account, name: "Old" }, { token: "OLD_VALUE", expiresAt: future, ...refreshFields }), /write failed/)
   const credential = await store.getCredential(account.id)
   assert.equal(credential.status === "valid" ? credential.credential.token : null, "NEW_VALUE")
   assert.equal((await store.hydrate()).accounts[0]?.name, account.name)
@@ -169,10 +189,10 @@ test("restoreAccount preserves index when SecureStore set/delete fails", async (
   for (const withCredential of [true, false]) {
     const { store, secure } = fixture()
     const account = record()
-    await store.installAccount(account, { token: "NEW_VALUE", expiresAt: future })
+    await store.installAccount(account, { token: "NEW_VALUE", expiresAt: future, ...refreshFields })
     if (withCredential) secure.failSet = 1
     else secure.failDelete = 1
-    await assert.rejects(store.restoreAccount({ ...account, name: "Old" }, withCredential ? { token: "OLD_VALUE", expiresAt: future } : null))
+    await assert.rejects(store.restoreAccount({ ...account, name: "Old" }, withCredential ? { token: "OLD_VALUE", expiresAt: future, ...refreshFields } : null))
     assert.equal((await store.hydrate()).accounts[0]?.name, account.name)
   }
 })
@@ -182,7 +202,7 @@ test("failed final index commit is reconciled as ready without deleting the cred
   const account = record()
   index.failSetOn = 2
   let message = ""
-  try { await store.installAccount(account, { token, expiresAt: future }) } catch (error) { message = String(error) }
+  try { await store.installAccount(account, { token, expiresAt: future, ...refreshFields }) } catch (error) { message = String(error) }
   assert.equal(message.includes(token), false)
   assert.equal([...index.values.values()].some((value) => value.includes(token)), false)
   assert.deepEqual(parseAccountIndex(index.values.get(ACCOUNT_INDEX_STORAGE_KEY) ?? null)?.pendingCredentialCleanup, [account.id])
@@ -195,7 +215,7 @@ test("failed final index commit is reconciled as ready without deleting the cred
 test("remove commits index first, journals failed deletion, and hydrate retries cleanup", async () => {
   const { store, index, secure } = fixture()
   const account = record()
-  await store.installAccount(account, { token, expiresAt: future })
+  await store.installAccount(account, { token, expiresAt: future, ...refreshFields })
   secure.failDelete = 1
   await store.removeAccount(account.id)
   let persisted = parseAccountIndex(index.values.get(ACCOUNT_INDEX_STORAGE_KEY) ?? null)
@@ -210,7 +230,7 @@ test("remove commits index first, journals failed deletion, and hydrate retries 
 test("index write failure during remove preserves account and credential", async () => {
   const { store, index, secure } = fixture()
   const account = record()
-  await store.installAccount(account, { token, expiresAt: future })
+  await store.installAccount(account, { token, expiresAt: future, ...refreshFields })
   index.failSet = 1
   await assert.rejects(store.removeAccount(account.id), /write failed/)
   assert.equal((await store.hydrate()).accounts.length, 1)
@@ -220,10 +240,10 @@ test("index write failure during remove preserves account and credential", async
 test("reinstall clears a pending deletion journal before the next hydrate", async () => {
   const { store, index, secure } = fixture()
   const account = record()
-  await store.installAccount(account, { token: "OLD_VALUE", expiresAt: future })
+  await store.installAccount(account, { token: "OLD_VALUE", expiresAt: future, ...refreshFields })
   secure.failDelete = 1
   await store.removeAccount(account.id)
-  await store.installAccount(account, { token, expiresAt: future })
+  await store.installAccount(account, { token, expiresAt: future, ...refreshFields })
   const persisted = parseAccountIndex(index.values.get(ACCOUNT_INDEX_STORAGE_KEY) ?? null)
   assert.deepEqual(persisted?.pendingCredentialCleanup, [])
   assert.equal((await store.hydrate()).accounts[0]?.status, "ready")
@@ -236,8 +256,8 @@ test("shared adapters serialize independent AccountStore instances without losin
   const first = createAccountStore({ indexStore: index, credentialStore: secure })
   const second = createAccountStore({ indexStore: index, credentialStore: secure })
   await Promise.all([
-    first.installAccount(record(), { token, expiresAt: future }),
-    second.installAccount(record("https://other.example.com", "u2"), { token, expiresAt: future }),
+    first.installAccount(record(), { token, expiresAt: future, ...refreshFields }),
+    second.installAccount(record("https://other.example.com", "u2"), { token, expiresAt: future, ...refreshFields }),
   ])
   assert.equal((await first.hydrate()).accounts.length, 2)
 })
@@ -245,7 +265,7 @@ test("shared adapters serialize independent AccountStore instances without losin
 test("active commit rejects accounts without a valid ready credential", async () => {
   const { store, secure } = fixture()
   const account = record()
-  await store.installAccount(account, { token, expiresAt: future })
+  await store.installAccount(account, { token, expiresAt: future, ...refreshFields })
   secure.values.delete(createCredentialStorageKey(account.id))
   const hydrated = await store.hydrate()
   await assert.rejects(
@@ -265,8 +285,8 @@ test("operations are serialized in process", async () => {
   const secure = new MemoryStore()
   const store = createAccountStore({ indexStore: index, credentialStore: secure })
   await Promise.all([
-    store.installAccount(record(), { token, expiresAt: future }),
-    store.installAccount(record("https://other.example.com", "u2"), { token, expiresAt: future }),
+    store.installAccount(record(), { token, expiresAt: future, ...refreshFields }),
+    store.installAccount(record("https://other.example.com", "u2"), { token, expiresAt: future, ...refreshFields }),
   ])
   assert.equal(peak, 1)
   assert.equal((await store.hydrate()).accounts.length, 2)
