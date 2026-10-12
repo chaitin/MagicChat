@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet } from "react-native"
-import { Button } from "tamagui"
+
+import { Text } from "@/components/mi-sans-text"
 
 import type { VoiceMessageRecorderStatus } from "@/features/conversation/voice/use-voice-message-recorder"
 import { useXGUITheme } from "@/xgui"
@@ -37,26 +38,14 @@ export function VoiceRecordButton({
         right: screenWidth,
         top: screenHeight,
       }}
-      style={styles.pressTarget}
+      style={({ pressed }) => [
+        styles.pressTarget,
+        pressed && { backgroundColor: colors.background1 },
+      ]}
     >
-      {({ pressed }) => (
-        <Button
-          accessible={false}
-          bg="transparent"
-          borderWidth={0}
-          color={colors.textPrimary}
-          disabled={disabled}
-          forceStyle={pressed ? "press" : undefined}
-          height="100%"
-          minH={0}
-          pointerEvents="none"
-          pressStyle={{ bg: colors.background1 }}
-          size="$4"
-          width="100%"
-        >
-          {getVoicePrompt(status, elapsedMS)}
-        </Button>
-      )}
+      <Text style={[styles.label, { color: colors.textPrimary }]}>
+        {getVoicePrompt(status, elapsedMS)}
+      </Text>
     </Pressable>
   )
 }
@@ -79,6 +68,11 @@ function formatRecordingDuration(durationMS: number) {
 
 const styles = StyleSheet.create({
   pressTarget: {
+    alignItems: "center",
     flex: 1,
+    justifyContent: "center",
+  },
+  label: {
+    fontSize: 15,
   },
 })

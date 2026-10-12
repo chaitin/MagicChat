@@ -1,16 +1,17 @@
 import type { ReactNode } from "react"
-import { Platform, Pressable } from "react-native"
-import { Button, type GetProps } from "tamagui"
+import { Pressable, StyleSheet } from "react-native"
+import { Text } from "@/components/mi-sans-text"
+import { useXGUITheme } from "@/xgui"
 
 export type HeaderButtonProps = {
   accessibilityLabel: string
   children?: ReactNode
   circular?: boolean
   disabled?: boolean
-  icon?: GetProps<typeof Button>["icon"]
+  icon?: ReactNode
   onPress: () => void
   pressedOpacity?: number
-  size?: GetProps<typeof Button>["size"]
+  size?: "$3" | "$4" | "$5"
   subtlePress?: boolean
 }
 
@@ -25,28 +26,8 @@ export function HeaderButton({
   size = "$4",
   subtlePress = true,
 }: HeaderButtonProps) {
-  const button = (pressed = false) => (
-    <Button
-      accessible={Platform.OS === "web"}
-      aria-label={accessibilityLabel}
-      chromeless
-      circular={circular}
-      disabled={Platform.OS === "web" ? disabled : undefined}
-      forceStyle={pressed ? "press" : undefined}
-      icon={icon}
-      onPress={Platform.OS === "web" && !disabled ? onPress : undefined}
-      opacity={pressed ? pressedOpacity : 1}
-      pointerEvents={Platform.OS === "web" ? "auto" : "none"}
-      pressStyle={subtlePress ? { background: "$color1" } : undefined}
-      size={size}
-    >
-      {children}
-    </Button>
-  )
-
-  if (Platform.OS === "web") {
-    return button()
-  }
+  const { colors } = useXGUITheme()
+  const dimension = size === "$3" ? 36 : size === "$5" ? 52 : 44
 
   return (
     <Pressable
@@ -56,8 +37,33 @@ export function HeaderButton({
       disabled={disabled}
       onPress={onPress}
       pressRetentionOffset={0}
+      style={({ pressed }) => [
+        styles.button,
+        {
+          height: dimension,
+          minWidth: circular ? dimension : undefined,
+          paddingHorizontal: size === "$3" ? 13 : size === "$5" ? 24 : 18,
+        },
+        circular && { borderRadius: dimension / 2, paddingHorizontal: 0 },
+        pressed && { opacity: pressedOpacity },
+        pressed && subtlePress && { backgroundColor: colors.background1 },
+      ]}
     >
-      {({ pressed }) => button(pressed)}
+      {icon}
+      {typeof children === "string" ? (
+        <Text style={{ color: colors.textPrimary }}>{children}</Text>
+      ) : (
+        children
+      )}
     </Pressable>
   )
 }
+
+const styles = StyleSheet.create({
+  button: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+})

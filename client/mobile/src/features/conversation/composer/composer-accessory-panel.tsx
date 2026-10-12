@@ -2,7 +2,7 @@ import { Camera, Images, Paperclip } from "lucide-react-native"
 import { Pressable, StyleSheet } from "react-native"
 import { Text } from "@/components/mi-sans-text"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { Button, ScrollView, SizableText, XStack, YStack } from "tamagui"
+import { ScrollView, SizableText, XStack, YStack } from "tamagui"
 
 import { useXGUITheme } from "@/xgui"
 
@@ -171,22 +171,12 @@ function AccessoryAction({
         disabled={disabled}
         onPress={onPress}
         pressRetentionOffset={0}
-        style={{ height: 64, width: 64 }}
+        style={({ pressed }) => [
+          styles.accessoryButton,
+          { backgroundColor: pressed ? colors.background1 : colors.background2 },
+        ]}
       >
-        {({ pressed }) => (
-          <Button
-            accessible={false}
-            bg={pressed ? colors.background1 : colors.background2}
-            disabled={disabled}
-            height={64}
-            icon={
-              <Icon color={colors.textPrimary} size={28} strokeWidth={1.8} />
-            }
-            pointerEvents="none"
-            rounded="$5"
-            width={64}
-          />
-        )}
+        <Icon color={colors.textPrimary} size={28} strokeWidth={1.8} />
       </Pressable>
       <SizableText color="$gray10" size="$2">
         {label}
@@ -196,6 +186,13 @@ function AccessoryAction({
 }
 
 const styles = StyleSheet.create({
+  accessoryButton: {
+    alignItems: "center",
+    borderRadius: 10,
+    height: 64,
+    justifyContent: "center",
+    width: 64,
+  },
   emojiButton: {
     alignItems: "center",
     borderRadius: 6,

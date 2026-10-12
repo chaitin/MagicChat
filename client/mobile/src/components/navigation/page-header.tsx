@@ -2,7 +2,6 @@ import { ArrowLeft, type LucideIcon } from "lucide-react-native"
 import type { ReactNode } from "react"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import {
-  Button,
   type GetProps,
   H5,
   SizableText,
@@ -39,7 +38,7 @@ export function PageHeader({
   titleLeading,
 }: {
   actionDisabled?: boolean
-  actionIcon?: GetProps<typeof Button>["icon"]
+  actionIcon?: ReactNode
   actionLabel?: string
   backDisabled?: boolean
   backIcon?: LucideIcon

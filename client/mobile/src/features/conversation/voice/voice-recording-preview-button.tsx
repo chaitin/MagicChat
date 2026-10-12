@@ -5,7 +5,7 @@ import {
 } from "expo-audio"
 import { AudioLines, Pause } from "lucide-react-native"
 import { useCallback, useEffect, useRef } from "react"
-import { Button } from "tamagui"
+import { NativeIconButton } from "@/components/buttons/native-icon-button"
 
 import { ThemedIcon } from "@/components/icons/themed-icon"
 import {
@@ -95,20 +95,17 @@ export function VoiceRecordingPreviewButton({
   }
 
   return (
-    <Button
+    <NativeIconButton
       accessibilityLabel={status.playing ? "暂停录音预览" : "播放录音预览"}
-      chromeless
-      circular
       disabled={disabled || status.isBuffering}
-      icon={
-        status.isBuffering ? (
-          <XGUILoadingIcon color={colors.textPlaceholder} size={20} />
-        ) : (
-          <ThemedIcon icon={status.playing ? Pause : AudioLines} size={30} />
-        )
-      }
       onPress={handlePress}
-      size="$5"
-    />
+      size={52}
+    >
+      {status.isBuffering ? (
+        <XGUILoadingIcon color={colors.textPlaceholder} size={20} />
+      ) : (
+        <ThemedIcon icon={status.playing ? Pause : AudioLines} size={30} />
+      )}
+    </NativeIconButton>
   )
 }

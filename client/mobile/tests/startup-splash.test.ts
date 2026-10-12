@@ -40,6 +40,9 @@ test("初始化页与原生 Splash 使用相同主题背景", async () => {
     (plugin: unknown) => Array.isArray(plugin) && plugin[0] === "expo-splash-screen"
   )[1]
 
+  assert.equal(splash.image, "./assets/images/splash-logo.png")
+  assert.equal(splash.dark.image, "./assets/images/splash-logo-dark.png")
+  assert.equal(splash.imageWidth, 56)
   assert.match(initScreen, /backgroundColor: colors\.background0/)
   assert.doesNotMatch(initScreen, /#04C9BD/)
   assert.match(colors, new RegExp(`background0: "${splash.backgroundColor}"`))

@@ -81,7 +81,7 @@
           "backgroundColor": "#EDEDED",
           "dark": {
             "backgroundColor": "#111111",
-            "image": "./assets/images/splash-logo.png"
+            "image": "./assets/images/splash-logo-dark.png"
           },
           "image": "./assets/images/splash-logo.png",
           "imageWidth": 56

@@ -1,7 +1,7 @@
 import { Eye, EyeOff } from "lucide-react-native"
 import { forwardRef, useEffect, useState } from "react"
+import { Pressable, StyleSheet } from "react-native"
 import {
-  Button,
   type GetProps,
   type TamaguiElement,
   useTheme,
@@ -47,25 +47,34 @@ export const PasswordInput = forwardRef<TamaguiElement, PasswordInputProps>(
           t={0}
           z={1}
         >
-          <Button
+          <Pressable
             accessibilityLabel={isPasswordVisible ? "隐藏密码" : "显示密码"}
-            chromeless
-            circular
-            color={isToggleDisabled ? "$gray9" : "$color10"}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: isToggleDisabled }}
             disabled={isToggleDisabled}
-            icon={
-              <ToggleIcon
-                color={String(
-                  (isToggleDisabled ? theme.gray9 : theme.color10).val
-                )}
-                size={18}
-              />
-            }
             onPress={() => setIsPasswordVisible((visible) => !visible)}
-            size="$3"
-          />
+            style={({ pressed }) => [
+              styles.toggle,
+              pressed && { backgroundColor: String(theme.backgroundPress.val) },
+            ]}
+          >
+            <ToggleIcon
+              color={String((isToggleDisabled ? theme.gray9 : theme.color10).val)}
+              size={18}
+            />
+          </Pressable>
         </YStack>
       </XStack>
     )
   }
 )
+
+const styles = StyleSheet.create({
+  toggle: {
+    alignItems: "center",
+    borderRadius: 18,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+})

@@ -6,13 +6,13 @@ import {
 import { AudioLines, Pause, Play } from "lucide-react-native"
 import { useCallback, useEffect, useRef } from "react"
 import {
-  Button,
   Paragraph,
   SizableText,
   XStack,
   YStack,
 } from "tamagui"
 
+import { NativeIconButton } from "@/components/buttons/native-icon-button"
 import { ThemedIcon } from "@/components/icons/themed-icon"
 import type { ResourceLoadState } from "@/data/resources"
 import { formatVoiceDuration } from "@/domain/messages/message-presenter"
@@ -149,22 +149,9 @@ export function VoiceMessagePlayer({
         <SizableText color={colors.brand5} flex={1} size="$4">
           语音 {formatVoiceDuration(durationMS)}
         </SizableText>
-        <Button
+        <NativeIconButton
           accessibilityLabel={playerStatus.playing ? "暂停语音" : "播放语音"}
-          chromeless
-          circular
           disabled={isLoading}
-          icon={
-            isLoading ? (
-              <XGUILoadingIcon color={colors.brand5} size={18} />
-            ) : (
-              <ThemedIcon
-                color={colors.brand5}
-                icon={playerStatus.playing ? Pause : Play}
-                size={18}
-              />
-            )
-          }
           onLongPress={() => {
             didLongPressRef.current = true
             onLongPress()
@@ -173,8 +160,17 @@ export function VoiceMessagePlayer({
           onPressIn={() => {
             didLongPressRef.current = false
           }}
-          size="$3"
-        />
+        >
+          {isLoading ? (
+            <XGUILoadingIcon color={colors.brand5} size={18} />
+          ) : (
+            <ThemedIcon
+              color={colors.brand5}
+              icon={playerStatus.playing ? Pause : Play}
+              size={18}
+            />
+          )}
+        </NativeIconButton>
       </XStack>
       {transcript ? (
         <Paragraph color={colors.textSecondary} size="$3">

@@ -4,7 +4,6 @@ import IconAlertCircleFilled from "@tabler/icons-react-native/IconAlertCircleFil
 import { memo, useRef } from "react"
 import { Pressable, View } from "react-native"
 import {
-  Button,
   Paragraph,
   SizableText,
   XStack,
@@ -134,10 +133,9 @@ export const MessageBubble = memo(function MessageBubble({
         ? "66%"
         : undefined
   const avatar = sender ? (
-    <Button
-      aria-label={`查看${fromMe ? "我的" : message.author}资料`}
-      chromeless
-      height="$3"
+    <Pressable
+      accessibilityLabel={`查看${fromMe ? "我的" : message.author}资料`}
+      accessibilityRole="button"
       onLongPress={
         onAvatarLongPress
           ? () => {
@@ -156,8 +154,7 @@ export const MessageBubble = memo(function MessageBubble({
       onPressIn={() => {
         didLongPressAvatarRef.current = false
       }}
-      p={0}
-      width="$3"
+      style={{ height: 36, width: 36 }}
     >
       <MessageAvatar
         avatar={message.avatar}
@@ -165,7 +162,7 @@ export const MessageBubble = memo(function MessageBubble({
         server={server}
         type={message.sender?.type === "app" ? "app" : "user"}
       />
-    </Button>
+    </Pressable>
   ) : (
     <MessageAvatar
       avatar={message.avatar}

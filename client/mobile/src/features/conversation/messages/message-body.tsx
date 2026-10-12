@@ -8,7 +8,6 @@ import {
 import { memo, useRef, useState } from "react"
 import { Alert, Linking, Pressable } from "react-native"
 import {
-  Button,
   Card,
   Image,
   Paragraph,
@@ -17,6 +16,7 @@ import {
   YStack,
 } from "tamagui"
 
+import { NativeIconButton } from "@/components/buttons/native-icon-button"
 import { ThemedIcon } from "@/components/icons/themed-icon"
 import type { ClientMessageBody } from "@/core/models"
 import type { ResourceLoadState } from "@/data/resources"
@@ -156,22 +156,9 @@ export const MessageBody = memo(function MessageBody({
           <SizableText color={colors.brand5} flex={1} size="$4">
             文件 {formatFileSize(body.sizeBytes)}
           </SizableText>
-          <Button
+          <NativeIconButton
             accessibilityLabel={`打开文件 ${body.name}`}
-            chromeless
-            circular
             disabled={isLoading}
-            icon={
-              isLoading ? (
-                <XGUILoadingIcon color={colors.brand5} size={18} />
-              ) : (
-                <ThemedIcon
-                  color={colors.brand5}
-                  icon={Download}
-                  size={18}
-                />
-              )
-            }
             onLongPress={() => {
               didLongPressResourceRef.current = true
               onMessageLongPress()
@@ -186,8 +173,13 @@ export const MessageBody = memo(function MessageBody({
             onPressIn={() => {
               didLongPressResourceRef.current = false
             }}
-            size="$3"
-          />
+          >
+            {isLoading ? (
+              <XGUILoadingIcon color={colors.brand5} size={18} />
+            ) : (
+              <ThemedIcon color={colors.brand5} icon={Download} size={18} />
+            )}
+          </NativeIconButton>
         </XStack>
         <SizableText
           color={colors.textSecondary}

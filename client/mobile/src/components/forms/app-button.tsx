@@ -1,84 +1,82 @@
-import { Platform, Pressable, StyleSheet } from "react-native"
-import { Button, type ButtonProps } from "tamagui"
+import type { ReactNode } from "react"
+import { Pressable, StyleSheet, type ViewStyle } from "react-native"
 
-/**
- * Keeps Tamagui's Button visuals while using React Native's native press target.
- *
- * Tamagui 2.4.5's responder-based native press handling can reduce a Button's
- * effective hit target to its text content when it is rendered in a ScrollView.
- * The outer Pressable owns the full rectangular hit target; the inner Button is
- * presentation-only on native.
- */
+import { tamaguiConfig } from "../../../tamagui.config"
+import { Text } from "@/components/mi-sans-text"
+import { useXGUITheme } from "@/xgui"
+
+type AppButtonProps = {
+  accessibilityLabel: string
+  children: ReactNode
+  disabled?: boolean
+  grow?: number
+  icon?: ReactNode
+  onPress: () => void
+  testID?: string
+  theme?: "gray" | "red"
+  variant?: "outlined"
+  width?: ViewStyle["width"]
+}
+
 export function AppButton({
   accessibilityLabel,
-  accessibilityState,
   children,
-  disabled,
+  disabled = false,
   grow,
+  icon,
   onPress,
   testID,
+  theme = "gray",
+  variant,
   width,
-  ...buttonProps
-}: ButtonProps) {
-  if (Platform.OS === "web") {
-    return (
-      <Button
-        {...buttonProps}
-        accessibilityLabel={accessibilityLabel}
-        accessibilityState={accessibilityState}
-        disabled={disabled}
-        grow={grow}
-        onPress={onPress}
-        testID={testID}
-        width={width}
-      >
-        {children}
-      </Button>
-    )
-  }
+}: AppButtonProps) {
+  const { colorScheme } = useXGUITheme()
+  const palette = tamaguiConfig.themes[`${colorScheme}_${theme}`]
 
   return (
     <Pressable
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
-      accessibilityState={{
-        ...accessibilityState,
-        disabled: Boolean(disabled),
-      }}
-      disabled={Boolean(disabled)}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       onPress={onPress}
-      style={[
-        styles.pressTarget,
-        width === "100%" ? styles.fullWidth : null,
-        grow ? styles.grow : null,
+      style={({ pressed }) => [
+        styles.button,
+        { width, flexGrow: grow, flexBasis: grow ? 0 : undefined },
+        variant === "outlined"
+          ? {
+              backgroundColor: "transparent",
+              borderColor: pressed ? palette.borderColorPress.val : palette.borderColor.val,
+            }
+          : {
+              backgroundColor: pressed ? palette.backgroundPress.val : palette.background.val,
+              borderColor: "transparent",
+            },
       ]}
       testID={testID}
     >
-      {({ pressed }) => (
-        <Button
-          {...buttonProps}
-          accessible={false}
-          disabled={disabled}
-          forceStyle={pressed ? "press" : undefined}
-          pointerEvents="none"
-          width="100%"
-        >
-          {children}
-        </Button>
+      {icon}
+      {typeof children === "string" ? (
+        <Text style={[styles.text, { color: palette.color.val }]}>{children}</Text>
+      ) : (
+        children
       )}
     </Pressable>
   )
 }
 
 const styles = StyleSheet.create({
-  fullWidth: {
-    width: "100%",
+  button: {
+    alignItems: "center",
+    borderRadius: 9,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 18,
+    height: 44,
+    justifyContent: "center",
+    paddingHorizontal: 18,
   },
-  grow: {
-    flexBasis: 0,
-    flexGrow: 1,
-  },
-  pressTarget: {
-    alignSelf: "stretch",
+  text: {
+    fontSize: 15,
   },
 })
