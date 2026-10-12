@@ -15,17 +15,13 @@ import {
   Keyboard,
   Platform,
   StyleSheet,
+  type TextInput as NativeTextInput,
   useWindowDimensions,
 } from "react-native"
 import { Text } from "@/components/mi-sans-text"
-import {
-  type TamaguiElement,
-  XStack,
-  YStack,
-} from "tamagui"
+import { XStack, YStack } from "tamagui"
 
 import { CompactIconButton } from "@/components/buttons/compact-icon-button"
-import { AppInput } from "@/components/forms/app-input"
 import type {
   PreparedClientMessageUpload,
   PreparedClientVoiceMessage,
@@ -62,7 +58,7 @@ import {
 } from "@/features/conversation/composer/message-reply-preview"
 import { useComposerVoice } from "@/features/conversation/voice/use-composer-voice"
 import { VoiceRecordButton } from "@/features/conversation/voice/voice-record-button"
-import { XGUIButton, useXGUITheme } from "@/xgui"
+import { XGUIButton, XGUIInput, useXGUITheme } from "@/xgui"
 import { MediaPermissionSettingsDialog } from "@/components/permissions/media-permission-settings-dialog"
 
 export type MessageComposerHandle = {
@@ -75,7 +71,7 @@ const COMPOSER_CONTROL_HEIGHT = 40
 const COMPOSER_ICON_BUTTON_SIZE = 34
 const COMPOSER_ICON_SIZE = 28
 const COMPOSER_INPUT_GAP = 8
-const COMPOSER_INPUT_HORIZONTAL_PADDING = "$3"
+const COMPOSER_INPUT_HORIZONTAL_PADDING = 13
 const COMPOSER_LINE_HEIGHT = 22
 const COMPOSER_MAX_LINES = 4
 const COMPOSER_MAX_CONTROL_HEIGHT =
@@ -116,7 +112,7 @@ export const MessageComposer = forwardRef<
 ) {
   const { colors } = useXGUITheme()
   const windowDimensions = useWindowDimensions()
-  const inputRef = useRef<TamaguiElement>(null)
+  const inputRef = useRef<NativeTextInput>(null)
   const contentRef = useRef("")
   const mentionsRef = useRef<DraftMention[]>([])
   const mentionTriggerRef = useRef<TextSelection | null>(null)
@@ -463,36 +459,32 @@ export const MessageComposer = forwardRef<
                 status={voice.status}
               />
             ) : (
-              <AppInput
+              <XGUIInput
+                accessibilityLabel="发消息"
                 autoCapitalize="sentences"
-                bg="transparent"
-                borderWidth={0}
-                color={colors.textPrimary}
                 disabled={disabled}
-                fontFamily="$body"
-                fontSize="$4"
-                focusStyle={{ borderWidth: 0, outlineWidth: 0 }}
-                height={inputHeight}
-                includeFontPadding={false}
-                minH={0}
                 multiline
                 onChangeText={handleContentChange}
                 onContentSizeChange={handleInputContentSizeChange}
                 onFocus={() => setAccessoryMode(null)}
                 onSelectionChange={handleSelectionChange}
                 placeholder="发消息"
-                placeholderTextColor="$gray9"
-                px={COMPOSER_INPUT_HORIZONTAL_PADDING}
-                py={inputVerticalPadding}
                 ref={inputRef}
                 returnKeyType="default"
                 scrollEnabled={inputScrollEnabled}
                 selection={pendingSelection}
+                style={{
+                  fontSize: 15,
+                  height: inputHeight,
+                  includeFontPadding: false,
+                  lineHeight: COMPOSER_LINE_HEIGHT,
+                  paddingHorizontal: COMPOSER_INPUT_HORIZONTAL_PADDING,
+                  paddingVertical: inputVerticalPadding,
+                  textAlignVertical: "center",
+                }}
                 submitBehavior="newline"
-                textAlignVertical="center"
-                unstyled
                 value={content}
-                width="100%"
+                variant="composer"
               />
             )}
           </YStack>

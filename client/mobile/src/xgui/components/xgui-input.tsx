@@ -22,10 +22,12 @@ export type XGUIInputProps = Omit<
   containerStyle?: StyleProp<ViewStyle>
   clearable?: boolean
   disabled?: boolean
-  label: string
   separator?: boolean
   trailing?: ReactNode
-}
+} & (
+  | { label: string; variant?: "form" }
+  | { label?: never; variant: "composer" }
+)
 
 export const XGUIInput = forwardRef<NativeTextInput, XGUIInputProps>(
   function XGUIInput(
@@ -40,13 +42,16 @@ export const XGUIInput = forwardRef<NativeTextInput, XGUIInputProps>(
       style,
       trailing,
       value,
+      variant = "form",
       ...textInputProps
     },
     ref
   ) {
     const { colors } = useXGUITheme()
     const inputRef = useRef<NativeTextInput>(null)
+    const isComposer = variant === "composer"
     const showClear =
+      !isComposer &&
       clearable &&
       !disabled &&
       editable !== false &&
@@ -56,12 +61,14 @@ export const XGUIInput = forwardRef<NativeTextInput, XGUIInputProps>(
     return (
       <View
         style={[
-          styles.cell,
-          { backgroundColor: colors.background2 },
+          isComposer ? styles.composerCell : styles.cell,
+          !isComposer && { backgroundColor: colors.background2 },
           containerStyle,
         ]}
       >
-        <Text style={[styles.label, { color: colors.textPrimary }]}>{label}</Text>
+        {!isComposer ? (
+          <Text style={[styles.label, { color: colors.textPrimary }]}>{label}</Text>
+        ) : null}
         <TextInput
           {...textInputProps}
           cursorColor={colors.brand}
@@ -74,7 +81,7 @@ export const XGUIInput = forwardRef<NativeTextInput, XGUIInputProps>(
           }}
           selectionColor={colors.brand}
           style={[
-            styles.input,
+            isComposer ? styles.composerInput : styles.input,
             {
               color: disabled ? colors.textSecondary : colors.textPrimary,
             },
@@ -139,6 +146,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     position: "relative",
     width: "100%",
+  },
+  composerCell: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    height: "100%",
+    width: "100%",
+  },
+  composerInput: {
+    flex: 1,
+    height: "100%",
+    paddingVertical: 0,
   },
   input: {
     flex: 1,
