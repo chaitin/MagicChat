@@ -13,15 +13,9 @@ import { Avatar } from "@/components/ui/avatar"
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-export function ProjectsPage({
-  targetId,
-  resolvedTheme,
-  mentionLabelResolver,
-  onSelectSearchResult,
-  onSearchResultCloseAutoFocus,
-  onCreateGroup,
-  onCreateApp,
-}: {
+import { ProjectTasksPage } from "./project-tasks-page"
+
+type ProjectsPageProps = {
   targetId: string
   resolvedTheme: "light" | "dark"
   mentionLabelResolver: MentionLabelResolver
@@ -29,7 +23,21 @@ export function ProjectsPage({
   onSearchResultCloseAutoFocus: () => void
   onCreateGroup: () => void
   onCreateApp: () => void
-}) {
+}
+
+export function ProjectsPage(props: ProjectsPageProps) {
+  return <AccountProjectsPage key={props.targetId} {...props} />
+}
+
+function AccountProjectsPage({
+  targetId,
+  resolvedTheme,
+  mentionLabelResolver,
+  onSelectSearchResult,
+  onSearchResultCloseAutoFocus,
+  onCreateGroup,
+  onCreateApp,
+}: ProjectsPageProps) {
   const [list, setList] = useState<DesktopProjectList | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -121,16 +129,17 @@ export function ProjectsPage({
           </nav>
         </ScrollArea>
       </aside>
-      <section
-        className="flex min-h-0 min-w-0 items-center justify-center bg-card"
-        aria-label="项目详情"
-      >
-        <div className="flex flex-col items-center gap-4 text-xgui-background-2">
-          <span className="flex size-32 items-center justify-center rounded-full bg-xgui-background-1">
-            <HugeiconsIcon icon={FlashIcon} className="size-16" aria-hidden />
-          </span>
-          <p className="text-sm text-muted-foreground">项目详情即将开放</p>
-        </div>
+      <section className="flex min-h-0 min-w-0 flex-col bg-card" aria-label="项目任务区域">
+        {selectedId ? (
+          <ProjectTasksPage key={selectedId} targetId={targetId} projectId={selectedId} />
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 text-xgui-background-2">
+            <span className="flex size-32 items-center justify-center rounded-full bg-xgui-background-1">
+              <HugeiconsIcon icon={FlashIcon} className="size-16" aria-hidden />
+            </span>
+            <p className="text-sm text-muted-foreground">选择一个项目查看任务</p>
+          </div>
+        )}
       </section>
     </section>
   )

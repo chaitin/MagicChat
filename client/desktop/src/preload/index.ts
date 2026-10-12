@@ -123,6 +123,20 @@ const bridge: DesktopBridge = {
     listBindableProjects: (targetId) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listBindableProjects, targetId),
     listProjects: (targetId) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listProjects, targetId),
+    listProjectTasks: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listProjectTasks, input),
+    getProjectTask: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getProjectTask, input),
+    createProjectTask: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.createProjectTask, input),
+    updateProjectTask: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.updateProjectTask, input),
+    deleteProjectTask: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.deleteProjectTask, input),
+    listProjectMembers: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listProjectMembers, input),
+    listProjectTaskActivities: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listProjectTaskActivities, input),
+    addProjectTaskComment: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.addProjectTaskComment, input),
     bindConversationProject: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.bindConversationProject, input),
     archiveTopic: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.archiveTopic, input),

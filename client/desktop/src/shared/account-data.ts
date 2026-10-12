@@ -19,6 +19,14 @@ export const ACCOUNT_DATA_CHANNELS = {
   uploadGroupAvatar: "desktop-next:v1:conversation-group-avatar-upload",
   listBindableProjects: "desktop-next:v1:projects-bindable-list",
   listProjects: "desktop-next:v1:projects-list",
+  listProjectTasks: "desktop-next:v1:project-tasks-list",
+  getProjectTask: "desktop-next:v1:project-task-get",
+  createProjectTask: "desktop-next:v1:project-task-create",
+  updateProjectTask: "desktop-next:v1:project-task-update",
+  deleteProjectTask: "desktop-next:v1:project-task-delete",
+  listProjectMembers: "desktop-next:v1:project-members-list",
+  listProjectTaskActivities: "desktop-next:v1:project-task-activities-list",
+  addProjectTaskComment: "desktop-next:v1:project-task-comment-add",
   bindConversationProject: "desktop-next:v1:conversation-project-bind",
   archiveTopic: "desktop-next:v1:conversation-topic-archive",
   createGroupConversation: "desktop-next:v1:conversation-group-create",
@@ -174,6 +182,91 @@ export type DesktopProjectList = {
   personalProject: DesktopProjectSummary | null
   projects: DesktopProjectSummary[]
 }
+
+export type ProjectTaskStatus = "todo" | "in_progress" | "done" | "canceled"
+export type ProjectTaskPriority = 1 | 2 | 3
+export type ProjectTaskUser = { id: string; name: string; nickname: string; avatar: string }
+export type ProjectTaskReminderInput =
+  | { mode: "once"; at: string; timezone: "Asia/Shanghai" }
+  | {
+      mode: "recurring"
+      frequency: "daily" | "weekly" | "monthly"
+      time: string
+      weekdays?: number[]
+      dayOfMonth?: number
+      timezone: "Asia/Shanghai"
+    }
+export type ProjectTaskReminder = ProjectTaskReminderInput & {
+  state: "scheduled" | "paused" | "fired" | "expired"
+  nextTriggerAt: string | null
+  lastProcessedAt: string | null
+}
+export type DesktopProjectTask = {
+  id: string
+  projectId: string
+  title: string
+  description: string
+  status: ProjectTaskStatus
+  priority: ProjectTaskPriority
+  assignee: ProjectTaskUser | null
+  creator: ProjectTaskUser
+  startDate: string | null
+  dueDate: string | null
+  labels: string[]
+  reminder: ProjectTaskReminder | null
+  completedAt: string | null
+  canceledAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+export type ProjectMember = {
+  id: string
+  displayName: string
+  avatar: string
+  email: string
+  role: "owner" | "member"
+  status: string
+}
+export type ProjectTaskActivity = {
+  id: string
+  projectId: string
+  taskId: string
+  type: "created" | "updated" | "commented"
+  actor: ProjectTaskUser
+  content: string
+  changes: { field: string; from: unknown; to: unknown }[]
+  createdAt: string
+}
+export type ProjectPage<T> = { items: T[]; nextCursor: string | null }
+export type ProjectTargetInput = { targetId: string; projectId: string }
+export type ProjectTaskTargetInput = ProjectTargetInput & { taskId: string }
+export type ListProjectMembersInput = ProjectTargetInput & { cursor?: string; limit?: number }
+export type ListProjectTasksInput = ProjectTargetInput & {
+  cursor?: string
+  limit?: number
+  keyword?: string
+  statuses?: ProjectTaskStatus[]
+  priorities?: ProjectTaskPriority[]
+  assigneeUserIds?: string[]
+}
+export type ProjectTaskMutation = {
+  title?: string
+  description?: string
+  status?: ProjectTaskStatus
+  priority?: ProjectTaskPriority
+  assigneeUserId?: string | null
+  startDate?: string | null
+  dueDate?: string | null
+  labels?: string[]
+  reminder?: ProjectTaskReminderInput | null
+}
+export type CreateProjectTaskInput = ProjectTargetInput & ProjectTaskMutation & { title: string }
+export type UpdateProjectTaskInput = ProjectTaskTargetInput & ProjectTaskMutation
+export type ListProjectTaskActivitiesInput = ProjectTaskTargetInput & {
+  cursor?: string
+  limit?: number
+}
+export type AddProjectTaskCommentInput = ProjectTaskTargetInput & { content: string }
 
 export type DesktopConversationInfo = {
   announcement: string
@@ -689,6 +782,20 @@ export interface AccountDataBridge {
   uploadGroupAvatar(input: UploadGroupAvatarInput): Promise<AuthResult<DesktopConversation>>
   listBindableProjects(targetId: string): Promise<AuthResult<DesktopProjectSummary[]>>
   listProjects(targetId: string): Promise<AuthResult<DesktopProjectList>>
+  listProjectTasks(
+    input: ListProjectTasksInput,
+  ): Promise<AuthResult<ProjectPage<DesktopProjectTask>>>
+  getProjectTask(input: ProjectTaskTargetInput): Promise<AuthResult<DesktopProjectTask>>
+  createProjectTask(input: CreateProjectTaskInput): Promise<AuthResult<DesktopProjectTask>>
+  updateProjectTask(input: UpdateProjectTaskInput): Promise<AuthResult<DesktopProjectTask>>
+  deleteProjectTask(input: ProjectTaskTargetInput): Promise<AuthResult<string>>
+  listProjectMembers(
+    input: ListProjectMembersInput,
+  ): Promise<AuthResult<ProjectPage<ProjectMember>>>
+  listProjectTaskActivities(
+    input: ListProjectTaskActivitiesInput,
+  ): Promise<AuthResult<ProjectPage<ProjectTaskActivity>>>
+  addProjectTaskComment(input: AddProjectTaskCommentInput): Promise<AuthResult<ProjectTaskActivity>>
   bindConversationProject(
     input: BindConversationProjectInput,
   ): Promise<AuthResult<DesktopConversation>>

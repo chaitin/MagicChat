@@ -2,7 +2,9 @@ import type { BrowserWindow } from "electron"
 import {
   ACCOUNT_DATA_CHANNELS,
   type AddGroupMembersInput,
+  type AddProjectTaskCommentInput,
   type BindConversationProjectInput,
+  type CreateProjectTaskInput,
   type ConversationTargetInput,
   type LocalAttachmentPageInput,
   type LocalMessageContextInput,
@@ -15,6 +17,11 @@ import {
   type DismissConversationInput,
   type LocalSearchInput,
   type ListConversationsInput,
+  type ListProjectMembersInput,
+  type ListProjectTaskActivitiesInput,
+  type ListProjectTasksInput,
+  type ProjectTaskTargetInput,
+  type UpdateProjectTaskInput,
   type MarkConversationReadInput,
   type MessageReactionUsersInput,
   type ResolveUserNamesInput,
@@ -94,6 +101,30 @@ export function registerAccountDataIpc({
     auth.listBindableProjects(input as string),
   )
   handle(ACCOUNT_DATA_CHANNELS.listProjects, (input) => auth.listProjects(input as string))
+  handle(ACCOUNT_DATA_CHANNELS.listProjectTasks, (input) =>
+    auth.listProjectTasks(input as ListProjectTasksInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.getProjectTask, (input) =>
+    auth.getProjectTask(input as ProjectTaskTargetInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.createProjectTask, (input) =>
+    auth.createProjectTask(input as CreateProjectTaskInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.updateProjectTask, (input) =>
+    auth.updateProjectTask(input as UpdateProjectTaskInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.deleteProjectTask, (input) =>
+    auth.deleteProjectTask(input as ProjectTaskTargetInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.listProjectMembers, (input) =>
+    auth.listProjectMembers(input as ListProjectMembersInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.listProjectTaskActivities, (input) =>
+    auth.listProjectTaskActivities(input as ListProjectTaskActivitiesInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.addProjectTaskComment, (input) =>
+    auth.addProjectTaskComment(input as AddProjectTaskCommentInput),
+  )
   handle(ACCOUNT_DATA_CHANNELS.bindConversationProject, (input) =>
     auth.bindConversationProject(input as BindConversationProjectInput),
   )

@@ -45,6 +45,7 @@ import { parseConversationTopic } from "./conversation-topic"
 import { MediaManager } from "./media-manager"
 import { incomingMessageNotification } from "./message-notification-policy"
 import { ProjectManager } from "./project-manager"
+import { ProjectTaskManager } from "./project-task-manager"
 import { RealtimeManager, type RealtimeEvent } from "./realtime-manager"
 import { SearchManager } from "./search-manager"
 import type { IncomingMessageNotification } from "../../shared/desktop"
@@ -56,6 +57,7 @@ export class AccountRuntime {
   private contactManager?: ContactManager
   private clientAppManager?: ClientAppManager
   private projectManager?: ProjectManager
+  private projectTaskManager?: ProjectTaskManager
   private avatarManager?: AvatarManager
   private currentUserAvatar?: AvatarDescriptor
   private mediaManager?: MediaManager
@@ -234,6 +236,46 @@ export class AccountRuntime {
   listProjects() {
     this.assertInitialized()
     return this.projectManager!.listProjects()
+  }
+
+  listProjectTasks(input: Parameters<ProjectTaskManager["list"]>[0]) {
+    this.assertInitialized()
+    return this.projectTaskManager!.list(input)
+  }
+
+  getProjectTask(input: Parameters<ProjectTaskManager["get"]>[0]) {
+    this.assertInitialized()
+    return this.projectTaskManager!.get(input)
+  }
+
+  createProjectTask(input: Parameters<ProjectTaskManager["create"]>[0]) {
+    this.assertInitialized()
+    return this.projectTaskManager!.create(input)
+  }
+
+  updateProjectTask(input: Parameters<ProjectTaskManager["update"]>[0]) {
+    this.assertInitialized()
+    return this.projectTaskManager!.update(input)
+  }
+
+  deleteProjectTask(input: Parameters<ProjectTaskManager["delete"]>[0]) {
+    this.assertInitialized()
+    return this.projectTaskManager!.delete(input)
+  }
+
+  listProjectMembers(input: Parameters<ProjectTaskManager["listMembers"]>[0]) {
+    this.assertInitialized()
+    return this.projectTaskManager!.listMembers(input)
+  }
+
+  listProjectTaskActivities(input: Parameters<ProjectTaskManager["listActivities"]>[0]) {
+    this.assertInitialized()
+    return this.projectTaskManager!.listActivities(input)
+  }
+
+  addProjectTaskComment(input: Parameters<ProjectTaskManager["addComment"]>[0]) {
+    this.assertInitialized()
+    return this.projectTaskManager!.addComment(input)
   }
 
   async bindConversationProject(conversationId: string, projectId: string) {
@@ -645,6 +687,7 @@ export class AccountRuntime {
     this.contactManager = undefined
     this.clientAppManager = undefined
     this.projectManager = undefined
+    this.projectTaskManager = undefined
     this.avatarManager = undefined
     this.database?.close()
     this.database = undefined
@@ -685,6 +728,7 @@ export class AccountRuntime {
       }
       this.currentUserAvatar = currentUserAvatar
       this.projectManager = new ProjectManager(client, this.contactManager, currentUserAvatar)
+      this.projectTaskManager = new ProjectTaskManager(client)
       this.mediaManager = new MediaManager(
         accountDirectory,
         `${this.input.serverUrl}\0${this.input.userId}`,

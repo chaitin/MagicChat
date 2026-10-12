@@ -1,6 +1,8 @@
 import type {
   AddGroupMembersInput,
+  AddProjectTaskCommentInput,
   AvatarRequest,
+  CreateProjectTaskInput,
   BindConversationProjectInput,
   ConversationTargetInput,
   ContactTargetInput,
@@ -10,6 +12,11 @@ import type {
   FriendRequestListInput,
   ForwardMessagesInput,
   ListConversationsInput,
+  ListProjectMembersInput,
+  ListProjectTaskActivitiesInput,
+  ListProjectTasksInput,
+  ProjectTaskTargetInput,
+  UpdateProjectTaskInput,
   LocalAttachmentPageInput,
   LocalMessageContextInput,
   LocalMessagesAfterInput,
@@ -162,6 +169,46 @@ export class AccountDataFacade {
   async listProjects(targetId: string) {
     await this.ready(targetId)
     return this.requireRuntime().listProjects()
+  }
+
+  async listProjectTasks(input: ListProjectTasksInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().listProjectTasks(input)
+  }
+
+  async getProjectTask(input: ProjectTaskTargetInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().getProjectTask(input)
+  }
+
+  async createProjectTask(input: CreateProjectTaskInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().createProjectTask(input)
+  }
+
+  async updateProjectTask(input: UpdateProjectTaskInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().updateProjectTask(input)
+  }
+
+  async deleteProjectTask(input: ProjectTaskTargetInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().deleteProjectTask(input)
+  }
+
+  async listProjectMembers(input: ListProjectMembersInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().listProjectMembers(input)
+  }
+
+  async listProjectTaskActivities(input: ListProjectTaskActivitiesInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().listProjectTaskActivities(input)
+  }
+
+  async addProjectTaskComment(input: AddProjectTaskCommentInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().addProjectTaskComment(input)
   }
 
   async bindConversationProject(input: BindConversationProjectInput) {

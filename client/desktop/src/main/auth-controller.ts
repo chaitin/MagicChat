@@ -336,6 +336,38 @@ export class AuthController {
     return this.accountData.listProjects(...args)
   }
 
+  listProjectTasks(...args: Parameters<AccountDataFacade["listProjectTasks"]>) {
+    return this.accountData.listProjectTasks(...args)
+  }
+
+  getProjectTask(...args: Parameters<AccountDataFacade["getProjectTask"]>) {
+    return this.accountData.getProjectTask(...args)
+  }
+
+  createProjectTask(...args: Parameters<AccountDataFacade["createProjectTask"]>) {
+    return this.accountData.createProjectTask(...args)
+  }
+
+  updateProjectTask(...args: Parameters<AccountDataFacade["updateProjectTask"]>) {
+    return this.accountData.updateProjectTask(...args)
+  }
+
+  deleteProjectTask(...args: Parameters<AccountDataFacade["deleteProjectTask"]>) {
+    return this.accountData.deleteProjectTask(...args)
+  }
+
+  listProjectMembers(...args: Parameters<AccountDataFacade["listProjectMembers"]>) {
+    return this.accountData.listProjectMembers(...args)
+  }
+
+  listProjectTaskActivities(...args: Parameters<AccountDataFacade["listProjectTaskActivities"]>) {
+    return this.accountData.listProjectTaskActivities(...args)
+  }
+
+  addProjectTaskComment(...args: Parameters<AccountDataFacade["addProjectTaskComment"]>) {
+    return this.accountData.addProjectTaskComment(...args)
+  }
+
   bindConversationProject(...args: Parameters<AccountDataFacade["bindConversationProject"]>) {
     return this.accountData.bindConversationProject(...args)
   }
