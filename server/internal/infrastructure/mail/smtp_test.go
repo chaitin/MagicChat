@@ -19,7 +19,7 @@ func TestRenderLoginCodeMessageIncludesBrandedHTMLAndPlainFallback(t *testing.T)
 		},
 		Recipient: "alice@example.com", AppName: "即应", OrganizationName: "长亭科技",
 		Code: "01234567", ExpiresIn: 15 * time.Minute,
-		ClientLoginURL: "https://chat.example.com/login", LogoURL: "https://chat.example.com/logo.png",
+		ClientLoginURL: "https://chat.example.com/login", LogoURL: "https://chat.example.com/favicon.png",
 	})
 	if err != nil {
 		t.Fatalf("render message: %v", err)
@@ -31,7 +31,7 @@ func TestRenderLoginCodeMessageIncludesBrandedHTMLAndPlainFallback(t *testing.T)
 		"text/html; charset=UTF-8",
 		"01234567",
 		"https://chat.example.com/login",
-		"https://chat.example.com/logo.png",
+		"https://chat.example.com/favicon.png",
 		"#14b8a6",
 	} {
 		if !strings.Contains(message, expected) {
@@ -49,7 +49,7 @@ func TestRenderTestEmailMessageIncludesBrandedHTMLAndAccessURL(t *testing.T) {
 			FromEmail: "mailer@example.com", FromName: "即应通知",
 		},
 		Recipient: "admin@example.com", AppName: "即应", OrganizationName: "长亭科技",
-		ClientLoginURL: "https://chat.example.com/login", LogoURL: "https://chat.example.com/logo.png",
+		ClientLoginURL: "https://chat.example.com/login", LogoURL: "https://chat.example.com/favicon.png",
 	})
 	if err != nil {
 		t.Fatalf("render test message: %v", err)
@@ -64,7 +64,7 @@ func TestRenderTestEmailMessageIncludesBrandedHTMLAndAccessURL(t *testing.T) {
 		"Content-Type: multipart/alternative",
 		"SMTP 配置测试",
 		"https://chat.example.com/login",
-		"https://chat.example.com/logo.png",
+		"https://chat.example.com/favicon.png",
 		"#14b8a6",
 	} {
 		if !strings.Contains(decodedMessage, expected) {

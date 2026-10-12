@@ -134,7 +134,7 @@ func (s *Service) deliverCode(email string) {
 	if err := s.mailer.SendLoginCode(ctx, Mail{
 		SMTP: smtpSettings, Recipient: email, AppName: brand.AppName,
 		OrganizationName: brand.OrganizationName, Code: code, ExpiresIn: CodeTTL,
-		ClientLoginURL: loginURL, LogoURL: s.clientOrigin + "/logo.png",
+		ClientLoginURL: loginURL, LogoURL: s.clientOrigin + "/favicon.png",
 	}); err != nil {
 		slog.Error("deliver email login code", "stage", "smtp_send", "recipient_hash", recipientHash,
 			"smtp_host", smtpSettings.SMTPHost, "smtp_port", smtpSettings.SMTPPort, "error", err)
@@ -162,7 +162,7 @@ func (s *Service) TestSMTP(ctx context.Context, rawRecipient string) error {
 	message := Mail{
 		SMTP: smtpSettings, Recipient: recipient, AppName: brand.AppName,
 		OrganizationName: brand.OrganizationName,
-		ClientLoginURL:   s.clientOrigin + "/login", LogoURL: s.clientOrigin + "/logo.png",
+		ClientLoginURL:   s.clientOrigin + "/login", LogoURL: s.clientOrigin + "/favicon.png",
 	}
 	if err := s.mailer.SendTestEmail(ctx, message); err != nil {
 		slog.Error("test email login SMTP", "smtp_host", smtpSettings.SMTPHost,

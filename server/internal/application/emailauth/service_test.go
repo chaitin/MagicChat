@@ -32,7 +32,7 @@ func TestServiceRequestsAndConsumesOneTimeCode(t *testing.T) {
 		t.Fatalf("checked email = %q, messages = %#v", accounts.checkedEmail, mailer.messages)
 	}
 	message := mailer.messages[0]
-	if message.Code != "01234567" || message.ClientLoginURL != "https://chat.example.com/login" || message.LogoURL != "https://chat.example.com/logo.png" {
+	if message.Code != "01234567" || message.ClientLoginURL != "https://chat.example.com/login" || message.LogoURL != "https://chat.example.com/favicon.png" {
 		t.Fatalf("mail = %#v", message)
 	}
 
@@ -129,7 +129,7 @@ func TestServiceSendsSMTPTestEmail(t *testing.T) {
 		t.Fatalf("test messages = %#v", mailer.testMessages)
 	}
 	message := mailer.testMessages[0]
-	if message.Recipient != "admin@example.com" || message.ClientLoginURL != "https://chat.example.com/login" {
+	if message.Recipient != "admin@example.com" || message.ClientLoginURL != "https://chat.example.com/login" || message.LogoURL != "https://chat.example.com/favicon.png" {
 		t.Fatalf("test message = %#v", message)
 	}
 
