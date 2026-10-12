@@ -4,7 +4,7 @@ import { EventEmitter } from "node:events"
 import test from "node:test"
 import { openDownloadedUpdate } from "../src/main/update-installer.ts"
 
-test("Windows launches the installer before quitting", async () => {
+test("Windows opens the installer without quitting the current app", async () => {
   const calls: string[] = []
   const spawnInstaller = ((file: string) => {
     calls.push(`spawn:${file}`)
@@ -19,15 +19,17 @@ test("Windows launches the installer before quitting", async () => {
     spawnInstaller,
     openPath: async () => "",
     showItemInFolder: () => undefined,
-    quit: () => calls.push("quit"),
   })
-  assert.deepEqual(calls, ["spawn:C:/updates/setup.exe", "unref", "quit"])
+  assert.deepEqual(calls, ["spawn:C:/updates/setup.exe", "unref"])
 })
 
-test("Windows keeps the app running if the installer cannot launch", async () => {
-  let quit = false
+test("Windows reports an installer launch failure without detaching it", async () => {
+  let detached = false
   const spawnInstaller = (() => {
     const child = new EventEmitter() as ChildProcess
+    child.unref = () => {
+      detached = true
+    }
     queueMicrotask(() => child.emit("error", new Error("launch failed")))
     return child
   }) as typeof spawn
@@ -38,13 +40,10 @@ test("Windows keeps the app running if the installer cannot launch", async () =>
       spawnInstaller,
       openPath: async () => "",
       showItemInFolder: () => undefined,
-      quit: () => {
-        quit = true
-      },
     }),
     /launch failed/,
   )
-  assert.equal(quit, false)
+  assert.equal(detached, false)
 })
 
 test("macOS opens the DMG; Linux reveals rather than executes the AppImage", async () => {
@@ -56,7 +55,6 @@ test("macOS opens the DMG; Linux reveals rather than executes the AppImage", asy
       return ""
     },
     showItemInFolder: () => calls.push("reveal"),
-    quit: () => calls.push("quit"),
   }
   await openDownloadedUpdate({ ...common, platform: "macos" })
   await openDownloadedUpdate({ ...common, platform: "linux-amd" })

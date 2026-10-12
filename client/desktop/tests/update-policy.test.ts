@@ -27,6 +27,43 @@ test("selects the current OS and compares its build ID", () => {
   })
 })
 
+test("optional platform feed can move within trusted release directories", () => {
+  const feed = "https://jiying.chat/releases/desktop/2.0.1/"
+  const info = parseUpdateInfo(
+    { windows: { ...manifest.windows, updateFeed: feed } },
+    "windows",
+    "2.0.0",
+    20,
+  )
+  assert.equal(info.updateFeed, feed)
+  assert.throws(() =>
+    parseUpdateInfo(
+      { windows: { ...manifest.windows, version: "2.0.0", updateFeed: feed } },
+      "windows",
+      "2.0.0",
+      20,
+    ),
+  )
+  for (const invalid of [
+    "https://other.example/releases/desktop/",
+    "http://jiying.chat/releases/desktop/",
+    "https://jiying.chat/releases/desktop/latest.yml",
+    "https://jiying.chat/releases/%2e%2e/desktop/",
+  ]) {
+    assert.throws(() =>
+      parseUpdateInfo(
+        { windows: { ...manifest.windows, updateFeed: invalid } },
+        "windows",
+        "2.0.0",
+        20,
+      ),
+    )
+  }
+  assert.throws(() =>
+    parseUpdateInfo({ windows: { ...manifest.windows, updateFeed: null } }, "windows", "2.0.0", 20),
+  )
+})
+
 test("older builds do not trigger an update", () => {
   const info = parseUpdateInfo(
     { windows: { build: 3, version: "1.8.7", url: manifest.windows.url } },

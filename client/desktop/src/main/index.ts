@@ -624,6 +624,10 @@ void app.whenReady().then(async () => {
     await updates.install()
     return null
   })
+  handleIpc(DESKTOP_CHANNELS.restartToInstallUpdate, async () => {
+    await updates.restartToInstall()
+    return null
+  })
   handleIpc(DESKTOP_CHANNELS.getSystemInfo, async () => getSystemInfo())
   handleIpc(DESKTOP_CHANNELS.getStorageInfo, async () => getStorageInfo())
   handleIpc(DESKTOP_CHANNELS.openStorageDirectory, async () => {

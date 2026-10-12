@@ -77,6 +77,7 @@ export type UpdateInfo = {
   latestVersion: string
   latestBuildId: number
   downloadUrl: string
+  updateFeed?: string
   updateAvailable: boolean
 }
 export type UpdateProgress = { received: number; total: number | null; percent: number | null }
@@ -104,6 +105,7 @@ export const DESKTOP_CHANNELS = {
   checkForUpdates: "desktop-next:v1:check-for-updates",
   downloadUpdate: "desktop-next:v1:download-update",
   installUpdate: "desktop-next:v1:install-update",
+  restartToInstallUpdate: "desktop-next:v1:restart-to-install-update",
   updateProgress: "desktop-next:v1:update-progress",
   getSystemInfo: "desktop-next:v1:get-system-info",
   getStorageInfo: "desktop-next:v1:get-storage-info",
@@ -159,6 +161,7 @@ export interface DesktopBridge {
   checkForUpdates(): Promise<AuthResult<UpdateInfo>>
   downloadUpdate(): Promise<AuthResult<null>>
   installUpdate(): Promise<AuthResult<null>>
+  restartToInstallUpdate(): Promise<AuthResult<null>>
   onUpdateProgress(callback: (value: UpdateProgress) => void): () => void
   getSystemInfo(): Promise<AuthResult<SystemInfo>>
   getStorageInfo(): Promise<AuthResult<StorageInfo>>

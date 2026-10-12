@@ -17,6 +17,7 @@ const bridge: DesktopBridge = {
   checkForUpdates: () => ipcRenderer.invoke(DESKTOP_CHANNELS.checkForUpdates),
   downloadUpdate: () => ipcRenderer.invoke(DESKTOP_CHANNELS.downloadUpdate),
   installUpdate: () => ipcRenderer.invoke(DESKTOP_CHANNELS.installUpdate),
+  restartToInstallUpdate: () => ipcRenderer.invoke(DESKTOP_CHANNELS.restartToInstallUpdate),
   onUpdateProgress: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, value: UpdateProgress) => callback(value)
     ipcRenderer.on(DESKTOP_CHANNELS.updateProgress, listener)

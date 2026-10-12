@@ -1,9 +1,12 @@
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
-import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises"
+import { gzipSync } from "node:zlib"
 import os from "node:os"
 import path from "node:path"
 import test from "node:test"
+import { stringify as stringifyYaml } from "yaml"
+import { fileDigests } from "../release-tools.mjs"
 import { expectedReleaseAssetNames, prepareReleasePlan } from "../release-plan.mjs"
 import { inspectReleaseTag } from "../release-tag.mjs"
 
@@ -27,14 +30,35 @@ async function fixture() {
   const inputDirectory = path.join(root, "artifacts")
   await mkdir(inputDirectory)
   for (const name of expectedReleaseAssetNames("2.0.0")) {
-    const bytes = Buffer.alloc(1024)
+    if (name.endsWith(".yml")) continue
+    const bytes = name.endsWith(".blockmap") ? gzipSync(Buffer.alloc(1024)) : Buffer.alloc(1024)
     if (name.endsWith(".exe")) bytes.write("MZ")
+    else if (name.endsWith(".zip")) Buffer.from([0x50, 0x4b, 0x03, 0x04]).copy(bytes)
     else if (name.endsWith(".AppImage")) {
       Buffer.from([0x7f, 0x45, 0x4c, 0x46]).copy(bytes)
       bytes[5] = 1
       bytes.writeUInt16LE(name.includes("-arm64.") ? 0xb7 : 0x3e, 18)
-    } else bytes.write("koly", 512)
+    } else if (name.endsWith(".dmg")) bytes.write("koly", 512)
     await writeFile(path.join(inputDirectory, name), bytes)
+  }
+  for (const [metadataName, asset] of [
+    ["latest.yml", expectedReleaseAssetNames("2.0.0")[0]],
+    ["latest-mac.yml", expectedReleaseAssetNames("2.0.0")[4]],
+  ]) {
+    const artifact = path.join(inputDirectory, asset)
+    await writeFile(
+      path.join(inputDirectory, metadataName),
+      stringifyYaml({
+        version: "2.0.0",
+        files: [
+          {
+            url: asset,
+            size: (await stat(artifact)).size,
+            sha512: (await fileDigests(artifact)).sha512,
+          },
+        ],
+      }),
+    )
   }
   return {
     root,
@@ -44,7 +68,7 @@ async function fixture() {
   }
 }
 
-test("任意标识的 desktop 标签保留 package 版本并生成四个平台发布计划", async () => {
+test("任意标识的 desktop 标签保留 package 版本并生成跨平台自动更新发布计划", async () => {
   const fixtureData = await fixture()
   const { root, inputDirectory, outputDirectory, commit } = fixtureData
   const plan = await prepareReleasePlan({
@@ -62,7 +86,7 @@ test("任意标识的 desktop 标签保留 package 版本并生成四个平台�
     plan.assets.map((asset) => asset.name),
     expectedReleaseAssetNames("2.0.0"),
   )
-  assert.equal((await readdir(outputDirectory)).length, 6)
+  assert.equal((await readdir(outputDirectory)).length, 11)
   assert.equal(
     JSON.parse(await readFile(path.join(outputDirectory, "release-plan.json"), "utf8")).tag,
     "desktop/nightly-1",
@@ -93,6 +117,24 @@ test("拒绝不匹配的标签、提交和缺失的平台产物", async () => {
       outputDirectory,
     }),
     /发布制品不匹配/,
+  )
+})
+
+test("拒绝与安装包不匹配的更新元数据", async () => {
+  const { root, inputDirectory, outputDirectory, commit } = await fixture()
+  const metadataPath = path.join(inputDirectory, "latest.yml")
+  const metadata = (await readFile(metadataPath, "utf8")).replace(/sha512: .+/, "sha512: invalid")
+  await writeFile(metadataPath, metadata)
+  await assert.rejects(
+    prepareReleasePlan({
+      repositoryRoot: root,
+      repository: "chaitin/MagicChat",
+      tag: "desktop/nightly-1",
+      commit,
+      inputDirectory,
+      outputDirectory,
+    }),
+    /摘要或大小不正确/,
   )
 })
 

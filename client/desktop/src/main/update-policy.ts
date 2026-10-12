@@ -33,6 +33,27 @@ export function isTrustedReleaseUrl(input: string): boolean {
   }
 }
 
+export function isTrustedUpdateFeed(input: string): boolean {
+  if (!isTrustedReleaseUrl(input)) return false
+  const pathname = new URL(input).pathname
+  return (
+    pathname.endsWith("/") &&
+    !pathname.includes("%") &&
+    pathname.split("/").every((segment) => segment !== "." && segment !== "..")
+  )
+}
+
+function isNewerSemver(latest: string, installed: string): boolean {
+  if (!/^\d+\.\d+\.\d+$/.test(latest) || !/^\d+\.\d+\.\d+$/.test(installed)) return false
+  const next = latest.split(".").map(Number)
+  const current = installed.split(".").map(Number)
+  if (!next.every(Number.isSafeInteger) || !current.every(Number.isSafeInteger)) return false
+  for (let index = 0; index < 3; index++) {
+    if (next[index] !== current[index]) return next[index] > current[index]
+  }
+  return false
+}
+
 export function parseUpdateInfo(
   value: unknown,
   platform: ReleasePlatform,
@@ -43,7 +64,7 @@ export function parseUpdateInfo(
   if (!isRecord(release)) {
     throw new AuthFailure("invalid_update_info", `更新信息缺少 ${platform} 发布通道`)
   }
-  const { build, version, url } = release
+  const { build, version, url, updateFeed } = release
   if (
     !Number.isSafeInteger(build) ||
     (build as number) < 0 ||
@@ -52,7 +73,14 @@ export function parseUpdateInfo(
     version.length > 64 ||
     typeof url !== "string" ||
     !isTrustedReleaseUrl(url) ||
-    !new URL(url).pathname.endsWith(updateFileExtension(platform))
+    !new URL(url).pathname.endsWith(updateFileExtension(platform)) ||
+    (updateFeed !== undefined &&
+      (typeof updateFeed !== "string" ||
+        !isTrustedUpdateFeed(updateFeed) ||
+        (platform !== "windows" && platform !== "macos"))) ||
+    (updateFeed !== undefined &&
+      (build as number) > currentBuildId &&
+      !isNewerSemver(version as string, currentVersion))
   ) {
     throw new AuthFailure("invalid_update_info", "更新信息格式不正确")
   }
@@ -63,6 +91,7 @@ export function parseUpdateInfo(
     latestVersion: version.trim(),
     latestBuildId: build as number,
     downloadUrl: url,
+    ...(typeof updateFeed === "string" ? { updateFeed } : {}),
     updateAvailable: (build as number) > currentBuildId,
   }
 }

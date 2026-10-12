@@ -36,6 +36,12 @@ export async function validateUpdateFile(
         return signature.equals(Buffer.from([0x50, 0x45, 0, 0]))
       }
       if (platform === "macos") {
+        if (path.extname(filePath).toLowerCase() === ".zip") {
+          if (size < 4) return false
+          const header = Buffer.alloc(4)
+          await file.read(header, 0, header.length, 0)
+          return header.equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))
+        }
         if (size < 512) return false
         const trailer = Buffer.alloc(4)
         await file.read(trailer, 0, 4, size - 512)

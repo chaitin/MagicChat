@@ -69,7 +69,7 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
           if (!shouldPromptForUpdate(result.data, manualRef.current, dismissedUpdateKey.current)) {
             return
           }
-          const nextKey = `${result.data.platform}:${result.data.latestBuildId}:${result.data.downloadUrl}`
+          const nextKey = `${result.data.platform}:${result.data.latestBuildId}:${result.data.downloadUrl}:${result.data.updateFeed ?? ""}`
           if (updateKey.current !== nextKey) {
             updateKey.current = nextKey
             setDownloaded(false)
@@ -130,8 +130,23 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
     try {
       const result = await window.desktop.installUpdate()
       if (!result.ok) throw new Error(result.error.message)
+      setOpen(false)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "无法打开更新安装包")
+    } finally {
+      setInstalling(false)
+    }
+  }
+
+  async function restartToInstall() {
+    if (!window.desktop || installing) return
+    setInstalling(true)
+    setError("")
+    try {
+      const result = await window.desktop.restartToInstallUpdate()
+      if (!result.ok) throw new Error(result.error.message)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "无法启动自动更新")
     } finally {
       setInstalling(false)
     }
@@ -146,12 +161,21 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
   }
 
   const isLinux = update?.platform === "linux-amd" || update?.platform === "linux-arm"
-  const installLabel = isLinux ? "打开下载位置" : "立即更新"
+  const isMacAutomatic = update?.platform === "macos" && Boolean(update.updateFeed)
+  const installLabel = isLinux
+    ? "打开下载位置"
+    : update?.platform === "windows"
+      ? "安装更新包"
+      : "立即更新"
   const instructions = isLinux
     ? "退出当前应用后，用下载的 AppImage 替换原文件，再启动新版。"
-    : update?.platform === "macos"
-      ? "打开安装镜像后，请退出当前应用，将新版拖入“应用程序”并选择替换。"
-      : "将打开 Windows 安装程序，请按安装向导完成更新。"
+    : isMacAutomatic
+      ? downloaded
+        ? "更新已准备好；退出客户端时将自动安装，也可以现在重启更新。"
+        : "将下载自动更新包；下载完成后仍可继续使用，正常退出时再安装。"
+      : update?.platform === "macos"
+        ? "打开安装镜像后，请退出当前应用，将新版拖入“应用程序”并选择替换。"
+        : "将打开 Windows 安装程序，客户端不会自动退出；安装时可能需要先关闭客户端。"
 
   return (
     <UpdateContext.Provider value={{ checking, checkUpdates }}>
@@ -187,12 +211,19 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
             </p>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={dismissUpdate} disabled={installing}>
-              以后再说
+            <Button
+              variant="outline"
+              onClick={isMacAutomatic && downloaded ? () => setOpen(false) : dismissUpdate}
+              disabled={installing}
+            >
+              {isMacAutomatic && downloaded ? "稍后退出时安装" : "以后再说"}
             </Button>
             {downloaded ? (
-              <Button onClick={() => void install()} disabled={installing}>
-                {installing ? "正在打开" : installLabel}
+              <Button
+                onClick={() => void (isMacAutomatic ? restartToInstall() : install())}
+                disabled={installing}
+              >
+                {installing ? "正在打开" : isMacAutomatic ? "现在重启更新" : installLabel}
               </Button>
             ) : (
               <Button onClick={() => void download()} disabled={downloading || !update}>

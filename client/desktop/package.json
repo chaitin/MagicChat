@@ -18,7 +18,7 @@
     "dev:web": "vite --config vite.renderer.config.ts",
     "build": "electron-vite build",
     "pack:win": "pnpm build && electron-builder --win nsis --x64 --config electron-builder.yml",
-    "pack:mac": "pnpm build && electron-builder --mac dmg --universal --config electron-builder.yml",
+    "pack:mac": "pnpm build && electron-builder --mac dmg zip --universal --config electron-builder.yml",
     "pack:linux": "pnpm build && electron-builder --linux AppImage --x64 --arm64 --config electron-builder.yml",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "test:release": "node --test scripts/tests/*.test.mjs",
@@ -38,6 +38,7 @@
     "cmdk": "^1.1.1",
     "cn": "^0.2.6",
     "date-fns": "^4.4.0",
+    "electron-updater": "6.8.9",
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.5.0",
     "katex": "^0.18.7",
@@ -76,6 +77,7 @@
     "prettier": "3.8.1",
     "tailwindcss": "4.2.1",
     "typescript": "6.0.2",
-    "vite": "7.3.6"
+    "vite": "7.3.6",
+    "yaml": "^2.9.1"
   }
 }

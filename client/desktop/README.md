@@ -34,9 +34,9 @@ pnpm dev:web
 
 ## 桌面版发布
 
-推送 `desktop/<标识>` 标签后，CI 从 `client/desktop/` 构建 Windows x64、Linux x64/arm64 AppImage、macOS universal DMG，并在四个产物全部完成后发布到对应的 GitHub Release。macOS 构建需要仓库配置 Developer ID 证书与 Apple 公证凭据；缺失时发布失败，不会上传未签名的 DMG。
+推送 `desktop/<标识>` 标签后，CI 构建 Windows x64 NSIS、Linux x64/arm64 AppImage、macOS universal DMG 和 ZIP，并生成 Windows/macOS 更新元数据（`latest.yml`、`latest-mac.yml`）及两份 blockmap。发布计划会校验产物和元数据中的版本、大小、SHA-512，然后通过 GitHub Release Draft 事务发布。macOS 构建需要 Developer ID 证书与 Apple 公证凭据；缺失时发布失败，不会上传未签名的 DMG/ZIP。Windows 当前仍是未签名的预览包。
 
-安装包的版本及更新 build ID 来自 `package.json` 的 `version` 和 `buildId`，而非标签名称；发布新版前应更新这两个字段。应用内更新读取官网的 `releases/version.json`，GitHub Release 不会自动修改官网清单，仍需按官网发布流程更新。
+安装包的版本及更新 build ID 来自 `package.json` 的 `version` 和 `buildId`，而非标签名称；发新版时两者必须同时递增（自动更新器按 SemVer 比较）。应用内更新读取官网的 `releases/version.json`；GitHub Release 不会自动上传官网静态文件或修改官网清单。需先把安装包、blockmap 和更新元数据放在对应的官网发布目录并核对可下载，再最后更新 `version.json`。旧客户端仍只读取清单中的 `url`。
 
 ## 当前内容
 
@@ -108,6 +108,6 @@ Windows 预览安装包输出到被 Git 忽略的 `dist/Jiying-Desktop-Preview-*
 
 ## 桌面更新
 
-Windows、macOS 和 Linux 共用官网 `/releases/version.json`，按 `windows`、`macos`、`linux-amd`、`linux-arm` 字段的 `build` 检查更新。桌面条目只需 `build`、`version` 和 `url`；下载时限制 HTTPS 来源和安装包大小，检查响应长度与平台文件格式，不要求哈希字段。应先上传各平台安装包，最后更新 `version.json`，且发布 build 必须大于已发布客户端 build。
+Windows、macOS 和 Linux 共用官网 `/releases/version.json`，按 `windows`、`macos`、`linux-amd`、`linux-arm` 字段的 `build` 检查更新。保留 `build`、`version`、`url`（Windows EXE / macOS DMG / Linux AppImage）；Windows/macOS 可增加 `updateFeed`，指向官网 HTTPS `/releases/` 下以 `/` 结尾的发布目录，其中分别包含 `latest.yml` + EXE + EXE.blockmap，或 `latest-mac.yml` + ZIP + ZIP.blockmap。路径由清单动态决定，客户端仍会限制来源与元数据文件名并核对清单版本。发布目录需支持对大文件的 HTTP Range 请求，否则差分下载可能回退全量。没有 `updateFeed` 的旧清单仍按完整安装包流程工作。Windows 当前预览包未签名：可先发布这些更新制品，但**不要在官网 Windows 清单加入 `updateFeed`**；配置正式签名、在 `electron-builder.yml` 启用签名校验并验收真机更新后才启用差分下载。
 
-启动时自动检查一次；“关于”页可手动检查。有新版时用户确认下载并查看进度，再自行完成安装：Windows 打开 NSIS，macOS 打开 DMG，Linux 打开已下载 AppImage 的目录供用户替换原文件。开发模式下不应测试真实安装操作。`pnpm pack:mac` 需要在 macOS 上执行；`pnpm pack:linux` 在 Linux 上执行。上述本地预览包不等同于经过平台签名、公证及真机验收的正式安装包。
+启动时自动检查一次；“关于”页可手动检查。有新版时用户确认下载并查看进度。带 `updateFeed` 的正式 Windows 包用 electron-updater 尝试差分下载，失败则下载完整安装包；点击“安装更新包”打开可见 NSIS 安装向导，客户端不主动退出。macOS 从 ZIP 准备自动更新，用户正常退出时安装，也可自行选择“现在重启更新”；无 `updateFeed` 时仍打开 DMG 手动替换。Linux 仍打开 AppImage 所在目录供手动替换。开发模式下不应测试真实安装操作。`pnpm pack:mac` 需要在 macOS 上执行；`pnpm pack:linux` 在 Linux 上执行。上述本地预览包不等同于经过平台签名、公证及真机验收的正式安装包。

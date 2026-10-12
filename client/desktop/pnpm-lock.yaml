@@ -41,6 +41,9 @@ importers:
       date-fns:
         specifier: ^4.4.0
         version: 4.4.0
+      electron-updater:
+        specifier: 6.8.9
+        version: 6.8.9
       embla-carousel-react:
         specifier: ^8.6.0
         version: 8.6.0(react@19.2.6)
@@ -113,7 +116,7 @@ importers:
         version: 0.2.0
       '@tailwindcss/vite':
         specifier: 4.2.1
-        version: 4.2.1(vite@7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1))
+        version: 4.2.1(vite@7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1)(yaml@2.9.1))
       '@types/katex':
         specifier: ^0.16.8
         version: 0.16.8
@@ -131,7 +134,7 @@ importers:
         version: 8.18.1
       '@vitejs/plugin-react':
         specifier: 5.2.0
-        version: 5.2.0(vite@7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1))
+        version: 5.2.0(vite@7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1)(yaml@2.9.1))
       electron:
         specifier: 43.2.0
         version: 43.2.0
@@ -140,7 +143,7 @@ importers:
         version: 26.15.3(electron-builder-squirrel-windows@26.15.3)
       electron-vite:
         specifier: 5.0.0
-        version: 5.0.0(vite@7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1))
+        version: 5.0.0(vite@7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1)(yaml@2.9.1))
       prettier:
         specifier: 3.8.1
         version: 3.8.1
@@ -152,7 +155,10 @@ importers:
         version: 6.0.2
       vite:
         specifier: 7.3.6
-        version: 7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1)
+        version: 7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1)(yaml@2.9.1)
+      yaml:
+        specifier: ^2.9.1
+        version: 2.9.1
 
 packages:
 
@@ -2216,6 +2222,9 @@ packages:
   electron-to-chromium@1.5.426:
     resolution: {integrity: sha512-2Gcq6inCQs/AqfHP3f5ftCzk+pqeW2VlA1LgmPqEj2hfBO8HiZRspNYkD4HzFBe4u6lGqca4BspFr6Ix4Q400g==}
 
+  electron-updater@6.8.9:
+    resolution: {integrity: sha512-ZhVxM9iGONUpZGI1FxdMRgJjUFXi7AYGVa5PwKlO1tV1/4zDxQmfKpXOHVztKrd6L9rLcFjERvi1Mf2vxyTkig==}
+
   electron-vite@5.0.0:
     resolution: {integrity: sha512-OHp/vjdlubNlhNkPkL/+3JD34ii5ov7M0GpuXEVdQeqdQ3ulvVR7Dg/rNBLfS5XPIFwgoBLDf9sjjrL+CuDyRQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -2690,6 +2699,13 @@ packages:
   lightningcss@1.31.1:
     resolution: {integrity: sha512-l51N2r93WmGUye3WuFoN5k10zyvrVs0qfKBhyC5ogUQ6Ew6JUSswh78mbSO+IU3nTWsyOArqPCcShdQSadghBQ==}
     engines: {node: '>= 12.0.0'}
+
+  lodash.escaperegexp@4.1.2:
+    resolution: {integrity: sha512-TM9YBvyC84ZxE3rgfefxUWiQKLilstD6k7PTGt6wfbtXF8ixIJLOL3VYyV/z+ZiPLsVxAsKAFVwWlWeb2Y8Yyw==}
+
+  lodash.isequal@4.5.0:
+    resolution: {integrity: sha512-pDo3lu8Jhfjqls6GkMgpahsF9kCyayhgykjyLMNFTKWrpVdAQtYyB4muAMWozBB4ig/dtWAmsMxLEI8wuz+DYQ==}
+    deprecated: This package is deprecated. Use require('node:util').isDeepStrictEqual instead.
 
   lodash@4.18.1:
     resolution: {integrity: sha512-dMInicTPVE8d1e5otfwmmjlxkZoUpiVLwyeTdUsi/Caj/gfzzblBcCE5sRHV/AsjuCmxWrte2TNGSYuCeCq+0Q==}
@@ -3392,6 +3408,9 @@ packages:
   tiny-invariant@1.3.3:
     resolution: {integrity: sha512-+FbBPE1o9QAYvviau/qC5SE3caw21q3xkvWKBtja5vgqOWIHHJ3ioaq1VPfn/Szqctz2bU/oYeKd9/z5BL+PVg==}
 
+  tiny-typed-emitter@2.1.0:
+    resolution: {integrity: sha512-qVtvMxeXbVej0cQWKqVSSAHmKZEHAvxdF8HEUBFWts8h+xEo5m/lEiPakuyZ3BnCBjOD8i24kzNOiOLLgsSxhA==}
+
   tinyglobby@0.2.17:
     resolution: {integrity: sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g==}
     engines: {node: '>=12.0.0'}
@@ -3640,6 +3659,11 @@ packages:
   yallist@5.0.0:
     resolution: {integrity: sha512-YgvUTfwqyc7UXVMrB+SImsVYSmTS8X/tSrtdNZMImM+n7+QTriRXyXim0mBrTXNeqzVF0KWGgHPeiyViFFrNDw==}
     engines: {node: '>=18'}
+
+  yaml@2.9.1:
+    resolution: {integrity: sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==}
+    engines: {node: '>= 14.6'}
+    hasBin: true
 
   yargs-parser@21.1.1:
     resolution: {integrity: sha512-tVpsJW7DdjecAiFpbIB1e3qxIQsE6NoPc5/eTdrbbIC4h0LVsWhnoa3g+m2HclBIujHzsxZ4VJVA+GUuc2/LBw==}
@@ -5107,12 +5131,12 @@ snapshots:
       '@tailwindcss/oxide-win32-arm64-msvc': 4.2.1
       '@tailwindcss/oxide-win32-x64-msvc': 4.2.1
 
-  '@tailwindcss/vite@4.2.1(vite@7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1))':
+  '@tailwindcss/vite@4.2.1(vite@7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1)(yaml@2.9.1))':
     dependencies:
       '@tailwindcss/node': 4.2.1
       '@tailwindcss/oxide': 4.2.1
       tailwindcss: 4.2.1
-      vite: 7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1)
+      vite: 7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1)(yaml@2.9.1)
 
   '@types/babel__core@7.20.5':
     dependencies:
@@ -5226,7 +5250,7 @@ snapshots:
 
   '@ungap/structured-clone@1.4.0': {}
 
-  '@vitejs/plugin-react@5.2.0(vite@7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1))':
+  '@vitejs/plugin-react@5.2.0(vite@7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1)(yaml@2.9.1))':
     dependencies:
       '@babel/core': 7.29.7
       '@babel/plugin-transform-react-jsx-self': 7.29.7(@babel/core@7.29.7)
@@ -5234,7 +5258,7 @@ snapshots:
       '@rolldown/pluginutils': 1.0.0-rc.3
       '@types/babel__core': 7.20.5
       react-refresh: 0.18.0
-      vite: 7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1)
+      vite: 7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1)(yaml@2.9.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -5668,7 +5692,20 @@ snapshots:
 
   electron-to-chromium@1.5.426: {}
 
-  electron-vite@5.0.0(vite@7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1)):
+  electron-updater@6.8.9:
+    dependencies:
+      builder-util-runtime: 9.7.0
+      fs-extra: 10.1.0
+      js-yaml: 4.3.2
+      lazy-val: 1.0.5
+      lodash.escaperegexp: 4.1.2
+      lodash.isequal: 4.5.0
+      semver: 7.7.4
+      tiny-typed-emitter: 2.1.0
+    transitivePeerDependencies:
+      - supports-color
+
+  electron-vite@5.0.0(vite@7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1)(yaml@2.9.1)):
     dependencies:
       '@babel/core': 7.29.7
       '@babel/plugin-transform-arrow-functions': 7.29.7(@babel/core@7.29.7)
@@ -5676,7 +5713,7 @@ snapshots:
       esbuild: 0.25.12
       magic-string: 0.30.21
       picocolors: 1.1.1
-      vite: 7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1)
+      vite: 7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1)(yaml@2.9.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -6194,6 +6231,10 @@ snapshots:
       lightningcss-linux-x64-musl: 1.31.1
       lightningcss-win32-arm64-msvc: 1.31.1
       lightningcss-win32-x64-msvc: 1.31.1
+
+  lodash.escaperegexp@4.1.2: {}
+
+  lodash.isequal@4.5.0: {}
 
   lodash@4.18.1: {}
 
@@ -7233,6 +7274,8 @@ snapshots:
 
   tiny-invariant@1.3.3: {}
 
+  tiny-typed-emitter@2.1.0: {}
+
   tinyglobby@0.2.17:
     dependencies:
       fdir: 6.5.0(picomatch@4.0.7)
@@ -7422,7 +7465,7 @@ snapshots:
       d3-time: 3.1.0
       d3-timer: 3.0.1
 
-  vite@7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1):
+  vite@7.3.6(@types/node@24.10.13)(jiti@2.7.0)(lightningcss@1.31.1)(yaml@2.9.1):
     dependencies:
       esbuild: 0.28.2
       fdir: 6.5.0(picomatch@4.0.7)
@@ -7435,6 +7478,7 @@ snapshots:
       fsevents: 2.3.3
       jiti: 2.7.0
       lightningcss: 1.31.1
+      yaml: 2.9.1
 
   webcrypto-core@1.9.2:
     dependencies:
@@ -7475,6 +7519,8 @@ snapshots:
   yallist@4.0.0: {}
 
   yallist@5.0.0: {}
+
+  yaml@2.9.1: {}
 
   yargs-parser@21.1.1: {}
 

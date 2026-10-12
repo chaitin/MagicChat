@@ -101,7 +101,7 @@ jobs:
           printf '%s' "$NOTARY_API_KEY_BASE64" | base64 -D > "$api_key_path"
           unset NOTARY_API_KEY_BASE64
           export APPLE_API_KEY="$api_key_path"
-          pnpm exec electron-builder --mac dmg --universal --config electron-builder.yml --publish never
+          pnpm exec electron-builder --mac dmg zip --universal --config electron-builder.yml --publish never
       - name: 验证 macOS 签名与公证
         if: matrix.platform == 'mac'
         shell: bash
@@ -109,7 +109,15 @@ jobs:
         run: |
           set -euo pipefail
           dmg=(dist/*.dmg)
+          zip=(dist/*.zip)
           test "${#dmg[@]}" -eq 1
+          test "${#zip[@]}" -eq 1
+          unzip -tq "${zip[0]}" >/dev/null
+          test -s dist/latest-mac.yml
+          zip_app="$RUNNER_TEMP/desktop-release-zip"
+          mkdir "$zip_app"
+          ditto -x -k "${zip[0]}" "$zip_app"
+          codesign --verify --deep --strict "$zip_app/即应.app"
           mountpoint="$RUNNER_TEMP/desktop-release-dmg"
           mkdir "$mountpoint"
           hdiutil attach -readonly -nobrowse -mountpoint "$mountpoint" "${dmg[0]}"
@@ -130,7 +138,11 @@ jobs:
           name: desktop-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
             client/desktop/dist/*.exe
+            client/desktop/dist/*.blockmap
             client/desktop/dist/*.dmg
+            client/desktop/dist/*.zip
+            client/desktop/dist/latest.yml
+            client/desktop/dist/latest-mac.yml
             client/desktop/dist/*.AppImage
           if-no-files-found: error
 
@@ -151,7 +163,7 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
-      - name: 校验四个平台产物并生成发布计划
+      - name: 校验各平台安装包与自动更新元数据并生成发布计划
         run: node client/desktop/scripts/prepare-release-plan.mjs --tag "$GITHUB_REF_NAME" --commit "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY" --input artifacts --output "$RUNNER_TEMP/desktop-release-plan"
       - name: 通过 Draft 事务发布并核对远端文件摘要
         env:

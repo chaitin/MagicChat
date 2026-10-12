@@ -6,14 +6,12 @@ export async function openDownloadedUpdate({
   filePath,
   openPath,
   showItemInFolder,
-  quit,
   spawnInstaller = spawn,
 }: {
   platform: ReleasePlatform
   filePath: string
   openPath: (filePath: string) => Promise<string>
   showItemInFolder: (filePath: string) => void
-  quit: () => void
   spawnInstaller?: typeof spawn
 }): Promise<void> {
   if (platform === "windows") {
@@ -27,7 +25,6 @@ export async function openDownloadedUpdate({
       child.once("error", reject)
     })
     child.unref()
-    quit()
   } else if (platform === "macos") {
     const error = await openPath(filePath)
     if (error) throw new Error(`无法打开安装镜像：${error}`)
