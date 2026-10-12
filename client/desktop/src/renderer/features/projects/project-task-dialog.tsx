@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react"
-import { Bell, MessageSquare, Trash2 } from "lucide-react"
+import { CalendarDays, MessageSquare, Trash2 } from "lucide-react"
+import { zhCN } from "date-fns/locale"
 import type {
   DesktopProjectTask,
   ProjectMember,
@@ -17,6 +18,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { Calendar } from "@/components/ui/calendar"
 import {
   Dialog,
   DialogContent,
@@ -26,12 +28,33 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  TaskPriorityIcon,
+  TaskStatusIcon,
+  priorityIconColors,
+  statusIconColors,
+  taskSelectItemClassName,
+} from "./project-task-views"
 import {
   taskPriorities,
   taskPriorityLabels,
   taskStatuses,
   taskStatusLabels,
+  formatDateKey,
+  isValid24HourTime,
+  parseDateKey,
+  shanghaiReminderDateTime,
+  shanghaiReminderISO,
 } from "./task-view-model"
 
 type TaskForm = {
@@ -243,10 +266,10 @@ export function ProjectTaskDialog({
         if (!open && !saving) onClose()
       }}
     >
-      <DialogContent className="max-h-[calc(100vh-3rem)] gap-4 overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[80vh] gap-4 overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{task ? "任务详情" : "创建任务"}</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="sr-only">
             {task ? "查看和编辑任务信息" : "填写任务标题、负责人和时间安排"}
           </DialogDescription>
         </DialogHeader>
@@ -270,52 +293,101 @@ export function ProjectTaskDialog({
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="状态">
-              <select
-                className={selectClass}
+            <Field label="状态" interactive>
+              <Select
                 value={form.status}
                 disabled={saving || loadingDetails}
-                onChange={(event) => change("status", event.target.value as ProjectTaskStatus)}
+                onValueChange={(status) => change("status", status as ProjectTaskStatus)}
               >
-                {taskStatuses.map((status) => (
-                  <option key={status} value={status}>
-                    {taskStatusLabels[status]}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="w-full" aria-label="状态">
+                  <SelectValue>
+                    <TaskStatusIcon status={form.status} />
+                    {taskStatusLabels[form.status]}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  {taskStatuses.map((status) => (
+                    <SelectItem
+                      key={status}
+                      value={status}
+                      className={taskSelectItemClassName}
+                      indicatorClassName={statusIconColors[status]}
+                    >
+                      <TaskStatusIcon status={status} />
+                      {taskStatusLabels[status]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
-            <Field label="优先级">
-              <select
-                className={selectClass}
-                value={form.priority}
+            <Field label="优先级" interactive>
+              <Select
+                value={String(form.priority)}
                 disabled={saving || loadingDetails}
-                onChange={(event) =>
-                  change("priority", Number(event.target.value) as ProjectTaskPriority)
+                onValueChange={(priority) =>
+                  change("priority", Number(priority) as ProjectTaskPriority)
                 }
               >
-                {taskPriorities.map((priority) => (
-                  <option key={priority} value={priority}>
-                    {taskPriorityLabels[priority]}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="负责人">
-              <select
-                className={selectClass}
-                value={form.assigneeUserId}
-                disabled={saving || loadingDetails}
-                onChange={(event) => change("assigneeUserId", event.target.value)}
-              >
-                <option value="">未分配</option>
-                {members
-                  .filter((member) => member.status === "active")
-                  .map((member) => (
-                    <option key={member.id} value={member.id}>
-                      {member.displayName}
-                    </option>
+                <SelectTrigger className="w-full" aria-label="优先级">
+                  <SelectValue>
+                    <TaskPriorityIcon priority={form.priority} />
+                    {taskPriorityLabels[form.priority]}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  {taskPriorities.map((priority) => (
+                    <SelectItem
+                      key={priority}
+                      value={String(priority)}
+                      className={taskSelectItemClassName}
+                      indicatorClassName={priorityIconColors[priority]}
+                    >
+                      <TaskPriorityIcon priority={priority} />
+                      {taskPriorityLabels[priority]}
+                    </SelectItem>
                   ))}
-              </select>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="负责人" interactive>
+              <Select
+                value={form.assigneeUserId || "__unassigned__"}
+                disabled={saving || loadingDetails}
+                onValueChange={(id) => change("assigneeUserId", id === "__unassigned__" ? "" : id)}
+              >
+                <SelectTrigger className="w-full" aria-label="负责人">
+                  <SelectValue>
+                    {form.assigneeUserId
+                      ? members.find((member) => member.id === form.assigneeUserId)?.displayName ||
+                        task?.assignee?.nickname ||
+                        task?.assignee?.name ||
+                        "未知成员"
+                      : "未分配"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectItem className={taskSelectItemClassName} value="__unassigned__">
+                    未分配
+                  </SelectItem>
+                  {form.assigneeUserId &&
+                    !members.some((member) => member.id === form.assigneeUserId) && (
+                      <SelectItem value={form.assigneeUserId} className={taskSelectItemClassName}>
+                        {task?.assignee?.nickname || task?.assignee?.name || "未知成员"}
+                      </SelectItem>
+                    )}
+                  {members
+                    .filter((member) => member.status === "active")
+                    .map((member) => (
+                      <SelectItem
+                        key={member.id}
+                        value={member.id}
+                        className={taskSelectItemClassName}
+                      >
+                        {member.displayName}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
             </Field>
             <Field label="标签（逗号分隔）">
               <Input
@@ -325,20 +397,20 @@ export function ProjectTaskDialog({
                 placeholder="例如：发版, 设计"
               />
             </Field>
-            <Field label="开始日期">
-              <Input
-                type="date"
+            <Field label="开始日期" interactive>
+              <TaskDatePicker
+                label="开始日期"
                 value={form.startDate}
                 disabled={saving || loadingDetails}
-                onChange={(event) => change("startDate", event.target.value)}
+                onChange={(date) => change("startDate", date)}
               />
             </Field>
-            <Field label="截止日期">
-              <Input
-                type="date"
+            <Field label="截止日期" interactive>
+              <TaskDatePicker
+                label="截止日期"
                 value={form.dueDate}
                 disabled={saving || loadingDetails}
-                onChange={(event) => change("dueDate", event.target.value)}
+                onChange={(date) => change("dueDate", date)}
               />
             </Field>
           </div>
@@ -496,14 +568,128 @@ export function ProjectTaskDialog({
   )
 }
 
-const selectClass = "h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="grid min-w-0 gap-1 text-sm">
+function Field({
+  label,
+  children,
+  interactive = false,
+}: {
+  label: string
+  children: React.ReactNode
+  interactive?: boolean
+}) {
+  const content = (
+    <>
       <span className="text-xs text-muted-foreground">{label}</span>
       {children}
-    </label>
+    </>
+  )
+  return interactive ? (
+    <div className="grid min-w-0 gap-1 text-sm">{content}</div>
+  ) : (
+    <label className="grid min-w-0 gap-1 text-sm">{content}</label>
+  )
+}
+
+function TaskDatePicker({
+  label,
+  value,
+  disabled,
+  clearable = true,
+  onChange,
+}: {
+  label: string
+  value: string
+  disabled?: boolean
+  clearable?: boolean
+  onChange: (value: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full justify-start font-normal"
+          aria-label={label}
+          disabled={disabled}
+        >
+          <CalendarDays className="size-4" aria-hidden />
+          {value || "选择日期"}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-auto gap-0 p-0">
+        <Calendar
+          mode="single"
+          locale={zhCN}
+          selected={parseDateKey(value) ?? undefined}
+          defaultMonth={parseDateKey(value) ?? new Date()}
+          onSelect={(date) => {
+            if (date) {
+              onChange(formatDateKey(date))
+              setOpen(false)
+            }
+          }}
+        />
+        {value && clearable && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="m-2 mt-0 self-end"
+            onClick={() => {
+              onChange("")
+              setOpen(false)
+            }}
+          >
+            清除日期
+          </Button>
+        )}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function TimeInput24Hour({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
+  const [draft, setDraft] = useState(value)
+  useEffect(() => setDraft(value), [value])
+
+  function commit() {
+    if (isValid24HourTime(draft)) {
+      if (draft !== value) onChange(draft)
+    } else {
+      setDraft(value)
+    }
+  }
+
+  return (
+    <Input
+      type="text"
+      inputMode="numeric"
+      maxLength={5}
+      placeholder="HH:mm"
+      className="bg-background tabular-nums"
+      aria-label="24 小时制提醒时间"
+      aria-invalid={draft.length > 0 && !isValid24HourTime(draft)}
+      value={draft}
+      onChange={(event) => {
+        const input = event.target.value
+        setDraft(/^\d{4}$/.test(input) ? `${input.slice(0, 2)}:${input.slice(2)}` : input)
+      }}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault()
+          event.currentTarget.blur()
+        }
+      }}
+    />
   )
 }
 
@@ -518,18 +704,19 @@ function TaskReminderField({
   const shanghaiNow = new Date(Date.now() + 8 * 60 * 60_000 + 60_000).toISOString().slice(0, 16)
   return (
     <fieldset className="grid gap-2 rounded-md border p-3 text-sm">
-      <legend className="flex items-center gap-1 px-1">
-        <Bell className="size-4" />
-        提醒时间
+      <legend className="px-1">
+        <Label
+          htmlFor="task-reminder-mode"
+          className="cursor-pointer text-xs text-muted-foreground"
+        >
+          任务提醒
+        </Label>
       </legend>
-      <select
-        aria-label="提醒方式"
-        className={selectClass}
+      <Select
         value={mode}
-        onChange={(event) => {
-          const mode = event.target.value
-          if (mode === "none") onChange(null)
-          else if (mode === "once")
+        onValueChange={(nextMode) => {
+          if (nextMode === "none") onChange(null)
+          else if (nextMode === "once")
             onChange({
               mode: "once",
               at: new Date(`${shanghaiNow}:00+08:00`).toISOString(),
@@ -544,52 +731,84 @@ function TaskReminderField({
             })
         }}
       >
-        <option value="none">不提醒</option>
-        <option value="once">一次性</option>
-        <option value="recurring">重复提醒</option>
-      </select>
+        <SelectTrigger id="task-reminder-mode" className="w-full" aria-label="提醒方式">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent position="popper">
+          <SelectItem className={taskSelectItemClassName} value="none">
+            不提醒
+          </SelectItem>
+          <SelectItem className={taskSelectItemClassName} value="once">
+            一次性
+          </SelectItem>
+          <SelectItem className={taskSelectItemClassName} value="recurring">
+            重复提醒
+          </SelectItem>
+        </SelectContent>
+      </Select>
       {value?.mode === "once" && (
-        <Field label="北京时间">
-          <Input
-            type="datetime-local"
-            value={new Date(new Date(value.at).getTime() + 8 * 60 * 60_000)
-              .toISOString()
-              .slice(0, 16)}
-            onChange={(event) => {
-              if (event.target.value)
-                onChange({ ...value, at: new Date(`${event.target.value}:00+08:00`).toISOString() })
-            }}
-          />
-        </Field>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="提醒日期（北京时间）" interactive>
+            <TaskDatePicker
+              label="提醒日期"
+              clearable={false}
+              value={shanghaiReminderDateTime(value.at).date}
+              onChange={(date) => {
+                if (date)
+                  onChange({
+                    ...value,
+                    at: shanghaiReminderISO(date, shanghaiReminderDateTime(value.at).time),
+                  })
+              }}
+            />
+          </Field>
+          <Field label="提醒时间（北京时间）">
+            <TimeInput24Hour
+              value={shanghaiReminderDateTime(value.at).time}
+              onChange={(time) =>
+                onChange({
+                  ...value,
+                  at: shanghaiReminderISO(shanghaiReminderDateTime(value.at).date, time),
+                })
+              }
+            />
+          </Field>
+        </div>
       )}
       {value?.mode === "recurring" && (
         <div className="grid grid-cols-2 gap-2">
-          <Field label="重复周期">
-            <select
-              className={selectClass}
+          <Field label="重复周期" interactive>
+            <Select
               value={value.frequency}
-              onChange={(event) =>
+              onValueChange={(frequency) =>
                 onChange({
                   mode: "recurring",
-                  frequency: event.target.value as "daily" | "weekly" | "monthly",
+                  frequency: frequency as "daily" | "weekly" | "monthly",
                   time: value.time,
                   timezone: "Asia/Shanghai",
-                  ...(event.target.value === "weekly" ? { weekdays: [1] } : {}),
-                  ...(event.target.value === "monthly" ? { dayOfMonth: 1 } : {}),
+                  ...(frequency === "weekly" ? { weekdays: [1] } : {}),
+                  ...(frequency === "monthly" ? { dayOfMonth: 1 } : {}),
                 })
               }
             >
-              <option value="daily">每天</option>
-              <option value="weekly">每周</option>
-              <option value="monthly">每月</option>
-            </select>
+              <SelectTrigger className="w-full" aria-label="重复周期">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectItem className={taskSelectItemClassName} value="daily">
+                  每天
+                </SelectItem>
+                <SelectItem className={taskSelectItemClassName} value="weekly">
+                  每周
+                </SelectItem>
+                <SelectItem className={taskSelectItemClassName} value="monthly">
+                  每月
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </Field>
           <Field label="提醒时间">
-            <Input
-              type="time"
-              value={value.time}
-              onChange={(event) => onChange({ ...value, time: event.target.value })}
-            />
+            <TimeInput24Hour value={value.time} onChange={(time) => onChange({ ...value, time })} />
           </Field>
           {value.frequency === "weekly" && (
             <div className="col-span-2 flex flex-wrap gap-2">
@@ -625,9 +844,6 @@ function TaskReminderField({
           )}
         </div>
       )}
-      <p className="text-xs text-muted-foreground">
-        到时向当前负责人发送任务卡片 · 时区 Asia/Shanghai
-      </p>
     </fieldset>
   )
 }

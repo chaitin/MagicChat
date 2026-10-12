@@ -1,8 +1,24 @@
 import type {
+  DesktopMessageReactionUser,
   DesktopProjectTask,
+  ProjectMember,
   ProjectTaskPriority,
   ProjectTaskStatus,
 } from "../../../shared/account-data"
+
+export function withResolvedMemberNames(
+  members: ProjectMember[],
+  users: DesktopMessageReactionUser[],
+): ProjectMember[] {
+  const names = new Map(
+    users.filter((user) => user.name && user.name !== user.id).map((user) => [user.id, user.name]),
+  )
+  return members.map((member) => ({
+    ...member,
+    displayName:
+      names.get(member.id) || (member.displayName === member.id ? "未知成员" : member.displayName),
+  }))
+}
 
 export const taskStatuses: ProjectTaskStatus[] = ["todo", "in_progress", "done", "canceled"]
 export const taskStatusLabels: Record<ProjectTaskStatus, string> = {
@@ -31,6 +47,19 @@ export function parseDateKey(value: string | null): Date | null {
   const [year, month, day] = value.split("-").map(Number)
   const date = new Date(year, month - 1, day)
   return formatDateKey(date) === value ? date : null
+}
+
+export function isValid24HourTime(value: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value)
+}
+
+export function shanghaiReminderDateTime(at: string): { date: string; time: string } {
+  const shifted = new Date(new Date(at).getTime() + 8 * 60 * 60_000).toISOString()
+  return { date: shifted.slice(0, 10), time: shifted.slice(11, 16) }
+}
+
+export function shanghaiReminderISO(date: string, time: string): string {
+  return new Date(`${date}T${time}:00+08:00`).toISOString()
 }
 
 export function addDays(date: Date, count: number): Date {

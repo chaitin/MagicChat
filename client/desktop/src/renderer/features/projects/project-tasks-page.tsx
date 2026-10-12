@@ -33,8 +33,16 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { ProjectTaskDialog } from "./project-task-dialog"
-import { TaskBoardView, TaskCalendarView, TaskGanttView, TaskListView } from "./project-task-views"
 import {
+  TaskBoardView,
+  TaskCalendarView,
+  TaskGanttView,
+  TaskListView,
+  TaskPriorityIcon,
+  TaskStatusIcon,
+} from "./project-task-views"
+import {
+  withResolvedMemberNames,
   taskPriorities,
   taskPriorityLabels,
   taskStatuses,
@@ -282,6 +290,7 @@ export function ProjectTasksPage({ targetId, projectId }: { targetId: string; pr
                     )
                   }
                 >
+                  <TaskStatusIcon status={status} />
                   {taskStatusLabels[status]}
                 </DropdownMenuCheckboxItem>
               ))}
@@ -302,6 +311,7 @@ export function ProjectTasksPage({ targetId, projectId }: { targetId: string; pr
                     )
                   }
                 >
+                  <TaskPriorityIcon priority={priority} />
                   {taskPriorityLabels[priority]}
                 </DropdownMenuCheckboxItem>
               ))}
@@ -419,7 +429,21 @@ async function loadAllMembers(targetId: string, projectId: string): Promise<Proj
       ...(cursor ? { cursor } : {}),
     })
     if (!result.ok) throw new Error(result.error.message)
-    items.push(...result.data.items)
+    const unresolvedIds = [
+      ...new Set(
+        result.data.items.filter((item) => item.displayName === item.id).map((item) => item.id),
+      ),
+    ]
+    if (unresolvedIds.length) {
+      const resolved = await window.desktop!.accountData.resolveUserNames({
+        targetId,
+        userIds: unresolvedIds,
+      })
+      if (!resolved.ok) throw new Error(resolved.error.message)
+      items.push(...withResolvedMemberNames(result.data.items, resolved.data))
+    } else {
+      items.push(...result.data.items)
+    }
     cursor = result.data.nextCursor
     if (cursor && (!result.data.items.length || seen.has(cursor)))
       throw new Error("项目成员分页格式不正确")

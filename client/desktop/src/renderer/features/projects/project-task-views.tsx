@@ -39,16 +39,16 @@ import {
   taskPriorities,
 } from "./task-view-model"
 
-const taskSelectItemClassName =
+export const taskSelectItemClassName =
   "cursor-pointer hover:bg-foreground/10 focus:bg-foreground/10 data-highlighted:bg-foreground/10 not-data-[variant=destructive]:focus:**:text-inherit"
 
-const priorityIconColors: Record<ProjectTaskPriority, string> = {
+export const priorityIconColors: Record<ProjectTaskPriority, string> = {
   1: "text-blue-500!",
   2: "text-yellow-600! dark:text-yellow-400!",
   3: "text-red-500!",
 }
 
-function TaskPriorityIcon({ priority }: { priority: ProjectTaskPriority }) {
+export function TaskPriorityIcon({ priority }: { priority: ProjectTaskPriority }) {
   return (
     <CircleSmallIcon className={cn("size-4 shrink-0", priorityIconColors[priority])} aria-hidden />
   )
@@ -60,7 +60,7 @@ const priorityBorderColors: Record<ProjectTaskPriority, string> = {
   3: "border-l-red-500",
 }
 
-const statusIconColors: Record<ProjectTaskStatus, string> = {
+export const statusIconColors: Record<ProjectTaskStatus, string> = {
   todo: "text-amber-600! dark:text-amber-400!",
   in_progress: "text-sky-600! dark:text-sky-400!",
   done: "text-emerald-600! dark:text-emerald-400!",
@@ -107,7 +107,7 @@ export function TaskStatusIcon({
         : status === "in_progress"
           ? CircleDot
           : CircleQuestionMarkIcon
-  return <Icon className={cn("size-4 shrink-0", className)} aria-hidden />
+  return <Icon className={cn("size-4 shrink-0", statusIconColors[status], className)} aria-hidden />
 }
 
 export function TaskListView({
@@ -183,7 +183,7 @@ export function TaskListView({
               className="w-28 shrink-0 cursor-pointer"
             >
               <SelectValue>
-                <TaskStatusIcon status={task.status} className={statusIconColors[task.status]} />
+                <TaskStatusIcon status={task.status} />
                 {taskStatusLabels[task.status]}
               </SelectValue>
             </SelectTrigger>
@@ -195,7 +195,7 @@ export function TaskListView({
                   indicatorClassName={statusIconColors[status]}
                   className={taskSelectItemClassName}
                 >
-                  <TaskStatusIcon status={status} className={statusIconColors[status]} />
+                  <TaskStatusIcon status={status} />
                   {taskStatusLabels[status]}
                 </SelectItem>
               ))}
