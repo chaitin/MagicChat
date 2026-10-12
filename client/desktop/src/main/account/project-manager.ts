@@ -1,19 +1,32 @@
-import { AuthFailure, isRecord } from "../../shared/auth"
-import type { DesktopProjectSummary } from "../../shared/account-data"
-import { AuthenticatedClient } from "./authenticated-client"
+import { AuthFailure, isRecord } from "../../shared/auth.ts"
+import type { DesktopProjectList, DesktopProjectSummary } from "../../shared/account-data"
+import type { AuthenticatedClient } from "./authenticated-client"
 import type { AvatarDescriptor } from "./avatar-types"
-import { ContactManager } from "./contact-manager"
-import { retryNetworkAction } from "./retry"
+import type { ContactManager } from "./contact-manager"
+import { retryNetworkAction } from "./retry.ts"
 
 export class ProjectManager {
+  private readonly client: AuthenticatedClient
+  private readonly contacts: ContactManager
+  private readonly currentUser: AvatarDescriptor
+
   constructor(
-    private readonly client: AuthenticatedClient,
-    private readonly contacts: ContactManager,
-    private readonly currentUser: AvatarDescriptor,
-  ) {}
+    client: AuthenticatedClient,
+    contacts: ContactManager,
+    currentUser: AvatarDescriptor,
+  ) {
+    this.client = client
+    this.contacts = contacts
+    this.currentUser = currentUser
+  }
 
   async listBindableProjects(): Promise<DesktopProjectSummary[]> {
+    return (await this.listProjects()).projects
+  }
+
+  async listProjects(): Promise<DesktopProjectList> {
     const projects: DesktopProjectSummary[] = []
+    let personalProject: DesktopProjectSummary | null = null
     const seenCursors = new Set<string>()
     let cursor: string | null = null
     do {
@@ -29,25 +42,18 @@ export class ProjectManager {
       ) {
         throw new AuthFailure("invalid_response", "项目列表响应格式不正确")
       }
+      if (!cursor && isRecord(data.personal_project) && data.personal_project.id) {
+        personalProject = projectSummary(data.personal_project)
+        if (data.personal_project.is_personal !== true) {
+          throw new AuthFailure("invalid_response", "个人项目响应格式不正确")
+        }
+      }
       for (const project of data.projects) {
-        if (
-          !isRecord(project) ||
-          typeof project.id !== "string" ||
-          !project.id ||
-          project.id.length > 128 ||
-          typeof project.name !== "string" ||
-          !project.name ||
-          project.name.length > 256 ||
-          typeof project.is_personal !== "boolean"
-        ) {
+        const summary = projectSummary(project)
+        if (!isRecord(project) || typeof project.is_personal !== "boolean") {
           throw new AuthFailure("invalid_response", "项目列表响应格式不正确")
         }
-        if (!project.is_personal)
-          projects.push({
-            id: project.id,
-            name: project.name,
-            description: typeof project.description === "string" ? project.description : "",
-          })
+        if (!project.is_personal) projects.push(summary)
       }
       cursor = data.next_cursor ?? null
       if (cursor && (!data.projects.length || seenCursors.has(cursor))) {
@@ -55,7 +61,7 @@ export class ProjectManager {
       }
       if (cursor) seenCursors.add(cursor)
     } while (cursor)
-    return projects
+    return { personalProject, projects }
   }
 
   getAvatarDescriptor(projectId: string): Promise<AvatarDescriptor> {
@@ -77,6 +83,25 @@ export class ProjectManager {
         avatarUrl: personalAvatar?.avatarUrl ?? optionalString(data.avatar, 4_096),
       }
     })
+  }
+}
+
+function projectSummary(value: unknown): DesktopProjectSummary {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    !value.id ||
+    value.id.length > 128 ||
+    typeof value.name !== "string" ||
+    !value.name ||
+    value.name.length > 256
+  ) {
+    throw new AuthFailure("invalid_response", "项目列表响应格式不正确")
+  }
+  return {
+    id: value.id,
+    name: value.name,
+    description: typeof value.description === "string" ? value.description : "",
   }
 }
 

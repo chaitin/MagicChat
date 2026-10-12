@@ -332,6 +332,10 @@ export class AuthController {
     return this.accountData.listBindableProjects(...args)
   }
 
+  listProjects(...args: Parameters<AccountDataFacade["listProjects"]>) {
+    return this.accountData.listProjects(...args)
+  }
+
   bindConversationProject(...args: Parameters<AccountDataFacade["bindConversationProject"]>) {
     return this.accountData.bindConversationProject(...args)
   }

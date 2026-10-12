@@ -26,6 +26,7 @@ import { AppRail, SectionPlaceholder, type AppSection } from "./components/app-n
 import { hasUnmutedUnreadConversations, unmutedUnreadCount } from "./conversation-unread"
 import { ClientAppDialog } from "../contacts/client-app-dialog"
 import { ContactsPage } from "../contacts/contacts-page"
+import { ProjectsPage } from "../projects/projects-page"
 import { ChatHeader } from "./components/chat-header"
 import { ConversationSidebar } from "./components/conversation-sidebar"
 import { CreateGroupConversationDialog } from "./components/create-group-conversation-dialog"
@@ -937,6 +938,17 @@ export function ChatPage({
           onSelectSearchResult={selectSearchResult}
           onSearchResultCloseAutoFocus={focusComposer}
           mentionLabelResolver={resolveMentionLabel}
+        />
+      ) : activeSection === "projects" ? (
+        <ProjectsPage
+          key={targetId}
+          targetId={targetId}
+          resolvedTheme={resolvedTheme}
+          mentionLabelResolver={resolveMentionLabel}
+          onSelectSearchResult={selectSearchResult}
+          onSearchResultCloseAutoFocus={focusComposer}
+          onCreateGroup={() => void openActionDialog("group")}
+          onCreateApp={() => void openActionDialog("app")}
         />
       ) : (
         <SectionPlaceholder section={activeSection} />

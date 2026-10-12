@@ -93,6 +93,7 @@ export function registerAccountDataIpc({
   handle(ACCOUNT_DATA_CHANNELS.listBindableProjects, (input) =>
     auth.listBindableProjects(input as string),
   )
+  handle(ACCOUNT_DATA_CHANNELS.listProjects, (input) => auth.listProjects(input as string))
   handle(ACCOUNT_DATA_CHANNELS.bindConversationProject, (input) =>
     auth.bindConversationProject(input as BindConversationProjectInput),
   )

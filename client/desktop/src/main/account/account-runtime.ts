@@ -231,6 +231,11 @@ export class AccountRuntime {
     return this.projectManager!.listBindableProjects()
   }
 
+  listProjects() {
+    this.assertInitialized()
+    return this.projectManager!.listProjects()
+  }
+
   async bindConversationProject(conversationId: string, projectId: string) {
     this.assertInitialized()
     const conversation = await this.conversationManager!.bindConversationProject(

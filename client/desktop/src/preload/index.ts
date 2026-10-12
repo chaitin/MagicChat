@@ -122,6 +122,7 @@ const bridge: DesktopBridge = {
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.uploadGroupAvatar, input),
     listBindableProjects: (targetId) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listBindableProjects, targetId),
+    listProjects: (targetId) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listProjects, targetId),
     bindConversationProject: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.bindConversationProject, input),
     archiveTopic: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.archiveTopic, input),

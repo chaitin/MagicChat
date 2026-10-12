@@ -159,6 +159,11 @@ export class AccountDataFacade {
     return this.requireRuntime().listBindableProjects()
   }
 
+  async listProjects(targetId: string) {
+    await this.ready(targetId)
+    return this.requireRuntime().listProjects()
+  }
+
   async bindConversationProject(input: BindConversationProjectInput) {
     await this.ready(input?.targetId)
     return this.requireRuntime().bindConversationProject(input.conversationId, input.projectId)
