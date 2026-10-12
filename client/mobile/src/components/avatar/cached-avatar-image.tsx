@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import * as FileSystem from "expo-file-system/legacy"
 import { Image as NativeImage, Platform, StyleSheet, View } from "react-native"
 import { SvgXml } from "react-native-svg"
-import { Avatar } from "tamagui"
 
 import {
   isSvgContent,
@@ -262,10 +261,13 @@ function RetryableAvatarImage({
           { backgroundColor: colors.background1 },
         ]}
       />
-      <Avatar.Image
+      <NativeImage
+        fadeDuration={0}
         key={revision}
         onError={() => void handleError()}
-        src={uri}
+        resizeMode="cover"
+        source={{ uri }}
+        style={StyleSheet.absoluteFill}
       />
     </>
   )

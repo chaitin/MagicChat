@@ -3,47 +3,44 @@ import {
   Platform,
   ScrollView,
   type ScrollViewProps,
+  type StyleProp,
   StyleSheet,
+  View,
+  type ViewStyle,
 } from "react-native"
 import {
   SafeAreaView,
   type Edge,
 } from "react-native-safe-area-context"
-import { YStack, type YStackProps } from "tamagui"
 
 import { ElasticOverscroll } from "@/components/layout/elastic-overscroll"
+import { useXGUITheme } from "@/xgui"
 
-type KeyboardAwareScreenProps = React.PropsWithChildren<
-  YStackProps & {
-    contentBackground?: YStackProps["bg"]
-    edges?: readonly Edge[]
-    elastic?: boolean
-    keyboardShouldPersistTaps?: ScrollViewProps["keyboardShouldPersistTaps"]
-    keyboardVerticalOffset?: number
-    scrollable?: boolean
-  }
->
+type KeyboardAwareScreenProps = React.PropsWithChildren<{
+  contentBackground?: string
+  contentStyle?: StyleProp<ViewStyle>
+  edges?: readonly Edge[]
+  elastic?: boolean
+  keyboardShouldPersistTaps?: ScrollViewProps["keyboardShouldPersistTaps"]
+  keyboardVerticalOffset?: number
+  scrollable?: boolean
+}>
 
 export function KeyboardAwareScreen({
   children,
-  contentBackground = "$background",
+  contentBackground,
+  contentStyle,
   edges,
   elastic = false,
   keyboardShouldPersistTaps = "handled",
   keyboardVerticalOffset = 0,
   scrollable = true,
-  ...contentProps
 }: KeyboardAwareScreenProps) {
+  const { colors } = useXGUITheme()
   const content = (
-    <YStack
-      {...contentProps}
-      bg={contentBackground}
-      grow={1}
-      minH={0}
-      shrink={scrollable ? 0 : 1}
-    >
+    <View style={[styles.content, { backgroundColor: contentBackground ?? colors.background0, flexShrink: scrollable ? 0 : 1 }, contentStyle]}>
       {children}
-    </YStack>
+    </View>
   )
 
   return (
@@ -92,6 +89,7 @@ const styles = StyleSheet.create({
   fill: {
     flex: 1,
   },
+  content: { flexGrow: 1, minHeight: 0 },
   scrollContent: {
     flexGrow: 1,
   },

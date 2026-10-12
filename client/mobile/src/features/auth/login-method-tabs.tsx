@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
-import { Paragraph, SizableText, Tabs, YStack } from "tamagui"
+import { Pressable, StyleSheet, View } from "react-native"
 
+import { Text } from "@/components/mi-sans-text"
 import { useXGUITheme } from "@/xgui"
 
 export type LoginMethod = "email-code" | "password"
@@ -41,9 +42,11 @@ export function LoginMethodTabs({
 
   if (!activeMethod) {
     return (
-      <YStack items="center" py="$4">
-        <Paragraph color="$gray9">服务器暂不支持登录</Paragraph>
-      </YStack>
+      <View style={styles.unavailable}>
+        <Text style={{ color: colors.textSecondary, fontSize: 15, lineHeight: 23 }}>
+          服务器暂不支持登录
+        </Text>
+      </View>
     )
   }
 
@@ -52,95 +55,47 @@ export function LoginMethodTabs({
   }
 
   return (
-    <Tabs
-      onValueChange={(value) => {
-        if (value === "email-code" || value === "password") {
-          onMethodChange(value)
-        }
-      }}
-      size="$4"
-      value={activeMethod}
-      width="100%"
-    >
-      <Tabs.List
-        bg={colors.background1}
-        borderWidth={0}
-        gap="$0.5"
-        height="$4"
-        p="$1"
-        rounded="$5"
-        width="100%"
-      >
+    <View style={styles.container}>
+      <View accessibilityRole="tablist" style={[styles.tabList, { backgroundColor: colors.background1 }]}>
         {emailCodeLoginEnabled ? (
-          <Tabs.Tab
-            bg={
-              activeMethod === "email-code"
-                ? colors.background2
-                : "transparent"
-            }
-            borderWidth={0}
+          <Pressable
+            accessibilityRole="tab"
+            accessibilityState={{ disabled, selected: activeMethod === "email-code" }}
             disabled={disabled}
-            flex={1}
-            height="100%"
-            items="center"
-            justify="center"
-            rounded="$4"
-            unstyled
-            value="email-code"
+            onPress={() => onMethodChange("email-code")}
+            style={[styles.tab, { backgroundColor: activeMethod === "email-code" ? colors.background2 : "transparent" }]}
           >
-            <SizableText
-              color={
-                activeMethod === "email-code"
-                  ? colors.brand
-                  : colors.textSecondary
-              }
-              fontWeight={activeMethod === "email-code" ? "600" : "500"}
-              size="$3"
-            >
+            <Text style={[styles.tabText, { color: activeMethod === "email-code" ? colors.brand : colors.textSecondary, fontWeight: activeMethod === "email-code" ? "600" : "500" }]}>
               验证码登录
-            </SizableText>
-          </Tabs.Tab>
+            </Text>
+          </Pressable>
         ) : null}
         {passwordLoginEnabled ? (
-          <Tabs.Tab
-            bg={
-              activeMethod === "password" ? colors.background2 : "transparent"
-            }
-            borderWidth={0}
+          <Pressable
+            accessibilityRole="tab"
+            accessibilityState={{ disabled, selected: activeMethod === "password" }}
             disabled={disabled}
-            flex={1}
-            height="100%"
-            items="center"
-            justify="center"
-            rounded="$4"
-            unstyled
-            value="password"
+            onPress={() => onMethodChange("password")}
+            style={[styles.tab, { backgroundColor: activeMethod === "password" ? colors.background2 : "transparent" }]}
           >
-            <SizableText
-              color={
-                activeMethod === "password"
-                  ? colors.brand
-                  : colors.textSecondary
-              }
-              fontWeight={activeMethod === "password" ? "600" : "500"}
-              size="$3"
-            >
+            <Text style={[styles.tabText, { color: activeMethod === "password" ? colors.brand : colors.textSecondary, fontWeight: activeMethod === "password" ? "600" : "500" }]}>
               密码登录
-            </SizableText>
-          </Tabs.Tab>
+            </Text>
+          </Pressable>
         ) : null}
-      </Tabs.List>
-
-      {emailCodeLoginEnabled ? (
-        <Tabs.Content pt="$4" value="email-code" width="100%">
-          {emailCodeContent}
-        </Tabs.Content>
-      ) : null}
-      {passwordLoginEnabled ? (
-        <Tabs.Content pt="$4" value="password" width="100%">
-          {passwordContent}
-        </Tabs.Content>
-      ) : null}
-    </Tabs>
+      </View>
+      <View style={styles.content}>
+        {activeMethod === "email-code" ? emailCodeContent : passwordContent}
+      </View>
+    </View>
   )
 }
+
+const styles = StyleSheet.create({
+  unavailable: { alignItems: "center", paddingVertical: 18 },
+  container: { width: "100%" },
+  tabList: { borderRadius: 10, flexDirection: "row", gap: 1, height: 44, padding: 2, width: "100%" },
+  tab: { alignItems: "center", borderRadius: 9, flex: 1, height: "100%", justifyContent: "center" },
+  tabText: { fontSize: 14, lineHeight: 21 },
+  content: { paddingTop: 18, width: "100%" },
+})

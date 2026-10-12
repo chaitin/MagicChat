@@ -1,7 +1,8 @@
 import { useRouter, type Href } from "expo-router"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ScrollView } from "react-native"
-import { Paragraph, XStack, YStack } from "tamagui"
+import { ScrollView, View } from "react-native"
+
+import { Text } from "@/components/mi-sans-text"
 
 import { AppAvatar } from "@/components/avatar/app-avatar"
 import { ContentState } from "@/components/feedback/content-state"
@@ -118,18 +119,18 @@ export function AccountManagementScreen() {
   if (!isHydrated) return <ContentState loading message="正在加载账号" />
 
   return (
-    <YStack bg={colors.background0} flex={1}>
+    <View style={{ backgroundColor: colors.background0, flex: 1 }}>
       <AppHeader onBackPress={() => router.back()} title="账号管理" />
       {actionError ? (
-        <YStack gap="$2" px="$4" py="$2">
-          <Paragraph accessibilityLiveRegion="polite" color={colors.destructive}>{actionError}</Paragraph>
+        <View style={{ gap: 7, paddingHorizontal: 18, paddingVertical: 7 }}>
+          <Text accessibilityLiveRegion="polite" style={{ color: colors.destructive, fontSize: 15, lineHeight: 23 }}>{actionError}</Text>
           <XGUIButton accessibilityLabel="重试账号操作" disabled={globallyBusy || busyAccountId !== null} onPress={() => retryActionRef.current?.()} size="mini" variant="secondary">重试</XGUIButton>
-        </YStack>
+        </View>
       ) : null}
       <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}>
-        <YStack maxW={440} self="center" width="100%">
+        <View style={{ alignSelf: "center", maxWidth: 440, width: "100%" }}>
           {displayedItems.length ? (
-            <YStack px="$4">
+            <View style={{ paddingHorizontal: 18 }}>
               <XGUIList variant="form-radio">
                 {displayedItems.map((item, index) => {
                   const loadedAvatar = item.isCurrent ? currentUser?.avatar : ""
@@ -148,7 +149,7 @@ export function AccountManagementScreen() {
                       separator={index > 0}
                       title={item.email}
                       trailing={(
-                        <XStack gap="$2">
+                        <View style={{ flexDirection: "row", gap: 7 }}>
                           <XGUIButton
                             accessibilityLabel={item.isCurrent ? `当前账号${item.email}` : `切换到账号${item.email}`}
                             accessibilityState={{ busy: busyAccountId === item.accountId, disabled: disabled || item.isCurrent }}
@@ -176,22 +177,22 @@ export function AccountManagementScreen() {
                           >
                             登出
                           </XGUIButton>
-                        </XStack>
+                        </View>
                       )}
                     />
                   )
                 })}
               </XGUIList>
-            </YStack>
+            </View>
           ) : (
             <ContentState message="本机还没有账号" />
           )}
-          <YStack p="$4">
+          <View style={{ padding: 18 }}>
             <XGUIButton accessibilityLabel="添加账号" disabled={globallyBusy || busyAccountId !== null} onPress={() => router.push(addAccountServerHref() as Href)} variant="secondary">
               添加账号
             </XGUIButton>
-          </YStack>
-        </YStack>
+          </View>
+        </View>
       </ScrollView>
       <XGUIActionSheet
         actions={logoutItem ? [{ accessibilityLabel: `确认登出账号${logoutItem.email}`, destructive: true, label: "登出", onPress: confirmLogout }] : []}
@@ -200,6 +201,6 @@ export function AccountManagementScreen() {
         open={Boolean(logoutItem)}
         title="登出账号"
       />
-    </YStack>
+    </View>
   )
 }

@@ -8,7 +8,6 @@ import {
   View,
 } from "react-native"
 import { Text, TextInput } from "@/components/mi-sans-text"
-import { YStack } from "tamagui"
 
 import { AppAvatar } from "@/components/avatar/app-avatar"
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
@@ -169,11 +168,10 @@ export function ConversationReportScreen() {
       <AppHeader onBackPress={requestBack} title="举报" />
       <KeyboardAwareScreen
         contentBackground={colors.background0}
+        contentStyle={{ paddingHorizontal: 18, paddingVertical: 18 }}
         edges={["left", "right", "bottom"]}
-        px="$4"
-        py="$4"
       >
-        <YStack gap="$4" maxW={440} self="center" width="100%">
+        <View style={{ alignSelf: "center", gap: 18, maxWidth: 440, width: "100%" }}>
           {!conversation || !target ? (
             <XGUIInformationBar
               floating={false}
@@ -279,7 +277,7 @@ export function ConversationReportScreen() {
               </XGUIButton>
             </>
           )}
-        </YStack>
+        </View>
       </KeyboardAwareScreen>
 
       <XGUIActionSheet

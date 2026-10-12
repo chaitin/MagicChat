@@ -1,6 +1,7 @@
 import { Fragment, useState } from "react"
-import { Pressable, StyleSheet } from "react-native"
-import { SizableText, XStack } from "tamagui"
+import { Pressable, StyleSheet, View } from "react-native"
+
+import { Text } from "@/components/mi-sans-text"
 
 import type {
   ClientMessageReaction,
@@ -53,11 +54,11 @@ export function MessageReactionChips({
   }
 
   return (
-    <XStack
-      flexWrap="wrap"
-      gap={6}
-      justify={align === "end" ? "flex-end" : "flex-start"}
-      maxW="100%"
+    <View
+      style={[
+        styles.container,
+        { justifyContent: align === "end" ? "flex-end" : "flex-start" },
+      ]}
     >
       {reactions.map((reaction) => {
         const canToggle =
@@ -65,16 +66,15 @@ export function MessageReactionChips({
         const pending = pendingTexts.has(reaction.text)
 
         return (
-          <XStack
-            bg={colors.secondaryBackground}
-            height={20}
-            items="center"
+          <View
             key={reaction.text}
-            maxW="100%"
-            opacity={!canToggle || pending ? 0.7 : 1}
-            overflow="hidden"
-            px={4}
-            rounded={5}
+            style={[
+              styles.chip,
+              {
+                backgroundColor: colors.secondaryBackground,
+                opacity: !canToggle || pending ? 0.7 : 1,
+              },
+            ]}
           >
             <Pressable
               accessibilityLabel={`${reaction.reactedByMe ? "取消" : "加入"}表情 ${reaction.text}`}
@@ -85,18 +85,18 @@ export function MessageReactionChips({
               onPressIn={(event) => event.stopPropagation()}
               style={styles.inlineControl}
             >
-              <SizableText color={colors.textPrimary} lineHeight={18} size="$2">
+              <Text style={[styles.reactionText, { color: colors.textPrimary }]}>
                 {reaction.text}
-              </SizableText>
+              </Text>
             </Pressable>
             <ReactionParticipants
               onUserPress={onUserPress}
               reaction={reaction}
             />
-          </XStack>
+          </View>
         )
       })}
-    </XStack>
+    </View>
   )
 }
 
@@ -111,25 +111,20 @@ function ReactionParticipants({
 
   if (reaction.users.length === 0) {
     return (
-      <SizableText color={colors.textPrimary} lineHeight={16} ml={2} size="$1">
+      <Text style={[styles.countText, { color: colors.textPrimary }]}>
         {reaction.count}
-      </SizableText>
+      </Text>
     )
   }
 
   return (
-    <XStack
-      items="center"
-      ml={2}
-      overflow="hidden"
-      style={styles.participants}
-    >
+    <View style={styles.participants}>
       {reaction.users.map((user, index) => (
         <Fragment key={user.id}>
           {index > 0 ? (
-            <SizableText color={colors.textPrimary} lineHeight={16} size="$1">
+            <Text style={[styles.participantText, { color: colors.textPrimary }]}>
               、
-            </SizableText>
+            </Text>
           ) : null}
           <Pressable
             accessibilityLabel={`查看${user.name}资料`}
@@ -139,32 +134,52 @@ function ReactionParticipants({
             onPressIn={(event) => event.stopPropagation()}
             style={styles.inlineControl}
           >
-            <SizableText
-              color={colors.textPrimary}
-              lineHeight={16}
+            <Text
               numberOfLines={1}
-              size="$1"
+              style={[styles.participantText, { color: colors.textPrimary }]}
             >
               {user.name}
-            </SizableText>
+            </Text>
           </Pressable>
         </Fragment>
       ))}
       {reaction.count > reaction.users.length ? (
-        <SizableText color={colors.textPrimary} lineHeight={16} size="$1">
+        <Text style={[styles.participantText, { color: colors.textPrimary }]}>
           {`等 ${reaction.count} 人`}
-        </SizableText>
+        </Text>
       ) : null}
-    </XStack>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    maxWidth: "100%",
+  },
+  chip: {
+    alignItems: "center",
+    borderRadius: 5,
+    flexDirection: "row",
+    height: 20,
+    maxWidth: "100%",
+    overflow: "hidden",
+    paddingHorizontal: 4,
+  },
+  reactionText: { fontSize: 13, lineHeight: 18 },
+  countText: { fontSize: 12, lineHeight: 16, marginLeft: 2 },
+  participantText: { fontSize: 12, lineHeight: 16 },
   inlineControl: {
     height: 20,
     justifyContent: "center",
   },
   participants: {
+    alignItems: "center",
+    flexDirection: "row",
     flexShrink: 1,
+    marginLeft: 2,
+    overflow: "hidden",
   },
 })

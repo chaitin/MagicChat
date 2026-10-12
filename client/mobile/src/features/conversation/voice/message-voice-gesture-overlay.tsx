@@ -1,5 +1,7 @@
 import { AudioLines } from "lucide-react-native"
-import { Circle, Portal, SizableText, YStack } from "tamagui"
+import { StyleSheet, View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
+import { XGUIOverlay } from "@/xgui/components/xgui-overlay-host"
 
 import type { VoiceMessageRecorderStatus } from "@/features/conversation/voice/use-voice-message-recorder"
 
@@ -21,42 +23,24 @@ export function MessageVoiceGestureOverlay({
   if (!active) return null
 
   return (
-    <Portal stackZIndex={100_000}>
-      <YStack
-        bg="rgba(18, 18, 18, 0.74)"
-        fullscreen
-        pointerEvents="none"
-      >
-        <YStack flex={1} items="center" justify="center" pb={180} px="$6">
-          <SizableText color="rgba(255,255,255,0.72)" mb="$4" size="$3">
+    <XGUIOverlay priority={100_000}>
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(18, 18, 18, 0.74)" }]}>
+        <View style={{ alignItems: "center", flex: 1, justifyContent: "center", paddingBottom: 180, paddingHorizontal: 32 }}>
+          <Text style={{ color: "rgba(255,255,255,0.72)", fontSize: 14, lineHeight: 21, marginBottom: 18 }}>
             {formatRecordingDuration(elapsedMS)}
-          </SizableText>
-          <SizableText
-            color="white"
-            fontWeight="600"
-            lineHeight="$7"
-            maxW={560}
-            numberOfLines={8}
-            size="$6"
-            text="center"
-          >
+          </Text>
+          <Text numberOfLines={8} style={{ color: "white", fontSize: 18, fontWeight: "600", lineHeight: 33, maxWidth: 560, textAlign: "center" }}>
             {getTranscriptText(status, transcript)}
-          </SizableText>
-        </YStack>
+          </Text>
+        </View>
 
         <RecordingArc screenWidth={screenWidth} />
 
-        <YStack
-          items="center"
-          position="absolute"
-          style={{ bottom: 112, left: 0, right: 0 }}
-        >
-          <SizableText color="white" fontWeight="600" size="$4">
-            松开结束录音
-          </SizableText>
-        </YStack>
-      </YStack>
-    </Portal>
+        <View style={{ alignItems: "center", bottom: 112, left: 0, position: "absolute", right: 0 }}>
+          <Text style={{ color: "white", fontSize: 15, fontWeight: "600", lineHeight: 23 }}>松开结束录音</Text>
+        </View>
+      </View>
+    </XGUIOverlay>
   )
 }
 
@@ -65,24 +49,10 @@ function RecordingArc({ screenWidth }: { screenWidth: number }) {
 
   return (
     <>
-      <Circle
-        bg="rgba(242,242,242,0.94)"
-        borderColor="rgba(255,255,255,0.9)"
-        borderWidth={1}
-        position="absolute"
-        size={arcSize}
-        style={{
-          bottom: -(arcSize - RECORDING_ARC_VISIBLE_HEIGHT),
-          left: (screenWidth - arcSize) / 2,
-        }}
-      />
-      <YStack
-        items="center"
-        position="absolute"
-        style={{ bottom: 38, left: 0, right: 0 }}
-      >
+      <View style={{ backgroundColor: "rgba(242,242,242,0.94)", borderColor: "rgba(255,255,255,0.9)", borderRadius: arcSize / 2, borderWidth: 1, bottom: -(arcSize - RECORDING_ARC_VISIBLE_HEIGHT), height: arcSize, left: (screenWidth - arcSize) / 2, position: "absolute", width: arcSize }} />
+      <View style={{ alignItems: "center", bottom: 38, left: 0, position: "absolute", right: 0 }}>
         <AudioLines color="#232323" size={32} strokeWidth={2} />
-      </YStack>
+      </View>
     </>
   )
 }

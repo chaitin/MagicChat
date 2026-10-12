@@ -6,15 +6,8 @@ import {
   MessagesSquare,
 } from "lucide-react-native"
 import { memo, useRef, useState } from "react"
-import { Alert, Linking, Pressable } from "react-native"
-import {
-  Card,
-  Image,
-  Paragraph,
-  SizableText,
-  XStack,
-  YStack,
-} from "tamagui"
+import { Alert, Image, Linking, Pressable, View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 
 import { NativeIconButton } from "@/components/buttons/native-icon-button"
 import { ThemedIcon } from "@/components/icons/themed-icon"
@@ -80,14 +73,14 @@ export const MessageBody = memo(function MessageBody({
         tone={bubbleTone}
         variant="text"
       >
-        <Paragraph color={colors.textPrimary} selectable size="$4">
+        <Text selectable style={{ color: colors.textPrimary, fontSize: 15, lineHeight: 23 }}>
           <MessageMentionText
             content={body.content}
             currentUserId={currentUserId}
             onMentionPress={onMentionPress}
             resolveMentionLabel={resolveMentionLabel}
           />
-        </Paragraph>
+        </Text>
       </CollapsibleMessageContent>
     )
   }
@@ -143,19 +136,19 @@ export const MessageBody = memo(function MessageBody({
     const state = resourceStates.get(body.fileId)
     const isLoading = state?.status === "loading"
     return (
-      <YStack
-        gap="$2"
+      <Pressable
+        accessible={false}
         onLongPress={() => {
           didLongPressResourceRef.current = true
           onMessageLongPress()
         }}
-        width="100%"
+        style={{ gap: 7, width: "100%" }}
       >
-        <XStack gap="$3" items="center">
+        <View style={{ alignItems: "center", flexDirection: "row", gap: 13 }}>
           <ThemedIcon color={colors.brand5} icon={FileText} size={22} />
-          <SizableText color={colors.brand5} flex={1} size="$4">
+          <Text style={{ color: colors.brand5, flex: 1, fontSize: 15, lineHeight: 23 }}>
             文件 {formatFileSize(body.sizeBytes)}
-          </SizableText>
+          </Text>
           <NativeIconButton
             accessibilityLabel={`打开文件 ${body.name}`}
             disabled={isLoading}
@@ -180,15 +173,11 @@ export const MessageBody = memo(function MessageBody({
               <ThemedIcon color={colors.brand5} icon={Download} size={18} />
             )}
           </NativeIconButton>
-        </XStack>
-        <SizableText
-          color={colors.textSecondary}
-          numberOfLines={1}
-          size="$3"
-        >
+        </View>
+        <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>
           {body.name}
-        </SizableText>
-      </YStack>
+        </Text>
+      </Pressable>
     )
   }
 
@@ -213,13 +202,9 @@ export const MessageBody = memo(function MessageBody({
     if (!body.caption) return image
 
     return (
-      <YStack maxW="100%" width={size.width}>
+      <View style={{ maxWidth: "100%", width: size.width }}>
         {image}
-        <YStack
-          pb={flushImage ? "$3" : undefined}
-          pt="$2"
-          px={flushImage ? "$3" : undefined}
-        >
+        <View style={{ paddingBottom: flushImage ? 13 : undefined, paddingHorizontal: flushImage ? 13 : undefined, paddingTop: 7 }}>
           {body.captionType === "markdown" ? (
             <MarkdownMessage
               content={body.caption}
@@ -230,17 +215,17 @@ export const MessageBody = memo(function MessageBody({
               serverUrl={serverUrl}
             />
           ) : (
-            <Paragraph color={colors.textPrimary} size="$4">
+            <Text style={{ color: colors.textPrimary, fontSize: 15, lineHeight: 23 }}>
               <MessageMentionText
                 content={body.caption}
                 currentUserId={currentUserId}
                 onMentionPress={onMentionPress}
                 resolveMentionLabel={resolveMentionLabel}
               />
-            </Paragraph>
+            </Text>
           )}
-        </YStack>
-      </YStack>
+        </View>
+      </View>
     )
   }
 
@@ -255,13 +240,9 @@ export const MessageBody = memo(function MessageBody({
     )
     if (!body.caption) return video
     return (
-      <YStack maxW="100%" width="100%">
+      <View style={{ maxWidth: "100%", width: "100%" }}>
         {video}
-        <YStack
-          pb={flushImage ? "$3" : undefined}
-          pt="$2"
-          px={flushImage ? "$3" : undefined}
-        >
+        <View style={{ paddingBottom: flushImage ? 13 : undefined, paddingHorizontal: flushImage ? 13 : undefined, paddingTop: 7 }}>
           {body.captionType === "markdown" ? (
             <MarkdownMessage
               content={body.caption}
@@ -272,17 +253,17 @@ export const MessageBody = memo(function MessageBody({
               serverUrl={serverUrl}
             />
           ) : (
-            <Paragraph color={colors.textPrimary} size="$4">
+            <Text style={{ color: colors.textPrimary, fontSize: 15, lineHeight: 23 }}>
               <MessageMentionText
                 content={body.caption}
                 currentUserId={currentUserId}
                 onMentionPress={onMentionPress}
                 resolveMentionLabel={resolveMentionLabel}
               />
-            </Paragraph>
+            </Text>
           )}
-        </YStack>
-      </YStack>
+        </View>
+      </View>
     )
   }
 
@@ -312,21 +293,21 @@ export const MessageBody = memo(function MessageBody({
   }
 
   if (body.type === "revoked") {
-    return <Paragraph color="$gray11" size="$4">该消息已被撤回</Paragraph>
+    return <Text style={{ color: colors.textSecondary, fontSize: 15, lineHeight: 23 }}>该消息已被撤回</Text>
   }
 
   if (body.type === "unsupported") {
     return (
-      <Paragraph color={colors.textPlaceholder} size="$4">
+      <Text style={{ color: colors.textPlaceholder, fontSize: 15, lineHeight: 23 }}>
         暂不支持查看该消息
-      </Paragraph>
+      </Text>
     )
   }
 
   return (
-    <Paragraph size="$4" text="center">
+    <Text style={{ color: colors.textPrimary, fontSize: 15, lineHeight: 23, textAlign: "center" }}>
       {formatClientMessageBodySummary(body, resolveMentionLabel)}
-    </Paragraph>
+    </Text>
   )
 })
 
@@ -420,8 +401,6 @@ function LoadedMessageImage({
       }}
     >
       <Image
-        height={size.height}
-        objectFit="cover"
         onError={() => {
           forgetLoadedAttachmentImage(uri)
           setStatus("error")
@@ -434,10 +413,9 @@ function LoadedMessageImage({
         onLoadStart={() => {
           if (!hasLoadedAttachmentImage(uri)) setStatus("loading")
         }}
-        opacity={status === "ready" ? 1 : 0}
-        pointerEvents="none"
-        src={uri}
-        width={size.width}
+        resizeMode="cover"
+        source={{ uri }}
+        style={{ height: size.height, opacity: status === "ready" ? 1 : 0, width: size.width }}
       />
       {status !== "ready" ? (
         <MessageImageStatus
@@ -469,23 +447,11 @@ function MessageImageStatus({
   const { colors } = useXGUITheme()
 
   return (
-    <YStack
+    <Pressable
       accessibilityLabel={error ? "图片加载失败" : "图片正在加载"}
-      bg={colors.background4}
-      borderBottomLeftRadius={captioned ? 0 : 7}
-      borderBottomRightRadius={captioned ? 0 : 7}
-      borderTopLeftRadius={7}
-      borderTopRightRadius={7}
-      height={size.height}
-      items="center"
-      justify="center"
-      l={absolute ? 0 : undefined}
       onLongPress={onLongPress}
       onPress={onPress}
-      overflow="hidden"
-      position={absolute ? "absolute" : "relative"}
-      t={absolute ? 0 : undefined}
-      width={size.width}
+      style={{ alignItems: "center", backgroundColor: colors.background4, borderBottomLeftRadius: captioned ? 0 : 7, borderBottomRightRadius: captioned ? 0 : 7, borderTopLeftRadius: 7, borderTopRightRadius: 7, height: size.height, justifyContent: "center", left: absolute ? 0 : undefined, overflow: "hidden", position: absolute ? "absolute" : "relative", top: absolute ? 0 : undefined, width: size.width }}
     />
   )
 }
@@ -510,10 +476,9 @@ function MessageLinkCard({
   const didLongPressRef = useRef(false)
 
   return (
-    <Card
-      bg="transparent"
-      borderWidth={0}
-      gap="$2"
+    <Pressable
+      accessibilityLabel={title}
+      accessibilityRole="button"
       onLongPress={() => {
         didLongPressRef.current = true
         onLongPress()
@@ -528,31 +493,20 @@ function MessageLinkCard({
       onPressIn={() => {
         didLongPressRef.current = false
       }}
-      p={0}
-      width="100%"
+      style={{ backgroundColor: "transparent", gap: 7, width: "100%" }}
     >
-      <XStack gap="$2" items="center">
+      <View style={{ alignItems: "center", flexDirection: "row", gap: 7 }}>
         <ThemedIcon color={accentColor} icon={icon} size={18} />
-        <SizableText
-          color={accentColor}
-          flex={1}
-          fontWeight="600"
-          numberOfLines={1}
-          size="$4"
-        >
+        <Text numberOfLines={1} style={{ color: accentColor, flex: 1, fontSize: 15, fontWeight: "600", lineHeight: 23 }}>
           {title}
-        </SizableText>
-      </XStack>
+        </Text>
+      </View>
       {description.trim() ? (
-        <Paragraph
-          color={colors.textSecondary}
-          numberOfLines={4}
-          size="$3"
-        >
+        <Text numberOfLines={4} style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>
           {description}
-        </Paragraph>
+        </Text>
       ) : null}
-    </Card>
+    </Pressable>
   )
 }
 
@@ -573,21 +527,15 @@ function ForwardBundleBody({
     : "暂无消息"
 
   return (
-    <YStack
-      gap="$2"
-      onLongPress={onLongPress}
-      width="100%"
-    >
-      <XStack gap="$3" items="center">
+    <Pressable accessible={false} onLongPress={onLongPress} style={{ gap: 7, width: "100%" }}>
+      <View style={{ alignItems: "center", flexDirection: "row", gap: 13 }}>
         <ThemedIcon color={colors.brand5} icon={MessagesSquare} size={22} />
-        <SizableText color={colors.brand5} flex={1} size="$4">
-          聊天记录
-        </SizableText>
-      </XStack>
-      <Paragraph color={colors.textSecondary} numberOfLines={2} size="$3">
+        <Text style={{ color: colors.brand5, flex: 1, fontSize: 15, lineHeight: 23 }}>聊天记录</Text>
+      </View>
+      <Text numberOfLines={2} style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>
         {body.itemCount} 条 - {firstSummary}
-      </Paragraph>
-    </YStack>
+      </Text>
+    </Pressable>
   )
 }
 

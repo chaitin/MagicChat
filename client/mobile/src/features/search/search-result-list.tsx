@@ -115,7 +115,6 @@ function SearchResultItem({
           <ConversationAvatar
             conversation={conversation}
             server={server}
-            surroundingBackground="$color1"
           />
         }
         onPress={onPress}

@@ -13,7 +13,7 @@ import {
 } from "react"
 import { useColorScheme } from "react-native"
 
-import { darkAppTheme, lightAppTheme, resolveAppTheme } from "@/config/app-theme"
+import { darkAppTheme, lightAppTheme } from "@/config/app-theme"
 import {
   parseThemePreference,
   resolveThemeScheme,
@@ -50,7 +50,7 @@ const AppThemeContext = createContext<AppThemeContextValue | null>(null)
 export function AppThemeProvider({
   children,
 }: {
-  children: (tamaguiTheme: "dark_teal" | "light_teal") => ReactNode
+  children: (scheme: ResolvedScheme) => ReactNode
 }) {
   const systemScheme = useColorScheme()
   // Render immediately using the system theme; hydration updates this in place.
@@ -58,7 +58,6 @@ export function AppThemeProvider({
   const preferenceRevision = useRef(0)
   const pendingWrite = useRef(Promise.resolve())
   const resolvedScheme = resolveThemeScheme(preference, systemScheme)
-  const theme = resolveAppTheme(resolvedScheme)
 
   useEffect(() => {
     let cancelled = false
@@ -93,7 +92,7 @@ export function AppThemeProvider({
       <ThemeProvider value={resolvedScheme === "dark" ? darkNavigationTheme : lightNavigationTheme}>
         <StatusBar style={resolvedScheme === "dark" ? "light" : "dark"} />
         <NavigationBar hidden={false} style={resolvedScheme === "dark" ? "light" : "dark"} />
-        {children(theme.tamaguiTheme)}
+        {children(resolvedScheme)}
       </ThemeProvider>
     </AppThemeContext.Provider>
   )

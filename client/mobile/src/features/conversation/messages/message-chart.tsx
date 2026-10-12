@@ -1,5 +1,6 @@
 import { Fragment, memo, useCallback, useMemo, useState } from "react"
-import { Pressable } from "react-native"
+import { Pressable, ScrollView, StyleSheet, View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 import Svg, {
   Circle,
   Line as SvgLine,
@@ -8,14 +9,6 @@ import Svg, {
   Rect,
   Text as SvgText,
 } from "react-native-svg"
-import {
-  Paragraph,
-  ScrollView,
-  Separator,
-  SizableText,
-  XStack,
-  YStack,
-} from "tamagui"
 
 import type {
   ClientBarChartMessageBody,
@@ -72,17 +65,13 @@ export const MessageChart = memo(function MessageChart({
   const { colors } = useXGUITheme()
 
   return (
-    <YStack gap="$2" onLongPress={onLongPress} width="100%">
-      <Paragraph color={colors.textPrimary} size="$4">
-        {chart.title}
-      </Paragraph>
-      <Separator borderColor={colors.foreground3} />
+    <Pressable accessible={false} onLongPress={onLongPress} style={{ gap: 7, width: "100%" }}>
+      <Text style={{ color: colors.textPrimary, fontSize: 15, lineHeight: 23 }}>{chart.title}</Text>
+      <View style={{ backgroundColor: colors.foreground3, height: StyleSheet.hairlineWidth }} />
       <ChartBody chart={chart} palette={palette} />
-      <Separator borderColor={colors.foreground3} />
-      <Paragraph color={colors.textPrimary} size="$4">
-        {chart.description}
-      </Paragraph>
-    </YStack>
+      <View style={{ backgroundColor: colors.foreground3, height: StyleSheet.hairlineWidth }} />
+      <Text style={{ color: colors.textPrimary, fontSize: 15, lineHeight: 23 }}>{chart.description}</Text>
+    </Pressable>
   )
 })
 
@@ -149,7 +138,7 @@ function LineMessageChart({
         })
 
   return (
-    <YStack gap="$2">
+    <View style={{ gap: 7 }}>
       <ChartViewport height={height} width={width}>
         <Svg height={height} width={width}>
           <CartesianGrid
@@ -225,7 +214,7 @@ function LineMessageChart({
         items={seriesLegendItems(chart.data.series, palette)}
         onToggle={toggleKey}
       />
-    </YStack>
+    </View>
   )
 }
 
@@ -265,7 +254,7 @@ function BarMessageChart({
         })
 
   return (
-    <YStack gap="$2">
+    <View style={{ gap: 7 }}>
       <ChartViewport
         height={height}
         vertical={horizontal}
@@ -302,7 +291,7 @@ function BarMessageChart({
         items={seriesLegendItems(chart.data.series, palette)}
         onToggle={toggleKey}
       />
-    </YStack>
+    </View>
   )
 }
 
@@ -552,7 +541,7 @@ function PieMessageChart({
     : []
 
   return (
-    <YStack gap="$2">
+    <View style={{ gap: 7 }}>
       <ChartViewport height={height} width={width}>
         <Svg height={height} width={width}>
           {visibleTotal === 0 ? (
@@ -596,7 +585,7 @@ function PieMessageChart({
         }))}
         onToggle={toggleKey}
       />
-    </YStack>
+    </View>
   )
 }
 
@@ -631,7 +620,7 @@ function RadarMessageChart({
         }))
 
   return (
-    <YStack gap="$2">
+    <View style={{ gap: 7 }}>
       <ChartViewport height={height} width={width}>
         <Svg height={height} width={width}>
           {[0.25, 0.5, 0.75, 1].map((level) => (
@@ -730,7 +719,7 @@ function RadarMessageChart({
         items={seriesLegendItems(chart.data.series, palette)}
         onToggle={toggleKey}
       />
-    </YStack>
+    </View>
   )
 }
 
@@ -811,24 +800,24 @@ function ChartViewport({
 }) {
   const content = vertical ? (
     <ScrollView
-      maxH={MAX_VERTICAL_CHART_HEIGHT}
+      style={{ maxHeight: MAX_VERTICAL_CHART_HEIGHT }}
       nestedScrollEnabled
       showsVerticalScrollIndicator={height > MAX_VERTICAL_CHART_HEIGHT}
     >
-      <YStack height={height} width={width}>
+      <View style={{ height, width }}>
         {children}
-      </YStack>
+      </View>
     </ScrollView>
   ) : (
-    <YStack height={height} width={width}>
+    <View style={{ height, width }}>
       {children}
-    </YStack>
+    </View>
   )
 
   return (
     <ScrollView
       horizontal
-      maxW="100%"
+      style={{ maxWidth: "100%" }}
       nestedScrollEnabled
       showsHorizontalScrollIndicator={width > DEFAULT_CHART_WIDTH}
     >
@@ -852,7 +841,7 @@ function ChartLegend({
   if (!always && items.length <= 1) return null
 
   return (
-    <XStack flexWrap="wrap" gap="$2" justify="center">
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7, justifyContent: "center" }}>
       {items.map((item) => {
         const hidden = hiddenKeys.has(item.key)
         return (
@@ -866,21 +855,14 @@ function ChartLegend({
               opacity: pressed ? 0.65 : hidden ? 0.4 : 1,
             })}
           >
-            <XStack gap="$1.5" items="center" py="$1">
-              <YStack
-                height={8}
-                rounded={2}
-                style={{ backgroundColor: item.color }}
-                width={8}
-              />
-              <SizableText color={colors.textSecondary} size="$3">
-                {item.label}
-              </SizableText>
-            </XStack>
+            <View style={{ alignItems: "center", flexDirection: "row", gap: 4, paddingVertical: 2 }}>
+              <View style={{ backgroundColor: item.color, borderRadius: 2, height: 8, width: 8 }} />
+              <Text style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>{item.label}</Text>
+            </View>
           </Pressable>
         )
       })}
-    </XStack>
+    </View>
   )
 }
 
@@ -895,44 +877,18 @@ function ChartTapResult({
   if (!label || details.length === 0) return null
 
   return (
-    <YStack
-      bg={colors.background1}
-      borderColor={colors.foreground3}
-      borderWidth={1}
-      gap="$1"
-      p="$2"
-      rounded="$3"
-    >
-      <SizableText color={colors.textPrimary} fontWeight="600" size="$3">
-        {label}
-      </SizableText>
+    <View style={{ backgroundColor: colors.background1, borderColor: colors.foreground3, borderRadius: 7, borderWidth: 1, gap: 2, padding: 7 }}>
+      <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: "600", lineHeight: 21 }}>{label}</Text>
       {details.map((detail) => (
-        <XStack gap="$2" items="center" justify="space-between" key={`${detail.label}:${detail.value}`}>
-          <XStack flex={1} gap="$1.5" items="center">
-            <YStack
-              height={8}
-              rounded={2}
-              style={{ backgroundColor: detail.color }}
-              width={8}
-            />
-            <SizableText
-              color={colors.textSecondary}
-              numberOfLines={1}
-              size="$3"
-            >
-              {detail.label}
-            </SizableText>
-          </XStack>
-          <SizableText
-            color={colors.textPrimary}
-            fontWeight="600"
-            size="$3"
-          >
-            {detail.value}
-          </SizableText>
-        </XStack>
+        <View key={`${detail.label}:${detail.value}`} style={{ alignItems: "center", flexDirection: "row", gap: 7, justifyContent: "space-between" }}>
+          <View style={{ alignItems: "center", flex: 1, flexDirection: "row", gap: 4 }}>
+            <View style={{ backgroundColor: detail.color, borderRadius: 2, height: 8, width: 8 }} />
+            <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>{detail.label}</Text>
+          </View>
+          <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: "600", lineHeight: 21 }}>{detail.value}</Text>
+        </View>
       ))}
-    </YStack>
+    </View>
   )
 }
 

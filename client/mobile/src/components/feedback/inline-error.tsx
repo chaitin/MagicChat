@@ -1,13 +1,21 @@
-import { Paragraph, Theme } from "tamagui"
+import { Text } from "@/components/mi-sans-text"
+import { useXGUITheme } from "@/xgui"
 
 export function InlineError({ message }: { message?: string }) {
+  const { colors } = useXGUITheme()
   if (!message) return null
 
   return (
-    <Theme name="red">
-      <Paragraph color="$color10" pb="$2" px="$4" size="$2">
-        {message}
-      </Paragraph>
-    </Theme>
+    <Text
+      style={{
+        color: colors.destructive,
+        fontSize: 13,
+        lineHeight: 20,
+        paddingBottom: 7,
+        paddingHorizontal: 18,
+      }}
+    >
+      {message}
+    </Text>
   )
 }

@@ -13,7 +13,6 @@ import { recordMobilePerf } from "@/diagnostics/mobile-perf"
 import ReanimatedSwipeable, {
   type SwipeableMethods,
 } from "react-native-gesture-handler/ReanimatedSwipeable"
-import { SizableText } from "tamagui"
 
 import { ContentState } from "@/components/feedback/content-state"
 import { InlineError } from "@/components/feedback/inline-error"
@@ -246,7 +245,7 @@ function ConversationListItem({
         <ConversationAvatar
           conversation={conversation}
           server={server}
-          surroundingBackground="$backgroundLight"
+          surroundingBackground={rowBackground}
           topicSourceOnly={item.nested}
         />
       </View>
@@ -257,14 +256,16 @@ function ConversationListItem({
           subtitle={item.description}
           subtitleLeading={
             item.unreadAlertLabel ? (
-              <SizableText
-                color={colors.destructive}
-                fontSize={item.nested ? 12 : 14}
-                fontWeight="600"
-                lineHeight={item.nested ? 17 : 20}
+              <Text
+                style={{
+                  color: colors.destructive,
+                  fontSize: item.nested ? 12 : 14,
+                  fontWeight: "600",
+                  lineHeight: item.nested ? 17 : 20,
+                }}
               >
                 {item.unreadAlertLabel}
-              </SizableText>
+              </Text>
             ) : undefined
           }
           subtitleTrailing={

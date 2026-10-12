@@ -5,11 +5,11 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  View,
   useWindowDimensions,
 } from "react-native"
 import { Text } from "@/components/mi-sans-text"
 import { SafeAreaView } from "react-native-safe-area-context"
-import { YStack } from "tamagui"
 
 import { AppHeader } from "@/components/navigation/app-header"
 import type { ServerConfig } from "@/core/server-model"
@@ -147,18 +147,18 @@ export function ServerManagementScreen() {
   }
 
   return (
-    <YStack bg={colors.background0} flex={1}>
+    <View style={[styles.fill, { backgroundColor: colors.background0 }]}>
       {mode !== "default" ? <AppHeader onBackPress={() => router.back()} title="" /> : null}
       <SafeAreaView
         edges={mode === "default" ? ["top", "bottom"] : ["bottom"]}
         style={[styles.fill, { backgroundColor: colors.background0 }]}
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          <YStack grow={1} items="center" onPress={closeOpenSwipeable}>
+          <Pressable accessible={false} onPress={closeOpenSwipeable} style={styles.pressableArea}>
             <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>
               {mode === "manage" ? "服务器管理" : mode === "add-account" ? "选择要添加账号的服务器" : "选择服务器"}
             </Text>
-            <YStack maxW={440} mt={48} px="$4" width="100%">
+            <View style={styles.serverListArea}>
               <ScrollView
                 nestedScrollEnabled
                 showsVerticalScrollIndicator
@@ -181,7 +181,7 @@ export function ServerManagementScreen() {
                 ))}
                 </XGUIList>
               </ScrollView>
-              <YStack pt="$4">
+              <View style={styles.addButtonArea}>
                 <XGUIButton
                   accessibilityLabel="添加服务器"
                   onPress={() => handleOpenEditor()}
@@ -189,9 +189,9 @@ export function ServerManagementScreen() {
                 >
                   添加服务器
                 </XGUIButton>
-              </YStack>
-            </YStack>
-            <YStack items="center" mt="auto" pb="$4" pt="$8">
+              </View>
+            </View>
+            <View style={styles.footer}>
               {mode === "default" ? (
                 <Pressable
                   accessibilityLabel={`检查更新，当前版本 ${appUpdate.installedVersion.version}`}
@@ -214,8 +214,8 @@ export function ServerManagementScreen() {
                 ]}
                 text="© 2026 北京长亭科技有限公司 版权所有"
               />
-            </YStack>
-          </YStack>
+            </View>
+          </Pressable>
         </ScrollView>
       </SafeAreaView>
 
@@ -300,7 +300,7 @@ export function ServerManagementScreen() {
         release={appUpdate.release}
         status={appUpdate.status}
       />
-    </YStack>
+    </View>
   )
 }
 
@@ -308,6 +308,10 @@ const styles = StyleSheet.create({
   fill: {
     flex: 1,
   },
+  pressableArea: { alignItems: "center", flexGrow: 1 },
+  serverListArea: { marginTop: 48, maxWidth: 440, paddingHorizontal: 18, width: "100%" },
+  addButtonArea: { paddingTop: 18 },
+  footer: { alignItems: "center", marginTop: "auto", paddingBottom: 18, paddingTop: 46 },
   pageTitle: {
     fontSize: 22,
     fontWeight: "500",

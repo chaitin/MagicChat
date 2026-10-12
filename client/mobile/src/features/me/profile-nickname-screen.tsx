@@ -2,7 +2,7 @@ import { useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useRouter } from "expo-router"
 import { ChevronLeft } from "lucide-react-native"
-import { YStack } from "tamagui"
+import { View } from "react-native"
 
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
 import { PageHeader } from "@/components/navigation/page-header"
@@ -54,7 +54,7 @@ export function ProfileNicknameScreen() {
   }
 
   return (
-    <YStack bg={colors.background0} flex={1}>
+    <View style={{ backgroundColor: colors.background0, flex: 1 }}>
       <PageHeader
         actionDisabled={saving || unchanged}
         actionLabel="保存"
@@ -73,12 +73,11 @@ export function ProfileNicknameScreen() {
       />
       <KeyboardAwareScreen
         contentBackground={colors.background0}
+        contentStyle={{ paddingHorizontal: 18, paddingTop: 18 }}
         edges={["left", "right", "bottom"]}
-        px="$4"
-        pt="$4"
       >
-        <YStack maxW={440} self="center" width="100%">
-          <YStack overflow="hidden" style={{ borderRadius: 8 }}>
+        <View style={{ alignSelf: "center", maxWidth: 440, width: "100%" }}>
+          <View style={{ borderRadius: 8, overflow: "hidden" }}>
             <XGUIInput
               autoFocus
               label="昵称"
@@ -92,7 +91,7 @@ export function ProfileNicknameScreen() {
               returnKeyType="done"
               value={nickname}
             />
-          </YStack>
+          </View>
           {errorMessage ? (
             <XGUIInformationBar
               floating={false}
@@ -101,8 +100,8 @@ export function ProfileNicknameScreen() {
               variant="warn-weak"
             />
           ) : null}
-        </YStack>
+        </View>
       </KeyboardAwareScreen>
-    </YStack>
+    </View>
   )
 }

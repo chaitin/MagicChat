@@ -22,7 +22,7 @@ import {
 } from "react-native"
 import { Text } from "@/components/mi-sans-text"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { Portal } from "tamagui"
+import { XGUIOverlay } from "@/xgui/components/xgui-overlay-host"
 
 import {
   getXGUISheetDragTranslateY,
@@ -304,7 +304,7 @@ export function XGUIActionSheet({
   if (!rendered) return null
 
   return (
-    <Portal>
+    <XGUIOverlay>
       <View pointerEvents="box-none" style={styles.portal}>
         <Animated.View
           style={[styles.backdrop, { opacity: backdropOpacity }]}
@@ -503,7 +503,7 @@ export function XGUIActionSheet({
           <View pointerEvents="auto" style={StyleSheet.absoluteFill} />
         ) : null}
       </View>
-    </Portal>
+    </XGUIOverlay>
   )
 }
 

@@ -1,6 +1,7 @@
 import { MessagesSquare } from "lucide-react-native"
-import { Pressable } from "react-native"
-import { Separator, SizableText, XStack, YStack } from "tamagui"
+import { Pressable, StyleSheet, View } from "react-native"
+
+import { Text } from "@/components/mi-sans-text"
 
 import { AppAvatar } from "@/components/avatar/app-avatar"
 import { ThemedIcon } from "@/components/icons/themed-icon"
@@ -27,56 +28,65 @@ export function TopicReplyPreview({
       onPress={onOpen}
     >
       {({ pressed }) => (
-        <YStack mt="$3" opacity={pressed ? 0.72 : 1} width="100%">
-          <Separator borderColor={colors.separator} mb="$2" />
+        <View style={[styles.container, { opacity: pressed ? 0.72 : 1 }]}>
+          <View style={[styles.separator, styles.topSeparator, { backgroundColor: colors.separator }]} />
 
           {topic.recentReplies.length > 0 ? (
             <>
-              <YStack gap="$2">
+              <View style={styles.replies}>
                 {topic.recentReplies.map((reply) => (
-                  <XStack gap="$2" items="center" key={reply.id} minW={0}>
+                  <View key={reply.id} style={styles.reply}>
                     <TopicReplyAvatar
                       avatar={reply.avatar}
                       name={reply.author}
                       server={server}
                     />
-                    <SizableText flex={1} minW={0} numberOfLines={1} size="$3">
-                      <SizableText
-                        color={colors.textPrimary}
-                        fontWeight="600"
-                        size="$3"
-                      >
+                    <Text numberOfLines={1} style={styles.replyText}>
+                      <Text style={{ color: colors.textPrimary, fontWeight: "600" }}>
                         {reply.author}
-                      </SizableText>
-                      <SizableText color={colors.textSecondary} size="$3">
+                      </Text>
+                      <Text style={{ color: colors.textSecondary }}>
                         ：{reply.summary}
-                      </SizableText>
-                    </SizableText>
-                  </XStack>
+                      </Text>
+                    </Text>
+                  </View>
                 ))}
-              </YStack>
-              <Separator borderColor={colors.separator} my="$3" />
+              </View>
+              <View style={[styles.separator, styles.middleSeparator, { backgroundColor: colors.separator }]} />
             </>
           ) : null}
 
-          <XStack gap="$3" items="center" justify="space-between">
-            <XStack gap="$2" items="center">
+          <View style={styles.footer}>
+            <View style={styles.link}>
               <ThemedIcon color={colors.link} icon={MessagesSquare} size={16} />
-              <SizableText color={colors.link} fontWeight="600" size="$3">
+              <Text style={[styles.footerText, { color: colors.link, fontWeight: "600" }]}>
                 查看话题
-              </SizableText>
-            </XStack>
+              </Text>
+            </View>
             {latestReplyTime ? (
-              <SizableText color={colors.textSecondary} size="$3">
+              <Text style={[styles.footerText, { color: colors.textSecondary }]}>
                 {latestReplyTime}
-              </SizableText>
+              </Text>
             ) : null}
-          </XStack>
-        </YStack>
+          </View>
+        </View>
       )}
     </Pressable>
   )
 }
+
+const styles = StyleSheet.create({
+  container: { marginTop: 13, width: "100%" },
+  separator: { height: StyleSheet.hairlineWidth, width: "100%" },
+  topSeparator: { marginBottom: 7 },
+  middleSeparator: { marginVertical: 13 },
+  replies: { gap: 7 },
+  reply: { alignItems: "center", flexDirection: "row", gap: 7, minWidth: 0 },
+  replyText: { flex: 1, fontSize: 14, lineHeight: 21, minWidth: 0 },
+  footer: { alignItems: "center", flexDirection: "row", gap: 13, justifyContent: "space-between" },
+  link: { alignItems: "center", flexDirection: "row", gap: 7 },
+  footerText: { fontSize: 14, lineHeight: 21 },
+})
 
 function TopicReplyAvatar({
   avatar,

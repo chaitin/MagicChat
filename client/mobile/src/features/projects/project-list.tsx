@@ -6,7 +6,6 @@ import {
   StyleSheet,
   View,
 } from "react-native"
-import { useTheme, YStack } from "tamagui"
 
 import { ContentState } from "@/components/feedback/content-state"
 import { InlineError } from "@/components/feedback/inline-error"
@@ -42,7 +41,6 @@ export function ProjectList({
   sections: ProjectListSection[]
   server: ServerTarget
 }) {
-  const theme = useTheme()
   const { colors } = useXGUITheme()
   const toast = useXGUIToast()
   const projects = useMemo(
@@ -66,7 +64,7 @@ export function ProjectList({
       }
       ListFooterComponent={
         hasMore && !hasKeyword ? (
-          <YStack bg={colors.background0} p="$4">
+          <View style={{ backgroundColor: colors.background0, padding: 18 }}>
             <AppButton
               accessibilityLabel="加载更多项目"
               disabled={isLoadingMore}
@@ -82,16 +80,16 @@ export function ProjectList({
             >
               {isLoadingMore ? "正在加载…" : "加载更多"}
             </AppButton>
-          </YStack>
+          </View>
         ) : null
       }
       ListHeaderComponent={<InlineError message={errorMessage} />}
       refreshControl={
         <RefreshControl
-          colors={[String(theme.color10.val)]}
+          colors={[colors.brand]}
           onRefresh={onRefresh}
           refreshing={isRefreshing}
-          tintColor={String(theme.color10.val)}
+          tintColor={colors.brand}
         />
       }
       renderItem={({ index, item }) => (

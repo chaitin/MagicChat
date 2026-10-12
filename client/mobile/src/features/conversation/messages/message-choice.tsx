@@ -2,7 +2,6 @@ import { Check } from "lucide-react-native"
 import { useRef, useState } from "react"
 import { Pressable, StyleSheet, View } from "react-native"
 import { Text } from "@/components/mi-sans-text"
-import { Paragraph, YStack } from "tamagui"
 
 import type {
   ClientChoiceMessageBody,
@@ -104,13 +103,12 @@ export function MessageChoice({
   }
 
   return (
-    <YStack
-      gap="$3"
+    <Pressable
       onLongPress={() => {
         didLongPressRef.current = true
         onLongPress()
       }}
-      width="100%"
+      style={styles.container}
     >
       {body.contentType === "markdown" ? (
         <MarkdownMessage
@@ -122,22 +120,17 @@ export function MessageChoice({
           serverUrl={serverUrl}
         />
       ) : (
-        <Paragraph size="$4">
+        <Text style={styles.contentText}>
           <MessageMentionText
             content={body.content}
             currentUserId={currentUserId}
             onMentionPress={onMentionPress}
             resolveMentionLabel={resolveMentionLabel}
           />
-        </Paragraph>
+        </Text>
       )}
 
-      <YStack
-        borderColor={colors.separator}
-        rounded={8}
-        borderWidth={StyleSheet.hairlineWidth}
-        overflow="hidden"
-      >
+      <View style={[styles.options, { borderColor: colors.separator }]}>
         {body.options.map((option, index) => (
           <ChoiceOptionRow
             count={countsByOptionId.get(option.id) ?? 0}
@@ -162,10 +155,10 @@ export function MessageChoice({
             type={body.selection === "single" ? "radio" : "checkbox"}
           />
         ))}
-      </YStack>
+      </View>
 
       {!answered ? (
-        <YStack gap="$3">
+        <View style={styles.submit}>
           <XGUIButton
             accessibilityLabel="提交选择"
             disabled={!hasSubmittableSelection || submitting}
@@ -183,9 +176,9 @@ export function MessageChoice({
           >
             提交
           </XGUIButton>
-        </YStack>
+        </View>
       ) : null}
-    </YStack>
+    </Pressable>
   )
 }
 
@@ -292,6 +285,14 @@ function ChoiceSelectionControl({
 }
 
 const styles = StyleSheet.create({
+  container: { gap: 13, width: "100%" },
+  contentText: { fontSize: 15, lineHeight: 23 },
+  options: {
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden",
+  },
+  submit: { gap: 13 },
   optionCount: {
     marginLeft: 12,
   },

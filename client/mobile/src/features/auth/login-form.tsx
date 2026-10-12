@@ -17,7 +17,6 @@ import {
   type TextInput as NativeTextInput,
 } from "react-native"
 import { Text } from "@/components/mi-sans-text"
-import { YStack } from "tamagui"
 
 import { ApiRequestError } from "@/data/api-client"
 import { MobileSessionCompatibilityError } from "@/data/auth/auth-api"
@@ -326,12 +325,12 @@ export function LoginForm({
 
   return (
     <View style={[styles.formSurface, { backgroundColor: colors.background0 }]}>
-        <YStack gap="$2">
+        <View style={{ gap: 7 }}>
           <LoginMethodTabs
             activeMethod={activeLoginMethod}
             disabled={isFormUnavailable}
             emailCodeContent={
-              <YStack gap="$4">
+              <View style={{ gap: 18 }}>
                 <View style={styles.fieldGroup}>
                   <XGUIInput
                     accessibilityLabel="邮箱"
@@ -414,7 +413,7 @@ export function LoginForm({
                   showDisabledAppearance={!legalConsentAccepted}
                   testID="email-code-login-submit-button"
                 />
-              </YStack>
+              </View>
             }
             emailCodeLoginEnabled={emailCodeLoginEnabled}
             onMethodChange={(method) => {
@@ -422,7 +421,7 @@ export function LoginForm({
               toast.hide()
             }}
             passwordContent={
-              <YStack gap="$4">
+              <View style={{ gap: 18 }}>
                 <View style={styles.fieldGroup}>
                   <XGUIInput
                     accessibilityLabel="账号"
@@ -491,11 +490,11 @@ export function LoginForm({
                   showDisabledAppearance={!legalConsentAccepted}
                   testID="password-login-submit-button"
                 />
-              </YStack>
+              </View>
             }
             passwordLoginEnabled={passwordLoginEnabled}
           />
-        </YStack>
+        </View>
     </View>
   )
 }

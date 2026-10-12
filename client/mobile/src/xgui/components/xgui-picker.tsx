@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
+  Animated,
+  BackHandler,
+  Easing,
   FlatList,
+  PanResponder,
   Pressable,
   StyleSheet,
   View,
@@ -9,7 +13,7 @@ import {
 } from "react-native"
 import { Text } from "@/components/mi-sans-text"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { Sheet } from "tamagui"
+import { XGUIOverlay } from "@/xgui/components/xgui-overlay-host"
 
 import { useXGUITheme } from "@/xgui/theme/use-xgui-theme"
 
@@ -169,13 +173,42 @@ export function XGUIPicker<T extends XGUIPickerValue>({
   const insets = useSafeAreaInsets()
   const closeRequestedRef = useRef(false)
   const pendingCloseActionRef = useRef<(() => void) | null>(null)
+  const onCancelRef = useRef(onCancel)
+  const [rendered, setRendered] = useState(open)
+  const [backdropOpacity] = useState(() => new Animated.Value(0))
+  const [panelTranslateY] = useState(() => new Animated.Value(56 + WHEEL_HEIGHT + Math.max(insets.bottom, 8)))
+  if (open && !rendered) setRendered(true)
   const selection = useMemo(() => selectionFor(columns, value), [columns, value])
+
+  useEffect(() => {
+    onCancelRef.current = onCancel
+  }, [onCancel])
 
   useEffect(() => {
     if (!open) return
     closeRequestedRef.current = false
     pendingCloseActionRef.current = null
   }, [open])
+
+  useEffect(() => {
+    if (!rendered) return
+    if (!open && !closeRequestedRef.current) {
+      closeRequestedRef.current = true
+      pendingCloseActionRef.current = onCancelRef.current ?? null
+    }
+    const animation = Animated.parallel([
+      Animated.timing(backdropOpacity, { duration: open ? 240 : 180, easing: Easing.out(Easing.cubic), toValue: open ? 1 : 0, useNativeDriver: true }),
+      Animated.timing(panelTranslateY, { duration: open ? 280 : 200, easing: Easing.out(Easing.cubic), toValue: open ? 0 : 56 + WHEEL_HEIGHT + Math.max(insets.bottom, 8), useNativeDriver: true }),
+    ])
+    animation.start(({ finished }) => {
+      if (!finished || open) return
+      setRendered(false)
+      const action = pendingCloseActionRef.current
+      pendingCloseActionRef.current = null
+      if (action) requestAnimationFrame(action)
+    })
+    return () => animation.stop()
+  }, [backdropOpacity, insets.bottom, open, panelTranslateY, rendered])
 
   const selectedItems = useMemo(
     () => columns.flatMap((column, index) => column[selection[index]] ?? []),
@@ -193,13 +226,33 @@ export function XGUIPicker<T extends XGUIPickerValue>({
 
   const cancel = () => close(onCancel)
 
-  const handleOpenChange = (nextOpen: boolean) => {
+  const handleOpenChange = useCallback((nextOpen: boolean) => {
     if (!nextOpen && !closeRequestedRef.current) {
       closeRequestedRef.current = true
       pendingCloseActionRef.current = onCancel ?? null
     }
     onOpenChange(nextOpen)
-  }
+  }, [onCancel, onOpenChange])
+
+  useEffect(() => {
+    if (!rendered) return
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      handleOpenChange(false)
+      return true
+    })
+    return () => subscription.remove()
+  }, [rendered, handleOpenChange])
+
+  const panResponder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gesture) => gesture.dy > 8 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+    onPanResponderGrant: () => panelTranslateY.stopAnimation(),
+    onPanResponderMove: (_, gesture) => panelTranslateY.setValue(Math.max(0, gesture.dy)),
+    onPanResponderRelease: (_, gesture) => {
+      if (gesture.dy > 72 || gesture.vy > 0.6) onOpenChange(false)
+      else Animated.spring(panelTranslateY, { toValue: 0, useNativeDriver: true }).start()
+    },
+    onPanResponderTerminate: () => Animated.spring(panelTranslateY, { toValue: 0, useNativeDriver: true }).start(),
+  }), [onOpenChange, panelTranslateY])
 
   const select = (columnIndex: number, itemIndex: number) => {
     const next = selection.map((index, indexOfColumn) =>
@@ -210,29 +263,14 @@ export function XGUIPicker<T extends XGUIPickerValue>({
   }
 
   return (
-    <Sheet
-      dismissOnOverlayPress
-      dismissOnSnapToBottom
-      modal
-      onAnimationComplete={({ open: animationOpen }) => {
-        if (animationOpen) return
-        const pendingCloseAction = pendingCloseActionRef.current
-        pendingCloseActionRef.current = null
-        pendingCloseAction?.()
-      }}
-      onOpenChange={handleOpenChange}
-      open={open}
-      snapPointsMode="fit"
-    >
-      <Sheet.Overlay backgroundColor="rgba(0,0,0,0.5)" />
-      <Sheet.Frame
-        bg={colors.background2}
-        borderTopLeftRadius={12}
-        borderTopRightRadius={12}
-        overflow="hidden"
-      >
+    rendered ? <XGUIOverlay priority={100_000}>
+      <View accessibilityViewIsModal style={styles.overlay}>
+        <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
+          <Pressable accessibilityLabel="关闭选择器" accessibilityRole="button" onPress={cancel} style={StyleSheet.absoluteFill} />
+        </Animated.View>
+        <Animated.View style={[styles.frame, { backgroundColor: colors.background2, transform: [{ translateY: panelTranslateY }] }]}>
         <View style={{ paddingBottom: Math.max(insets.bottom, 8) }}>
-          <View style={[styles.header, { borderBottomColor: colors.separator }]}>
+          <View {...panResponder.panHandlers} style={[styles.header, { borderBottomColor: colors.separator }]}>
             <Pressable accessibilityRole="button" onPress={cancel} style={styles.headerButton}>
               <Text style={[styles.headerButtonText, { color: colors.textSecondary }]}>{cancelLabel}</Text>
             </Pressable>
@@ -264,12 +302,16 @@ export function XGUIPicker<T extends XGUIPickerValue>({
             ))}
           </View>
         </View>
-      </Sheet.Frame>
-    </Sheet>
+        </Animated.View>
+      </View>
+    </XGUIOverlay> : null
   )
 }
 
 const styles = StyleSheet.create({
+  overlay: { bottom: 0, left: 0, position: "absolute", right: 0, top: 0 },
+  backdrop: { backgroundColor: "rgba(0,0,0,0.5)", bottom: 0, left: 0, position: "absolute", right: 0, top: 0 },
+  frame: { borderTopLeftRadius: 12, borderTopRightRadius: 12, bottom: 0, left: 0, overflow: "hidden", position: "absolute", right: 0 },
   columns: { flexDirection: "row", height: WHEEL_HEIGHT, overflow: "hidden" },
   header: { alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", minHeight: 56 },
   headerButton: { alignItems: "center", justifyContent: "center", minHeight: 56, minWidth: 72, paddingHorizontal: 16 },

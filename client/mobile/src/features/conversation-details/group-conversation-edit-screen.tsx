@@ -3,7 +3,6 @@ import { ChevronLeft } from "lucide-react-native"
 import { useState } from "react"
 import { StyleSheet, View } from "react-native"
 import { Text } from "@/components/mi-sans-text"
-import { YStack } from "tamagui"
 
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
 import { PageHeader } from "@/components/navigation/page-header"
@@ -93,7 +92,7 @@ export function GroupConversationEditScreen() {
   }
 
   return (
-    <YStack bg={colors.background0} flex={1}>
+    <View style={{ backgroundColor: colors.background0, flex: 1 }}>
       <PageHeader
         actionDisabled={saveDisabled}
         actionLabel="保存"
@@ -112,14 +111,13 @@ export function GroupConversationEditScreen() {
       />
       <KeyboardAwareScreen
         contentBackground={colors.background0}
+        contentStyle={{ paddingHorizontal: 18, paddingTop: 18 }}
         edges={["left", "right", "bottom"]}
-        px="$4"
-        pt="$4"
       >
-        <YStack maxW={440} self="center" width="100%">
+        <View style={{ alignSelf: "center", maxWidth: 440, width: "100%" }}>
           {conversation && validField && canManage ? (
             <>
-              <YStack overflow="hidden" style={{ borderRadius: 8 }}>
+              <View style={{ borderRadius: 8, overflow: "hidden" }}>
                 <XGUIInput
                   autoFocus
                   containerStyle={
@@ -147,7 +145,7 @@ export function GroupConversationEditScreen() {
                   textAlignVertical={editingAnnouncement ? "top" : "center"}
                   value={value}
                 />
-              </YStack>
+              </View>
               {editingAnnouncement ? (
                 <Text
                   style={[styles.count, { color: colors.textSecondary }]}
@@ -175,9 +173,9 @@ export function GroupConversationEditScreen() {
               </Text>
             </View>
           )}
-        </YStack>
+        </View>
       </KeyboardAwareScreen>
-    </YStack>
+    </View>
   )
 }
 

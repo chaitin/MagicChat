@@ -3,7 +3,6 @@ import { useQueryClient } from "@tanstack/react-query"
 import * as ImagePicker from "expo-image-picker"
 import { useRouter, type Href } from "expo-router"
 import { StyleSheet, View } from "react-native"
-import { XStack, YStack } from "tamagui"
 
 import { AppAvatar } from "@/components/avatar/app-avatar"
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
@@ -112,7 +111,7 @@ export function ProfileScreen() {
     <View style={[styles.screen, { backgroundColor: colors.background0 }]}>
       <AppHeader onBackPress={router.back} title="个人信息" />
       <KeyboardAwareScreen contentBackground={colors.background0} edges={[]}>
-        <YStack maxW={440} self="center" width="100%">
+        <View style={{ alignSelf: "center", maxWidth: 440, width: "100%" }}>
           <XGUIList size="large">
             <XGUIListItem
               disabled={savingAvatar}
@@ -120,12 +119,12 @@ export function ProfileScreen() {
               onPress={() => setAvatarSheetOpen(true)}
               title="头像"
               trailing={
-                <XStack gap="$3" items="center">
+                <View style={styles.avatarTrailing}>
                   <AppAvatar accessibilityLabel={displayName} avatar={currentUser?.avatar} server={session} size="$7" type="user" />
                   {savingAvatar ? (
                     <XGUILoadingIcon color={colors.textPlaceholder} size={20} />
                   ) : null}
-                </XStack>
+                </View>
               }
             />
           </XGUIList>
@@ -158,7 +157,7 @@ export function ProfileScreen() {
           <XGUIList size="large">
             <XGUIListItem centerContent destructive onPress={() => setDeactivationSheetOpen(true)} title="注销账号" />
           </XGUIList>
-        </YStack>
+        </View>
       </KeyboardAwareScreen>
 
       <MediaPermissionSettingsDialog
@@ -196,6 +195,7 @@ export function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  avatarTrailing: { alignItems: "center", flexDirection: "row", gap: 13 },
   screen: {
     flex: 1,
   },

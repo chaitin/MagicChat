@@ -1,5 +1,6 @@
 import { type LucideIcon } from "lucide-react-native"
-import { useTheme } from "tamagui"
+
+import { useXGUITheme } from "@/xgui"
 
 export function ThemedIcon({
   color,
@@ -10,7 +11,7 @@ export function ThemedIcon({
   icon: LucideIcon
   size?: number
 }) {
-  const theme = useTheme()
+  const { colors } = useXGUITheme()
 
-  return <Icon color={color ?? String(theme.color.val)} size={size} />
+  return <Icon color={color ?? colors.textPrimary} size={size} />
 }

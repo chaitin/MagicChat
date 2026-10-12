@@ -25,7 +25,9 @@ test("服务器管理使用统一的顶部返回按钮", async () => {
 test("未登录服务器选择页可检查并安装更新", async () => {
   const source = await readFile(screenUrl, "utf8")
 
-  assert.match(source, /添加服务器[\s\S]*?<YStack items="center" mt="auto"[\s\S]*?mode === "default"[\s\S]*?版本 \{appUpdate\.installedVersion\.version\}[\s\S]*?>检查更新<[\s\S]*?XGUIFooter/)
+  assert.match(source, /添加服务器[\s\S]*?<View style=\{styles\.footer\}>[\s\S]*?mode === "default"[\s\S]*?版本 \{appUpdate\.installedVersion\.version\}[\s\S]*?>检查更新<[\s\S]*?XGUIFooter/)
+  assert.match(source, /footer: \{ alignItems: "center", marginTop: "auto", paddingBottom: 18, paddingTop: 46 \}/)
+  assert.match(source, /<Pressable accessible=\{false\} onPress=\{closeOpenSwipeable\} style=\{styles\.pressableArea\}>/)
   assert.match(source, /accessibilityLabel=\{`检查更新，当前版本 \$\{appUpdate\.installedVersion\.version\}`\}/)
   assert.match(source, /color: colors\.foreground2/)
   assert.match(source, /styles\.updateLink[\s\S]*?minHeight: 44/)

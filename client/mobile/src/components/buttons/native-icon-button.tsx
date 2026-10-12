@@ -1,6 +1,5 @@
 import type { ReactNode } from "react"
 import { Pressable, StyleSheet } from "react-native"
-import { tamaguiConfig } from "../../../tamagui.config"
 import { useXGUITheme } from "@/xgui"
 
 type NativeIconButtonProps = {
@@ -22,8 +21,8 @@ export function NativeIconButton({
   onPressIn,
   size = 36,
 }: NativeIconButtonProps) {
-  const { colorScheme } = useXGUITheme()
-  const pressedColor = tamaguiConfig.themes[`${colorScheme}_teal`].backgroundPress.val
+  const { colorScheme, colors } = useXGUITheme()
+  const pressedColor = colorScheme === "dark" ? colors.background5 : colors.background1
   return (
     <Pressable
       accessibilityLabel={accessibilityLabel}

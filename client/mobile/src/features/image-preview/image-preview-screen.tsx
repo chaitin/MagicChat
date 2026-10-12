@@ -2,10 +2,9 @@ import { NavigationBar } from "expo-navigation-bar"
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router"
 import { StatusBar } from "expo-status-bar"
 import { useEffect, useMemo, useRef, useState } from "react"
-import {
-  SizableText,
-  YStack,
-} from "tamagui"
+import { StyleSheet, View } from "react-native"
+
+import { Text } from "@/components/mi-sans-text"
 
 import type { AuthenticatedTarget } from "@/core/server-target"
 import { useConversationMessages } from "@/data/messages/message-hooks"
@@ -260,26 +259,15 @@ function AuthenticatedImagePreview({
   }
 
   return (
-    <YStack bg="#000" flex={1}>
+    <View style={styles.screen}>
       <StatusBar hidden />
       <NavigationBar hidden={false} style="dark" />
 
       {!resource ? (
-        <YStack
-          b={0}
-          gap="$4"
-          items="center"
-          justify="center"
-          l={0}
-          position="absolute"
-          r={0}
-          t={0}
-        >
+        <View style={styles.loading}>
           {error ? (
             <>
-              <SizableText color="#fff" maxW={280} text="center">
-                {error.message}
-              </SizableText>
+              <Text style={styles.errorText}>{error.message}</Text>
               <XGUIButton
                 onPress={() => void handleRetry()}
                 size="mini"
@@ -291,7 +279,7 @@ function AuthenticatedImagePreview({
           ) : (
             <XGUILoadingIcon color="#fff" size={40} />
           )}
-        </YStack>
+        </View>
       ) : null}
 
       {resource ? (
@@ -312,9 +300,24 @@ function AuthenticatedImagePreview({
           source={{ uri: resource.uri }}
         />
       ) : null}
-    </YStack>
+    </View>
   )
 }
+
+const styles = StyleSheet.create({
+  screen: { backgroundColor: "#000", flex: 1 },
+  loading: {
+    alignItems: "center",
+    bottom: 0,
+    gap: 18,
+    justifyContent: "center",
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+  },
+  errorText: { color: "#fff", fontSize: 15, lineHeight: 23, maxWidth: 280, textAlign: "center" },
+})
 
 async function ensurePreviewResource(
   session: AuthenticatedTarget,

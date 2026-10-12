@@ -8,9 +8,10 @@ import {
   useRouter,
 } from "expo-router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Alert, Keyboard, Platform } from "react-native"
+import { Alert, Keyboard, Platform, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { SizableText, YStack } from "tamagui"
+
+import { Text } from "@/components/mi-sans-text"
 
 import { ContentState } from "@/components/feedback/content-state"
 import { measureMobilePerf, recordConversationReady, recordMobilePerf } from "@/diagnostics/mobile-perf"
@@ -535,7 +536,7 @@ export function ConversationScreen() {
   const headerAction = conversation ? handleConversationDetails : undefined
 
   return (
-    <YStack bg={colors.background0} flex={1}>
+    <View style={{ backgroundColor: colors.background0, flex: 1 }}>
       <AppHeader
         actions={
           headerAction
@@ -565,7 +566,7 @@ export function ConversationScreen() {
         title={conversationTitle}
       />
 
-      <YStack bg={colors.background1} flex={1} pb={insets.bottom}>
+      <View style={{ backgroundColor: colors.background1, flex: 1, paddingBottom: insets.bottom }}>
         <KeyboardAwareScreen
           contentBackground={colors.background0}
           edges={[]}
@@ -639,11 +640,11 @@ export function ConversationScreen() {
               }
               />
               {topicArchived ? (
-                <YStack bg={colors.background1} items="center" p="$4">
-                  <SizableText color={colors.textPlaceholder} size="$3">
+                <View style={{ alignItems: "center", backgroundColor: colors.background1, padding: 18 }}>
+                  <Text style={{ color: colors.textPlaceholder, fontSize: 14, lineHeight: 21 }}>
                     话题已关闭，无法继续发言
-                  </SizableText>
-                </YStack>
+                  </Text>
+                </View>
               ) : (
                 <MessageComposer
                   disabled={!conversation.canSend}
@@ -661,7 +662,7 @@ export function ConversationScreen() {
             </>
           )}
         </KeyboardAwareScreen>
-      </YStack>
+      </View>
 
       {messageActionTarget ? (
         <XGUIActionSheet
@@ -728,7 +729,7 @@ export function ConversationScreen() {
           source={forwardMessage}
         />
       ) : null}
-    </YStack>
+    </View>
   )
 }
 

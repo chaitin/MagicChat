@@ -1,9 +1,8 @@
 // Tabler exposes per-icon runtime entry points without per-icon declarations.
 // eslint-disable-next-line import/no-unresolved
 import IconCircleXFilled from "@tabler/icons-react-native/IconCircleXFilled"
-import { Pressable, StyleSheet } from "react-native"
+import { Pressable, StyleSheet, View } from "react-native"
 import { Text } from "@/components/mi-sans-text"
-import { XStack } from "tamagui"
 
 import { useXGUITheme } from "@/xgui"
 
@@ -23,16 +22,7 @@ export function MessageReplyPreview({
   const { colors } = useXGUITheme()
 
   return (
-    <XStack
-      bg={colors.foreground5}
-      height={36}
-      items="center"
-      mb="$1"
-      mt="$2"
-      mx="$3"
-      pl="$2"
-      rounded="$2"
-    >
+    <View style={[styles.preview, { backgroundColor: colors.foreground5 }]}>
       <Text
         numberOfLines={1}
         style={[styles.message, { color: colors.textSecondary }]}
@@ -53,11 +43,21 @@ export function MessageReplyPreview({
           />
         )}
       </Pressable>
-    </XStack>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
+  preview: {
+    alignItems: "center",
+    borderRadius: 5,
+    flexDirection: "row",
+    height: 36,
+    marginBottom: 2,
+    marginHorizontal: 13,
+    marginTop: 7,
+    paddingLeft: 7,
+  },
   clearButton: {
     alignItems: "center",
     height: 36,

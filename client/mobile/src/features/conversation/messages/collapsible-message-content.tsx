@@ -2,7 +2,8 @@ import { ChevronDown } from "lucide-react-native"
 import { type ReactNode, useId, useState } from "react"
 import { Pressable, StyleSheet, View } from "react-native"
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg"
-import { SizableText, XStack } from "tamagui"
+
+import { Text } from "@/components/mi-sans-text"
 
 import {
   type CollapsibleMessageVariant,
@@ -106,23 +107,12 @@ export function CollapsibleMessageContent({
           onPress={() => setExpanded(true)}
           style={[styles.expandAction, { backgroundColor: fadeColor }]}
         >
-          <XStack
-            height={EXPAND_LABEL_HEIGHT}
-            gap="$1"
-            items="center"
-            justify="center"
-            pointerEvents="none"
-            width="100%"
-          >
+          <View pointerEvents="none" style={styles.expandLabel}>
             <ChevronDown color={actionColor} size={14} />
-            <SizableText
-              color={colors.textPrimary}
-              lineHeight={18}
-              size="$3"
-            >
+            <Text style={[styles.expandText, { color: colors.textPrimary }]}>
               展开
-            </SizableText>
-          </XStack>
+            </Text>
+          </View>
         </Pressable>
       ) : null}
     </View>
@@ -151,6 +141,15 @@ const styles = StyleSheet.create({
     marginBottom: -EXPAND_ACTION_BOTTOM_OVERLAP,
     marginHorizontal: -BUBBLE_HORIZONTAL_PADDING,
   },
+  expandLabel: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 2,
+    height: EXPAND_LABEL_HEIGHT,
+    justifyContent: "center",
+    width: "100%",
+  },
+  expandText: { fontSize: 14, lineHeight: 18 },
   fade: {
     bottom: 0,
     left: 0,

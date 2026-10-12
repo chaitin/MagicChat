@@ -1,7 +1,6 @@
-import { AlertDialog, XStack } from "tamagui"
+import { View } from "react-native"
 
-import { AppButton } from "@/components/forms/app-button"
-import { XGUILoadingIcon, useXGUITheme } from "@/xgui"
+import { XGUIDialog, XGUILoadingIcon, useXGUITheme } from "@/xgui"
 
 export function TopicArchiveDialog({
   onConfirm,
@@ -17,48 +16,33 @@ export function TopicArchiveDialog({
   const { colors } = useXGUITheme()
 
   return (
-    <AlertDialog
-      onOpenChange={(nextOpen) => {
-        if (!saving) onOpenChange(nextOpen)
-      }}
+    <XGUIDialog
+      actions={[
+        {
+          accessibilityLabel: "取消关闭话题",
+          disabled: saving,
+          label: "取消",
+          onPress: () => onOpenChange(false),
+        },
+        {
+          accessibilityLabel: "确认关闭话题",
+          disabled: saving,
+          label: saving ? "关闭中…" : "确认关闭",
+          onPress: onConfirm,
+          variant: "destructive",
+        },
+      ]}
+      description="关闭后仍可查看话题，但无法继续发言，其他人也无法再参与。"
+      dismissible={!saving}
+      onOpenChange={onOpenChange}
       open={open}
+      title="确认关闭话题"
     >
-      <AlertDialog.Portal>
-        <AlertDialog.Overlay bg="$shadow6" opacity={0.5} />
-        <AlertDialog.Content bordered elevate gap="$4" maxW={440} width="90%">
-          <AlertDialog.Title fontSize="$4" lineHeight="$5">
-            确认关闭话题
-          </AlertDialog.Title>
-          <AlertDialog.Description color="$gray9">
-            关闭后仍可查看话题，但无法继续发言，其他人也无法再参与。
-          </AlertDialog.Description>
-          <XStack gap="$3" width="100%">
-            <AppButton
-              accessibilityLabel="取消关闭话题"
-              disabled={saving}
-              grow={1}
-              onPress={() => onOpenChange(false)}
-              theme="gray"
-            >
-              取消
-            </AppButton>
-            <AppButton
-              accessibilityLabel="确认关闭话题"
-              disabled={saving}
-              grow={1}
-              icon={
-                saving ? (
-                  <XGUILoadingIcon color={colors.textOnColor} size={20} />
-                ) : undefined
-              }
-              onPress={onConfirm}
-              theme="red"
-            >
-              {saving ? "关闭中…" : "确认关闭"}
-            </AppButton>
-          </XStack>
-        </AlertDialog.Content>
-      </AlertDialog.Portal>
-    </AlertDialog>
+      {saving ? (
+        <View style={{ alignItems: "center", marginTop: 12 }}>
+          <XGUILoadingIcon color={colors.destructive} size={20} />
+        </View>
+      ) : null}
+    </XGUIDialog>
   )
 }

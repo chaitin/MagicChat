@@ -1,8 +1,7 @@
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router"
 import { ChevronLeft } from "lucide-react-native"
 import { useRef, useState } from "react"
-import type { TextInput } from "react-native"
-import { YStack } from "tamagui"
+import { View, type TextInput } from "react-native"
 
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
 import { PageHeader } from "@/components/navigation/page-header"
@@ -104,7 +103,7 @@ function ServerEditorForm({ server }: { server: ServerConfig | null }) {
   }
 
   return (
-    <YStack bg={colors.background0} flex={1}>
+    <View style={{ backgroundColor: colors.background0, flex: 1 }}>
       <PageHeader
         actionDisabled={saveDisabled}
         actionLabel="保存"
@@ -123,12 +122,11 @@ function ServerEditorForm({ server }: { server: ServerConfig | null }) {
       />
       <KeyboardAwareScreen
         contentBackground={colors.background0}
+        contentStyle={{ paddingHorizontal: 18, paddingTop: 18 }}
         edges={["left", "right", "bottom"]}
-        px="$4"
-        pt="$4"
       >
-        <YStack maxW={440} self="center" width="100%">
-          <YStack overflow="hidden" style={{ borderRadius: 8 }}>
+        <View style={{ alignSelf: "center", maxWidth: 440, width: "100%" }}>
+          <View style={{ borderRadius: 8, overflow: "hidden" }}>
             <XGUIInput
               autoCapitalize="none"
               label="名称"
@@ -159,7 +157,7 @@ function ServerEditorForm({ server }: { server: ServerConfig | null }) {
               spellCheck={false}
               value={url}
             />
-          </YStack>
+          </View>
 
           {errorMessage ? (
             <XGUIInformationBar
@@ -169,8 +167,8 @@ function ServerEditorForm({ server }: { server: ServerConfig | null }) {
               variant="warn-weak"
             />
           ) : null}
-        </YStack>
+        </View>
       </KeyboardAwareScreen>
-    </YStack>
+    </View>
   )
 }

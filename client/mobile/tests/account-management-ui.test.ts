@@ -147,7 +147,7 @@ test("add, cancel, reauth and authenticated route guards remain separate", () =>
 test("account UI has explicit accessibility labels and never serializes credentials", async () => {
   const source = await readFile(new URL("../src/features/accounts/account-management-screen.tsx", import.meta.url), "utf8")
   assert.match(source, /accessibilityLabel={`登出账号\$\{item\.email\}`}/)
-  assert.match(source, /<YStack px="\$4">\s*<XGUIList variant="form-radio">/)
+  assert.match(source, /<View style=\{\{ paddingHorizontal: 18 \}\}>\s*<XGUIList variant="form-radio">/)
   assert.match(source, /avatar=\{avatar\}/)
   assert.match(source, /disabled=\{disabled \|\| item\.isCurrent\}/)
   assert.match(source, /\{item\.isCurrent \? "当前" : "切换"\}/)

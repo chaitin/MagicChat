@@ -1,8 +1,7 @@
 import { Camera, Images, Paperclip } from "lucide-react-native"
-import { Pressable, StyleSheet } from "react-native"
+import { Pressable, ScrollView, StyleSheet, View } from "react-native"
 import { Text } from "@/components/mi-sans-text"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { ScrollView, SizableText, XStack, YStack } from "tamagui"
 
 import { useXGUITheme } from "@/xgui"
 
@@ -95,13 +94,9 @@ export function ComposerAccessoryPanel({
   if (!mode) return null
 
   return (
-    <YStack
-      bg={colors.background0}
-      mb={-insets.bottom}
-      pb={insets.bottom}
-    >
+    <View style={{ backgroundColor: colors.background0, marginBottom: -insets.bottom, paddingBottom: insets.bottom }}>
       {mode === "attachments" ? (
-        <XStack flexWrap="wrap" minH={132} px="$3" py="$4">
+        <View style={styles.attachments}>
           <AccessoryAction
             disabled={disabled}
             icon={Camera}
@@ -120,10 +115,10 @@ export function ComposerAccessoryPanel({
             label="附件"
             onPress={onFilePress}
           />
-        </XStack>
+        </View>
       ) : (
-        <ScrollView maxH={184} showsVerticalScrollIndicator={false}>
-          <XStack flexWrap="wrap" px="$3" py="$3">
+        <ScrollView showsVerticalScrollIndicator={false} style={styles.emojiScroll}>
+          <View style={styles.emojiGrid}>
             {emojiItems.map((emoji) => (
               <Pressable
                 accessibilityLabel={emoji.label}
@@ -141,10 +136,10 @@ export function ComposerAccessoryPanel({
                 <Text style={styles.emojiText}>{emoji.value}</Text>
               </Pressable>
             ))}
-          </XStack>
+          </View>
         </ScrollView>
       )}
-    </YStack>
+    </View>
   )
 }
 
@@ -163,7 +158,7 @@ function AccessoryAction({
   const Icon = icon
 
   return (
-    <YStack gap="$2" items="center" width="25%">
+    <View style={styles.action}>
       <Pressable
         accessibilityLabel={label}
         accessibilityRole="button"
@@ -178,14 +173,19 @@ function AccessoryAction({
       >
         <Icon color={colors.textPrimary} size={28} strokeWidth={1.8} />
       </Pressable>
-      <SizableText color="$gray10" size="$2">
+      <Text style={[styles.actionLabel, { color: colors.textSecondary }]}>
         {label}
-      </SizableText>
-    </YStack>
+      </Text>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
+  attachments: { flexDirection: "row", flexWrap: "wrap", minHeight: 132, paddingHorizontal: 13, paddingVertical: 18 },
+  emojiScroll: { maxHeight: 184 },
+  emojiGrid: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 13, paddingVertical: 13 },
+  action: { alignItems: "center", gap: 7, width: "25%" },
+  actionLabel: { fontSize: 13, lineHeight: 20 },
   accessoryButton: {
     alignItems: "center",
     borderRadius: 10,

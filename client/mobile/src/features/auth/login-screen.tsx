@@ -2,8 +2,9 @@ import { useQueryClient } from "@tanstack/react-query"
 import { Redirect, type Href, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router"
 import { ChevronLeft } from "lucide-react-native"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { BackHandler } from "react-native"
-import { Image, Paragraph, XStack, YStack } from "tamagui"
+import { BackHandler, Image, StyleSheet, View } from "react-native"
+
+import { Text } from "@/components/mi-sans-text"
 
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
 import { ContentState } from "@/components/feedback/content-state"
@@ -169,7 +170,7 @@ export function LoginScreen() {
   }
 
   return (
-    <YStack bg={colors.background0} flex={1}>
+    <View style={[styles.screen, { backgroundColor: colors.background0 }]}>
       <PageHeader
         backDisabled={isPreparingSignIn}
         backIcon={ChevronLeft}
@@ -181,34 +182,29 @@ export function LoginScreen() {
       />
       <KeyboardAwareScreen
         contentBackground={colors.background0}
+        contentStyle={{ alignItems: "center", paddingBottom: 128, paddingHorizontal: 18, paddingTop: 7 }}
         edges={["left", "right", "bottom"]}
         keyboardShouldPersistTaps="always"
-        items="center"
-        pb={128}
-        pt="$2"
-        px="$4"
       >
-      <YStack grow={1} maxW={440} width="100%">
-        <YStack gap={48} grow={1} justify="center">
-          <XStack gap="$3" items="center" justify="center">
+      <View style={styles.content}>
+        <View style={styles.body}>
+          <View style={styles.brand}>
             <Image
-              alt="即应 Logo"
-              borderRadius={10}
-              height="$5"
-              src={require("../../../assets/images/icon.png")}
-              width="$5"
+              accessibilityLabel="即应 Logo"
+              source={require("../../../assets/images/icon.png")}
+              style={styles.logo}
             />
             {appInfo ? (
-              <YStack gap="$1.5" shrink={1}>
-                <Paragraph fontSize="$5" fontWeight="600" lineHeight="$6">
+              <View style={styles.brandText}>
+                <Text style={[styles.appName, { color: colors.textPrimary }]}>
                   {appInfo.appName} 智能协作平台
-                </Paragraph>
-                <Paragraph color="$color10" fontSize="$3">
+                </Text>
+                <Text style={[styles.organization, { color: colors.brand5 }]}>
                   {appInfo.organizationName} 的工作空间
-                </Paragraph>
-              </YStack>
+                </Text>
+              </View>
             ) : null}
-          </XStack>
+          </View>
 
           <LoginForm
             connectionFailed={connectionFailed}
@@ -221,9 +217,20 @@ export function LoginScreen() {
             passwordLoginEnabled={appInfo?.passwordLoginEnabled ?? true}
             server={loginServer}
           />
-        </YStack>
-      </YStack>
+        </View>
+      </View>
       </KeyboardAwareScreen>
-    </YStack>
+    </View>
   )
 }
+
+const styles = StyleSheet.create({
+  screen: { flex: 1 },
+  content: { flexGrow: 1, maxWidth: 440, width: "100%" },
+  body: { flexGrow: 1, gap: 48, justifyContent: "center" },
+  brand: { alignItems: "center", flexDirection: "row", gap: 13, justifyContent: "center" },
+  logo: { borderRadius: 10, height: 52, width: 52 },
+  brandText: { flexShrink: 1, gap: 4 },
+  appName: { fontSize: 16, fontWeight: "600", lineHeight: 27 },
+  organization: { fontSize: 14, lineHeight: 21 },
+})

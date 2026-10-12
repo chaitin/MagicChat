@@ -1,14 +1,33 @@
-import { Input, styled } from "tamagui"
+import { forwardRef, useState } from "react"
+import { StyleSheet, TextInput, type TextInputProps } from "react-native"
 
-export const AppInput = styled(Input, {
-  name: "AppInput",
-  cursorColor: "$color10",
-  placeholderTextColor: "$color8",
-  selectionColor: "$color10",
-  focusStyle: {
-    borderColor: "$borderColorFocus",
-    outlineColor: "$outlineColor",
-    outlineStyle: "solid",
-    outlineWidth: 2,
-  },
+import { useXGUITheme } from "@/xgui"
+
+export const AppInput = forwardRef<TextInput, TextInputProps>(function AppInput(
+  { onBlur, onFocus, style, ...props },
+  ref
+) {
+  const { colors } = useXGUITheme()
+  const [focused, setFocused] = useState(false)
+
+  return (
+    <TextInput
+      {...props}
+      cursorColor={colors.brand}
+      onBlur={(event) => { setFocused(false); onBlur?.(event) }}
+      onFocus={(event) => { setFocused(true); onFocus?.(event) }}
+      placeholderTextColor={colors.textPlaceholder}
+      ref={ref}
+      selectionColor={colors.brand}
+      style={[
+        styles.input,
+        { backgroundColor: colors.background2, borderColor: focused ? colors.brand : colors.separator, color: colors.textPrimary },
+        style,
+      ]}
+    />
+  )
+})
+
+const styles = StyleSheet.create({
+  input: { borderRadius: 8, borderWidth: 1, fontSize: 15, height: 44, paddingHorizontal: 13 },
 })

@@ -1,6 +1,7 @@
 import { Fragment } from "react"
 import { Linking } from "react-native"
-import { Text } from "tamagui"
+
+import { Text } from "@/components/mi-sans-text"
 
 import type { EntityReference } from "@/domain/entities/entity-profile"
 import {
@@ -31,8 +32,7 @@ export function MessageMentionText({
           {linkifyMessageText(part.text).map((textPart, textIndex) =>
             textPart.type === "link" ? (
               <Text
-                color={colors.link}
-                fontWeight="600"
+                style={{ color: colors.link, fontWeight: "600" }}
                 key={`link:${textIndex}:${textPart.value}`}
                 onPress={() => void openMessageLink(textPart.href)}
               >
@@ -57,8 +57,7 @@ export function MessageMentionText({
 
     return (
       <Text
-        color={highlighted ? colors.orange : colors.link}
-        fontWeight="600"
+        style={{ color: highlighted ? colors.orange : colors.link, fontWeight: "600" }}
         key={`${part.targetType}:${part.id}:${index}`}
         onPress={target ? () => onMentionPress(target) : undefined}
       >

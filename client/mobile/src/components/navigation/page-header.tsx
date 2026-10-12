@@ -1,18 +1,14 @@
 import { ArrowLeft, type LucideIcon } from "lucide-react-native"
 import type { ReactNode } from "react"
+import { StyleSheet, View, type TextStyle } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import {
-  type GetProps,
-  H5,
-  SizableText,
-  XStack,
-  YStack,
-} from "tamagui"
+
+import { Text } from "@/components/mi-sans-text"
 
 import { CompactIconButton } from "@/components/buttons/compact-icon-button"
 import { ThemedIcon } from "@/components/icons/themed-icon"
 import { HeaderButton } from "@/components/navigation/header-button"
-import { XGUIButton } from "@/xgui/components/xgui-button"
+import { XGUIButton, useXGUITheme } from "@/xgui"
 
 export const PAGE_HEADER_HEIGHT = 56
 
@@ -23,7 +19,7 @@ export function PageHeader({
   backDisabled = false,
   backIcon = ArrowLeft,
   backIconColor,
-  background = "$background",
+  background,
   compactActionIcon,
   compactIconButtons = false,
   actionLabel,
@@ -43,7 +39,7 @@ export function PageHeader({
   backDisabled?: boolean
   backIcon?: LucideIcon
   backIconColor?: string
-  background?: GetProps<typeof YStack>["bg"]
+  background?: string
   compactActionIcon?: LucideIcon
   compactIconButtons?: boolean
   compactTitle?: boolean
@@ -54,19 +50,16 @@ export function PageHeader({
   title: string
   titleColor?: string
   titleFontSize?: number
-  titleFontWeight?: GetProps<typeof SizableText>["fontWeight"]
+  titleFontWeight?: TextStyle["fontWeight"]
   titleLeading?: ReactNode
 }) {
   const insets = useSafeAreaInsets()
+  const { colors } = useXGUITheme()
 
   return (
-    <YStack bg={background} pt={insets.top}>
-      <XStack
-        height={PAGE_HEADER_HEIGHT}
-        items="center"
-        px={compactIconButtons ? "$3" : "$2"}
-      >
-        <XStack width={72}>
+    <View style={{ backgroundColor: background ?? colors.background0, paddingTop: insets.top }}>
+      <View style={[styles.header, { paddingHorizontal: compactIconButtons ? 13 : 7 }]}>
+        <View style={styles.leading}>
           {onBackPress ? (
             compactIconButtons ? (
               <CompactIconButton
@@ -89,31 +82,33 @@ export function PageHeader({
               />
             )
           ) : null}
-        </XStack>
+        </View>
 
-        <XStack flex={1} gap="$2" items="center" justify="center" minW={0}>
+        <View style={styles.titleRow}>
           {titleLeading}
           {compactTitle ? (
-            <SizableText
-              flex={1}
-              fontSize={titleFontSize}
-              fontWeight={titleFontWeight}
-              lineHeight={titleFontSize ? 24 : undefined}
+            <Text
               numberOfLines={1}
-              size="$4"
-              style={titleColor ? { color: titleColor } : undefined}
-              text="center"
+              style={[
+                styles.title,
+                {
+                  color: titleColor ?? colors.textPrimary,
+                  fontSize: titleFontSize ?? 15,
+                  fontWeight: titleFontWeight,
+                  lineHeight: titleFontSize ? 24 : 23,
+                },
+              ]}
             >
               {title}
-            </SizableText>
+            </Text>
           ) : (
-            <H5 flex={1} numberOfLines={1} text="center">
+            <Text accessibilityRole="header" numberOfLines={1} style={[styles.largeTitle, { color: titleColor ?? colors.textPrimary }]}>
               {title}
-            </H5>
+            </Text>
           )}
-        </XStack>
+        </View>
 
-        <XStack justify="flex-end" width={72}>
+        <View style={styles.actions}>
           {actionLabel && onActionPress ? (
             compactIconButtons && compactActionIcon ? (
               <CompactIconButton
@@ -146,8 +141,24 @@ export function PageHeader({
               </HeaderButton>
             )
           ) : null}
-        </XStack>
-      </XStack>
-    </YStack>
+        </View>
+      </View>
+    </View>
   )
 }
+
+const styles = StyleSheet.create({
+  header: { alignItems: "center", flexDirection: "row", height: PAGE_HEADER_HEIGHT },
+  leading: { width: 72 },
+  titleRow: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    gap: 7,
+    justifyContent: "center",
+    minWidth: 0,
+  },
+  title: { flex: 1, textAlign: "center" },
+  largeTitle: { flex: 1, fontSize: 20, fontWeight: "600", lineHeight: 26, textAlign: "center" },
+  actions: { flexDirection: "row", justifyContent: "flex-end", width: 72 },
+})

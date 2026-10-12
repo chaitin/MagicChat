@@ -5,13 +5,13 @@ import test from "node:test"
 
 const root = path.resolve(import.meta.dirname, "..")
 
-test("Popover 完成锚点测量后才挂载 Portal 内容", async () => {
+test("Popover 完成锚点测量后才挂载原生覆盖层", async () => {
   const source = await readFile(
     path.join(root, "src/xgui/components/xgui-popover-menu.tsx"),
     "utf8"
   )
 
-  assert.match(source, /<Portal stackZIndex=\{100_000\}>/)
+  assert.match(source, /<XGUIOverlay priority=\{100_000\}>/)
   assert.doesNotMatch(source, /<Modal|animationType="none"/)
   assert.match(source, /setLayout\([\s\S]*?setRendered\(true\)/)
   assert.match(source, /if \(!rendered \|\| !layout\) return null/)

@@ -2,15 +2,8 @@ import { useRouter } from "expo-router"
 import MarkdownIt from "markdown-it"
 import type Token from "markdown-it/lib/token.mjs"
 import { memo, useMemo, type ReactNode } from "react"
-import { Linking, ScrollView } from "react-native"
-import {
-  Image,
-  Paragraph,
-  Separator,
-  SizableText,
-  XStack,
-  YStack,
-} from "tamagui"
+import { Image, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 
 import type { EntityReference } from "@/domain/entities/entity-profile"
 import type { MessageMentionLabelResolver } from "@/domain/messages/message-presenter"
@@ -24,6 +17,9 @@ type MarkdownNode = {
 }
 
 type MarkdownRenderContext = {
+  backgroundPress: string
+  borderColor: string
+  codeColor: string
   currentUserId: string
   linkColor: ReturnType<typeof useXGUITheme>["colors"]["link"]
   onMentionPress: (target: EntityReference) => void
@@ -68,22 +64,21 @@ export const MarkdownMessage = memo(function MarkdownMessage({
 
   if (nodes.length === 0) {
     return (
-      <Paragraph
-        color={colors.textPrimary}
-        selectable={selectable}
-        size="$4"
-      >
+      <Text selectable={selectable} style={[styles.text, { color: colors.textPrimary }]}>
         <MessageMentionText
           content={content}
           currentUserId={currentUserId}
           onMentionPress={onMentionPress}
           resolveMentionLabel={resolveMentionLabel}
         />
-      </Paragraph>
+      </Text>
     )
   }
 
   const context: MarkdownRenderContext = {
+    backgroundPress: colors.background1,
+    borderColor: colors.separator,
+    codeColor: colors.brand5,
     currentUserId,
     linkColor: colors.link,
     onMentionPress,
@@ -94,9 +89,9 @@ export const MarkdownMessage = memo(function MarkdownMessage({
   }
 
   return (
-    <YStack gap="$2" maxW="100%">
+    <View style={{ gap: 7, maxWidth: "100%" }}>
       {renderBlockNodes(nodes, context)}
-    </YStack>
+    </View>
   )
 })
 
@@ -149,15 +144,9 @@ function renderBlockNode(
 
   if (token.type === "heading_open") {
     return (
-      <SizableText
-        color={context.textColor}
-        fontWeight="600"
-        key={key}
-        lineHeight={23}
-        size="$4"
-      >
+      <Text key={key} style={[styles.text, { color: context.textColor, fontWeight: "600" }]}>
         {renderNodeInlineContent(node, context)}
-      </SizableText>
+      </Text>
     )
   }
 
@@ -172,25 +161,17 @@ function renderBlockNode(
 
   if (token.type === "list_item_open") {
     return (
-      <YStack flex={1} gap="$2" key={key}>
+      <View key={key} style={{ flex: 1, gap: 7 }}>
         {renderBlockNodes(node.children, context)}
-      </YStack>
+      </View>
     )
   }
 
   if (token.type === "blockquote_open") {
     return (
-      <YStack
-        bg="$backgroundPress"
-        borderColor="$borderColor"
-        borderLeftWidth={3}
-        gap="$2"
-        key={key}
-        p="$2"
-        pl="$3"
-      >
+      <View key={key} style={{ backgroundColor: context.backgroundPress, borderColor: context.borderColor, borderLeftWidth: 3, gap: 7, padding: 7, paddingLeft: 13 }}>
         {renderBlockNodes(node.children, context)}
-      </YStack>
+      </View>
     )
   }
 
@@ -199,7 +180,7 @@ function renderBlockNode(
   }
 
   if (token.type === "hr") {
-    return <Separator key={key} />
+    return <View key={key} style={{ backgroundColor: context.borderColor, height: StyleSheet.hairlineWidth }} />
   }
 
   if (token.type === "table_open") {
@@ -214,32 +195,32 @@ function renderBlockNode(
 
   if (token.type === "inline") {
     return (
-      <Paragraph color={context.textColor} key={key} selectable={context.selectable} size="$4">
+      <Text key={key} selectable={context.selectable} style={[styles.text, { color: context.textColor }]}>
         {renderInlineTokens(
           token.children ?? [],
           context
         )}
-      </Paragraph>
+      </Text>
     )
   }
 
   if (node.children.length > 0) {
     return (
-      <YStack gap="$2" key={key}>
+      <View key={key} style={{ gap: 7 }}>
         {renderBlockNodes(node.children, context)}
-      </YStack>
+      </View>
     )
   }
 
   return token.content ? (
-    <Paragraph color={context.textColor} key={key} selectable={context.selectable} size="$4">
+    <Text key={key} selectable={context.selectable} style={[styles.text, { color: context.textColor }]}>
       <MessageMentionText
         content={token.content}
         currentUserId={context.currentUserId}
         onMentionPress={context.onMentionPress}
         resolveMentionLabel={context.resolveMentionLabel}
       />
-    </Paragraph>
+    </Text>
   ) : null
 }
 
@@ -260,11 +241,11 @@ function renderParagraph(
   )
 
   return (
-    <YStack gap="$2" key={key}>
+    <View key={key} style={{ gap: 7 }}>
       {hasText || imageTokens.length === 0 ? (
-        <Paragraph color={context.textColor} lineHeight={23} selectable={context.selectable} size="$4">
+        <Text selectable={context.selectable} style={[styles.text, { color: context.textColor }]}>
           {renderInlineTokens(inlineTokens, context)}
-        </Paragraph>
+        </Text>
       ) : null}
       {imageTokens.map((token, index) => (
         <MarkdownImage
@@ -273,7 +254,7 @@ function renderParagraph(
           token={token}
         />
       ))}
-    </YStack>
+    </View>
   )
 }
 
@@ -289,28 +270,18 @@ function renderList(
   const start = Number(node.token.attrGet("start") ?? "1") || 1
 
   return (
-    <YStack gap="$2" key={key}>
+    <View key={key} style={{ gap: 7 }}>
       {items.map((item, index) => (
-        <XStack
-          gap="$2"
-          items="flex-start"
-          key={`${key}:item:${index}`}
-          maxW="100%"
-        >
-          <SizableText
-            color={context.textColor}
-            minW={ordered ? 22 : 10}
-            size="$4"
-            text="right"
-          >
+        <View key={`${key}:item:${index}`} style={{ alignItems: "flex-start", flexDirection: "row", gap: 7, maxWidth: "100%" }}>
+          <Text style={[styles.text, { color: context.textColor, minWidth: ordered ? 22 : 10, textAlign: "right" }]}>
             {ordered ? `${start + index}.` : "•"}
-          </SizableText>
-          <YStack gap="$2" minW={0} shrink={1}>
+          </Text>
+          <View style={{ flexShrink: 1, gap: 7, minWidth: 0 }}>
             {renderBlockNodes(item.children, context)}
-          </YStack>
-        </XStack>
+          </View>
+        </View>
       ))}
-    </YStack>
+    </View>
   )
 }
 
@@ -324,18 +295,11 @@ function MarkdownCodeBlock({
   const language = token.info.trim().split(/\s+/, 1)[0]
 
   return (
-    <YStack
-      bg="$backgroundPress"
-      borderColor="$borderColor"
-      borderWidth={1}
-      gap="$2"
-      overflow="hidden"
-      rounded="$3"
-    >
+    <View style={{ backgroundColor: context.backgroundPress, borderColor: context.borderColor, borderRadius: 7, borderWidth: 1, gap: 7, overflow: "hidden" }}>
       {language ? (
-        <SizableText color="$color10" px="$3" pt="$2" size="$4">
+        <Text style={[styles.text, { color: context.codeColor, paddingHorizontal: 13, paddingTop: 7 }]}>
           {language}
-        </SizableText>
+        </Text>
       ) : null}
       <ScrollView
         horizontal
@@ -343,11 +307,11 @@ function MarkdownCodeBlock({
         showsHorizontalScrollIndicator
         style={horizontalScrollStyle}
       >
-        <SizableText p="$3" selectable={context.selectable} size="$4" style={{ fontFamily: "monospace" }}>
+        <Text selectable={context.selectable} style={[styles.text, { fontFamily: "monospace", padding: 13 }]}>
           {token.content.replace(/\n$/, "")}
-        </SizableText>
+        </Text>
       </ScrollView>
-    </YStack>
+    </View>
   )
 }
 
@@ -367,7 +331,7 @@ function MarkdownTable({
       showsHorizontalScrollIndicator
       style={horizontalScrollStyle}
     >
-      <YStack borderColor="$borderColor" borderTopWidth={1} minW={280}>
+      <View style={{ borderColor: context.borderColor, borderTopWidth: 1, minWidth: 280 }}>
         {rows.map((row, rowIndex) => {
           const cells = row.children.filter(
             (child) =>
@@ -375,33 +339,18 @@ function MarkdownTable({
           )
 
           return (
-            <XStack key={`row:${rowIndex}`}>
+            <View key={`row:${rowIndex}`} style={{ flexDirection: "row" }}>
               {cells.map((cell, cellIndex) => (
-                <YStack
-                  bg={cell.token.type === "th_open" ? "$backgroundPress" : undefined}
-                  borderBottomWidth={1}
-                  borderColor="$borderColor"
-                  borderLeftWidth={cellIndex === 0 ? 1 : 0}
-                  borderRightWidth={1}
-                  key={`cell:${rowIndex}:${cellIndex}`}
-                  p="$2"
-                  width={140}
-                >
-                  <SizableText
-                    fontWeight={cell.token.type === "th_open" ? "600" : "400"}
-                    size="$4"
-                  >
-                    {renderNodeInlineContent(
-                      cell,
-                      context
-                    )}
-                  </SizableText>
-                </YStack>
+                <View key={`cell:${rowIndex}:${cellIndex}`} style={{ backgroundColor: cell.token.type === "th_open" ? context.backgroundPress : undefined, borderBottomWidth: 1, borderColor: context.borderColor, borderLeftWidth: cellIndex === 0 ? 1 : 0, borderRightWidth: 1, padding: 7, width: 140 }}>
+                  <Text style={[styles.text, { color: context.textColor, fontWeight: cell.token.type === "th_open" ? "600" : "400" }]}>
+                    {renderNodeInlineContent(cell, context)}
+                  </Text>
+                </View>
               ))}
-            </XStack>
+            </View>
           )
         })}
-      </YStack>
+      </View>
     </ScrollView>
   )
 }
@@ -414,22 +363,14 @@ function MarkdownImage({ serverUrl, token }: { serverUrl: string; token: Token }
 
   if (!source || !/^https?:/i.test(source)) {
     return (
-      <Paragraph color={colors.textPlaceholder} size="$4">
-        {alt}
-      </Paragraph>
+      <Text style={[styles.text, { color: colors.textPlaceholder }]}>{alt}</Text>
     )
   }
 
   return (
-    <Image
-      accessibilityLabel={alt}
-      height={160}
-      objectFit="contain"
-      onPress={() => router.push(buildUrlImagePreviewHref(source))}
-      rounded="$3"
-      src={source}
-      width={220}
-    />
+    <Pressable accessibilityLabel={alt} accessibilityRole="button" onPress={() => router.push(buildUrlImagePreviewHref(source))}>
+      <Image resizeMode="contain" source={{ uri: source }} style={{ borderRadius: 7, height: 160, width: 220 }} />
+    </Pressable>
   )
 }
 
@@ -498,40 +439,30 @@ function renderInlineNode(
   }
   if (token.type === "code_inline") {
     return (
-      <SizableText
-        color="$color10"
-        key={key}
-        size="$4"
-        style={{ fontFamily: "monospace" }}
-      >
+      <Text key={key} style={[styles.text, { color: context.codeColor, fontFamily: "monospace" }]}>
         {token.content}
-      </SizableText>
+      </Text>
     )
   }
   if (token.type === "strong_open") {
     return (
-      <SizableText color={color} fontWeight="600" key={key} size="$4">
+      <Text key={key} style={[styles.text, { color, fontWeight: "600" }]}>
         {children}
-      </SizableText>
+      </Text>
     )
   }
   if (token.type === "em_open") {
     return (
-      <SizableText color={color} fontStyle="italic" key={key} size="$4">
+      <Text key={key} style={[styles.text, { color, fontStyle: "italic" }]}>
         {children}
-      </SizableText>
+      </Text>
     )
   }
   if (token.type === "s_open") {
     return (
-      <SizableText
-        color={color}
-        key={key}
-        size="$4"
-        textDecorationLine="line-through"
-      >
+      <Text key={key} style={[styles.text, { color, textDecorationLine: "line-through" }]}>
         {children}
-      </SizableText>
+      </Text>
     )
   }
   if (token.type === "link_open") {
@@ -540,15 +471,9 @@ function renderInlineNode(
       context.serverUrl
     )
     return (
-      <SizableText
-        color={context.linkColor}
-        key={key}
-        onPress={url ? () => void openMarkdownUrl(url) : undefined}
-        size="$4"
-        textDecorationLine="underline"
-      >
+      <Text key={key} onPress={url ? () => void openMarkdownUrl(url) : undefined} style={[styles.text, { color: context.linkColor, textDecorationLine: "underline" }]}>
         {children}
-      </SizableText>
+      </Text>
     )
   }
   if (token.type === "image") {
@@ -556,7 +481,7 @@ function renderInlineNode(
   }
 
   if (children.length > 0) {
-    return <SizableText color={color} key={key} size="$4">{children}</SizableText>
+    return <Text key={key} style={[styles.text, { color }]}>{children}</Text>
   }
 
   return token.content ? (
@@ -594,6 +519,10 @@ function resolveMarkdownUrl(value: string, serverUrl: string) {
     return ""
   }
 }
+
+const styles = StyleSheet.create({
+  text: { fontSize: 15, lineHeight: 23 },
+})
 
 async function openMarkdownUrl(url: string) {
   try {

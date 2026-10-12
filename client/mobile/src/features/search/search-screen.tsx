@@ -1,8 +1,7 @@
 import { useRouter } from "expo-router"
 import { useMemo, useState } from "react"
-import { Keyboard } from "react-native"
+import { Keyboard, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { YStack } from "tamagui"
 
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
 import { useAuthenticatedSession } from "@/providers/auth-provider"
@@ -78,7 +77,7 @@ export function SearchScreen() {
       edges={[]}
       scrollable={false}
     >
-      <YStack bg={colors.background0} pt={insets.top}>
+      <View style={{ backgroundColor: colors.background0, paddingTop: insets.top }}>
         <XGUIFilledSearchBar
           accessibilityLabel="搜索消息、联系人和项目"
           autoFocus
@@ -86,9 +85,16 @@ export function SearchScreen() {
           onChangeText={setKeyword}
           value={keyword}
         />
-      </YStack>
+      </View>
 
-      <YStack bg={colors.background0} flex={1} minH={0} pb={insets.bottom}>
+      <View
+        style={{
+          backgroundColor: colors.background0,
+          flex: 1,
+          minHeight: 0,
+          paddingBottom: insets.bottom,
+        }}
+      >
         {hasKeyword ? (
           <SearchResultList
             currentUser={currentUser}
@@ -97,7 +103,7 @@ export function SearchScreen() {
             server={session}
           />
         ) : null}
-      </YStack>
+      </View>
     </KeyboardAwareScreen>
   )
 }

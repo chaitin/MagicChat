@@ -15,11 +15,11 @@ import {
   Keyboard,
   Platform,
   StyleSheet,
+  View,
   type TextInput as NativeTextInput,
   useWindowDimensions,
 } from "react-native"
 import { Text } from "@/components/mi-sans-text"
-import { XStack, YStack } from "tamagui"
 
 import { CompactIconButton } from "@/components/buttons/compact-icon-button"
 import type {
@@ -417,20 +417,11 @@ export const MessageComposer = forwardRef<
 
   return (
     <>
-      <YStack
-        bg={colors.background1}
-        borderTopColor={colors.separator}
-        borderTopWidth={StyleSheet.hairlineWidth}
-      >
+      <View style={{ backgroundColor: colors.background1, borderTopColor: colors.separator, borderTopWidth: StyleSheet.hairlineWidth }}>
         {replyTarget ? (
           <MessageReplyPreview onClear={onClearReply} target={replyTarget} />
         ) : null}
-        <XStack
-          height={composerPanelHeight}
-          items="center"
-          pb={COMPOSER_EXTRA_BOTTOM_PADDING}
-          px="$2"
-        >
+        <View style={{ alignItems: "center", flexDirection: "row", height: composerPanelHeight, paddingBottom: COMPOSER_EXTRA_BOTTOM_PADDING, paddingHorizontal: 7 }}>
           <CompactIconButton
             accessibilityLabel={voice.mode ? "切换到文字输入" : "切换到语音输入"}
             buttonSize={COMPOSER_ICON_BUTTON_SIZE}
@@ -441,13 +432,7 @@ export const MessageComposer = forwardRef<
             onPress={voice.toggleMode}
             strokeWidth={1.5}
           />
-          <YStack
-            bg={voice.interactionActive ? "$color5" : colors.background2}
-            flex={1}
-            height={visibleControlHeight}
-            mx={COMPOSER_INPUT_GAP}
-            style={{ borderRadius: 6 }}
-          >
+          <View style={{ backgroundColor: voice.interactionActive ? colors.brand1 : colors.background2, borderRadius: 6, flex: 1, height: visibleControlHeight, marginHorizontal: COMPOSER_INPUT_GAP }}>
             {voice.mode ? (
               <VoiceRecordButton
                 disabled={disabled || upload.preparing}
@@ -487,8 +472,8 @@ export const MessageComposer = forwardRef<
                 variant="composer"
               />
             )}
-          </YStack>
-          <XStack gap="$1" items="center">
+          </View>
+          <View style={{ alignItems: "center", flexDirection: "row", gap: 2 }}>
             <CompactIconButton
               accessibilityLabel="选择表情"
               buttonSize={COMPOSER_ICON_BUTTON_SIZE}
@@ -532,8 +517,8 @@ export const MessageComposer = forwardRef<
                 strokeWidth={1.5}
               />
             )}
-          </XStack>
-        </XStack>
+          </View>
+        </View>
         <ComposerAccessoryPanel
           disabled={interactionDisabled}
           mode={accessoryMode}
@@ -542,7 +527,7 @@ export const MessageComposer = forwardRef<
           onFilePress={() => void handleUploadPick(pickFileMessage)}
           onLibraryPress={() => void handleUploadPick(pickLibraryMediaMessage)}
         />
-      </YStack>
+      </View>
 
       <MentionPickerSheet
         candidates={mentionCandidates}

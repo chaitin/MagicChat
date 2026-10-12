@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "expo-router"
 import { ChevronLeft } from "lucide-react-native"
-import { Paragraph, YStack } from "tamagui"
+import { View } from "react-native"
+
+import { Text } from "@/components/mi-sans-text"
 
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
 import { PageHeader } from "@/components/navigation/page-header"
@@ -79,12 +81,12 @@ export function AccountDeactivationScreen() {
   }
 
   return (
-    <YStack bg={colors.background0} flex={1}>
+    <View style={{ backgroundColor: colors.background0, flex: 1 }}>
       <PageHeader backIcon={ChevronLeft} backIconColor={colors.textPrimary} background={colors.background0} compactIconButtons onBackPress={() => router.back()} title="注销账号" titleColor={colors.textPrimary} titleFontSize={17} titleFontWeight="600" />
-      <KeyboardAwareScreen contentBackground={colors.background0} edges={["left", "right", "bottom"]} px="$4" pt="$4">
-        <YStack gap="$4" maxW={440} self="center" width="100%">
-          <Paragraph color={colors.textSecondary}>验证码将发送至当前账号邮箱：{activeAccount?.email?.trim() || "邮箱不可用"}</Paragraph>
-          <YStack overflow="hidden" style={{ borderRadius: 8 }}>
+      <KeyboardAwareScreen contentBackground={colors.background0} contentStyle={{ paddingHorizontal: 18, paddingTop: 18 }} edges={["left", "right", "bottom"]}>
+        <View style={{ alignSelf: "center", gap: 18, maxWidth: 440, width: "100%" }}>
+          <Text style={{ color: colors.textSecondary, fontSize: 15, lineHeight: 23 }}>验证码将发送至当前账号邮箱：{activeAccount?.email?.trim() || "邮箱不可用"}</Text>
+          <View style={{ borderRadius: 8, overflow: "hidden" }}>
             <XGUIInput
               autoComplete="one-time-code"
               autoFocus
@@ -97,11 +99,11 @@ export function AccountDeactivationScreen() {
               trailing={<XGUIButton disabled={sending || retrySeconds > 0 || submitting} loading={sending} onPress={() => void requestCode()} size="mini" variant="secondary">{retrySeconds > 0 ? `${retrySeconds}秒` : "发送验证码"}</XGUIButton>}
               value={code}
             />
-          </YStack>
+          </View>
           {errorMessage ? <XGUIInformationBar floating={false} message={errorMessage} variant="warn-weak" /> : null}
           <XGUIButton disabled={code.length !== 8 || submitting} loading={submitting} onPress={() => void submit()} variant="danger">注销账号</XGUIButton>
-        </YStack>
+        </View>
       </KeyboardAwareScreen>
-    </YStack>
+    </View>
   )
 }

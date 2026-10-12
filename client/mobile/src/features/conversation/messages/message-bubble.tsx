@@ -3,12 +3,7 @@
 import IconAlertCircleFilled from "@tabler/icons-react-native/IconAlertCircleFilled"
 import { memo, useRef } from "react"
 import { Pressable, View } from "react-native"
-import {
-  Paragraph,
-  SizableText,
-  XStack,
-  YStack,
-} from "tamagui"
+import { Text } from "@/components/mi-sans-text"
 
 import { AppAvatar } from "@/components/avatar/app-avatar"
 import type { EntityReference } from "@/domain/entities/entity-profile"
@@ -87,13 +82,13 @@ export const MessageBubble = memo(function MessageBubble({
 
   if (message.role === "system") {
     return (
-      <XStack bg={highlighted ? colors.brand1 : undefined} justify="center" px="$5">
-        <XStack maxW="85%">
-          <SizableText color={colors.textPlaceholder} size="$2" text="center">
+      <View style={{ alignItems: "center", backgroundColor: highlighted ? colors.brand1 : undefined, paddingHorizontal: 24 }}>
+        <View style={{ maxWidth: "85%" }}>
+          <Text style={{ color: colors.textPlaceholder, fontSize: 13, lineHeight: 20, textAlign: "center" }}>
             {formatClientMessageBodySummary(message.body, resolveMentionLabel)}
-          </SizableText>
-        </XStack>
-      </XStack>
+          </Text>
+        </View>
+      </View>
     )
   }
 
@@ -173,29 +168,14 @@ export const MessageBubble = memo(function MessageBubble({
   )
 
   return (
-    <XStack
-      bg={highlighted ? colors.brand1 : undefined}
-      gap="$2"
-      items="flex-start"
-      justify={fromMe ? "flex-end" : "flex-start"}
-      px="$3"
-    >
+    <View style={{ alignItems: "flex-start", backgroundColor: highlighted ? colors.brand1 : undefined, flexDirection: "row", gap: 7, justifyContent: fromMe ? "flex-end" : "flex-start", paddingHorizontal: 13 }}>
       {!fromMe ? avatar : null}
-      <YStack
-        gap="$1"
-        items={fromMe ? "flex-end" : "flex-start"}
-        maxW="82%"
-        width={structuredBubbleWidth}
-      >
-        <XStack gap="$2" items="center">
-          <SizableText
-            color={colors.textSecondary}
-            numberOfLines={1}
-            size="$2"
-          >
+      <View style={{ alignItems: fromMe ? "flex-end" : "flex-start", gap: 2, maxWidth: "82%", width: structuredBubbleWidth }}>
+        <View style={{ alignItems: "center", flexDirection: "row", gap: 7 }}>
+          <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 20 }}>
             {message.author}
-          </SizableText>
-        </XStack>
+          </Text>
+        </View>
 
         <View
           collapsable={false}
@@ -242,46 +222,16 @@ export const MessageBubble = memo(function MessageBubble({
               )}
             </View>
           ) : null}
-          <YStack
-            bg={
-              fromMe
-                ? colors.brand1
-                : colors.background2
-            }
-            rounded="$5"
-            borderTopLeftRadius={fromMe ? "$5" : "$1"}
-            borderTopRightRadius={fromMe ? "$1" : "$5"}
-            borderWidth={0}
-            maxW="100%"
-            overflow="hidden"
-            p={flushImageBubble ? 0 : "$3"}
-            width={structuredBubbleWidth ? "100%" : undefined}
-          >
+          <View style={{ backgroundColor: fromMe ? colors.brand1 : colors.background2, borderBottomLeftRadius: 10, borderBottomRightRadius: 10, borderTopLeftRadius: fromMe ? 10 : 3, borderTopRightRadius: fromMe ? 3 : 10, maxWidth: "100%", overflow: "hidden", padding: flushImageBubble ? 0 : 13, width: structuredBubbleWidth ? "100%" : undefined }}>
             {message.replyTo ? (
-              <YStack
-                borderColor="$borderColor"
-                borderLeftWidth={2}
-                mb="$2"
-                pl="$2"
-              >
-                <SizableText
-                  color={colors.textSecondary}
-                  fontWeight="600"
-                  numberOfLines={1}
-                  selectable={allowsTextSelection}
-                  size="$3"
-                >
+              <View style={{ borderColor: colors.separator, borderLeftWidth: 2, marginBottom: 7, paddingLeft: 7 }}>
+                <Text numberOfLines={1} selectable={allowsTextSelection} style={{ color: colors.textSecondary, fontSize: 14, fontWeight: "600", lineHeight: 21 }}>
                   {message.replyTo.author}
-                </SizableText>
-                <Paragraph
-                  color={colors.textSecondary}
-                  numberOfLines={2}
-                  selectable={allowsTextSelection}
-                  size="$3"
-                >
+                </Text>
+                <Text numberOfLines={2} selectable={allowsTextSelection} style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>
                   {message.replyTo.summary}
-                </Paragraph>
-              </YStack>
+                </Text>
+              </View>
             ) : null}
             {message.body.type === "choice" ? (
               <MessageChoice
@@ -319,11 +269,7 @@ export const MessageBubble = memo(function MessageBubble({
               />
             )}
             {message.reactions.length > 0 ? (
-              <YStack
-                mb={flushImageBubble ? "$2" : undefined}
-                mt="$2"
-                px={flushImageBubble ? "$2" : undefined}
-              >
+              <View style={{ marginBottom: flushImageBubble ? 7 : undefined, marginTop: 7, paddingHorizontal: flushImageBubble ? 7 : undefined }}>
                 <MessageReactionChips
                   align={fromMe ? "end" : "start"}
                   canAdd={
@@ -340,7 +286,7 @@ export const MessageBubble = memo(function MessageBubble({
                   }
                   reactions={message.reactions}
                 />
-              </YStack>
+              </View>
             ) : null}
             {message.topic ? (
               <TopicReplyPreview
@@ -349,17 +295,17 @@ export const MessageBubble = memo(function MessageBubble({
                 topic={message.topic}
               />
             ) : null}
-          </YStack>
+          </View>
         </View>
 
         {message.delegatedByName ? (
-          <SizableText color={colors.textPlaceholder} size="$1">
+          <Text style={{ color: colors.textPlaceholder, fontSize: 12, lineHeight: 18 }}>
             由 {message.delegatedByName} 代发
-          </SizableText>
+          </Text>
         ) : null}
-      </YStack>
+      </View>
       {fromMe ? avatar : null}
-    </XStack>
+    </View>
   )
 })
 

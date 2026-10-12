@@ -5,12 +5,8 @@ import {
 } from "expo-audio"
 import { AudioLines, Pause, Play } from "lucide-react-native"
 import { useCallback, useEffect, useRef } from "react"
-import {
-  Paragraph,
-  SizableText,
-  XStack,
-  YStack,
-} from "tamagui"
+import { Pressable, View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 
 import { NativeIconButton } from "@/components/buttons/native-icon-button"
 import { ThemedIcon } from "@/components/icons/themed-icon"
@@ -132,23 +128,23 @@ export function VoiceMessagePlayer({
   }
 
   return (
-    <YStack
-      gap="$2"
+    <Pressable
+      accessible={false}
       onLongPress={() => {
         didLongPressRef.current = true
         onLongPress()
       }}
-      width="100%"
+      style={{ gap: 7, width: "100%" }}
     >
-      <XStack gap="$3" items="center">
+      <View style={{ alignItems: "center", flexDirection: "row", gap: 13 }}>
         <ThemedIcon
           color={colors.brand5}
           icon={AudioLines}
           size={22}
         />
-        <SizableText color={colors.brand5} flex={1} size="$4">
+        <Text style={{ color: colors.brand5, flex: 1, fontSize: 15, lineHeight: 23 }}>
           语音 {formatVoiceDuration(durationMS)}
-        </SizableText>
+        </Text>
         <NativeIconButton
           accessibilityLabel={playerStatus.playing ? "暂停语音" : "播放语音"}
           disabled={isLoading}
@@ -171,12 +167,12 @@ export function VoiceMessagePlayer({
             />
           )}
         </NativeIconButton>
-      </XStack>
+      </View>
       {transcript ? (
-        <Paragraph color={colors.textSecondary} size="$3">
+        <Text style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>
           {transcript}
-        </Paragraph>
+        </Text>
       ) : null}
-    </YStack>
+    </Pressable>
   )
 }

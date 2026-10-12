@@ -10,18 +10,20 @@ async function source(path: string) {
   return readFile(new URL(path, root), "utf8")
 }
 
-test("选择器保留 Sheet，半屏选择使用 Portal 原生驱动动画", async () => {
+test("选择器与半屏弹层均使用原生覆盖层和动画", async () => {
   const [picker, halfScreen, motion] = await Promise.all([
     source("src/xgui/components/xgui-picker.tsx"),
     source("src/xgui/components/xgui-half-screen-dialog.tsx"),
     source("src/xgui/components/xgui-sheet-motion.ts"),
   ])
 
-  assert.match(picker, /import \{ Sheet \} from "tamagui"/)
-  assert.match(picker, /<Sheet\.Overlay/)
-  assert.match(picker, /onAnimationComplete=/)
+  assert.match(picker, /<XGUIOverlay priority=\{100_000\}>/)
+  assert.match(picker, /Animated\.parallel\(\[/)
+  assert.match(picker, /PanResponder\.create/)
+  assert.match(picker, /onPress=\{cancel\}/)
+  assert.doesNotMatch(picker, /from "tamagui"|<Sheet\b/)
 
-  assert.match(halfScreen, /import \{ Portal \} from "tamagui"/)
+  assert.match(halfScreen, /<XGUIOverlay>/)
   assert.match(halfScreen, /Animated\.sequence\(\[/)
   assert.match(halfScreen, /Animated\.spring\(panelTranslateY/)
   assert.match(halfScreen, /toValue: -8/)
@@ -71,7 +73,7 @@ test("Picker 在退场完成后执行确认或取消回调并锁定重复操作"
 
   assert.match(picker, /closeRequestedRef\.current/)
   assert.match(picker, /pendingCloseActionRef\.current/)
-  assert.match(picker, /pendingCloseAction\?\.\(\)/)
+  assert.match(picker, /if \(action\) requestAnimationFrame\(action\)/)
   assert.match(picker, /close\(\(\) => onConfirm\(selectedValues, selectedItems\)\)/)
   assert.match(picker, /const cancel = \(\) => close\(onCancel\)/)
 })
@@ -81,7 +83,7 @@ test("ActionSheet 延迟动作在关闭动画完成后执行并阻止重复提�
 
   assert.match(sheet, /actionLockedRef\.current/)
   assert.match(sheet, /const deferUntilClosed =\s+action\.deferUntilClosed === true/)
-  assert.match(sheet, /import \{ Portal \} from "tamagui"/)
+  assert.match(sheet, /<XGUIOverlay>/)
   assert.match(sheet, /new Animated\.Value\(windowHeight\)/)
   assert.match(sheet, /useState\(presentationOpen\)/)
   assert.match(sheet, /panelTranslateY\.stopAnimation\(\)/)

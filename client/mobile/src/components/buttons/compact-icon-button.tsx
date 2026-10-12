@@ -2,7 +2,6 @@ import type { Icon as TablerIcon } from "@tabler/icons-react-native"
 import type { LucideIcon } from "lucide-react-native"
 import type { Ref } from "react"
 import { Pressable, type View } from "react-native"
-import { useTheme } from "tamagui"
 
 import { XGUILoadingIcon, useXGUITheme } from "@/xgui"
 
@@ -32,8 +31,7 @@ export function CompactIconButton({
   onPress: () => void
   strokeWidth?: number
 }) {
-  const theme = useTheme()
-  const { colors } = useXGUITheme()
+  const { colorScheme, colors } = useXGUITheme()
   const Icon = icon
   const resolvedButtonSize = Math.max(buttonSize, iconSize)
 
@@ -59,11 +57,16 @@ export function CompactIconButton({
           <XGUILoadingIcon color={colors.textPlaceholder} size={20} />
         ) : (
           <Icon
-            color={String(
+            color={
               disabled
-                ? theme.gray8.val
-                : iconColor ?? (pressed ? theme.color7.val : theme.color10.val)
-            )}
+                ? colors.textPlaceholder
+                : iconColor ??
+                  (pressed
+                    ? colorScheme === "dark"
+                      ? colors.brand2
+                      : colors.brand1
+                    : colors.brand5)
+            }
             opacity={iconColor && pressed ? 0.5 : 1}
             size={iconSize}
             strokeWidth={strokeWidth}

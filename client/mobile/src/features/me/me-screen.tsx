@@ -25,14 +25,8 @@ import IconChevronRight from "@tabler/icons-react-native/IconChevronRight"
 // eslint-disable-next-line import/no-unresolved
 import IconSun from "@tabler/icons-react-native/IconSun"
 import { useRouter, type Href } from "expo-router"
-import { Alert, Linking, Platform, Pressable } from "react-native"
-import {
-  Card,
-  Paragraph,
-  SizableText,
-  XStack,
-  YStack,
-} from "tamagui"
+import { Alert, Linking, Platform, Pressable, View } from "react-native"
+import { Text } from "@/components/mi-sans-text"
 
 import { AppAvatar } from "@/components/avatar/app-avatar"
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
@@ -451,8 +445,8 @@ export function MeScreen() {
         edges={[]}
         elastic
       >
-        <YStack maxW={440} pb="$4" pt="$2" self="center" width="100%">
-          <Card bg="$background" overflow="hidden" rounded={0}>
+        <View style={{ alignSelf: "center", maxWidth: 440, paddingBottom: 18, paddingTop: 7, width: "100%" }}>
+          <View style={{ backgroundColor: colors.background0, overflow: "hidden" }}>
             <Pressable
               accessibilityLabel="个人信息"
               accessibilityRole="button"
@@ -463,31 +457,26 @@ export function MeScreen() {
                   : colors.background2,
               })}
             >
-              <XStack gap="$4" items="center" minH={116} px="$4" py="$4">
+              <View style={{ alignItems: "center", flexDirection: "row", gap: 18, minHeight: 116, paddingHorizontal: 18, paddingVertical: 18 }}>
                 <AppAvatar accessibilityLabel={currentUserName} avatar={currentUser?.avatar} server={session} size="$7" type="user" />
-                <YStack flex={1} gap="$2" justify="center">
-                  <SizableText
-                    color={colors.textPrimary}
-                    fontWeight="600"
-                    numberOfLines={1}
-                    size="$6"
-                  >
+                <View style={{ flex: 1, gap: 7, justifyContent: "center" }}>
+                  <Text numberOfLines={1} style={{ color: colors.textPrimary, fontSize: 18, fontWeight: "600", lineHeight: 27 }}>
                     {currentUserName}
-                  </SizableText>
-                  <Paragraph color="$gray10" numberOfLines={1} size="$3">
+                  </Text>
+                  <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>
                     {organizationName}
-                  </Paragraph>
-                </YStack>
+                  </Text>
+                </View>
                 <IconChevronRight
                   color={colors.textPlaceholder}
                   size={18}
                   strokeWidth={1}
                 />
-              </XStack>
+              </View>
             </Pressable>
-          </Card>
+          </View>
 
-          <YStack>
+          <View>
             <XGUIList size="large">
               <XGUIListItem
                 icon={({ size, strokeWidth }) => <IconPalette color={colors.yellow} size={size} strokeWidth={strokeWidth} />}
@@ -568,8 +557,8 @@ export function MeScreen() {
                 title="退出登录"
               />
             </XGUIList>
-          </YStack>
-        </YStack>
+          </View>
+        </View>
       </KeyboardAwareScreen>
 
       <XGUIDialog

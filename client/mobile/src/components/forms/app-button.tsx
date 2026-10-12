@@ -1,9 +1,19 @@
 import type { ReactNode } from "react"
 import { Pressable, StyleSheet, type ViewStyle } from "react-native"
 
-import { tamaguiConfig } from "../../../tamagui.config"
 import { Text } from "@/components/mi-sans-text"
 import { useXGUITheme } from "@/xgui"
+
+const buttonColors = {
+  light: {
+    gray: { color: "hsla(0, 0%, 13%, 1)", background: "hsla(0, 0%, 98%, 1)", backgroundPress: "hsla(0, 0%, 94%, 1)", borderColor: "hsla(0, 0%, 91%, 1)", borderColorPress: "hsla(0, 0%, 88%, 1)" },
+    red: { color: "hsla(351, 63%, 24%, 1)", background: "hsla(0, 100%, 98%, 1)", backgroundPress: "hsla(357, 90%, 96%, 1)", borderColor: "hsla(358, 100%, 93%, 1)", borderColorPress: "hsla(359, 100%, 90%, 1)" },
+  },
+  dark: {
+    gray: { color: "hsla(0, 0%, 93%, 1)", background: "hsla(0, 0%, 10%, 1)", backgroundPress: "hsla(0, 0%, 7%, 1)", borderColor: "hsla(0, 0%, 16%, 1)", borderColorPress: "hsla(0, 0%, 13%, 1)" },
+    red: { color: "hsla(350, 100%, 91%, 1)", background: "hsla(355, 25%, 10%, 1)", backgroundPress: "hsla(0, 19%, 8%, 1)", borderColor: "hsla(348, 68%, 19%, 1)", borderColorPress: "hsla(350, 53%, 15%, 1)" },
+  },
+} as const
 
 type AppButtonProps = {
   accessibilityLabel: string
@@ -31,7 +41,7 @@ export function AppButton({
   width,
 }: AppButtonProps) {
   const { colorScheme } = useXGUITheme()
-  const palette = tamaguiConfig.themes[`${colorScheme}_${theme}`]
+  const palette = buttonColors[colorScheme][theme]
 
   return (
     <Pressable
@@ -46,10 +56,10 @@ export function AppButton({
         variant === "outlined"
           ? {
               backgroundColor: "transparent",
-              borderColor: pressed ? palette.borderColorPress.val : palette.borderColor.val,
+              borderColor: pressed ? palette.borderColorPress : palette.borderColor,
             }
           : {
-              backgroundColor: pressed ? palette.backgroundPress.val : palette.background.val,
+              backgroundColor: pressed ? palette.backgroundPress : palette.background,
               borderColor: "transparent",
             },
       ]}
@@ -57,7 +67,7 @@ export function AppButton({
     >
       {icon}
       {typeof children === "string" ? (
-        <Text style={[styles.text, { color: palette.color.val }]}>{children}</Text>
+        <Text style={[styles.text, { color: palette.color }]}>{children}</Text>
       ) : (
         children
       )}

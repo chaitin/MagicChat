@@ -11,11 +11,6 @@ import {
 } from "react-native"
 import { Text } from "@/components/mi-sans-text"
 import { measureMobilePerf, recordMobilePerf } from "@/diagnostics/mobile-perf"
-import {
-  SizableText,
-  XStack,
-  YStack,
-} from "tamagui"
 
 import { ContentState } from "@/components/feedback/content-state"
 import { AppButton } from "@/components/forms/app-button"
@@ -280,7 +275,7 @@ export function MessageList({
   if (error && messages.length === 0) {
     return (
       <ContentState message={error.message} tone="error">
-        <YStack maxW={240} width="100%">
+        <View style={{ maxWidth: 240, width: "100%" }}>
           <AppButton
             accessibilityLabel="重新加载消息"
             onPress={onRetry}
@@ -290,17 +285,17 @@ export function MessageList({
           >
             重试
           </AppButton>
-        </YStack>
+        </View>
       </ContentState>
     )
   }
 
   if (messages.length === 0) {
-    return <YStack bg={colors.background0} flex={1} />
+    return <View style={{ backgroundColor: colors.background0, flex: 1 }} />
   }
 
   return (
-    <YStack bg={colors.background0} flex={1} position="relative">
+    <View style={{ backgroundColor: colors.background0, flex: 1 }}>
       <FlatList
         ref={listRef}
         contentContainerStyle={styles.content}
@@ -388,7 +383,7 @@ export function MessageList({
       />
 
       {pendingNewMessageCount > 0 ? (
-        <XStack b="$4" justify="center" l={0} position="absolute" r={0}>
+        <View style={{ bottom: 18, justifyContent: "center", left: 0, position: "absolute", right: 0, flexDirection: "row" }}>
           <XGUIButton
             onPress={handleJumpToLatest}
             size="mini"
@@ -407,9 +402,9 @@ export function MessageList({
               </Text>
             </View>
           </XGUIButton>
-        </XStack>
+        </View>
       ) : null}
-    </YStack>
+    </View>
   )
 }
 
@@ -419,7 +414,7 @@ const maintainVisibleContentPosition = {
 } as const
 
 function MessageItemSeparator() {
-  return <YStack height="$1" />
+  return <View style={{ height: 20 }} />
 }
 
 function messageItemKeyExtractor(item: MessageListItem) {
@@ -478,11 +473,9 @@ function MessageTimeMarker({
   if (!label) return null
 
   return (
-    <XStack justify="center">
-      <SizableText color={color} size="$2">
-        {label}
-      </SizableText>
-    </XStack>
+    <View style={{ alignItems: "center" }}>
+      <Text style={{ color, fontSize: 13, lineHeight: 20 }}>{label}</Text>
+    </View>
   )
 }
 

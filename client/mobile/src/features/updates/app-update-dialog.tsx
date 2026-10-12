@@ -1,4 +1,6 @@
-import { SizableText, XStack, YStack } from "tamagui"
+import { StyleSheet, View } from "react-native"
+
+import { Text } from "@/components/mi-sans-text"
 
 import type { AppRelease } from "@/features/updates/app-update-model"
 import { XGUIDialog, XGUIProgress, useXGUITheme } from "@/xgui"
@@ -31,20 +33,30 @@ export function AppUpdateDialog({
       open={Boolean(release) && status === "downloading"}
       title="正在更新"
     >
-      <YStack gap="$2" mt="$4">
-        <XStack items="center" justify="space-between">
-          <SizableText color={colors.textSecondary} size="$3">
+      <View style={styles.progressContent}>
+        <View style={styles.progressHeader}>
+          <Text style={[styles.progressText, { color: colors.textSecondary }]}>
             正在下载安装包
-          </SizableText>
-          <SizableText color={colors.brand} size="$3">
+          </Text>
+          <Text style={[styles.progressText, { color: colors.brand }]}>
             {percent}%
-          </SizableText>
-        </XStack>
+          </Text>
+        </View>
         <XGUIProgress
           accessibilityLabel="安装包下载进度"
           value={percent}
         />
-      </YStack>
+      </View>
     </XGUIDialog>
   )
 }
+
+const styles = StyleSheet.create({
+  progressContent: { gap: 7, marginTop: 18 },
+  progressHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  progressText: { fontSize: 14, lineHeight: 21 },
+})

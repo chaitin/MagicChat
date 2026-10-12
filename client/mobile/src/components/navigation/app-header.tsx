@@ -1,9 +1,8 @@
 import { ChevronLeft, Menu } from "lucide-react-native"
 import type { ComponentProps, ReactNode, Ref } from "react"
-import { type View } from "react-native"
+import { StyleSheet, View } from "react-native"
 import { Text } from "@/components/mi-sans-text"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { XStack, YStack } from "tamagui"
 
 import { CompactIconButton } from "@/components/buttons/compact-icon-button"
 import { useXGUITheme } from "@/xgui"
@@ -38,9 +37,9 @@ export function AppHeader({
   const { colors } = useXGUITheme()
 
   return (
-    <YStack bg={colors.background0} pt={insets.top}>
-      <XStack height={APP_HEADER_HEIGHT} items="center" px="$3">
-        <XStack gap="$1" items="center" width={72}>
+    <View style={{ backgroundColor: colors.background0, paddingTop: insets.top }}>
+      <View style={styles.header}>
+        <View style={styles.leading}>
           {onBackPress ? (
             <CompactIconButton
               accessibilityLabel="返回"
@@ -60,7 +59,7 @@ export function AppHeader({
             />
           ) : null}
           {onBackPress ? backAccessory : null}
-        </XStack>
+        </View>
 
         <Text
           numberOfLines={1}
@@ -75,7 +74,7 @@ export function AppHeader({
           {title}
         </Text>
 
-        <XStack gap="$1" justify="flex-end" width={72}>
+        <View style={styles.actions}>
           {actions.slice(0, 2).map((action) => (
             <CompactIconButton
               accessibilityLabel={action.label}
@@ -88,8 +87,29 @@ export function AppHeader({
               strokeWidth={action.strokeWidth ?? 1.5}
             />
           ))}
-        </XStack>
-      </XStack>
-    </YStack>
+        </View>
+      </View>
+    </View>
   )
 }
+
+const styles = StyleSheet.create({
+  header: {
+    alignItems: "center",
+    flexDirection: "row",
+    height: APP_HEADER_HEIGHT,
+    paddingHorizontal: 13,
+  },
+  leading: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 2,
+    width: 72,
+  },
+  actions: {
+    flexDirection: "row",
+    gap: 2,
+    justifyContent: "flex-end",
+    width: 72,
+  },
+})

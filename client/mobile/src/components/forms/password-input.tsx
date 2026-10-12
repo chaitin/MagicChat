@@ -1,24 +1,17 @@
 import { Eye, EyeOff } from "lucide-react-native"
 import { forwardRef, useEffect, useState } from "react"
-import { Pressable, StyleSheet } from "react-native"
-import {
-  type GetProps,
-  type TamaguiElement,
-  useTheme,
-  XStack,
-  YStack,
-} from "tamagui"
+import { Pressable, StyleSheet, View, type TextInput, type TextInputProps } from "react-native"
 
 import { AppInput } from "@/components/forms/app-input"
+import { useXGUITheme } from "@/xgui"
 
-type PasswordInputProps = Omit<
-  GetProps<typeof AppInput>,
-  "secureTextEntry"
->
+type PasswordInputProps = Omit<TextInputProps, "secureTextEntry"> & {
+  disabled?: boolean
+}
 
-export const PasswordInput = forwardRef<TamaguiElement, PasswordInputProps>(
-  function PasswordInput({ disabled, ...inputProps }, ref) {
-    const theme = useTheme()
+export const PasswordInput = forwardRef<TextInput, PasswordInputProps>(
+  function PasswordInput({ disabled, style, ...inputProps }, ref) {
+    const { colors } = useXGUITheme()
     const [isPasswordVisible, setIsPasswordVisible] = useState(false)
     const hasPassword =
       typeof inputProps.value === "string" && inputProps.value.length > 0
@@ -30,23 +23,15 @@ export const PasswordInput = forwardRef<TamaguiElement, PasswordInputProps>(
     }, [hasPassword])
 
     return (
-      <XStack position="relative" width="100%">
+      <View style={styles.container}>
         <AppInput
           {...inputProps}
-          disabled={disabled}
-          pr="$8"
+          editable={!disabled && inputProps.editable !== false}
           ref={ref}
           secureTextEntry={!isPasswordVisible}
-          width="100%"
+          style={[styles.input, style]}
         />
-        <YStack
-          b={0}
-          justify="center"
-          position="absolute"
-          r="$0.5"
-          t={0}
-          z={1}
-        >
+        <View style={styles.togglePosition}>
           <Pressable
             accessibilityLabel={isPasswordVisible ? "隐藏密码" : "显示密码"}
             accessibilityRole="button"
@@ -55,21 +40,24 @@ export const PasswordInput = forwardRef<TamaguiElement, PasswordInputProps>(
             onPress={() => setIsPasswordVisible((visible) => !visible)}
             style={({ pressed }) => [
               styles.toggle,
-              pressed && { backgroundColor: String(theme.backgroundPress.val) },
+              pressed && { backgroundColor: colors.background1 },
             ]}
           >
             <ToggleIcon
-              color={String((isToggleDisabled ? theme.gray9 : theme.color10).val)}
+              color={isToggleDisabled ? colors.textPlaceholder : colors.brand}
               size={18}
             />
           </Pressable>
-        </YStack>
-      </XStack>
+        </View>
+      </View>
     )
   }
 )
 
 const styles = StyleSheet.create({
+  container: { width: "100%" },
+  input: { paddingRight: 46 },
+  togglePosition: { bottom: 0, justifyContent: "center", position: "absolute", right: 1, top: 0 },
   toggle: {
     alignItems: "center",
     borderRadius: 18,

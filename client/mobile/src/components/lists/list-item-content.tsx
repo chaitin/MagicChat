@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
-import { SizableText, XStack, YStack } from "tamagui"
+import { StyleSheet, View } from "react-native"
 
+import { Text } from "@/components/mi-sans-text"
 import { useXGUITheme } from "@/xgui"
 
 export function ListItemContent({
@@ -21,47 +22,69 @@ export function ListItemContent({
   const { colors } = useXGUITheme()
 
   return (
-    <YStack
-      height={compact ? 42 : "$4"}
-      justify="center"
-      minW={0}
-      pl="$1.5"
-      width="100%"
-    >
-      <XStack gap="$2" items="center" maxW="100%">
-        <SizableText
-          color={compact ? colors.textSecondary : colors.textPrimary}
-          flex={1}
-          fontSize={compact ? 12 : 18}
-          lineHeight={compact ? 17 : 24}
+    <View style={[styles.container, { height: compact ? 42 : 44 }]}>
+      <View style={styles.titleRow}>
+        <Text
           numberOfLines={1}
+          style={[
+            styles.title,
+            {
+              color: compact ? colors.textSecondary : colors.textPrimary,
+              fontSize: compact ? 12 : 18,
+              lineHeight: compact ? 17 : 24,
+            },
+          ]}
         >
           {title}
-        </SizableText>
+        </Text>
         {meta ? (
-          <SizableText
-            color={colors.textPlaceholder}
-            fontSize={12}
-            lineHeight={17}
-          >
+          <Text style={[styles.meta, { color: colors.textPlaceholder }]}>
             {meta}
-          </SizableText>
+          </Text>
         ) : null}
-      </XStack>
+      </View>
 
-      <XStack gap="$1" items="center" maxW="100%" pt={compact ? 2 : 4}>
+      <View style={[styles.subtitleRow, { paddingTop: compact ? 2 : 4 }]}>
         {subtitleLeading}
-        <SizableText
-          color={colors.textPlaceholder}
-          flex={1}
-          fontSize={compact ? 12 : 14}
-          lineHeight={compact ? 17 : 20}
+        <Text
           numberOfLines={1}
+          style={[
+            styles.subtitle,
+            {
+              color: colors.textPlaceholder,
+              fontSize: compact ? 12 : 14,
+              lineHeight: compact ? 17 : 20,
+            },
+          ]}
         >
           {subtitle}
-        </SizableText>
+        </Text>
         {subtitleTrailing}
-      </XStack>
-    </YStack>
+      </View>
+    </View>
   )
 }
+
+const styles = StyleSheet.create({
+  container: {
+    justifyContent: "center",
+    minWidth: 0,
+    paddingLeft: 4,
+    width: "100%",
+  },
+  titleRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 7,
+    maxWidth: "100%",
+  },
+  title: { flex: 1 },
+  meta: { fontSize: 12, lineHeight: 17 },
+  subtitleRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 2,
+    maxWidth: "100%",
+  },
+  subtitle: { flex: 1 },
+})

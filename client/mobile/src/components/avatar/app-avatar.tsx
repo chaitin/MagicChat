@@ -8,7 +8,6 @@ import IconUser from "@tabler/icons-react-native/IconUser"
 import IconUsers from "@tabler/icons-react-native/IconUsers"
 import type { ComponentType } from "react"
 import { View } from "react-native"
-import { Avatar, getTokenValue, type SizeTokens } from "tamagui"
 
 import { CachedAvatarImage } from "@/components/avatar/cached-avatar-image"
 import {
@@ -34,6 +33,8 @@ type AvatarIcon = ComponentType<{
   strokeWidth?: number
 }>
 
+const AVATAR_TOKEN_SIZES = { "$3": 36, "$4": 44, "$7": 74 } as const
+
 const icons: Record<AppAvatarType, AvatarIcon> = {
   app: IconRobotFace,
   group: IconUsers,
@@ -47,7 +48,7 @@ export type AppAvatarProps = {
   members?: AvatarMember[]
   rounded?: boolean
   server: ServerTarget
-  size?: number | SizeTokens
+  size?: number | keyof typeof AVATAR_TOKEN_SIZES
   square?: boolean
   type: AppAvatarType
 }
@@ -63,12 +64,7 @@ export function AppAvatar({
   type,
 }: AppAvatarProps) {
   const { colorScheme, colors } = useXGUITheme()
-  const resolvedSize =
-    typeof size === "number"
-      ? size
-      : Number(
-          getTokenValue(size as Parameters<typeof getTokenValue>[0], "size")
-        ) || 40
+  const resolvedSize = typeof size === "number" ? size : AVATAR_TOKEN_SIZES[size]
   const radius = square
     ? 0
     : rounded
@@ -77,12 +73,19 @@ export function AppAvatar({
   const entries = type === "group" ? selectGroupAvatarMembers(members) : []
 
   return (
-    <Avatar
+    <View
+      accessible={Boolean(accessibilityLabel)}
       accessibilityLabel={accessibilityLabel}
-      backgroundColor={colors.background1}
-      borderRadius={radius}
-      overflow="hidden"
-      size={size}
+      accessibilityRole={accessibilityLabel ? "image" : undefined}
+      style={{
+        alignItems: "center",
+        backgroundColor: colors.background1,
+        borderRadius: radius,
+        height: resolvedSize,
+        justifyContent: "center",
+        overflow: "hidden",
+        width: resolvedSize,
+      }}
     >
       {entries.length && type === "group" && !avatar ? (
         <CompositeGroupAvatar entries={entries} server={server} size={resolvedSize} theme={colorScheme} />
@@ -90,7 +93,7 @@ export function AppAvatar({
         <Fallback size={resolvedSize} type={type} />
       )}
       {avatar ? <CachedAvatarImage avatar={avatar} server={server} /> : null}
-    </Avatar>
+    </View>
   )
 }
 

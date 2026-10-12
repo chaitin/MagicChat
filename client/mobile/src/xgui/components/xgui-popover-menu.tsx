@@ -17,7 +17,7 @@ import {
 import { Text } from "@/components/mi-sans-text"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import Svg, { Path } from "react-native-svg"
-import { Portal } from "tamagui"
+import { XGUIOverlay } from "@/xgui/components/xgui-overlay-host"
 
 import {
   calculateXGUIPopoverLayout,
@@ -189,7 +189,7 @@ export function XGUIPopoverMenu({
   })
 
   return (
-    <Portal stackZIndex={100_000}>
+    <XGUIOverlay priority={100_000}>
       <View accessibilityViewIsModal style={styles.portal}>
         <Pressable accessibilityRole="button" onPress={close} style={styles.fill} />
         <Animated.View
@@ -258,7 +258,7 @@ export function XGUIPopoverMenu({
           </View>
         </Animated.View>
       </View>
-    </Portal>
+    </XGUIOverlay>
   )
 }
 

@@ -1,4 +1,4 @@
-import { Circle, YStack } from "tamagui"
+import { StyleSheet, View } from "react-native"
 
 import {
   GroupAvatar,
@@ -26,7 +26,7 @@ export function ContactDirectoryAvatar({
   const { colors } = useXGUITheme()
 
   return (
-    <YStack height="$4" width="$4">
+    <View style={styles.avatar}>
       {type === "group" ? (
         <GroupAvatar
           avatar={avatar}
@@ -39,16 +39,29 @@ export function ContactDirectoryAvatar({
       )}
 
       {online !== undefined ? (
-        <Circle
-          bg={online ? "$green9" : "$gray8"}
-          borderColor={colors.background2}
-          borderWidth={2}
-          b={-2}
-          position="absolute"
-          r={-2}
-          size={11}
+        <View
+          style={[
+            styles.onlineIndicator,
+            {
+              backgroundColor: online ? colors.brand5 : colors.textPlaceholder,
+              borderColor: colors.background2,
+            },
+          ]}
         />
       ) : null}
-    </YStack>
+    </View>
   )
 }
+
+const styles = StyleSheet.create({
+  avatar: { height: 44, width: 44 },
+  onlineIndicator: {
+    borderRadius: 5.5,
+    borderWidth: 2,
+    bottom: -2,
+    height: 11,
+    position: "absolute",
+    right: -2,
+    width: 11,
+  },
+})
