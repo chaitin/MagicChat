@@ -1,6 +1,6 @@
 import { Children, isValidElement, useMemo, type MouseEvent, type ReactNode } from "react"
 import katex from "katex"
-import ReactMarkdown from "react-markdown"
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown"
 import remarkFlexibleMarkers from "remark-flexible-markers"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
@@ -16,6 +16,7 @@ import {
   type MentionLabelResolver,
 } from "@/lib/message-mentions"
 import { cn } from "@/lib/utils"
+import { markdownAttachmentFileId } from "../../../../shared/markdown-attachment"
 
 const allowedElements = [
   "a",
@@ -58,12 +59,17 @@ export function MessageMarkdown({
   content,
   currentUserId,
   mentionLabelResolver,
+  renderAttachmentImage,
 }: {
   content: string
   currentUserId: string
   mentionLabelResolver: MentionLabelResolver
+  renderAttachmentImage?: (fileId: string, alt: string) => ReactNode
 }) {
-  const components = useMemo(() => createComponents(currentUserId), [currentUserId])
+  const components = useMemo(
+    () => createComponents(currentUserId, renderAttachmentImage),
+    [currentUserId, renderAttachmentImage],
+  )
   const plugins = useMemo<React.ComponentProps<typeof ReactMarkdown>["remarkPlugins"]>(
     () => [
       [remarkGfm, { singleTilde: false }],
@@ -80,6 +86,14 @@ export function MessageMarkdown({
         allowedElements={allowedElements}
         components={components}
         remarkPlugins={plugins}
+        urlTransform={(url, key, node) =>
+          renderAttachmentImage &&
+          key === "src" &&
+          node.tagName === "img" &&
+          markdownAttachmentFileId(url)
+            ? url
+            : defaultUrlTransform(url)
+        }
         skipHtml
         unwrapDisallowed
       >
@@ -89,7 +103,10 @@ export function MessageMarkdown({
   )
 }
 
-function createComponents(currentUserId: string): MarkdownComponents {
+function createComponents(
+  currentUserId: string,
+  renderAttachmentImage?: (fileId: string, alt: string) => ReactNode,
+): MarkdownComponents {
   return {
     a: ({ children, href }) => <MarkdownLink href={href}>{children}</MarkdownLink>,
     blockquote: ({ children }) => (
@@ -119,6 +136,8 @@ function createComponents(currentUserId: string): MarkdownComponents {
     ),
     hr: () => <hr className="h-px border-0 bg-foreground/20" />,
     img: ({ alt, src }) => {
+      const fileId = markdownAttachmentFileId(src)
+      if (fileId && renderAttachmentImage) return renderAttachmentImage(fileId, alt ?? "")
       const source = imageSource(src)
       return source ? (
         <img

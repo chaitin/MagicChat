@@ -16,6 +16,8 @@ import type {
   ListProjectTaskActivitiesInput,
   ListProjectTasksInput,
   ProjectTaskTargetInput,
+  UploadProjectTaskImageInput,
+  ReadProjectTaskImageInput,
   UpdateProjectTaskInput,
   LocalAttachmentPageInput,
   LocalMessageContextInput,
@@ -214,6 +216,16 @@ export class AccountDataFacade {
   async addProjectTaskComment(input: AddProjectTaskCommentInput) {
     await this.ready(input?.targetId)
     return this.requireRuntime().addProjectTaskComment(input)
+  }
+
+  async uploadProjectTaskImage(input: UploadProjectTaskImageInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().uploadProjectTaskImage(input)
+  }
+
+  async readProjectTaskImage(input: ReadProjectTaskImageInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().readProjectTaskImage(input)
   }
 
   async bindConversationProject(input: BindConversationProjectInput) {
@@ -486,6 +498,7 @@ export class AccountDataFacade {
       id: request.id,
       theme: request.theme,
       cacheOnly: request.cacheOnly === true,
+      refresh: request.refresh === true,
     })
   }
 

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import {
   CircleQuestionMarkIcon,
   BanIcon,
@@ -8,12 +8,14 @@ import {
   CircleCheck,
   CircleDot,
   CircleSmallIcon,
+  Dot,
 } from "lucide-react"
 import type {
   DesktopProjectTask,
   ProjectTaskPriority,
   ProjectTaskStatus,
 } from "../../../shared/account-data"
+import { EntityAvatar } from "@/components/avatar/entity-avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -112,11 +114,17 @@ export function TaskStatusIcon({
 
 export function TaskListView({
   tasks,
+  targetId,
+  theme,
+  assigneeNames,
   onOpen,
   onMove,
   onPriorityChange,
 }: {
   tasks: DesktopProjectTask[]
+  targetId: string
+  theme: "light" | "dark"
+  assigneeNames: ReadonlyMap<string, string>
   onOpen: (task: DesktopProjectTask) => void
   onMove: (task: DesktopProjectTask, status: ProjectTaskStatus) => void
   onPriorityChange: (task: DesktopProjectTask, priority: ProjectTaskPriority) => void
@@ -131,20 +139,44 @@ export function TaskListView({
             priorityBorderColors[task.priority],
           )}
         >
-          <button
-            type="button"
-            className="group/task-title min-w-0 flex-1 cursor-pointer text-left"
-            onClick={() => onOpen(task)}
-            aria-label={`查看任务详情：${task.title}`}
-          >
-            <span className="block truncate text-sm font-medium group-hover/task-title:text-xgui-link group-focus-visible/task-title:text-xgui-link">
-              {task.title}
+          <div className="grid min-w-0 flex-1 gap-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <button
+                type="button"
+                className="min-w-0 cursor-pointer truncate text-left text-sm font-medium hover:text-xgui-brand focus-visible:text-xgui-brand"
+                onClick={() => onOpen(task)}
+                aria-label={`查看任务详情：${task.title}`}
+              >
+                {task.title}
+              </button>
+              {task.assignee && (
+                <span className="flex min-w-0 shrink-0 items-center gap-1.5 text-sm font-medium text-muted-foreground">
+                  <EntityAvatar
+                    targetId={targetId}
+                    type="user"
+                    id={task.assignee.id}
+                    theme={theme}
+                    size={18}
+                    className="rounded-full"
+                    label={`${assigneeNames.get(task.assignee.id) || task.assignee.nickname || task.assignee.name || task.assignee.id}头像`}
+                  />
+                  <span className="max-w-32 truncate">
+                    {assigneeNames.get(task.assignee.id) ||
+                      task.assignee.nickname ||
+                      task.assignee.name ||
+                      task.assignee.id}
+                  </span>
+                </span>
+              )}
+            </div>
+            <span
+              className="block min-w-0 truncate text-xs text-muted-foreground"
+              title={task.description.trim() || "暂无详细说明"}
+            >
+              {task.description.trim() || "暂无详细说明"}
             </span>
-            <span className="block truncate text-xs text-muted-foreground">
-              {task.assignee?.nickname || task.assignee?.name || "未分配"}
-              {task.dueDate ? ` · 截止 ${task.dueDate}` : ""}
-            </span>
-          </button>
+            <TaskMetaLine task={task} />
+          </div>
           <Select
             value={String(task.priority)}
             onValueChange={(value) => onPriorityChange(task, Number(value) as ProjectTaskPriority)}
@@ -279,21 +311,19 @@ export function TaskBoardView({
                         <button
                           type="button"
                           onClick={() => onOpen(task)}
-                          className="min-w-0 cursor-pointer truncate text-left hover:text-xgui-link focus-visible:rounded-sm focus-visible:text-xgui-link focus-visible:outline-2 focus-visible:outline-ring"
+                          className="min-w-0 cursor-pointer truncate text-left hover:text-xgui-brand focus-visible:rounded-sm focus-visible:text-xgui-brand focus-visible:outline-2 focus-visible:outline-ring"
                           aria-label={`查看任务详情：${task.title}`}
                         >
                           {task.title}
                         </button>
                       </div>
-                      <span className="truncate text-xs text-muted-foreground">
-                        {task.assignee?.nickname || task.assignee?.name || "未分配"}
-                        {task.dueDate ? ` · ${task.dueDate}` : ""}
+                      <span
+                        className="block truncate text-xs text-muted-foreground"
+                        title={task.description.trim() || "暂无详细说明"}
+                      >
+                        {task.description.trim() || "暂无详细说明"}
                       </span>
-                      {task.labels.length > 0 && (
-                        <span className="truncate text-xs text-muted-foreground">
-                          {task.labels.join(" · ")}
-                        </span>
-                      )}
+                      <TaskMetaLine task={task} includeDates={false} />
                     </div>
                   ))}
                 </div>
@@ -307,6 +337,46 @@ export function TaskBoardView({
 }
 
 const weekdays = ["一", "二", "三", "四", "五", "六", "日"]
+
+function TaskMetaLine({
+  task,
+  includeDates = true,
+}: {
+  task: DesktopProjectTask
+  includeDates?: boolean
+}) {
+  const labels = task.labels.filter((label) => label.trim())
+  const items: ReactNode[] = [
+    ...(includeDates && task.startDate ? [`${task.startDate} 开始`] : []),
+    ...(includeDates && task.dueDate ? [`截至 ${task.dueDate}`] : []),
+    ...(labels.length
+      ? [
+          <span className="flex min-w-0 items-center gap-1" key="labels">
+            {labels.map((label) => (
+              <Badge
+                key={label}
+                variant="outline"
+                className="h-5 max-w-24 truncate border-sky-300 bg-sky-100 px-1.5 text-[11px] font-normal text-sky-600 dark:border-sky-700 dark:bg-sky-900/30 dark:text-sky-400"
+              >
+                {label}
+              </Badge>
+            ))}
+          </span>,
+        ]
+      : []),
+  ]
+  if (!items.length) return null
+  return (
+    <div className="flex min-w-0 items-center truncate whitespace-nowrap text-xs text-muted-foreground">
+      {items.map((item, index) => (
+        <span key={index} className="flex min-w-0 items-center">
+          {index > 0 && <Dot className="mx-0.5 size-3 shrink-0" aria-hidden />}
+          {item}
+        </span>
+      ))}
+    </div>
+  )
+}
 
 function UnscheduledTasksSection({
   tasks,

@@ -31,6 +31,12 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 20110,
     strictPort: true,
-    fs: { allow: [directory, path.resolve(directory, "../../assets")] },
+    fs: {
+      allow: [
+        directory,
+        path.resolve(directory, "../../assets"),
+        path.resolve(directory, "../shared"),
+      ],
+    },
   },
 })

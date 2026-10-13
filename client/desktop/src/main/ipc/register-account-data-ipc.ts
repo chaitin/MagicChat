@@ -21,6 +21,8 @@ import {
   type ListProjectTaskActivitiesInput,
   type ListProjectTasksInput,
   type ProjectTaskTargetInput,
+  type UploadProjectTaskImageInput,
+  type ReadProjectTaskImageInput,
   type UpdateProjectTaskInput,
   type MarkConversationReadInput,
   type MessageReactionUsersInput,
@@ -127,6 +129,12 @@ export function registerAccountDataIpc({
   )
   handle(ACCOUNT_DATA_CHANNELS.addProjectTaskComment, (input) =>
     auth.addProjectTaskComment(input as AddProjectTaskCommentInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.uploadProjectTaskImage, (input) =>
+    auth.uploadProjectTaskImage(input as UploadProjectTaskImageInput),
+  )
+  handle(ACCOUNT_DATA_CHANNELS.readProjectTaskImage, (input) =>
+    auth.readProjectTaskImage(input as ReadProjectTaskImageInput),
   )
   handle(ACCOUNT_DATA_CHANNELS.bindConversationProject, (input) =>
     auth.bindConversationProject(input as BindConversationProjectInput),

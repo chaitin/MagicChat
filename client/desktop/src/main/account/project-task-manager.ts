@@ -16,9 +16,17 @@ import type {
   ProjectTaskReminderInput,
   ProjectTaskTargetInput,
   ProjectTaskUser,
+  ProjectTaskImageContextInput,
+  UploadProjectTaskImageInput,
+  UploadedProjectTaskImage,
+  ReadProjectTaskImageInput,
+  ProjectTaskImageReadURL,
   UpdateProjectTaskInput,
 } from "../../shared/account-data"
 import type { AuthenticatedClient } from "./authenticated-client"
+import { detectAvatarContentType } from "./avatar-content-type.ts"
+import { taskImageValidationError } from "../../shared/task-image.ts"
+import { markdownAttachmentSource } from "../../../../shared/markdown-attachment.ts"
 
 const statuses = new Set(["todo", "in_progress", "done", "canceled"])
 const reminderStates = new Set(["scheduled", "paused", "fired", "expired"])
@@ -62,7 +70,12 @@ export class ProjectTaskManager {
   }
 
   async get(input: ProjectTaskTargetInput): Promise<DesktopProjectTask> {
-    return parseTask(await this.client.get(taskItemPath(input)), input.projectId, input.taskId)
+    const task = parseTask(
+      await this.client.get(taskItemPath(input)),
+      input.projectId,
+      input.taskId,
+    )
+    return this.hydrateTaskUsers(task)
   }
 
   async create(input: CreateProjectTaskInput): Promise<DesktopProjectTask> {
@@ -152,14 +165,136 @@ export class ProjectTaskManager {
       invalidInput()
     if (input.cursor) query.set("cursor", checkedId(input.cursor, "分页游标", 2048))
     const data = await this.client.get(`${path}/activities?${query}`)
-    return parsePage(data, "activities", (value) => parseActivity(value, input))
+    const page = parsePage(data, "activities", (value) => parseActivity(value, input))
+    return {
+      ...page,
+      items: await Promise.all(page.items.map((activity) => this.hydrateActivity(activity))),
+    }
   }
 
   async addComment(input: AddProjectTaskCommentInput): Promise<ProjectTaskActivity> {
     const path = taskItemPath(input)
     const content = checkedText(input.content, "评论", 5000).trim()
     if (!content) invalidInput()
-    return parseActivity(await this.client.post(`${path}/comments`, { content }), input)
+    return this.hydrateActivity(
+      parseActivity(await this.client.post(`${path}/comments`, { content }), input),
+    )
+  }
+
+  private async hydrateTaskUsers(task: DesktopProjectTask): Promise<DesktopProjectTask> {
+    const users = [task.creator, ...(task.assignee ? [task.assignee] : [])]
+    const resolved = await this.resolveMissingUsers(users)
+    const byId = new Map(resolved.map((user) => [user.id, user]))
+    return {
+      ...task,
+      creator: byId.get(task.creator.id) ?? task.creator,
+      assignee: task.assignee ? (byId.get(task.assignee.id) ?? task.assignee) : null,
+    }
+  }
+
+  private async hydrateActivity(activity: ProjectTaskActivity): Promise<ProjectTaskActivity> {
+    const [actor] = await this.resolveMissingUsers([activity.actor])
+    return { ...activity, actor: actor ?? activity.actor }
+  }
+
+  private async resolveMissingUsers(users: ProjectTaskUser[]): Promise<ProjectTaskUser[]> {
+    const missing = [
+      ...new Map(
+        users
+          .filter((user) => !user.name.trim() && !user.nickname.trim())
+          .map((user) => [user.id, user]),
+      ).values(),
+    ]
+    if (!missing.length) return users
+    try {
+      const data = await this.client.post("/api/client/users/resolve", {
+        user_ids: missing.map((user) => user.id),
+      })
+      if (!isRecord(data) || !Array.isArray(data.users)) return users
+      const resolved = new Map<string, ProjectTaskUser>()
+      for (const value of data.users) {
+        if (!isRecord(value) || typeof value.id !== "string" || !value.id) continue
+        const original = missing.find((user) => user.id === value.id)
+        if (!original) continue
+        resolved.set(value.id, {
+          ...original,
+          name: optionalString(value.name) || original.name,
+          nickname: optionalString(value.nickname) || original.nickname,
+          avatar: optionalString(value.avatar) || original.avatar,
+        })
+      }
+      return users.map((user) => resolved.get(user.id) ?? user)
+    } catch {
+      return users
+    }
+  }
+
+  async uploadImage(input: UploadProjectTaskImageInput): Promise<UploadedProjectTaskImage> {
+    if (!(input?.bytes instanceof ArrayBuffer)) invalidInput()
+    const name = checkedText(input.name, "图片名称", 240)
+    const error = taskImageValidationError({
+      type: input.contentType,
+      size: input.bytes.byteLength,
+    })
+    if (error) throw new AuthFailure("invalid_task_image", error)
+    if (detectAvatarContentType(new Uint8Array(input.bytes)) !== input.contentType) {
+      throw new AuthFailure("invalid_task_image", "图片内容与格式不符")
+    }
+    await this.assertImageContext(input)
+    const data = await this.client.postFile(
+      "/api/client/temporary-files",
+      {},
+      {
+        bytes: input.bytes,
+        name: name || "粘贴图片",
+        fieldName: "file",
+        contentType: input.contentType,
+      },
+    )
+    if (!isRecord(data) || !isRecord(data.file)) invalidResponse("上传图片")
+    const fileId = checkedId(data.file.id, "图片文件")
+    try {
+      markdownAttachmentSource(fileId)
+    } catch {
+      invalidResponse("上传图片")
+    }
+    if (!Number.isSafeInteger(data.file.size_bytes) || (data.file.size_bytes as number) <= 0) {
+      invalidResponse("上传图片")
+    }
+    return { fileId, sizeBytes: data.file.size_bytes as number }
+  }
+
+  async readImage(input: ReadProjectTaskImageInput): Promise<ProjectTaskImageReadURL> {
+    const fileId = checkedId(input?.fileId, "图片文件")
+    try {
+      markdownAttachmentSource(fileId)
+    } catch {
+      invalidInput()
+    }
+    await this.assertImageContext(input)
+    const data = await this.client.post("/api/client/temporary-files/read-urls", {
+      file_ids: [fileId],
+    })
+    if (!isRecord(data) || !Array.isArray(data.urls)) invalidResponse("图片访问地址")
+    const image = data.urls.find((item) => isRecord(item) && item.file_id === fileId)
+    if (!isRecord(image) || typeof image.url !== "string") invalidResponse("图片访问地址")
+    try {
+      const url = new URL(image.url)
+      if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
+        invalidResponse("图片访问地址")
+      return { url: url.href }
+    } catch {
+      return invalidResponse("图片访问地址")
+    }
+  }
+
+  private async assertImageContext(input: ProjectTaskImageContextInput): Promise<void> {
+    // 重新确认项目/任务读取权限，避免窗口打开后成员权限已被撤销。
+    const path =
+      input.taskId === undefined
+        ? `${taskPath(input)}?limit=1`
+        : taskItemPath(input as ProjectTaskTargetInput)
+    await this.client.get(path)
   }
 }
 

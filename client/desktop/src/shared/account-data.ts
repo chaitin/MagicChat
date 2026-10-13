@@ -28,6 +28,8 @@ export const ACCOUNT_DATA_CHANNELS = {
   listProjectTaskAssignees: "desktop-next:v1:project-task-assignees-list",
   listProjectTaskActivities: "desktop-next:v1:project-task-activities-list",
   addProjectTaskComment: "desktop-next:v1:project-task-comment-add",
+  uploadProjectTaskImage: "desktop-next:v1:project-task-image-upload",
+  readProjectTaskImage: "desktop-next:v1:project-task-image-read",
   bindConversationProject: "desktop-next:v1:conversation-project-bind",
   archiveTopic: "desktop-next:v1:conversation-topic-archive",
   createGroupConversation: "desktop-next:v1:conversation-group-create",
@@ -119,6 +121,7 @@ export type AvatarRequest = {
   id: string
   theme: "light" | "dark"
   cacheOnly?: boolean
+  refresh?: boolean
 }
 export type AvatarResult = {
   status: "ready" | "fallback"
@@ -246,6 +249,15 @@ export type ProjectTaskActivity = {
 export type ProjectPage<T> = { items: T[]; nextCursor: string | null }
 export type ProjectTargetInput = { targetId: string; projectId: string }
 export type ProjectTaskTargetInput = ProjectTargetInput & { taskId: string }
+export type ProjectTaskImageContextInput = ProjectTargetInput & { taskId?: string }
+export type UploadProjectTaskImageInput = ProjectTaskImageContextInput & {
+  bytes: ArrayBuffer
+  name: string
+  contentType: string
+}
+export type ReadProjectTaskImageInput = ProjectTaskImageContextInput & { fileId: string }
+export type UploadedProjectTaskImage = { fileId: string; sizeBytes: number }
+export type ProjectTaskImageReadURL = { url: string }
 export type ListProjectMembersInput = ProjectTargetInput & { cursor?: string; limit?: number }
 export type ListProjectTasksInput = ProjectTargetInput & {
   cursor?: string
@@ -640,6 +652,7 @@ export type SendTextMessageInput = {
 export type SendRichMessageBody =
   | Extract<DesktopMessageBody, { type: "choice" }>
   | Extract<DesktopMessageBody, { type: "chart" }>
+  | { type: "entity_card"; entityType: "task"; entityId: string }
 
 export type SendRichMessageInput = {
   targetId: string
@@ -806,6 +819,12 @@ export interface AccountDataBridge {
     input: ListProjectTaskActivitiesInput,
   ): Promise<AuthResult<ProjectPage<ProjectTaskActivity>>>
   addProjectTaskComment(input: AddProjectTaskCommentInput): Promise<AuthResult<ProjectTaskActivity>>
+  uploadProjectTaskImage(
+    input: UploadProjectTaskImageInput,
+  ): Promise<AuthResult<UploadedProjectTaskImage>>
+  readProjectTaskImage(
+    input: ReadProjectTaskImageInput,
+  ): Promise<AuthResult<ProjectTaskImageReadURL>>
   bindConversationProject(
     input: BindConversationProjectInput,
   ): Promise<AuthResult<DesktopConversation>>

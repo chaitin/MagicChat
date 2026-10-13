@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react"
+import { startTransition, useEffect, useRef, useState, type FormEvent } from "react"
 import {
   CalendarDays,
   ChartGantt,
@@ -7,6 +7,7 @@ import {
   Columns3,
   ListFilterIcon,
   ListTodo,
+  Loader2,
   Plus,
   RefreshCw,
 } from "lucide-react"
@@ -52,6 +53,19 @@ type TaskFilters = {
   statuses: ProjectTaskStatus[]
   priorities: ProjectTaskPriority[]
 }
+
+type TaskCacheKey = string
+const taskPageCache = new Map<TaskCacheKey, DesktopProjectTask[]>()
+
+function taskCacheKey(input: ListProjectTasksInput): TaskCacheKey {
+  return JSON.stringify([
+    input.targetId,
+    input.projectId,
+    input.keyword ?? "",
+    [...(input.statuses ?? [])].sort(),
+    [...(input.priorities ?? [])].sort(),
+  ])
+}
 const views: { id: TaskView; label: string; icon: typeof ListTodo }[] = [
   { id: "list", label: "任务列表", icon: ListTodo },
   { id: "board", label: "看板", icon: Columns3 },
@@ -73,7 +87,15 @@ function storedTaskView(): TaskView {
   }
 }
 
-export function ProjectTasksPage({ targetId, projectId }: { targetId: string; projectId: string }) {
+export function ProjectTasksPage({
+  targetId,
+  projectId,
+  resolvedTheme,
+}: {
+  targetId: string
+  projectId: string
+  resolvedTheme: "light" | "dark"
+}) {
   const { showToast } = useAnimatedToast()
   const [view, setView] = useState<TaskView>(storedTaskView)
   const activeViewDetails = views.find((item) => item.id === view) ?? views[0]
@@ -84,25 +106,69 @@ export function ProjectTasksPage({ targetId, projectId }: { targetId: string; pr
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [reload, setReload] = useState(0)
+  const [assigneeNames, setAssigneeNames] = useState<Map<string, string>>(() => new Map())
+  const requestedAssigneeIds = useRef(new Set<string>())
 
   useEffect(() => {
     let active = true
-    setLoading(true)
+    const input = { targetId, projectId, ...appliedFilters }
+    const key = taskCacheKey(input)
+    const cached = taskPageCache.get(key)
+    let receivedPage = Boolean(cached)
     setError("")
-    void loadAllTasks({ targetId, projectId, ...appliedFilters })
+    if (cached) {
+      setTasks(cached)
+      setLoading(false)
+    } else {
+      setTasks([])
+      setLoading(true)
+    }
+    void loadAllTasks(input, (items) => {
+      if (!active) return
+      receivedPage = true
+      taskPageCache.set(key, items)
+      setTasks(items)
+      setLoading(false)
+    })
       .then((items) => {
-        if (active) setTasks(items)
+        if (!active) return
+        taskPageCache.set(key, items)
+        setTasks(items)
+        setLoading(false)
       })
       .catch((reason: unknown) => {
-        if (active) setError(reason instanceof Error ? reason.message : "加载任务列表失败")
-      })
-      .finally(() => {
-        if (active) setLoading(false)
+        if (!active) return
+        setLoading(false)
+        if (!receivedPage) setError(reason instanceof Error ? reason.message : "加载任务列表失败")
+        else {
+          showToast({
+            status: "warning",
+            title: "任务列表未完全加载",
+            description: reason instanceof Error ? reason.message : "部分任务加载失败",
+          })
+        }
       })
     return () => {
       active = false
     }
-  }, [targetId, projectId, appliedFilters, reload])
+  }, [targetId, projectId, appliedFilters, reload, showToast])
+
+  useEffect(() => {
+    const ids = [...new Set(tasks.flatMap((task) => (task.assignee ? [task.assignee.id] : [])))]
+    const pending = ids.filter((id) => !requestedAssigneeIds.current.has(id))
+    if (!pending.length) return
+    pending.forEach((id) => requestedAssigneeIds.current.add(id))
+    void window
+      .desktop!.accountData.resolveUserNames({ targetId, userIds: pending })
+      .then((result) => {
+        if (!result.ok) return
+        setAssigneeNames((current) => {
+          const next = new Map(current)
+          for (const user of result.data) if (user.name) next.set(user.id, user.name)
+          return next
+        })
+      })
+  }, [targetId, tasks])
 
   useEffect(
     () =>
@@ -189,7 +255,7 @@ export function ProjectTasksPage({ targetId, projectId }: { targetId: string; pr
   }
 
   function changeView(next: TaskView) {
-    setView(next)
+    startTransition(() => setView(next))
     try {
       window.localStorage.setItem("project-task-view", next)
     } catch {
@@ -335,7 +401,7 @@ export function ProjectTasksPage({ targetId, projectId }: { targetId: string; pr
       </div>
       {loading ? (
         <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground">
-          <RefreshCw className="mr-2 size-4 animate-spin" />
+          <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
           正在加载任务
         </div>
       ) : error ? (
@@ -368,6 +434,9 @@ export function ProjectTasksPage({ targetId, projectId }: { targetId: string; pr
           {view === "list" && (
             <TaskListView
               tasks={tasks}
+              targetId={targetId}
+              theme={resolvedTheme}
+              assigneeNames={assigneeNames}
               onOpen={(task) => void openTask(task)}
               onMove={(task, status) => void moveStatus(task, status)}
               onPriorityChange={(task, priority) => void movePriority(task, priority)}
@@ -389,7 +458,10 @@ function hasFilters(filters: TaskFilters) {
   return Boolean(filters.keyword || filters.priorities.length || filters.statuses.length)
 }
 
-async function loadAllTasks(input: ListProjectTasksInput): Promise<DesktopProjectTask[]> {
+async function loadAllTasks(
+  input: ListProjectTasksInput,
+  onPage: (items: DesktopProjectTask[]) => void,
+): Promise<DesktopProjectTask[]> {
   const items: DesktopProjectTask[] = []
   const seen = new Set<string>()
   let cursor: string | null = null
@@ -401,6 +473,7 @@ async function loadAllTasks(input: ListProjectTasksInput): Promise<DesktopProjec
     })
     if (!result.ok) throw new Error(result.error.message)
     items.push(...result.data.items)
+    onPage([...items])
     cursor = result.data.nextCursor
     if (cursor && (!result.data.items.length || seen.has(cursor)))
       throw new Error("任务列表分页格式不正确")

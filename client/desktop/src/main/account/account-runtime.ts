@@ -283,6 +283,16 @@ export class AccountRuntime {
     return this.projectTaskManager!.addComment(input)
   }
 
+  uploadProjectTaskImage(input: Parameters<ProjectTaskManager["uploadImage"]>[0]) {
+    this.assertInitialized()
+    return this.projectTaskManager!.uploadImage(input)
+  }
+
+  readProjectTaskImage(input: Parameters<ProjectTaskManager["readImage"]>[0]) {
+    this.assertInitialized()
+    return this.projectTaskManager!.readImage(input)
+  }
+
   async bindConversationProject(conversationId: string, projectId: string) {
     this.assertInitialized()
     const conversation = await this.conversationManager!.bindConversationProject(
@@ -658,9 +668,13 @@ export class AccountRuntime {
     return app
   }
 
-  getAvatar(request: Omit<AvatarRequest, "targetId">): Promise<AvatarResult> {
+  async getAvatar(request: Omit<AvatarRequest, "targetId">): Promise<AvatarResult> {
     this.assertInitialized()
-    return this.avatarManager!.getAvatar(request)
+    const result = await this.avatarManager!.getAvatar(request)
+    if (request.refresh && !request.cacheOnly && (request.type === "user" || request.type === "group")) {
+      this.notifyChanged([], [], { type: request.type, id: request.id })
+    }
+    return result
   }
 
   async invalidateAvatar(type: AvatarRequest["type"], entityId: string) {

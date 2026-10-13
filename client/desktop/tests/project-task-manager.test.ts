@@ -164,6 +164,54 @@ test("成员分页、动态和评论返回可展示的数据", async () => {
   )
 })
 
+test("任务创建人和动态操作者缺少姓名时通过用户解析接口补全", async () => {
+  const anonymousTask = { ...task, creator: { id: "u1", name: "", nickname: "", avatar: "" } }
+  const anonymousActivity = {
+    id: "a1",
+    project_id: projectId,
+    task_id: task.id,
+    actor: { id: "u2", name: "", nickname: "", avatar: "" },
+    type: "commented",
+    content: "已检查",
+    created_at: "2026-10-12T00:00:00Z",
+    changes: [],
+  }
+  const manager = managerFor({
+    get: async (url: string) =>
+      url.endsWith("/task-1")
+        ? anonymousTask
+        : { activities: [anonymousActivity], next_cursor: null },
+    post: async (url: string, body: unknown) => {
+      assert.equal(url, "/api/client/users/resolve")
+      assert.deepEqual(body, {
+        user_ids: [
+          url.includes("resolve") && (body as { user_ids: string[] }).user_ids[0] === "u1"
+            ? "u1"
+            : "u2",
+        ],
+      })
+      return {
+        users: [
+          {
+            id: (body as { user_ids: string[] }).user_ids[0],
+            name: "张三",
+            nickname: "小张",
+            avatar: "",
+          },
+        ],
+      }
+    },
+  })
+  assert.equal(
+    (await manager.get({ targetId, projectId, taskId: task.id })).creator.nickname,
+    "小张",
+  )
+  assert.equal(
+    (await manager.listActivities({ targetId, projectId, taskId: task.id })).items[0]?.actor.name,
+    "张三",
+  )
+})
+
 test("负责人资料仅解析当前项目分页成员，保留原名昵称及联系方式", async () => {
   let reads = 0
   const manager = managerFor({

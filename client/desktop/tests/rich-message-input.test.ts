@@ -2,6 +2,35 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { normalizeOutgoingRichMessageBody } from "../src/main/account/rich-message-input.ts"
 
+test("任务对象卡片转为服务端协议并限制为任务实体", () => {
+  assert.deepEqual(
+    normalizeOutgoingRichMessageBody({
+      type: "entity_card",
+      entityType: "task",
+      entityId: "task-1",
+    }),
+    { type: "entity_card", entity_type: "task", entity_id: "task-1" },
+  )
+  assert.throws(
+    () =>
+      normalizeOutgoingRichMessageBody({
+        type: "entity_card",
+        entityType: "user",
+        entityId: "user-1",
+      }),
+    /对象卡片格式不正确/,
+  )
+  assert.throws(
+    () =>
+      normalizeOutgoingRichMessageBody({
+        type: "entity_card",
+        entityType: "task",
+        entityId: "bad/id",
+      }),
+    /对象卡片格式不正确/,
+  )
+})
+
 test("选择消息转为服务端协议", () => {
   assert.deepEqual(
     normalizeOutgoingRichMessageBody({

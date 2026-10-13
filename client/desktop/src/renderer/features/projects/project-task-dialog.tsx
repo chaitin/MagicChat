@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
-import { CalendarDays, MessageSquare, Trash2, X } from "lucide-react"
+import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
+import { CalendarDays, Pencil, Trash2, X } from "lucide-react"
 import { zhCN } from "date-fns/locale"
 import type {
   DesktopProjectTask,
   ProjectTaskAssignee,
-  ProjectTaskActivity,
   ProjectTaskPriority,
   ProjectTaskReminderInput,
   ProjectTaskStatus,
@@ -33,6 +33,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Select,
   SelectContent,
@@ -40,8 +41,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+import { hasTaskImageUpload } from "../../../shared/task-image"
+import { TaskDescriptionEditor } from "./task-description-editor"
+import { ProjectTaskDetailView } from "./project-task-detail-view"
+import {
+  taskPropertyMutation,
+  taskPropertyValues,
+  type TaskPropertyValues,
+} from "./task-property-mutation"
 import {
   TaskPriorityIcon,
   TaskStatusIcon,
@@ -67,16 +75,10 @@ import {
   shanghaiReminderISO,
 } from "./task-view-model"
 
-type TaskForm = {
+type TaskForm = TaskPropertyValues & {
   title: string
   description: string
-  status: ProjectTaskStatus
-  priority: ProjectTaskPriority
-  assigneeUserId: string
-  startDate: string
-  dueDate: string
   labels: string[]
-  reminder: ProjectTaskReminderInput | null
 }
 
 function initialForm(task: DesktopProjectTask | null): TaskForm {
@@ -96,11 +98,12 @@ function initialForm(task: DesktopProjectTask | null): TaskForm {
 export function ProjectTaskDialog({
   targetId,
   projectId,
-  task,
+  task: initialTask,
   members,
   resolvedTheme,
   onClose,
   onChanged,
+  onTaskSaved,
 }: {
   targetId: string
   projectId: string
@@ -109,70 +112,36 @@ export function ProjectTaskDialog({
   resolvedTheme: "light" | "dark"
   onClose: () => void
   onChanged: () => Promise<void>
+  onTaskSaved: (task: DesktopProjectTask) => void
 }) {
+  const { showToast } = useAnimatedToast()
+  const [task, setTask] = useState(initialTask)
+  const savingRef = useRef(false)
+  const [activityRevision, setActivityRevision] = useState(0)
   const [form, setForm] = useState<TaskForm>(() => initialForm(task))
   const [labelDraft, setLabelDraft] = useState("")
+  const [editing, setEditing] = useState(() => !task)
   const details = task
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [activities, setActivities] = useState<ProjectTaskActivity[]>([])
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
-  const [activityError, setActivityError] = useState("")
-  const [loadingActivities, setLoadingActivities] = useState(false)
-  const [comment, setComment] = useState("")
-  const [commenting, setCommenting] = useState(false)
-
-  async function loadActivities(cursor?: string) {
-    if (!task || loadingActivities) return
-    setLoadingActivities(true)
-    setActivityError("")
-    try {
-      const result = await window.taskWindow!.accountData.listProjectTaskActivities({
-        targetId,
-        projectId,
-        taskId: task.id,
-        ...(cursor ? { cursor } : {}),
-      })
-      if (!result.ok) throw new Error(result.error.message)
-      setActivities((current) => (cursor ? [...current, ...result.data.items] : result.data.items))
-      setNextCursor(result.data.nextCursor)
-    } catch (reason) {
-      setActivityError(reason instanceof Error ? reason.message : "加载任务动态失败")
-    } finally {
-      setLoadingActivities(false)
-    }
-  }
-
-  useEffect(() => {
-    if (!task) return
-    let active = true
-    void window
-      .taskWindow!.accountData.listProjectTaskActivities({ targetId, projectId, taskId: task.id })
-      .then((result) => {
-        if (!active) return
-        if (!result.ok) throw new Error(result.error.message)
-        setActivities(result.data.items)
-        setNextCursor(result.data.nextCursor)
-      })
-      .catch((reason: unknown) => {
-        if (active) setActivityError(reason instanceof Error ? reason.message : "加载任务动态失败")
-      })
-    return () => {
-      active = false
-    }
-  }, [targetId, projectId, task?.id])
-
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (saving) return
+    if (savingRef.current || saving || !editing) return
     setError("")
+    const invalid = (message: string) => {
+      setError(message)
+      showToast({ status: "error", title: "无法保存任务", description: message })
+    }
+    if (hasTaskImageUpload(form.description))
+      return invalid("请等待图片上传完成，失败的图片请重试或移除")
     const title = form.title.trim()
-    if (!title) return setError("请填写任务标题")
+    if (!title) return invalid("请填写任务标题")
     if (form.startDate && form.dueDate && form.startDate > form.dueDate)
-      return setError("开始日期不能晚于截止日期")
+      return invalid("开始日期不能晚于截止日期")
     const labels = mergeTaskLabels(form.labels, labelDraft)
-    if (labels.length > 20) return setError("最多添加 20 个标签")
+    if (labels.length > 20) return invalid("最多添加 20 个标签")
+    savingRef.current = true
     setSaving(true)
     try {
       const fields = {
@@ -195,11 +164,23 @@ export function ProjectTaskDialog({
           })
         : await window.taskWindow!.accountData.createProjectTask({ targetId, projectId, ...fields })
       if (!result.ok) throw new Error(result.error.message)
-      await onChanged()
-      onClose()
+      if (task) {
+        setTask(result.data)
+        onTaskSaved(result.data)
+        setForm(initialForm(result.data))
+        setLabelDraft("")
+        setEditing(false)
+        setActivityRevision((value) => value + 1)
+      }
+      showToast({ status: "success", title: task ? "任务修改已保存" : "任务创建成功" })
+      await notifyChanged()
+      if (!task) onClose()
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "保存任务失败")
+      const message = reason instanceof Error ? reason.message : "保存任务失败"
+      setError(message)
+      showToast({ status: "error", title: "保存任务失败", description: message })
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }
@@ -218,32 +199,59 @@ export function ProjectTaskDialog({
       await onChanged()
       onClose()
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "删除任务失败")
+      const message = reason instanceof Error ? reason.message : "删除任务失败"
+      setError(message)
+      showToast({ status: "error", title: "删除任务失败", description: message })
       setConfirmDelete(false)
     } finally {
       setSaving(false)
     }
   }
 
-  async function addComment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!task || commenting || !comment.trim()) return
-    setCommenting(true)
-    setActivityError("")
+  async function notifyChanged() {
     try {
-      const result = await window.taskWindow!.accountData.addProjectTaskComment({
+      await onChanged()
+    } catch {
+      showToast({
+        status: "warning",
+        title: "任务已保存，但列表刷新失败",
+        description: "可重新打开项目列表刷新。",
+      })
+    }
+  }
+
+  async function saveProperty<K extends keyof TaskPropertyValues>(
+    key: K,
+    value: TaskPropertyValues[K],
+  ) {
+    if (!task || savingRef.current || editing) return
+    try {
+      const mutation = taskPropertyMutation(taskPropertyValues(task), key, value)
+      if (!mutation) return
+      savingRef.current = true
+      setSaving(true)
+      const result = await window.taskWindow!.accountData.updateProjectTask({
         targetId,
         projectId,
         taskId: task.id,
-        content: comment.trim(),
+        ...mutation,
       })
       if (!result.ok) throw new Error(result.error.message)
-      setComment("")
-      await loadActivities()
+      setTask(result.data)
+      onTaskSaved(result.data)
+      setForm(initialForm(result.data))
+      setActivityRevision((current) => current + 1)
+      showToast({ status: "success", title: "任务修改已保存" })
+      await notifyChanged()
     } catch (reason) {
-      setActivityError(reason instanceof Error ? reason.message : "添加评论失败")
+      showToast({
+        status: "error",
+        title: "修改任务失败",
+        description: reason instanceof Error ? reason.message : "请稍后重试",
+      })
     } finally {
-      setCommenting(false)
+      savingRef.current = false
+      setSaving(false)
     }
   }
 
@@ -251,275 +259,173 @@ export function ProjectTaskDialog({
     setForm((current) => ({ ...current, [key]: value }))
   }
 
-  const assigneeName =
-    members.find((member) => member.id === form.assigneeUserId)?.displayName ||
-    task?.assignee?.nickname ||
-    task?.assignee?.name ||
-    "未知成员"
+  function startEditing() {
+    if (saving || savingRef.current) return
+    setForm(initialForm(task))
+    setLabelDraft("")
+    setError("")
+    setEditing(true)
+  }
 
   return (
     <>
       <div className="flex h-full min-h-0 flex-col">
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <ScrollArea
+          className="min-h-0 min-w-0 flex-1 overflow-hidden"
+          viewportClassName="overflow-x-hidden [&>div]:block! [&>div]:h-full! [&>div]:w-full! [&>div]:min-w-0!"
+        >
           <div
             className={cn(
               "grid min-h-full items-start gap-4 p-5 md:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]",
-              task
-                ? "md:grid-rows-[minmax(min-content,1fr)_auto]"
-                : "md:grid-rows-[minmax(min-content,1fr)]",
+              editing ? "md:grid-rows-[minmax(min-content,1fr)]" : "content-start",
             )}
           >
-            <form
-              id="project-task-form"
-              className="contents"
-              onSubmit={(event) => void save(event)}
-            >
-              <div className="grid min-w-0 gap-3 md:col-start-1 md:row-start-1 md:grid-rows-[auto_auto_minmax(min-content,1fr)] md:self-stretch">
-                <Field label="标题">
-                  <Input
-                    autoFocus
-                    required
-                    maxLength={240}
-                    value={form.title}
-                    disabled={saving}
-                    onChange={(event) => change("title", event.target.value)}
-                  />
-                </Field>
-                <Field label="标签" interactive>
-                  <TaskLabelInput
-                    labels={form.labels}
-                    draft={labelDraft}
-                    disabled={saving}
-                    onDraftChange={setLabelDraft}
-                    onAdd={() => {
-                      const labels = mergeTaskLabels(form.labels, labelDraft)
-                      if (labels.length > 20) {
-                        setError("最多添加 20 个标签")
-                        return
-                      }
-                      change("labels", labels)
-                      setLabelDraft("")
-                    }}
-                    onRemove={(label) =>
-                      change(
-                        "labels",
-                        form.labels.filter((item) => item !== label),
-                      )
-                    }
-                  />
-                </Field>
-                <Field label="详细说明" className="min-h-0 grid-rows-[auto_minmax(6rem,1fr)]">
-                  <Textarea
-                    className="h-full min-h-24 resize-none field-sizing-fixed"
-                    value={form.description}
-                    disabled={saving}
-                    onChange={(event) => change("description", event.target.value)}
-                  />
-                </Field>
-              </div>
-              <div
-                className={cn(
-                  "grid min-w-0 content-start gap-3 md:col-start-2 md:row-start-1",
-                  task && "md:row-span-2",
-                )}
-              >
-                <Field label="状态" interactive>
-                  <Select
-                    value={form.status}
-                    disabled={saving}
-                    onValueChange={(status) => change("status", status as ProjectTaskStatus)}
-                  >
-                    <SelectTrigger className="w-full" aria-label="状态">
-                      <SelectValue>
-                        <TaskStatusIcon status={form.status} />
-                        {taskStatusLabels[form.status]}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent position="popper">
-                      {taskStatuses.map((status) => (
-                        <SelectItem
-                          key={status}
-                          value={status}
-                          className={taskSelectItemClassName}
-                          indicatorClassName={statusIconColors[status]}
-                        >
-                          <TaskStatusIcon status={status} />
-                          {taskStatusLabels[status]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label="优先级" interactive>
-                  <Select
-                    value={String(form.priority)}
-                    disabled={saving}
-                    onValueChange={(priority) =>
-                      change("priority", Number(priority) as ProjectTaskPriority)
-                    }
-                  >
-                    <SelectTrigger className="w-full" aria-label="优先级">
-                      <SelectValue>
-                        <TaskPriorityIcon priority={form.priority} />
-                        {taskPriorityLabels[form.priority]}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent position="popper">
-                      {taskPriorities.map((priority) => (
-                        <SelectItem
-                          key={priority}
-                          value={String(priority)}
-                          className={taskSelectItemClassName}
-                          indicatorClassName={priorityIconColors[priority]}
-                        >
-                          <TaskPriorityIcon priority={priority} />
-                          {taskPriorityLabels[priority]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label="负责人" interactive>
-                  <TaskAssigneePicker
+            {!editing && task ? (
+              <ProjectTaskDetailView
+                targetId={targetId}
+                projectId={projectId}
+                task={task}
+                members={members}
+                theme={resolvedTheme}
+                onChanged={onChanged}
+                onEdit={startEditing}
+                onDelete={() => setConfirmDelete(true)}
+                disabled={saving}
+                activityRevision={activityRevision}
+                propertyControls={
+                  <TaskPropertyFields
                     targetId={targetId}
                     members={members}
-                    value={form.assigneeUserId}
-                    name={assigneeName}
+                    values={taskPropertyValues(task)}
+                    task={task}
                     theme={resolvedTheme}
                     disabled={saving}
-                    onChange={(id) => change("assigneeUserId", id)}
+                    hideEmpty
+                    onChange={(key, value) => void saveProperty(key, value)}
                   />
-                </Field>
-                <Field label="开始日期" interactive>
-                  <TaskDatePicker
-                    label="开始日期"
-                    value={form.startDate}
-                    disabled={saving}
-                    onChange={(date) => change("startDate", date)}
-                  />
-                </Field>
-                <Field label="截止日期" interactive>
-                  <TaskDatePicker
-                    label="截止日期"
-                    value={form.dueDate}
-                    disabled={saving}
-                    onChange={(date) => change("dueDate", date)}
-                  />
-                </Field>
-                <TaskReminderField
-                  value={form.reminder}
-                  onChange={(value) => change("reminder", value)}
-                />
-                {details?.reminder && (
-                  <p className="text-xs text-muted-foreground">
-                    提醒状态：
-                    {
-                      { scheduled: "已安排", paused: "已暂停", fired: "已触发", expired: "已过期" }[
-                        details.reminder.state
-                      ]
-                    }
-                    {details.reminder.nextTriggerAt
-                      ? ` · 下次提醒 ${new Date(details.reminder.nextTriggerAt).toLocaleString("zh-CN")}`
-                      : ""}
-                  </p>
-                )}
-              </div>
-            </form>
-            {task && (
-              <div className="grid min-w-0 gap-4 md:col-start-1 md:row-start-2">
-                {details && (
-                  <p className="text-xs text-muted-foreground">
-                    创建人：{details.creator.nickname || details.creator.name || details.creator.id}
-                    {` · 创建于 ${new Date(details.createdAt).toLocaleString("zh-CN")}`}
-                    {` · 更新于 ${new Date(details.updatedAt).toLocaleString("zh-CN")}`}
-                  </p>
-                )}
-                <section aria-label="任务动态" className="grid gap-3 border-t pt-4">
-                  <h3 className="flex items-center gap-2 text-sm font-medium">
-                    <MessageSquare className="size-4" />
-                    任务动态
-                  </h3>
-                  {activities.length === 0 && !activityError && (
-                    <p className="text-xs text-muted-foreground">暂无动态</p>
-                  )}
-                  <div className="grid max-h-52 gap-2 overflow-y-auto">
-                    {activities.map((activity) => (
-                      <div key={activity.id} className="rounded-md bg-muted/50 px-3 py-2 text-xs">
-                        <span className="font-medium">
-                          {activity.actor.nickname || activity.actor.name}
-                        </span>
-                        <span className="ml-2 text-muted-foreground">
-                          {new Date(activity.createdAt).toLocaleString("zh-CN")}
-                        </span>
-                        <p className="mt-1 whitespace-pre-wrap">
-                          {activity.type === "commented"
-                            ? activity.content
-                            : activity.type === "created"
-                              ? "创建了任务"
-                              : `更新了任务${activity.changes.length ? `：${activity.changes.map((change) => change.field).join("、")}` : ""}`}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                  {nextCursor && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={loadingActivities}
-                      onClick={() => void loadActivities(nextCursor)}
-                    >
-                      {loadingActivities ? "加载中…" : "加载更多动态"}
-                    </Button>
-                  )}
-                  {activityError && (
-                    <p role="alert" className="text-xs text-destructive">
-                      {activityError}
-                    </p>
-                  )}
-                  <form className="flex gap-2" onSubmit={(event) => void addComment(event)}>
-                    <Input
-                      aria-label="评论内容"
-                      placeholder="添加评论"
-                      value={comment}
-                      onChange={(event) => setComment(event.target.value)}
-                    />
-                    <Button type="submit" disabled={commenting || !comment.trim()}>
-                      {commenting ? "发送中" : "发送"}
-                    </Button>
-                  </form>
-                </section>
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="grid shrink-0 gap-3 border-t bg-background px-5 py-4">
-          {error && (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          )}
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {task && (
-              <Button
-                type="button"
-                variant="destructive"
-                className="mr-auto"
-                disabled={saving}
-                onClick={() => setConfirmDelete(true)}
+                }
+              />
+            ) : (
+              <form
+                id="project-task-form"
+                className="contents"
+                onSubmit={(event) => void save(event)}
               >
-                <Trash2 />
-                删除
-              </Button>
+                <div className="grid min-w-0 gap-3 md:col-start-1 md:row-start-1 md:grid-rows-[auto_auto_minmax(min-content,1fr)] md:self-stretch">
+                  <Field label="标题">
+                    <Input
+                      autoFocus
+                      required
+                      maxLength={240}
+                      value={form.title}
+                      disabled={saving}
+                      onChange={(event) => change("title", event.target.value)}
+                    />
+                  </Field>
+                  <Field label="标签" interactive>
+                    <TaskLabelInput
+                      labels={form.labels}
+                      draft={labelDraft}
+                      disabled={saving}
+                      onDraftChange={setLabelDraft}
+                      onAdd={() => {
+                        const labels = mergeTaskLabels(form.labels, labelDraft)
+                        if (labels.length > 20) {
+                          setError("最多添加 20 个标签")
+                          return
+                        }
+                        change("labels", labels)
+                        setLabelDraft("")
+                      }}
+                      onRemove={(label) =>
+                        change(
+                          "labels",
+                          form.labels.filter((item) => item !== label),
+                        )
+                      }
+                    />
+                  </Field>
+                  <TaskDescriptionEditor
+                    targetId={targetId}
+                    projectId={projectId}
+                    taskId={task?.id}
+                    value={form.description}
+                    disabled={saving}
+                    onChange={(update) =>
+                      setForm((current) => ({
+                        ...current,
+                        description: update(current.description),
+                      }))
+                    }
+                  />
+                </div>
+                <div className="grid min-w-0 content-start gap-3 md:col-start-2 md:row-start-1">
+                  <TaskPropertyFields
+                    targetId={targetId}
+                    members={members}
+                    values={form}
+                    task={details}
+                    theme={resolvedTheme}
+                    disabled={saving}
+                    onChange={(key, value) => setForm((current) => ({ ...current, [key]: value }))}
+                  />
+                </div>
+              </form>
             )}
-            <Button type="button" variant="outline" disabled={saving} onClick={onClose}>
-              取消
-            </Button>
-            <Button type="submit" form="project-task-form" disabled={saving || !form.title.trim()}>
-              {saving ? "保存中…" : task ? "保存修改" : "创建任务"}
-            </Button>
           </div>
-        </div>
+        </ScrollArea>
+        {editing && (
+          <div className="grid shrink-0 gap-3 border-t bg-background px-5 py-3">
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {task && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="mr-auto"
+                  disabled={saving}
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  <Trash2 />
+                  删除
+                </Button>
+              )}
+              {editing && task && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={saving}
+                  onClick={() => {
+                    setForm(initialForm(task))
+                    setLabelDraft("")
+                    setError("")
+                    setEditing(false)
+                  }}
+                >
+                  退出编辑
+                </Button>
+              )}
+              {editing ? (
+                <Button
+                  type="submit"
+                  form="project-task-form"
+                  disabled={saving || hasTaskImageUpload(form.description) || !form.title.trim()}
+                >
+                  {saving ? "保存中…" : task ? "保存修改" : "创建任务"}
+                </Button>
+              ) : (
+                <Button type="button" disabled={saving} onClick={startEditing}>
+                  <Pencil />
+                  编辑
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
       <AlertDialog
         open={confirmDelete}
@@ -527,7 +433,7 @@ export function ProjectTaskDialog({
           if (!saving) setConfirmDelete(open)
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent size="sm">
           <AlertDialogHeader>
             <AlertDialogTitle>确认删除任务</AlertDialogTitle>
             <AlertDialogDescription>
@@ -555,6 +461,145 @@ export function ProjectTaskDialog({
         </AlertDialogContent>
       </AlertDialog>
     </>
+  )
+}
+
+function TaskPropertyFields({
+  targetId,
+  members,
+  values,
+  task,
+  theme,
+  disabled,
+  hideEmpty = false,
+  onChange,
+}: {
+  targetId: string
+  members: ProjectTaskAssignee[]
+  values: TaskPropertyValues
+  task: DesktopProjectTask | null
+  theme: "light" | "dark"
+  disabled: boolean
+  hideEmpty?: boolean
+  onChange: <K extends keyof TaskPropertyValues>(key: K, value: TaskPropertyValues[K]) => void
+}) {
+  const assigneeName =
+    members.find((member) => member.id === values.assigneeUserId)?.displayName ||
+    task?.assignee?.nickname ||
+    task?.assignee?.name ||
+    "未知成员"
+  return (
+    <fieldset disabled={disabled} className="contents">
+      <Field label="状态" interactive>
+        <Select
+          value={values.status}
+          disabled={disabled}
+          onValueChange={(status) => onChange("status", status as ProjectTaskStatus)}
+        >
+          <SelectTrigger className="w-full" aria-label="状态">
+            <SelectValue>
+              <TaskStatusIcon status={values.status} />
+              {taskStatusLabels[values.status]}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent position="popper">
+            {taskStatuses.map((status) => (
+              <SelectItem
+                key={status}
+                value={status}
+                className={taskSelectItemClassName}
+                indicatorClassName={statusIconColors[status]}
+              >
+                <TaskStatusIcon status={status} />
+                {taskStatusLabels[status]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="优先级" interactive>
+        <Select
+          value={String(values.priority)}
+          disabled={disabled}
+          onValueChange={(priority) =>
+            onChange("priority", Number(priority) as ProjectTaskPriority)
+          }
+        >
+          <SelectTrigger className="w-full" aria-label="优先级">
+            <SelectValue>
+              <TaskPriorityIcon priority={values.priority} />
+              {taskPriorityLabels[values.priority]}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent position="popper">
+            {taskPriorities.map((priority) => (
+              <SelectItem
+                key={priority}
+                value={String(priority)}
+                className={taskSelectItemClassName}
+                indicatorClassName={priorityIconColors[priority]}
+              >
+                <TaskPriorityIcon priority={priority} />
+                {taskPriorityLabels[priority]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      {(!hideEmpty || values.assigneeUserId) && (
+        <Field label="负责人" interactive>
+          <TaskAssigneePicker
+            targetId={targetId}
+            members={members}
+            value={values.assigneeUserId}
+            name={assigneeName}
+            theme={theme}
+            disabled={disabled}
+            onChange={(id) => onChange("assigneeUserId", id)}
+          />
+        </Field>
+      )}
+      {(!hideEmpty || values.startDate) && (
+        <Field label="开始日期" interactive>
+          <TaskDatePicker
+            label="开始日期"
+            value={values.startDate}
+            disabled={disabled}
+            onChange={(date) => onChange("startDate", date)}
+          />
+        </Field>
+      )}
+      {(!hideEmpty || values.dueDate) && (
+        <Field label="截止日期" interactive>
+          <TaskDatePicker
+            label="截止日期"
+            value={values.dueDate}
+            disabled={disabled}
+            onChange={(date) => onChange("dueDate", date)}
+          />
+        </Field>
+      )}
+      {(!hideEmpty || values.reminder) && (
+        <TaskReminderField
+          value={values.reminder}
+          disabled={disabled}
+          onChange={(value) => onChange("reminder", value)}
+        />
+      )}
+      {task?.reminder && (
+        <p className="text-xs text-muted-foreground">
+          提醒状态：
+          {
+            { scheduled: "已安排", paused: "已暂停", fired: "已触发", expired: "已过期" }[
+              task.reminder.state
+            ]
+          }
+          {task.reminder.nextTriggerAt
+            ? ` · 下次提醒 ${new Date(task.reminder.nextTriggerAt).toLocaleString("zh-CN")}`
+            : ""}
+        </p>
+      )}
+    </fieldset>
   )
 }
 
@@ -587,7 +632,11 @@ function TaskLabelInput({
       }}
     >
       {labels.map((label) => (
-        <Badge key={label} variant="secondary" className="h-6 max-w-full gap-1">
+        <Badge
+          key={label}
+          variant="secondary"
+          className="h-6 max-w-full gap-1 border-sky-300 bg-sky-100 text-sky-600 dark:border-sky-700 dark:bg-sky-900/30 dark:text-sky-400"
+        >
           <span className="truncate" title={label}>
             {label}
           </span>
@@ -595,7 +644,7 @@ function TaskLabelInput({
             type="button"
             aria-label={`删除标签 ${label}`}
             disabled={disabled}
-            className="flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
+            className="flex size-4 shrink-0 items-center justify-center rounded-full text-current hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
             onClick={() => {
               onRemove(label)
               inputRef.current?.focus()
@@ -615,10 +664,14 @@ function TaskLabelInput({
         className="h-6 min-w-28 flex-1 rounded-none border-0 bg-transparent p-0 shadow-none focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent"
         onChange={(event) => onDraftChange(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key !== "Enter" || event.nativeEvent.isComposing || event.keyCode === 229)
-            return
-          event.preventDefault()
-          onAdd()
+          if (event.nativeEvent.isComposing || event.keyCode === 229) return
+          if (event.key === "Enter") {
+            event.preventDefault()
+            onAdd()
+          } else if (event.key === "Backspace" && !draft && labels.length) {
+            event.preventDefault()
+            onRemove(labels[labels.length - 1])
+          }
         }}
       />
     </div>
@@ -836,9 +889,11 @@ function TaskDatePicker({
 
 function TimeInput24Hour({
   value,
+  disabled,
   onChange,
 }: {
   value: string
+  disabled?: boolean
   onChange: (value: string) => void
 }) {
   const [draft, setDraft] = useState(value)
@@ -846,7 +901,10 @@ function TimeInput24Hour({
 
   function commit() {
     if (isValid24HourTime(draft)) {
-      if (draft !== value) onChange(draft)
+      if (draft !== value) {
+        setDraft(value)
+        onChange(draft)
+      }
     } else {
       setDraft(value)
     }
@@ -856,6 +914,7 @@ function TimeInput24Hour({
     <Input
       type="text"
       inputMode="numeric"
+      disabled={disabled}
       maxLength={5}
       placeholder="HH:mm"
       className="bg-background tabular-nums"
@@ -877,27 +936,59 @@ function TimeInput24Hour({
   )
 }
 
+function TaskReminderDayInput({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: number
+  disabled: boolean
+  onChange: (day: number) => void
+}) {
+  const [draft, setDraft] = useState(String(value))
+  useEffect(() => setDraft(String(value)), [value])
+  return (
+    <Input
+      type="number"
+      min={1}
+      max={31}
+      disabled={disabled}
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => {
+        const day = Number(draft)
+        setDraft(String(value))
+        if (Number.isInteger(day) && day >= 1 && day <= 31 && day !== value) onChange(day)
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault()
+          event.currentTarget.blur()
+        }
+      }}
+    />
+  )
+}
+
 function TaskReminderField({
   value,
+  disabled,
   onChange,
 }: {
   value: ProjectTaskReminderInput | null
+  disabled: boolean
   onChange: (value: ProjectTaskReminderInput | null) => void
 }) {
   const mode = value?.mode ?? "none"
   const shanghaiNow = new Date(Date.now() + 8 * 60 * 60_000 + 60_000).toISOString().slice(0, 16)
   return (
-    <fieldset className="grid gap-2 rounded-md border p-3 text-sm">
-      <legend className="px-1">
-        <Label
-          htmlFor="task-reminder-mode"
-          className="cursor-pointer text-xs text-muted-foreground"
-        >
-          任务提醒
-        </Label>
-      </legend>
+    <div role="group" aria-label="任务提醒" className="grid gap-1 text-sm">
+      <Label htmlFor="task-reminder-mode" className="cursor-pointer text-xs text-muted-foreground">
+        任务提醒
+      </Label>
       <Select
         value={mode}
+        disabled={disabled}
         onValueChange={(nextMode) => {
           if (nextMode === "none") onChange(null)
           else if (nextMode === "once")
@@ -935,6 +1026,7 @@ function TaskReminderField({
           <Field label="提醒日期（北京时间）" interactive>
             <TaskDatePicker
               label="提醒日期"
+              disabled={disabled}
               clearable={false}
               value={shanghaiReminderDateTime(value.at).date}
               onChange={(date) => {
@@ -949,6 +1041,7 @@ function TaskReminderField({
           <Field label="提醒时间（北京时间）">
             <TimeInput24Hour
               value={shanghaiReminderDateTime(value.at).time}
+              disabled={disabled}
               onChange={(time) =>
                 onChange({
                   ...value,
@@ -964,6 +1057,7 @@ function TaskReminderField({
           <Field label="重复周期" interactive>
             <Select
               value={value.frequency}
+              disabled={disabled}
               onValueChange={(frequency) =>
                 onChange({
                   mode: "recurring",
@@ -992,7 +1086,11 @@ function TaskReminderField({
             </Select>
           </Field>
           <Field label="提醒时间">
-            <TimeInput24Hour value={value.time} onChange={(time) => onChange({ ...value, time })} />
+            <TimeInput24Hour
+              value={value.time}
+              disabled={disabled}
+              onChange={(time) => onChange({ ...value, time })}
+            />
           </Field>
           {value.frequency === "weekly" && (
             <div className="flex flex-wrap gap-2">
@@ -1000,6 +1098,7 @@ function TaskReminderField({
                 <label key={day} className="flex items-center gap-1 text-xs">
                   <input
                     type="checkbox"
+                    disabled={disabled}
                     checked={value.weekdays?.includes(day) ?? false}
                     onChange={(event) =>
                       onChange({
@@ -1017,17 +1116,15 @@ function TaskReminderField({
           )}
           {value.frequency === "monthly" && (
             <Field label="每月几号">
-              <Input
-                type="number"
-                min={1}
-                max={31}
+              <TaskReminderDayInput
+                disabled={disabled}
                 value={value.dayOfMonth ?? 1}
-                onChange={(event) => onChange({ ...value, dayOfMonth: Number(event.target.value) })}
+                onChange={(dayOfMonth) => onChange({ ...value, dayOfMonth })}
               />
             </Field>
           )}
         </div>
       )}
-    </fieldset>
+    </div>
   )
 }

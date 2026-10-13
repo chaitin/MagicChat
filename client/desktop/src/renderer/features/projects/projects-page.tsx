@@ -131,7 +131,12 @@ function AccountProjectsPage({
       </aside>
       <section className="flex min-h-0 min-w-0 flex-col bg-card" aria-label="项目任务区域">
         {selectedId ? (
-          <ProjectTasksPage key={selectedId} targetId={targetId} projectId={selectedId} />
+          <ProjectTasksPage
+            key={selectedId}
+            targetId={targetId}
+            projectId={selectedId}
+            resolvedTheme={resolvedTheme}
+          />
         ) : (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 text-xgui-background-2">
             <span className="flex size-32 items-center justify-center rounded-full bg-xgui-background-1">

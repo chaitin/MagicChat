@@ -153,6 +153,10 @@ const bridge: DesktopBridge = {
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listProjectTaskActivities, input),
     addProjectTaskComment: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.addProjectTaskComment, input),
+    uploadProjectTaskImage: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.uploadProjectTaskImage, input),
+    readProjectTaskImage: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.readProjectTaskImage, input),
     bindConversationProject: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.bindConversationProject, input),
     archiveTopic: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.archiveTopic, input),
@@ -303,7 +307,13 @@ const taskWindowBridge: TaskWindowBridge = {
     listProjectTaskAssignees: bridge.accountData.listProjectTaskAssignees,
     listProjectTaskActivities: bridge.accountData.listProjectTaskActivities,
     addProjectTaskComment: bridge.accountData.addProjectTaskComment,
+    uploadProjectTaskImage: bridge.accountData.uploadProjectTaskImage,
+    readProjectTaskImage: bridge.accountData.readProjectTaskImage,
     resolveUserNames: bridge.accountData.resolveUserNames,
+    listConversations: bridge.accountData.listConversations,
+    getContacts: bridge.accountData.getContacts,
+    openContactConversation: bridge.accountData.openContactConversation,
+    sendRichMessage: bridge.accountData.sendRichMessage,
   },
 }
 

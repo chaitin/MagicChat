@@ -372,6 +372,14 @@ export class AuthController {
     return this.accountData.addProjectTaskComment(...args)
   }
 
+  uploadProjectTaskImage(...args: Parameters<AccountDataFacade["uploadProjectTaskImage"]>) {
+    return this.accountData.uploadProjectTaskImage(...args)
+  }
+
+  readProjectTaskImage(...args: Parameters<AccountDataFacade["readProjectTaskImage"]>) {
+    return this.accountData.readProjectTaskImage(...args)
+  }
+
   bindConversationProject(...args: Parameters<AccountDataFacade["bindConversationProject"]>) {
     return this.accountData.bindConversationProject(...args)
   }

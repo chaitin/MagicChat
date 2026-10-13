@@ -101,6 +101,7 @@ export function ProjectTaskWindowPage() {
             resolvedTheme={resolvedTheme}
             onClose={() => void bridge.windowControls.close()}
             onChanged={() => bridge.notifyChanged()}
+            onTaskSaved={(task) => setData((current) => (current ? { ...current, task } : current))}
           />
         ) : (
           <p className="p-6 text-sm text-muted-foreground">正在加载任务…</p>

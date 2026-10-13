@@ -31,6 +31,12 @@ export interface TaskWindowBridge {
     | "listProjectTaskAssignees"
     | "listProjectTaskActivities"
     | "addProjectTaskComment"
+    | "uploadProjectTaskImage"
+    | "readProjectTaskImage"
+    | "listConversations"
+    | "getContacts"
+    | "openContactConversation"
+    | "sendRichMessage"
     | "resolveUserNames"
   >
 }

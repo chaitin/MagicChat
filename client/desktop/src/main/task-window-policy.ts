@@ -22,6 +22,7 @@ export function parseTaskWindowOpenInput(input: unknown): TaskWindowContext {
 }
 
 const projectOperations = new Set<string>([
+  ACCOUNT_DATA_CHANNELS.listConversations,
   ACCOUNT_DATA_CHANNELS.listProjectMembers,
   ACCOUNT_DATA_CHANNELS.listProjectTaskAssignees,
   ACCOUNT_DATA_CHANNELS.resolveUserNames,
@@ -39,6 +40,12 @@ export function assertTaskWindowAccountRequest(
   channel: string,
   input: unknown,
 ) {
+  if (channel === ACCOUNT_DATA_CHANNELS.getContacts) {
+    if (input !== context.targetId) {
+      throw new AuthFailure("untrusted_sender", "任务窗口请求来源不受信任")
+    }
+    return
+  }
   if (!isRecord(input) || input.targetId !== context.targetId) {
     throw new AuthFailure("untrusted_sender", "任务窗口请求来源不受信任")
   }
@@ -46,8 +53,11 @@ export function assertTaskWindowAccountRequest(
     channel === ACCOUNT_DATA_CHANNELS.getAvatar ||
     channel === ACCOUNT_DATA_CHANNELS.invalidateAvatar
   ) {
-    if (input.type !== "user" || !validId(input.id)) {
-      throw new AuthFailure("untrusted_sender", "任务窗口只能读取用户头像")
+    if (
+      !["user", "group", "topic", "app", "project"].includes(input.type as string) ||
+      !validId(input.id)
+    ) {
+      throw new AuthFailure("untrusted_sender", "任务窗口只能读取会话实体头像")
     }
     return
   }
@@ -57,8 +67,45 @@ export function assertTaskWindowAccountRequest(
     }
     return
   }
+  if (channel === ACCOUNT_DATA_CHANNELS.openContactConversation) {
+    if (input.type !== "user" || !validId(input.id)) {
+      throw new AuthFailure("untrusted_sender", "任务窗口只能打开联系人私聊")
+    }
+    return
+  }
+  if (channel === ACCOUNT_DATA_CHANNELS.listConversations) {
+    if (
+      input.selectedConversationId !== null &&
+      input.selectedConversationId !== undefined &&
+      !validId(input.selectedConversationId)
+    ) {
+      throw new AuthFailure("invalid_conversation_id", "对话 ID 不正确")
+    }
+    return
+  }
+  if (channel === ACCOUNT_DATA_CHANNELS.sendRichMessage) {
+    if (
+      !validId(input.conversationId) ||
+      !isRecord(input.body) ||
+      input.body.type !== "entity_card" ||
+      input.body.entityType !== "task" ||
+      input.body.entityId !== context.taskId
+    ) {
+      throw new AuthFailure("untrusted_sender", "任务窗口只能发送当前任务卡片")
+    }
+    return
+  }
   if (input.projectId !== context.projectId) {
     throw new AuthFailure("untrusted_sender", "任务窗口请求来源不受信任")
+  }
+  if (
+    channel === ACCOUNT_DATA_CHANNELS.uploadProjectTaskImage ||
+    channel === ACCOUNT_DATA_CHANNELS.readProjectTaskImage
+  ) {
+    if (input.taskId !== (context.taskId ?? undefined)) {
+      throw new AuthFailure("untrusted_sender", "任务图片请求不属于当前任务窗口")
+    }
+    return
   }
   if (projectOperations.has(channel)) return
   if (channel === ACCOUNT_DATA_CHANNELS.createProjectTask && context.taskId === null) return

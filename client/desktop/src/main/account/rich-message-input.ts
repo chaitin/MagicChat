@@ -6,7 +6,19 @@ export function normalizeOutgoingRichMessageBody(value: unknown): Record<string,
   if (!isRecord(value)) throw invalidRichMessage()
   if (value.type === "choice") return normalizeChoice(value)
   if (value.type === "chart") return normalizeChart(value)
+  if (value.type === "entity_card") return normalizeEntityCard(value)
   throw invalidRichMessage()
+}
+
+function normalizeEntityCard(value: Record<string, unknown>) {
+  if (
+    value.entityType !== "task" ||
+    typeof value.entityId !== "string" ||
+    !/^[A-Za-z0-9_-]{1,128}$/.test(value.entityId)
+  ) {
+    throw new AuthFailure("invalid_rich_message", "对象卡片格式不正确")
+  }
+  return { type: "entity_card", entity_type: "task", entity_id: value.entityId }
 }
 
 function normalizeChoice(value: Record<string, unknown>) {

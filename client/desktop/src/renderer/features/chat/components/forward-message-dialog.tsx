@@ -1,5 +1,12 @@
-import { useId, useMemo, useState, type FormEvent } from "react"
-import { pinyin } from "pinyin-pro"
+import {
+  useDeferredValue,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import { Button } from "@/components/ui/button"
@@ -13,10 +20,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Item, ItemContent, ItemGroup } from "@/components/ui/item"
+import { Item, ItemContent } from "@/components/ui/item"
 import { Label } from "@/components/ui/label"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import type { DesktopConversation, ForwardMessagesResult } from "../../../../shared/account-data"
+import { VirtualizedList } from "@/components/virtualized-list"
+import type {
+  DesktopContactUser,
+  DesktopConversation,
+  ForwardMessagesResult,
+} from "../../../../shared/account-data"
+import {
+  mergeConversationTargetCandidates,
+  filterConversationTargets,
+  conversationTargetName,
+  conversationTargetAvatar,
+} from "../../../../shared/conversation-targets"
+import { forwardToConversationTargets } from "../forward-targets"
 import { collectForwardResults } from "../forward-retry"
 
 export function ForwardMessageDialog({
@@ -43,21 +61,43 @@ export function ForwardMessageDialog({
   const [sent, setSent] = useState<Set<string>>(() => new Set())
   const [failures, setFailures] = useState<Map<string, string>>(() => new Map())
   const [submitting, setSubmitting] = useState(false)
-  const candidates = useMemo(() => {
-    const keyword = query.trim().toLocaleLowerCase().replace(/\s+/g, "")
-    return conversations
-      .filter((conversation) => !conversation.topic?.archived && conversation.canSend !== false)
-      .filter((conversation) => {
-        if (!keyword) return true
-        const name = conversation.name.toLocaleLowerCase()
-        const letters = pinyin(name, { type: "array", toneType: "none" })
-        const full = letters.join("").toLocaleLowerCase()
-        const initials = pinyin(name, { pattern: "first", type: "array", toneType: "none" })
-          .join("")
-          .toLocaleLowerCase()
-        return name.includes(keyword) || full.includes(keyword) || initials.includes(keyword)
+  const [contacts, setContacts] = useState<DesktopContactUser[]>([])
+  const [loadingContacts, setLoadingContacts] = useState(true)
+  const [contactError, setContactError] = useState("")
+  const [reloadContacts, setReloadContacts] = useState(0)
+  const submittingRef = useRef(false)
+  const resolvedContacts = useRef(new Map<string, string>())
+  const allCandidates = useMemo(
+    () => mergeConversationTargetCandidates(conversations, contacts),
+    [conversations, contacts],
+  )
+  const deferredQuery = useDeferredValue(query)
+  const candidates = useMemo(
+    () => filterConversationTargets(allCandidates, deferredQuery),
+    [allCandidates, deferredQuery],
+  )
+
+  useEffect(() => {
+    let active = true
+    setLoadingContacts(true)
+    setContactError("")
+    void window
+      .desktop!.accountData.getContacts(targetId)
+      .then((result) => {
+        if (!active) return
+        if (!result.ok) throw new Error(result.error.message)
+        setContacts(result.data.users)
       })
-  }, [conversations, query])
+      .catch((reason: unknown) => {
+        if (active) setContactError(reason instanceof Error ? reason.message : "加载联系人失败")
+      })
+      .finally(() => {
+        if (active) setLoadingContacts(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [targetId, reloadContacts])
 
   function toggle(conversationId: string) {
     if (submitting || sent.has(conversationId)) return
@@ -81,10 +121,21 @@ export function ForwardMessageDialog({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (submitting || !selected.size) return
+    if (submittingRef.current || loadingContacts || !selected.size) return
+    submittingRef.current = true
     setSubmitting(true)
     try {
-      const result = await onForward([...selected])
+      const targets = allCandidates.filter(
+        (candidate) => selected.has(candidate.key) && !sent.has(candidate.key),
+      )
+      if (targets.length !== selected.size) throw new Error("部分目标已不可用，请重新选择")
+      const result = await forwardToConversationTargets(
+        targets,
+        targetId,
+        window.desktop!.accountData,
+        resolvedContacts.current,
+        onForward,
+      )
       const { sent: succeeded, failed, retryIds } = collectForwardResults(result, sent)
       setSent(succeeded)
       setFailures(failed)
@@ -108,6 +159,7 @@ export function ForwardMessageDialog({
         description: error instanceof Error ? error.message : undefined,
       })
     } finally {
+      submittingRef.current = false
       setSubmitting(false)
     }
   }
@@ -127,69 +179,81 @@ export function ForwardMessageDialog({
         <form className="grid min-w-0 gap-4" onSubmit={(event) => void submit(event)}>
           <Input
             aria-label="搜索目标会话"
-            placeholder="搜索会话"
+            placeholder="搜索对话或联系人"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
-          <ScrollArea
-            className="h-64 rounded-md border"
-            viewportClassName="[&>div]:block! [&>div]:w-full!"
-          >
-            <ItemGroup className="gap-1! p-2" aria-label="目标会话">
-              {candidates.length === 0 && (
-                <p className="py-6 text-center text-sm text-muted-foreground">没有匹配的会话</p>
-              )}
-              {candidates.map((conversation) => {
-                const checkboxId = `${id}-${conversation.id}`
-                const isSent = sent.has(conversation.id)
-                return (
-                  <Item
-                    asChild
-                    key={conversation.id}
-                    size="sm"
-                    className="cursor-pointer px-2 py-1 hover:bg-muted"
-                  >
-                    <Label htmlFor={checkboxId}>
-                      <EntityAvatar
-                        targetId={targetId}
-                        type={conversation.avatarType}
-                        id={conversation.avatarId}
-                        theme={theme}
-                        size={24}
-                        label={`${conversation.name}头像`}
-                      />
-                      <ItemContent className="min-w-0 flex-1">
-                        <span className="truncate text-sm">{conversation.name}</span>
-                        {failures.has(conversation.id) && (
-                          <span className="truncate text-xs text-destructive">
-                            {failures.get(conversation.id)}
-                          </span>
-                        )}
-                      </ItemContent>
-                      {isSent ? (
-                        <span className="text-xs text-muted-foreground">已转发</span>
-                      ) : (
-                        <Checkbox
-                          id={checkboxId}
-                          checked={selected.has(conversation.id)}
-                          disabled={submitting}
-                          onCheckedChange={() => toggle(conversation.id)}
-                          aria-label={`转发到${conversation.name}`}
-                        />
+          <VirtualizedList
+            items={candidates}
+            getKey={(candidate) => candidate.key}
+            ariaLabel="目标会话"
+            resetKey={deferredQuery}
+            rowHeight={38}
+            loading={loadingContacts}
+            empty="没有匹配的对话或联系人"
+            renderItem={(candidate) => {
+              const name = conversationTargetName(candidate)
+              const avatar = conversationTargetAvatar(candidate)
+              const checkboxId = `${id}-${candidate.key}`
+              const isSent = sent.has(candidate.key)
+              return (
+                <Item asChild size="sm" className="cursor-pointer px-2 py-1 hover:bg-muted">
+                  <Label htmlFor={checkboxId}>
+                    <EntityAvatar
+                      targetId={targetId}
+                      type={avatar.type}
+                      id={avatar.id}
+                      theme={theme}
+                      size={24}
+                      label={`${name}头像`}
+                    />
+                    <ItemContent className="min-w-0 flex-1">
+                      <span className="truncate text-sm">{name}</span>
+                      {failures.has(candidate.key) && (
+                        <span className="truncate text-xs text-destructive">
+                          {failures.get(candidate.key)}
+                        </span>
                       )}
-                    </Label>
-                  </Item>
-                )
-              })}
-            </ItemGroup>
-          </ScrollArea>
+                    </ItemContent>
+                    {isSent ? (
+                      <span className="text-xs text-muted-foreground">已转发</span>
+                    ) : (
+                      <Checkbox
+                        id={checkboxId}
+                        checked={selected.has(candidate.key)}
+                        disabled={submitting}
+                        onCheckedChange={() => toggle(candidate.key)}
+                        aria-label={`转发到${name}`}
+                      />
+                    )}
+                  </Label>
+                </Item>
+              )
+            }}
+          />
+          {contactError && (
+            <div className="flex items-center gap-2">
+              <p role="alert" className="text-xs text-destructive">
+                {contactError}
+              </p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={submitting}
+                onClick={() => setReloadContacts((value) => value + 1)}
+              >
+                重试
+              </Button>
+            </div>
+          )}
           <DialogFooter className="items-center sm:justify-between">
             <span className="text-xs text-muted-foreground">已选择 {selected.size} 个会话</span>
             <div className="flex gap-2">
               <Button type="button" variant="outline" disabled={submitting} onClick={onClose}>
                 取消
               </Button>
-              <Button type="submit" disabled={submitting || !selected.size}>
+              <Button type="submit" disabled={submitting || loadingContacts || !selected.size}>
                 {submitting ? "正在转发" : `转发（${selected.size}）`}
               </Button>
             </div>
