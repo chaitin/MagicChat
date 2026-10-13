@@ -25,6 +25,7 @@ export const ACCOUNT_DATA_CHANNELS = {
   updateProjectTask: "desktop-next:v1:project-task-update",
   deleteProjectTask: "desktop-next:v1:project-task-delete",
   listProjectMembers: "desktop-next:v1:project-members-list",
+  listProjectTaskAssignees: "desktop-next:v1:project-task-assignees-list",
   listProjectTaskActivities: "desktop-next:v1:project-task-activities-list",
   addProjectTaskComment: "desktop-next:v1:project-task-comment-add",
   bindConversationProject: "desktop-next:v1:conversation-project-bind",
@@ -226,6 +227,11 @@ export type ProjectMember = {
   email: string
   role: "owner" | "member"
   status: string
+}
+export type ProjectTaskAssignee = ProjectMember & {
+  name: string
+  nickname: string
+  phone: string
 }
 export type ProjectTaskActivity = {
   id: string
@@ -792,6 +798,9 @@ export interface AccountDataBridge {
   listProjectMembers(
     input: ListProjectMembersInput,
   ): Promise<AuthResult<ProjectPage<ProjectMember>>>
+  listProjectTaskAssignees(
+    input: ListProjectMembersInput,
+  ): Promise<AuthResult<ProjectPage<ProjectTaskAssignee>>>
   listProjectTaskActivities(
     input: ListProjectTaskActivitiesInput,
   ): Promise<AuthResult<ProjectPage<ProjectTaskActivity>>>

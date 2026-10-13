@@ -9,12 +9,27 @@ const MediaPreviewPage = lazy(() =>
     default: MediaPreviewPage,
   })),
 )
+const ProjectTaskWindowPage = lazy(() =>
+  import("./features/projects/project-task-window-page").then(({ ProjectTaskWindowPage }) => ({
+    default: ProjectTaskWindowPage,
+  })),
+)
 
-export function AppPages({ mediaPreviewMode }: { mediaPreviewMode: boolean }) {
+export function AppPages({
+  mediaPreviewMode,
+  taskWindowMode,
+}: {
+  mediaPreviewMode: boolean
+  taskWindowMode: boolean
+}) {
   return (
     <MotionConfig reducedMotion="user">
       <Suspense fallback={null}>
-        {mediaPreviewMode ? (
+        {taskWindowMode ? (
+          <AnimatedToastProvider>
+            <ProjectTaskWindowPage />
+          </AnimatedToastProvider>
+        ) : mediaPreviewMode ? (
           <AnimatedToastProvider>
             <MediaPreviewPage />
           </AnimatedToastProvider>

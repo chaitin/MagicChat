@@ -3,11 +3,25 @@ import { ACCOUNT_DATA_CHANNELS } from "../shared/account-data"
 import { DESKTOP_CHANNELS, type DesktopBridge, type UpdateProgress } from "../shared/desktop"
 import { AUTH_CHANNELS } from "../shared/auth"
 import { MEDIA_CHANNELS, type MediaDownloadProgress } from "../shared/media"
+import {
+  TASK_WINDOW_CHANNELS,
+  type TaskWindowBridge,
+  type TaskWindowChange,
+} from "../shared/task-window"
 
 const platform =
   process.platform === "darwin" ? "macos" : process.platform === "win32" ? "windows" : "linux"
 
 const bridge: DesktopBridge = {
+  taskWindows: {
+    open: (input) => ipcRenderer.invoke(TASK_WINDOW_CHANNELS.open, input),
+    onChanged: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, value: TaskWindowChange) =>
+        callback(value)
+      ipcRenderer.on(TASK_WINDOW_CHANNELS.changed, listener)
+      return () => ipcRenderer.removeListener(TASK_WINDOW_CHANNELS.changed, listener)
+    },
+  },
   openHomepage: () => ipcRenderer.invoke(DESKTOP_CHANNELS.openHomepage),
   openExternalLink: (url) => ipcRenderer.invoke(DESKTOP_CHANNELS.openExternalLink, url),
   openWebLink: (url) => ipcRenderer.invoke(DESKTOP_CHANNELS.openWebLink, url),
@@ -133,6 +147,8 @@ const bridge: DesktopBridge = {
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.deleteProjectTask, input),
     listProjectMembers: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listProjectMembers, input),
+    listProjectTaskAssignees: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listProjectTaskAssignees, input),
     listProjectTaskActivities: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listProjectTaskActivities, input),
     addProjectTaskComment: (input) =>
@@ -260,4 +276,36 @@ const bridge: DesktopBridge = {
   },
 }
 
+const taskWindowBridge: TaskWindowBridge = {
+  initialize: () => ipcRenderer.invoke(TASK_WINDOW_CHANNELS.initialize),
+  notifyChanged: () => ipcRenderer.invoke(TASK_WINDOW_CHANNELS.notifyChanged),
+  getTheme: () => ipcRenderer.invoke(TASK_WINDOW_CHANNELS.getTheme),
+  onThemeChanged: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, theme: Parameters<typeof callback>[0]) =>
+      callback(theme)
+    ipcRenderer.on(TASK_WINDOW_CHANNELS.themeChanged, listener)
+    return () => ipcRenderer.removeListener(TASK_WINDOW_CHANNELS.themeChanged, listener)
+  },
+  windowControls: {
+    platform,
+    getMaximized: bridge.windowControls.getMaximized,
+    minimize: bridge.windowControls.minimize,
+    toggleMaximize: bridge.windowControls.toggleMaximize,
+    close: bridge.windowControls.close,
+    onMaximizedChange: bridge.windowControls.onMaximizedChange,
+  },
+  accountData: {
+    getProjectTask: bridge.accountData.getProjectTask,
+    createProjectTask: bridge.accountData.createProjectTask,
+    updateProjectTask: bridge.accountData.updateProjectTask,
+    deleteProjectTask: bridge.accountData.deleteProjectTask,
+    listProjectMembers: bridge.accountData.listProjectMembers,
+    listProjectTaskAssignees: bridge.accountData.listProjectTaskAssignees,
+    listProjectTaskActivities: bridge.accountData.listProjectTaskActivities,
+    addProjectTaskComment: bridge.accountData.addProjectTaskComment,
+    resolveUserNames: bridge.accountData.resolveUserNames,
+  },
+}
+
 contextBridge.exposeInMainWorld("desktop", bridge)
+contextBridge.exposeInMainWorld("taskWindow", taskWindowBridge)

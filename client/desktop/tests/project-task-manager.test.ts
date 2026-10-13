@@ -164,6 +164,84 @@ test("成员分页、动态和评论返回可展示的数据", async () => {
   )
 })
 
+test("负责人资料仅解析当前项目分页成员，保留原名昵称及联系方式", async () => {
+  let reads = 0
+  const manager = managerFor({
+    get: async (url: string) => {
+      reads += 1
+      assert.match(url, /\/projects\/project-1\/members\?limit=100&cursor=next/)
+      return {
+        members: [
+          { id: "u1", role: "owner", status: "active" },
+          { id: "u2", role: "member", status: "active", email: "hidden@example.com" },
+        ],
+        next_cursor: "after",
+      }
+    },
+    post: async (url: string, body: unknown) => {
+      assert.equal(url, "/api/client/users/resolve")
+      assert.deepEqual(body, { user_ids: ["u1", "u2"] })
+      return {
+        users: [
+          {
+            id: "u1",
+            name: "张三",
+            nickname: "小张",
+            email: "zhang@example.com",
+            phone: "+8613812345678",
+          },
+          { id: "outside-project", name: "其他人", email: "other@example.com" },
+        ],
+      }
+    },
+  })
+  const result = await manager.listAssignees({ targetId, projectId, cursor: "next" })
+  assert.equal(reads, 1)
+  assert.equal(result.nextCursor, "after")
+  assert.deepEqual(
+    result.items.map((member) => ({
+      id: member.id,
+      displayName: member.displayName,
+      name: member.name,
+      nickname: member.nickname,
+      email: member.email,
+      phone: member.phone,
+    })),
+    [
+      {
+        id: "u1",
+        displayName: "小张",
+        name: "张三",
+        nickname: "小张",
+        email: "zhang@example.com",
+        phone: "+8613812345678",
+      },
+      { id: "u2", displayName: "未知成员", name: "", nickname: "", email: "", phone: "" },
+    ],
+  )
+})
+
+test("空项目分页不解析用户，异常成员资料响应报错", async () => {
+  const empty = managerFor({
+    get: async () => ({ members: [], next_cursor: null }),
+    post: async () => {
+      throw new Error("不应解析用户")
+    },
+  })
+  assert.deepEqual(await empty.listAssignees({ targetId, projectId }), {
+    items: [],
+    nextCursor: null,
+  })
+  const invalid = managerFor({
+    get: async () => ({
+      members: [{ id: "u1", role: "member", status: "active" }],
+      next_cursor: null,
+    }),
+    post: async () => ({ users: [null] }),
+  })
+  await assert.rejects(invalid.listAssignees({ targetId, projectId }), /项目成员资料响应格式不正确/)
+})
+
 test("不接受错误项目或非法变更、提醒和失控筛选", async () => {
   const manager = managerFor({
     get: async () => ({ tasks: [{ ...task, project_id: "other" }], next_cursor: null }),

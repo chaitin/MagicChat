@@ -149,6 +149,7 @@ export function isSafeWebUrl(value: unknown): value is string {
 }
 
 export interface DesktopBridge {
+  readonly taskWindows: import("./task-window").TaskWindowOpener
   readonly auth: AuthBridge
   readonly accountData: AccountDataBridge
   readonly media: MediaBridge

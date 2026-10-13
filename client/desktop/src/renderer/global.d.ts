@@ -7,5 +7,6 @@ declare global {
     desktop?: DesktopBridge
     screenshot?: ScreenshotBridge
     mediaPreview?: MediaPreviewBridge
+    taskWindow?: import("../shared/task-window").TaskWindowBridge
   }
 }

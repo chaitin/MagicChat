@@ -13,7 +13,6 @@ import {
 import type {
   DesktopProjectTask,
   ListProjectTasksInput,
-  ProjectMember,
   ProjectTaskPriority,
   ProjectTaskStatus,
 } from "../../../shared/account-data"
@@ -32,7 +31,6 @@ import {
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import { ProjectTaskDialog } from "./project-task-dialog"
 import {
   TaskBoardView,
   TaskCalendarView,
@@ -42,7 +40,6 @@ import {
   TaskStatusIcon,
 } from "./project-task-views"
 import {
-  withResolvedMemberNames,
   taskPriorities,
   taskPriorityLabels,
   taskStatuses,
@@ -84,11 +81,9 @@ export function ProjectTasksPage({ targetId, projectId }: { targetId: string; pr
   const [filters, setFilters] = useState<TaskFilters>(defaultFilters)
   const [appliedFilters, setAppliedFilters] = useState<TaskFilters>(defaultFilters)
   const [tasks, setTasks] = useState<DesktopProjectTask[]>([])
-  const [members, setMembers] = useState<ProjectMember[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [reload, setReload] = useState(0)
-  const [activeTask, setActiveTask] = useState<DesktopProjectTask | null | "new">(null)
 
   useEffect(() => {
     let active = true
@@ -109,24 +104,30 @@ export function ProjectTasksPage({ targetId, projectId }: { targetId: string; pr
     }
   }, [targetId, projectId, appliedFilters, reload])
 
-  useEffect(() => {
-    let active = true
-    void loadAllMembers(targetId, projectId)
-      .then((items) => {
-        if (active) setMembers(items.filter((member) => member.status === "active"))
+  useEffect(
+    () =>
+      window.desktop!.taskWindows.onChanged((change) => {
+        if (change.targetId === targetId && change.projectId === projectId)
+          setReload((current) => current + 1)
+      }),
+    [targetId, projectId],
+  )
+
+  async function openTask(task: DesktopProjectTask | "new") {
+    try {
+      const result = await window.desktop!.taskWindows.open({
+        targetId,
+        projectId,
+        ...(task === "new" ? {} : { taskId: task.id }),
       })
-      .catch((reason: unknown) => {
-        if (active) {
-          showToast({
-            status: "error",
-            title: reason instanceof Error ? reason.message : "加载项目成员失败",
-          })
-        }
+      if (!result.ok) throw new Error(result.error.message)
+    } catch (reason) {
+      showToast({
+        status: "error",
+        title: reason instanceof Error ? reason.message : "打开任务窗口失败",
       })
-    return () => {
-      active = false
     }
-  }, [targetId, projectId])
+  }
 
   async function movePriority(task: DesktopProjectTask, priority: ProjectTaskPriority) {
     if (task.priority === priority) return
@@ -326,7 +327,7 @@ export function ProjectTasksPage({ targetId, projectId }: { targetId: string; pr
           >
             <RefreshCw />
           </Button>
-          <Button type="button" size="sm" onClick={() => setActiveTask("new")}>
+          <Button type="button" size="sm" onClick={() => void openTask("new")}>
             <Plus />
             创建任务
           </Button>
@@ -355,7 +356,7 @@ export function ProjectTasksPage({ targetId, projectId }: { targetId: string; pr
       ) : view === "board" ? (
         <TaskBoardView
           tasks={tasks}
-          onOpen={setActiveTask}
+          onOpen={(task) => void openTask(task)}
           onMove={(task, status) => void moveStatus(task, status)}
         />
       ) : (
@@ -367,27 +368,18 @@ export function ProjectTasksPage({ targetId, projectId }: { targetId: string; pr
           {view === "list" && (
             <TaskListView
               tasks={tasks}
-              onOpen={setActiveTask}
+              onOpen={(task) => void openTask(task)}
               onMove={(task, status) => void moveStatus(task, status)}
               onPriorityChange={(task, priority) => void movePriority(task, priority)}
             />
           )}
-          {view === "calendar" && <TaskCalendarView tasks={tasks} onOpen={setActiveTask} />}
-          {view === "gantt" && <TaskGanttView tasks={tasks} onOpen={setActiveTask} />}
+          {view === "calendar" && (
+            <TaskCalendarView tasks={tasks} onOpen={(task) => void openTask(task)} />
+          )}
+          {view === "gantt" && (
+            <TaskGanttView tasks={tasks} onOpen={(task) => void openTask(task)} />
+          )}
         </ScrollArea>
-      )}
-      {activeTask && (
-        <ProjectTaskDialog
-          key={activeTask === "new" ? "new" : activeTask.id}
-          targetId={targetId}
-          projectId={projectId}
-          task={activeTask === "new" ? null : activeTask}
-          members={members}
-          onClose={() => setActiveTask(null)}
-          onChanged={async () => {
-            setReload((current) => current + 1)
-          }}
-        />
       )}
     </section>
   )
@@ -412,41 +404,6 @@ async function loadAllTasks(input: ListProjectTasksInput): Promise<DesktopProjec
     cursor = result.data.nextCursor
     if (cursor && (!result.data.items.length || seen.has(cursor)))
       throw new Error("任务列表分页格式不正确")
-    if (cursor) seen.add(cursor)
-  } while (cursor)
-  return items
-}
-
-async function loadAllMembers(targetId: string, projectId: string): Promise<ProjectMember[]> {
-  const items: ProjectMember[] = []
-  const seen = new Set<string>()
-  let cursor: string | null = null
-  do {
-    const result = await window.desktop!.accountData.listProjectMembers({
-      targetId,
-      projectId,
-      limit: 100,
-      ...(cursor ? { cursor } : {}),
-    })
-    if (!result.ok) throw new Error(result.error.message)
-    const unresolvedIds = [
-      ...new Set(
-        result.data.items.filter((item) => item.displayName === item.id).map((item) => item.id),
-      ),
-    ]
-    if (unresolvedIds.length) {
-      const resolved = await window.desktop!.accountData.resolveUserNames({
-        targetId,
-        userIds: unresolvedIds,
-      })
-      if (!resolved.ok) throw new Error(resolved.error.message)
-      items.push(...withResolvedMemberNames(result.data.items, resolved.data))
-    } else {
-      items.push(...result.data.items)
-    }
-    cursor = result.data.nextCursor
-    if (cursor && (!result.data.items.length || seen.has(cursor)))
-      throw new Error("项目成员分页格式不正确")
     if (cursor) seen.add(cursor)
   } while (cursor)
   return items

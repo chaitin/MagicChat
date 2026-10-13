@@ -10,6 +10,7 @@ if (!root) throw new Error("页面根节点不存在")
 
 const screenshotMode = window.location.hash === "#/screenshot"
 const mediaPreviewMode = window.location.hash === "#/media-preview"
+const taskWindowMode = window.location.hash === "#/task-window"
 
 createRoot(root).render(
   <StrictMode>
@@ -17,7 +18,7 @@ createRoot(root).render(
       <ScreenshotOverlay />
     ) : (
       <Suspense fallback={null}>
-        <AppPages mediaPreviewMode={mediaPreviewMode} />
+        <AppPages mediaPreviewMode={mediaPreviewMode} taskWindowMode={taskWindowMode} />
       </Suspense>
     )}
   </StrictMode>,

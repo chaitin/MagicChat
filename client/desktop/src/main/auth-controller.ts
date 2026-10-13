@@ -360,6 +360,10 @@ export class AuthController {
     return this.accountData.listProjectMembers(...args)
   }
 
+  listProjectTaskAssignees(...args: Parameters<AccountDataFacade["listProjectTaskAssignees"]>) {
+    return this.accountData.listProjectTaskAssignees(...args)
+  }
+
   listProjectTaskActivities(...args: Parameters<AccountDataFacade["listProjectTaskActivities"]>) {
     return this.accountData.listProjectTaskActivities(...args)
   }

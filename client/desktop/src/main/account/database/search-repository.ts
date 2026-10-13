@@ -1,4 +1,9 @@
 import type { DatabaseSync } from "node:sqlite"
+import {
+  createUserSearchIndex,
+  matchesUserSearch,
+  type UserSearchIndex,
+} from "../../../shared/user-search.ts"
 import type {
   AvatarType,
   LocalSearchAppResult,
@@ -9,6 +14,10 @@ import type {
 
 export class SearchRepository {
   private readonly database: DatabaseSync
+  private readonly contactSearchIndexes = new Map<
+    string,
+    { signature: string; index: UserSearchIndex }
+  >()
 
   constructor(database: DatabaseSync) {
     this.database = database
@@ -18,14 +27,31 @@ export class SearchRepository {
     const rows = this.database
       .prepare(
         `SELECT id, name, nickname, email, phone, online, last_online_at
-         FROM contact_users
-         WHERE instr(lower(name), ?) > 0
-            OR instr(lower(nickname), ?) > 0
-            OR instr(lower(email), ?) > 0
-            OR instr(lower(phone), ?) > 0`,
+         FROM contact_users`,
       )
-      .all(query, query, query, query) as Array<Record<string, unknown>>
-    return rows.map((row) => ({
+      .all() as Array<Record<string, unknown>>
+    const currentIds = new Set<string>()
+    const matches = rows.filter((row) => {
+      const id = String(row.id)
+      currentIds.add(id)
+      const fields = {
+        name: String(row.name),
+        nickname: String(row.nickname),
+        email: String(row.email),
+        phone: String(row.phone),
+      }
+      const signature = JSON.stringify(fields)
+      let cached = this.contactSearchIndexes.get(id)
+      if (!cached || cached.signature !== signature) {
+        cached = { signature, index: createUserSearchIndex(fields) }
+        this.contactSearchIndexes.set(id, cached)
+      }
+      return matchesUserSearch(cached.index, query)
+    })
+    for (const id of this.contactSearchIndexes.keys()) {
+      if (!currentIds.has(id)) this.contactSearchIndexes.delete(id)
+    }
+    return matches.map((row) => ({
       kind: "contact",
       id: String(row.id),
       name: String(row.name),

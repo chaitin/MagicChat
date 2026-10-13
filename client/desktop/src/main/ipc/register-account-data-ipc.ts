@@ -119,6 +119,9 @@ export function registerAccountDataIpc({
   handle(ACCOUNT_DATA_CHANNELS.listProjectMembers, (input) =>
     auth.listProjectMembers(input as ListProjectMembersInput),
   )
+  handle(ACCOUNT_DATA_CHANNELS.listProjectTaskAssignees, (input) =>
+    auth.listProjectTaskAssignees(input as ListProjectMembersInput),
+  )
   handle(ACCOUNT_DATA_CHANNELS.listProjectTaskActivities, (input) =>
     auth.listProjectTaskActivities(input as ListProjectTaskActivitiesInput),
   )

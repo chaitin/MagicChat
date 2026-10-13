@@ -43,6 +43,105 @@ test("分类搜索最多返回一百条", () => {
   assert.equal(result.hasMore, true)
 })
 
+test("全局联系人搜索与任务负责人统一匹配四字段、拼音及首字母", () => {
+  const database = new DatabaseSync(":memory:")
+  try {
+    initializeAccountSchema(database)
+    database
+      .prepare(
+        `INSERT INTO contact_users
+      (id, name, nickname, avatar, email, phone, online, updated_at, payload_json)
+      VALUES ('u1', '张三', '小张', '', 'Zhang.San@Example.com', '+86 138-1234-5678', 1, '', '{}')`,
+      )
+      .run()
+    const repository = new SearchRepository(database)
+    for (const query of [
+      "张三",
+      "小张",
+      "zhangsan",
+      "zhang san",
+      "san",
+      "ZS",
+      "xiaozhang",
+      "xz",
+      "ZHANG.SAN@EXAMPLE.COM",
+      "1381234",
+      "138-1234",
+      "１３８１２３４",
+      "  小张  ",
+    ]) {
+      const result = repository.searchContacts(query)
+      assert.deepEqual(
+        result.map((item) => item.id),
+        ["u1"],
+        query,
+      )
+      assert.equal(result[0]?.nickname, "小张")
+      assert.equal(result[0]?.online, true)
+    }
+    for (const query of ["李四", "other@example.com", "1390000", "---"]) {
+      assert.deepEqual(repository.searchContacts(query), [], query)
+    }
+  } finally {
+    database.close()
+  }
+})
+
+test("联系人搜索索引随姓名联系方式更新失效，删除成员不残留结果", () => {
+  const database = new DatabaseSync(":memory:")
+  try {
+    initializeAccountSchema(database)
+    database
+      .prepare(
+        `INSERT INTO contact_users
+      (id, name, nickname, avatar, email, phone, online, updated_at, payload_json)
+      VALUES ('u1', '张三', '小张', '', 'old@example.com', '13812345678', 0, '', '{}')`,
+      )
+      .run()
+    const repository = new SearchRepository(database)
+    assert.equal(repository.searchContacts("zs").length, 1)
+    database
+      .prepare(
+        "UPDATE contact_users SET name = '李四', nickname = '小李', email = 'new@example.com', phone = '13987654321', online = 1 WHERE id = 'u1'",
+      )
+      .run()
+    for (const query of ["zs", "xz", "old@example.com", "1381234"]) {
+      assert.deepEqual(repository.searchContacts(query), [], query)
+    }
+    for (const query of ["ls", "xl", "new@example.com", "1398765"]) {
+      assert.equal(repository.searchContacts(query)[0]?.online, true, query)
+    }
+    database.prepare("DELETE FROM contact_users WHERE id = 'u1'").run()
+    assert.deepEqual(repository.searchContacts("ls"), [])
+  } finally {
+    database.close()
+  }
+})
+
+test("联系人搜索索引按账号数据库隔离，在线状态不被缓存冻结", () => {
+  const first = new DatabaseSync(":memory:")
+  const second = new DatabaseSync(":memory:")
+  try {
+    initializeAccountSchema(first)
+    initializeAccountSchema(second)
+    first
+      .prepare(
+        `INSERT INTO contact_users
+      (id, name, nickname, avatar, email, phone, online, updated_at, payload_json)
+      VALUES ('u1', '张三', '', '', '', '', 0, '', '{}')`,
+      )
+      .run()
+    const repository = new SearchRepository(first)
+    assert.equal(repository.searchContacts("zs")[0]?.online, false)
+    first.prepare("UPDATE contact_users SET online = 1 WHERE id = 'u1'").run()
+    assert.equal(repository.searchContacts("zs")[0]?.online, true)
+    assert.deepEqual(new SearchRepository(second).searchContacts("zs"), [])
+  } finally {
+    first.close()
+    second.close()
+  }
+})
+
 test("聊天记录只查询本地数据库并按时间倒序", () => {
   const database = new DatabaseSync(":memory:")
   initializeAccountSchema(database)

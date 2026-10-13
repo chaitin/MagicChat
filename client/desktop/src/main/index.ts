@@ -35,6 +35,7 @@ import {
 } from "../shared/desktop"
 import { MEDIA_CHANNELS } from "../shared/media"
 import { SCREENSHOT_CHANNELS, type ScreenshotSelection } from "../shared/screenshot"
+import { TASK_WINDOW_CHANNELS } from "../shared/task-window"
 import { AuthController, authResult } from "./auth-controller"
 import { isMessageNotificationSuppressed } from "./account/message-notification-policy"
 import { registerAccountDataIpc } from "./ipc/register-account-data-ipc"
@@ -52,6 +53,8 @@ import {
 } from "./protocols/resource-protocols"
 import { ScreenshotManager } from "./screenshot-manager"
 import { ShortcutManager } from "./shortcut-manager"
+import { assertTaskWindowAccountRequest } from "./task-window-policy"
+import { TaskWindows } from "./task-windows"
 import { isTrustedReleaseUrl } from "./update-service"
 import { UpdateManager, updateCacheDirectory } from "./update-manager"
 import { createUnreadAttention } from "./unread-attention"
@@ -379,6 +382,14 @@ void app.whenReady().then(async () => {
     !app.isPackaged ? process.env.ELECTRON_RENDERER_URL : undefined,
     () => mainWindow,
   )
+  const taskWindows = new TaskWindows(
+    path.join(__dirname, "../preload/index.cjs"),
+    path.join(__dirname, "../renderer/index.html"),
+    !app.isPackaged ? process.env.ELECTRON_RENDERER_URL : undefined,
+    () => mainWindow,
+    () => contentZoom,
+    appIconPath,
+  )
   const screenshot = new ScreenshotManager(
     path.join(__dirname, "../preload/screenshot.cjs"),
     path.join(__dirname, "../renderer/index.html"),
@@ -398,7 +409,11 @@ void app.whenReady().then(async () => {
   function handleIpc<T>(channel: string, operation: (input: unknown) => Promise<T>) {
     ipcMain.handle(channel, (event, input: unknown) =>
       authResult(async () => {
-        assertTrustedSender(event)
+        if (taskWindows.ownsSender(event.sender) && event.senderFrame === event.sender.mainFrame) {
+          assertTaskWindowAccountRequest(taskWindows.getContext(event.sender), channel, input)
+        } else {
+          assertTrustedSender(event)
+        }
         return operation(input)
       }),
     )
@@ -408,7 +423,9 @@ void app.whenReady().then(async () => {
     if (
       !window ||
       event.senderFrame !== event.sender.mainFrame ||
-      (window !== mainWindow && !mediaPreview.ownsSender(event.sender))
+      (window !== mainWindow &&
+        !mediaPreview.ownsSender(event.sender) &&
+        !taskWindows.ownsSender(event.sender))
     ) {
       throw new AuthFailure("untrusted_sender", "窗口请求来源不受信任")
     }
@@ -429,6 +446,29 @@ void app.whenReady().then(async () => {
   ipcMain.handle(DESKTOP_CHANNELS.windowQuit, (event) => {
     assertTrustedSender(event)
     quitApp()
+  })
+  handleIpc(TASK_WINDOW_CHANNELS.open, async (input) => {
+    await taskWindows.open(input)
+    return null
+  })
+  ipcMain.handle(TASK_WINDOW_CHANNELS.initialize, (event) => {
+    if (event.senderFrame !== event.sender.mainFrame) {
+      throw new AuthFailure("untrusted_sender", "任务窗口请求来源不受信任")
+    }
+    return taskWindows.getContext(event.sender)
+  })
+  ipcMain.handle(TASK_WINDOW_CHANNELS.notifyChanged, (event) => {
+    if (event.senderFrame !== event.sender.mainFrame) {
+      throw new AuthFailure("untrusted_sender", "任务窗口请求来源不受信任")
+    }
+    taskWindows.notifyChanged(event.sender)
+  })
+  ipcMain.handle(TASK_WINDOW_CHANNELS.getTheme, (event) => {
+    if (event.senderFrame !== event.sender.mainFrame) {
+      throw new AuthFailure("untrusted_sender", "任务窗口请求来源不受信任")
+    }
+    taskWindows.getContext(event.sender)
+    return auth.getAppSettings().then((settings) => settings.theme)
   })
   ipcMain.handle(MEDIA_CHANNELS.previewInitialize, (event) => {
     if (event.senderFrame !== event.sender.mainFrame || !mediaPreview.ownsSender(event.sender)) {
@@ -572,7 +612,10 @@ void app.whenReady().then(async () => {
     handle: handleIpc,
     auth,
     getMainWindow: () => mainWindow,
-    onSignOut: clearUnreadAttention,
+    onSignOut: () => {
+      clearUnreadAttention()
+      taskWindows.closeAll()
+    },
   })
   handleIpc(DESKTOP_CHANNELS.openHomepage, async () => {
     await shell.openExternal(JIYING_HOMEPAGE)
@@ -645,6 +688,7 @@ void app.whenReady().then(async () => {
     const theme = input as ThemePreference
     await auth.setTheme(theme)
     mediaPreview.notifyThemeChanged(theme)
+    taskWindows.notifyThemeChanged(theme)
     return null
   })
   handleIpc(DESKTOP_CHANNELS.setContentZoom, async (input) => {
@@ -652,6 +696,7 @@ void app.whenReady().then(async () => {
     await auth.setContentZoom(zoom)
     contentZoom = zoom
     mainWindow?.webContents.setZoomFactor(zoom)
+    taskWindows.setZoom(zoom)
     return null
   })
   handleIpc(DESKTOP_CHANNELS.setNotificationSettings, async (input) => {
@@ -738,15 +783,14 @@ void app.whenReady().then(async () => {
     shortcuts.setRecording(input)
     return null
   })
-  session.defaultSession.setPermissionRequestHandler(
-    (contents, permission, callback, details) =>
-      callback(
-        isAllowedMainWindowPermission(
-          permission,
-          contents === mainWindow?.webContents,
-          details.isMainFrame,
-        ),
+  session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) =>
+    callback(
+      isAllowedMainWindowPermission(
+        permission,
+        contents === mainWindow?.webContents,
+        details.isMainFrame,
       ),
+    ),
   )
   session.defaultSession.setPermissionCheckHandler((contents, permission, _origin, details) =>
     isAllowedMainWindowPermission(

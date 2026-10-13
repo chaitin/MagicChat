@@ -201,6 +201,11 @@ export class AccountDataFacade {
     return this.requireRuntime().listProjectMembers(input)
   }
 
+  async listProjectTaskAssignees(input: ListProjectMembersInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().listProjectTaskAssignees(input)
+  }
+
   async listProjectTaskActivities(input: ListProjectTaskActivitiesInput) {
     await this.ready(input?.targetId)
     return this.requireRuntime().listProjectTaskActivities(input)

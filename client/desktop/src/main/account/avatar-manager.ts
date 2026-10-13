@@ -132,6 +132,9 @@ export class AvatarManager {
     let descriptor: AvatarDescriptor | undefined
     try {
       descriptor = await this.resolveDescriptor(request.type, request.id)
+      if (!descriptor && request.type === "user") {
+        descriptor = await this.contacts.refreshAvatarDescriptor("user", request.id)
+      }
     } catch {
       return projectCache && projectCacheAvailable
         ? { status: "ready", type: "project", resourceUrl: resourceUrl(projectCache) }

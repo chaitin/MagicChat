@@ -7,6 +7,7 @@ import type {
   ListProjectMembersInput,
   ListProjectTasksInput,
   ProjectMember,
+  ProjectTaskAssignee,
   ProjectPage,
   ProjectTargetInput,
   ProjectTaskActivity,
@@ -96,6 +97,47 @@ export class ProjectTaskManager {
       `/api/client/projects/${encodeURIComponent(projectId)}/members?${query}`,
     )
     return parsePage(data, "members", parseMember)
+  }
+
+  async listAssignees(input: ListProjectMembersInput): Promise<ProjectPage<ProjectTaskAssignee>> {
+    const page = await this.listMembers(input)
+    const userIds = [...new Set(page.items.map((member) => member.id))]
+    const profiles = new Map<
+      string,
+      { name: string; nickname: string; email: string; phone: string }
+    >()
+    if (userIds.length) {
+      const data = await this.client.post("/api/client/users/resolve", { user_ids: userIds })
+      if (!isRecord(data) || !Array.isArray(data.users)) invalidResponse("项目成员资料")
+      for (const user of data.users) {
+        if (!isRecord(user) || typeof user.id !== "string" || !user.id)
+          invalidResponse("项目成员资料")
+        if (userIds.includes(user.id))
+          profiles.set(user.id, {
+            name: optionalString(user.name),
+            nickname: optionalString(user.nickname),
+            email: optionalString(user.email),
+            phone: optionalString(user.phone),
+          })
+      }
+    }
+    return {
+      nextCursor: page.nextCursor,
+      items: page.items.map((member) => {
+        const profile = profiles.get(member.id)
+        return {
+          ...member,
+          name: profile?.name ?? "",
+          nickname: profile?.nickname ?? "",
+          phone: profile?.phone ?? "",
+          email: profile?.email ?? "",
+          displayName:
+            profile?.nickname ||
+            profile?.name ||
+            (member.displayName === member.id ? "未知成员" : member.displayName),
+        }
+      }),
+    }
   }
 
   async listActivities(

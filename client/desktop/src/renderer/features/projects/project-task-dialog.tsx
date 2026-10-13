@@ -1,9 +1,9 @@
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useMemo, useState, type FormEvent } from "react"
 import { CalendarDays, MessageSquare, Trash2 } from "lucide-react"
 import { zhCN } from "date-fns/locale"
 import type {
   DesktopProjectTask,
-  ProjectMember,
+  ProjectTaskAssignee,
   ProjectTaskActivity,
   ProjectTaskPriority,
   ProjectTaskReminderInput,
@@ -17,16 +17,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { EntityAvatar } from "@/components/avatar/entity-avatar"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+} from "@/components/ui/combobox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -45,6 +47,11 @@ import {
   statusIconColors,
   taskSelectItemClassName,
 } from "./project-task-views"
+import {
+  createUserSearchIndex,
+  matchesUserSearch,
+  type UserSearchIndex,
+} from "../../../shared/user-search"
 import {
   taskPriorities,
   taskPriorityLabels,
@@ -88,19 +95,20 @@ export function ProjectTaskDialog({
   projectId,
   task,
   members,
+  resolvedTheme,
   onClose,
   onChanged,
 }: {
   targetId: string
   projectId: string
   task: DesktopProjectTask | null
-  members: ProjectMember[]
+  members: ProjectTaskAssignee[]
+  resolvedTheme: "light" | "dark"
   onClose: () => void
   onChanged: () => Promise<void>
 }) {
   const [form, setForm] = useState<TaskForm>(() => initialForm(task))
-  const [details, setDetails] = useState(task)
-  const [loadingDetails, setLoadingDetails] = useState(Boolean(task))
+  const details = task
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -116,7 +124,7 @@ export function ProjectTaskDialog({
     setLoadingActivities(true)
     setActivityError("")
     try {
-      const result = await window.desktop!.accountData.listProjectTaskActivities({
+      const result = await window.taskWindow!.accountData.listProjectTaskActivities({
         targetId,
         projectId,
         taskId: task.id,
@@ -136,21 +144,7 @@ export function ProjectTaskDialog({
     if (!task) return
     let active = true
     void window
-      .desktop!.accountData.getProjectTask({ targetId, projectId, taskId: task.id })
-      .then((result) => {
-        if (!active) return
-        if (!result.ok) throw new Error(result.error.message)
-        setDetails(result.data)
-        setForm((current) => (current.title === task.title ? initialForm(result.data) : current))
-      })
-      .catch((reason: unknown) => {
-        if (active) setError(reason instanceof Error ? reason.message : "加载任务详情失败")
-      })
-      .finally(() => {
-        if (active) setLoadingDetails(false)
-      })
-    void window
-      .desktop!.accountData.listProjectTaskActivities({ targetId, projectId, taskId: task.id })
+      .taskWindow!.accountData.listProjectTaskActivities({ targetId, projectId, taskId: task.id })
       .then((result) => {
         if (!active) return
         if (!result.ok) throw new Error(result.error.message)
@@ -167,7 +161,7 @@ export function ProjectTaskDialog({
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (saving || loadingDetails) return
+    if (saving) return
     setError("")
     const title = form.title.trim()
     if (!title) return setError("请填写任务标题")
@@ -195,13 +189,13 @@ export function ProjectTaskDialog({
         reminder: form.reminder,
       }
       const result = task
-        ? await window.desktop!.accountData.updateProjectTask({
+        ? await window.taskWindow!.accountData.updateProjectTask({
             targetId,
             projectId,
             taskId: task.id,
             ...fields,
           })
-        : await window.desktop!.accountData.createProjectTask({ targetId, projectId, ...fields })
+        : await window.taskWindow!.accountData.createProjectTask({ targetId, projectId, ...fields })
       if (!result.ok) throw new Error(result.error.message)
       await onChanged()
       onClose()
@@ -217,7 +211,7 @@ export function ProjectTaskDialog({
     setSaving(true)
     setError("")
     try {
-      const result = await window.desktop!.accountData.deleteProjectTask({
+      const result = await window.taskWindow!.accountData.deleteProjectTask({
         targetId,
         projectId,
         taskId: task.id,
@@ -239,7 +233,7 @@ export function ProjectTaskDialog({
     setCommenting(true)
     setActivityError("")
     try {
-      const result = await window.desktop!.accountData.addProjectTaskComment({
+      const result = await window.taskWindow!.accountData.addProjectTaskComment({
         targetId,
         projectId,
         taskId: task.id,
@@ -259,278 +253,249 @@ export function ProjectTaskDialog({
     setForm((current) => ({ ...current, [key]: value }))
   }
 
+  const assigneeName =
+    members.find((member) => member.id === form.assigneeUserId)?.displayName ||
+    task?.assignee?.nickname ||
+    task?.assignee?.name ||
+    "未知成员"
+
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open && !saving) onClose()
-      }}
-    >
-      <DialogContent className="max-h-[80vh] gap-4 overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{task ? "任务详情" : "创建任务"}</DialogTitle>
-          <DialogDescription className="sr-only">
-            {task ? "查看和编辑任务信息" : "填写任务标题、负责人和时间安排"}
-          </DialogDescription>
-        </DialogHeader>
-        <form className="grid gap-4" onSubmit={(event) => void save(event)}>
-          <Field label="任务标题">
-            <Input
-              autoFocus
-              required
-              maxLength={240}
-              value={form.title}
-              disabled={saving || loadingDetails}
-              onChange={(event) => change("title", event.target.value)}
-            />
-          </Field>
-          <Field label="任务描述">
-            <Textarea
-              className="min-h-24"
-              value={form.description}
-              disabled={saving || loadingDetails}
-              onChange={(event) => change("description", event.target.value)}
-            />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="状态" interactive>
-              <Select
-                value={form.status}
-                disabled={saving || loadingDetails}
-                onValueChange={(status) => change("status", status as ProjectTaskStatus)}
-              >
-                <SelectTrigger className="w-full" aria-label="状态">
-                  <SelectValue>
-                    <TaskStatusIcon status={form.status} />
-                    {taskStatusLabels[form.status]}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent position="popper">
-                  {taskStatuses.map((status) => (
-                    <SelectItem
-                      key={status}
-                      value={status}
-                      className={taskSelectItemClassName}
-                      indicatorClassName={statusIconColors[status]}
-                    >
-                      <TaskStatusIcon status={status} />
-                      {taskStatusLabels[status]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="优先级" interactive>
-              <Select
-                value={String(form.priority)}
-                disabled={saving || loadingDetails}
-                onValueChange={(priority) =>
-                  change("priority", Number(priority) as ProjectTaskPriority)
-                }
-              >
-                <SelectTrigger className="w-full" aria-label="优先级">
-                  <SelectValue>
-                    <TaskPriorityIcon priority={form.priority} />
-                    {taskPriorityLabels[form.priority]}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent position="popper">
-                  {taskPriorities.map((priority) => (
-                    <SelectItem
-                      key={priority}
-                      value={String(priority)}
-                      className={taskSelectItemClassName}
-                      indicatorClassName={priorityIconColors[priority]}
-                    >
-                      <TaskPriorityIcon priority={priority} />
-                      {taskPriorityLabels[priority]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="负责人" interactive>
-              <Select
-                value={form.assigneeUserId || "__unassigned__"}
-                disabled={saving || loadingDetails}
-                onValueChange={(id) => change("assigneeUserId", id === "__unassigned__" ? "" : id)}
-              >
-                <SelectTrigger className="w-full" aria-label="负责人">
-                  <SelectValue>
-                    {form.assigneeUserId
-                      ? members.find((member) => member.id === form.assigneeUserId)?.displayName ||
-                        task?.assignee?.nickname ||
-                        task?.assignee?.name ||
-                        "未知成员"
-                      : "未分配"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent position="popper">
-                  <SelectItem className={taskSelectItemClassName} value="__unassigned__">
-                    未分配
-                  </SelectItem>
-                  {form.assigneeUserId &&
-                    !members.some((member) => member.id === form.assigneeUserId) && (
-                      <SelectItem value={form.assigneeUserId} className={taskSelectItemClassName}>
-                        {task?.assignee?.nickname || task?.assignee?.name || "未知成员"}
-                      </SelectItem>
-                    )}
-                  {members
-                    .filter((member) => member.status === "active")
-                    .map((member) => (
-                      <SelectItem
-                        key={member.id}
-                        value={member.id}
-                        className={taskSelectItemClassName}
-                      >
-                        {member.displayName}
-                      </SelectItem>
+    <>
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="grid items-start gap-4 p-5 md:grid-cols-[minmax(0,3fr)_minmax(0,1fr)] md:grid-rows-[auto_1fr]">
+            <form
+              id="project-task-form"
+              className="contents"
+              onSubmit={(event) => void save(event)}
+            >
+              <div className="grid min-w-0 gap-4 md:col-start-1 md:row-start-1">
+                <Field label="任务标题">
+                  <Input
+                    autoFocus
+                    required
+                    maxLength={240}
+                    value={form.title}
+                    disabled={saving}
+                    onChange={(event) => change("title", event.target.value)}
+                  />
+                </Field>
+                <Field label="标签（逗号分隔）">
+                  <Input
+                    value={form.labels}
+                    disabled={saving}
+                    onChange={(event) => change("labels", event.target.value)}
+                    placeholder="例如：发版, 设计"
+                  />
+                </Field>
+                <Field label="任务描述">
+                  <Textarea
+                    className="min-h-24"
+                    value={form.description}
+                    disabled={saving}
+                    onChange={(event) => change("description", event.target.value)}
+                  />
+                </Field>
+              </div>
+              <div className="grid min-w-0 content-start gap-3 md:col-start-2 md:row-start-1 md:row-span-2">
+                <Field label="状态" interactive>
+                  <Select
+                    value={form.status}
+                    disabled={saving}
+                    onValueChange={(status) => change("status", status as ProjectTaskStatus)}
+                  >
+                    <SelectTrigger className="w-full" aria-label="状态">
+                      <SelectValue>
+                        <TaskStatusIcon status={form.status} />
+                        {taskStatusLabels[form.status]}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      {taskStatuses.map((status) => (
+                        <SelectItem
+                          key={status}
+                          value={status}
+                          className={taskSelectItemClassName}
+                          indicatorClassName={statusIconColors[status]}
+                        >
+                          <TaskStatusIcon status={status} />
+                          {taskStatusLabels[status]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="优先级" interactive>
+                  <Select
+                    value={String(form.priority)}
+                    disabled={saving}
+                    onValueChange={(priority) =>
+                      change("priority", Number(priority) as ProjectTaskPriority)
+                    }
+                  >
+                    <SelectTrigger className="w-full" aria-label="优先级">
+                      <SelectValue>
+                        <TaskPriorityIcon priority={form.priority} />
+                        {taskPriorityLabels[form.priority]}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      {taskPriorities.map((priority) => (
+                        <SelectItem
+                          key={priority}
+                          value={String(priority)}
+                          className={taskSelectItemClassName}
+                          indicatorClassName={priorityIconColors[priority]}
+                        >
+                          <TaskPriorityIcon priority={priority} />
+                          {taskPriorityLabels[priority]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="负责人" interactive>
+                  <TaskAssigneePicker
+                    targetId={targetId}
+                    members={members}
+                    value={form.assigneeUserId}
+                    name={assigneeName}
+                    theme={resolvedTheme}
+                    disabled={saving}
+                    onChange={(id) => change("assigneeUserId", id)}
+                  />
+                </Field>
+                <Field label="开始日期" interactive>
+                  <TaskDatePicker
+                    label="开始日期"
+                    value={form.startDate}
+                    disabled={saving}
+                    onChange={(date) => change("startDate", date)}
+                  />
+                </Field>
+                <Field label="截止日期" interactive>
+                  <TaskDatePicker
+                    label="截止日期"
+                    value={form.dueDate}
+                    disabled={saving}
+                    onChange={(date) => change("dueDate", date)}
+                  />
+                </Field>
+                <TaskReminderField
+                  value={form.reminder}
+                  onChange={(value) => change("reminder", value)}
+                />
+                {details?.reminder && (
+                  <p className="text-xs text-muted-foreground">
+                    提醒状态：
+                    {
+                      { scheduled: "已安排", paused: "已暂停", fired: "已触发", expired: "已过期" }[
+                        details.reminder.state
+                      ]
+                    }
+                    {details.reminder.nextTriggerAt
+                      ? ` · 下次提醒 ${new Date(details.reminder.nextTriggerAt).toLocaleString("zh-CN")}`
+                      : ""}
+                  </p>
+                )}
+              </div>
+            </form>
+            {task && (
+              <div className="grid min-w-0 gap-4 md:col-start-1 md:row-start-2">
+                {details && (
+                  <p className="text-xs text-muted-foreground">
+                    创建人：{details.creator.nickname || details.creator.name || details.creator.id}
+                    {` · 创建于 ${new Date(details.createdAt).toLocaleString("zh-CN")}`}
+                    {` · 更新于 ${new Date(details.updatedAt).toLocaleString("zh-CN")}`}
+                  </p>
+                )}
+                <section aria-label="任务动态" className="grid gap-3 border-t pt-4">
+                  <h3 className="flex items-center gap-2 text-sm font-medium">
+                    <MessageSquare className="size-4" />
+                    任务动态
+                  </h3>
+                  {activities.length === 0 && !activityError && (
+                    <p className="text-xs text-muted-foreground">暂无动态</p>
+                  )}
+                  <div className="grid max-h-52 gap-2 overflow-y-auto">
+                    {activities.map((activity) => (
+                      <div key={activity.id} className="rounded-md bg-muted/50 px-3 py-2 text-xs">
+                        <span className="font-medium">
+                          {activity.actor.nickname || activity.actor.name}
+                        </span>
+                        <span className="ml-2 text-muted-foreground">
+                          {new Date(activity.createdAt).toLocaleString("zh-CN")}
+                        </span>
+                        <p className="mt-1 whitespace-pre-wrap">
+                          {activity.type === "commented"
+                            ? activity.content
+                            : activity.type === "created"
+                              ? "创建了任务"
+                              : `更新了任务${activity.changes.length ? `：${activity.changes.map((change) => change.field).join("、")}` : ""}`}
+                        </p>
+                      </div>
                     ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="标签（逗号分隔）">
-              <Input
-                value={form.labels}
-                disabled={saving || loadingDetails}
-                onChange={(event) => change("labels", event.target.value)}
-                placeholder="例如：发版, 设计"
-              />
-            </Field>
-            <Field label="开始日期" interactive>
-              <TaskDatePicker
-                label="开始日期"
-                value={form.startDate}
-                disabled={saving || loadingDetails}
-                onChange={(date) => change("startDate", date)}
-              />
-            </Field>
-            <Field label="截止日期" interactive>
-              <TaskDatePicker
-                label="截止日期"
-                value={form.dueDate}
-                disabled={saving || loadingDetails}
-                onChange={(date) => change("dueDate", date)}
-              />
-            </Field>
+                  </div>
+                  {nextCursor && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={loadingActivities}
+                      onClick={() => void loadActivities(nextCursor)}
+                    >
+                      {loadingActivities ? "加载中…" : "加载更多动态"}
+                    </Button>
+                  )}
+                  {activityError && (
+                    <p role="alert" className="text-xs text-destructive">
+                      {activityError}
+                    </p>
+                  )}
+                  <form className="flex gap-2" onSubmit={(event) => void addComment(event)}>
+                    <Input
+                      aria-label="评论内容"
+                      placeholder="添加评论"
+                      value={comment}
+                      onChange={(event) => setComment(event.target.value)}
+                    />
+                    <Button type="submit" disabled={commenting || !comment.trim()}>
+                      {commenting ? "发送中" : "发送"}
+                    </Button>
+                  </form>
+                </section>
+              </div>
+            )}
           </div>
-          {loadingDetails ? (
-            <p className="text-xs text-muted-foreground">正在加载任务详情…</p>
-          ) : (
-            <TaskReminderField
-              value={form.reminder}
-              onChange={(value) => change("reminder", value)}
-            />
-          )}
+        </div>
+        <div className="grid shrink-0 gap-3 border-t bg-background px-5 py-4">
           {error && (
             <p role="alert" className="text-sm text-destructive">
               {error}
             </p>
           )}
-          <DialogFooter className="items-center">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {task && (
               <Button
                 type="button"
                 variant="destructive"
                 className="mr-auto"
-                disabled={saving || loadingDetails}
+                disabled={saving}
                 onClick={() => setConfirmDelete(true)}
               >
                 <Trash2 />
                 删除
               </Button>
             )}
-            <Button
-              type="button"
-              variant="outline"
-              disabled={saving || loadingDetails}
-              onClick={onClose}
-            >
+            <Button type="button" variant="outline" disabled={saving} onClick={onClose}>
               取消
             </Button>
-            <Button type="submit" disabled={saving || loadingDetails || !form.title.trim()}>
+            <Button type="submit" form="project-task-form" disabled={saving || !form.title.trim()}>
               {saving ? "保存中…" : task ? "保存修改" : "创建任务"}
             </Button>
-          </DialogFooter>
-        </form>
-        {details && (
-          <p className="text-xs text-muted-foreground">
-            创建人：{details.creator.nickname || details.creator.name || details.creator.id}
-            {` · 创建于 ${new Date(details.createdAt).toLocaleString("zh-CN")}`}
-            {` · 更新于 ${new Date(details.updatedAt).toLocaleString("zh-CN")}`}
-          </p>
-        )}
-        {details?.reminder && (
-          <p className="text-xs text-muted-foreground">
-            提醒状态：
-            {
-              { scheduled: "已安排", paused: "已暂停", fired: "已触发", expired: "已过期" }[
-                details.reminder.state
-              ]
-            }
-            {details.reminder.nextTriggerAt
-              ? ` · 下次提醒 ${new Date(details.reminder.nextTriggerAt).toLocaleString("zh-CN")}`
-              : ""}
-          </p>
-        )}
-        {task && (
-          <section aria-label="任务动态" className="grid gap-3 border-t pt-4">
-            <h3 className="flex items-center gap-2 text-sm font-medium">
-              <MessageSquare className="size-4" />
-              任务动态
-            </h3>
-            {activities.length === 0 && !activityError && (
-              <p className="text-xs text-muted-foreground">暂无动态</p>
-            )}
-            <div className="grid max-h-52 gap-2 overflow-y-auto">
-              {activities.map((activity) => (
-                <div key={activity.id} className="rounded-md bg-muted/50 px-3 py-2 text-xs">
-                  <span className="font-medium">
-                    {activity.actor.nickname || activity.actor.name}
-                  </span>
-                  <span className="ml-2 text-muted-foreground">
-                    {new Date(activity.createdAt).toLocaleString("zh-CN")}
-                  </span>
-                  <p className="mt-1 whitespace-pre-wrap">
-                    {activity.type === "commented"
-                      ? activity.content
-                      : activity.type === "created"
-                        ? "创建了任务"
-                        : `更新了任务${activity.changes.length ? `：${activity.changes.map((change) => change.field).join("、")}` : ""}`}
-                  </p>
-                </div>
-              ))}
-            </div>
-            {nextCursor && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={loadingActivities}
-                onClick={() => void loadActivities(nextCursor)}
-              >
-                {loadingActivities ? "加载中…" : "加载更多动态"}
-              </Button>
-            )}
-            {activityError && (
-              <p role="alert" className="text-xs text-destructive">
-                {activityError}
-              </p>
-            )}
-            <form className="flex gap-2" onSubmit={(event) => void addComment(event)}>
-              <Input
-                aria-label="评论内容"
-                placeholder="添加评论"
-                value={comment}
-                onChange={(event) => setComment(event.target.value)}
-              />
-              <Button type="submit" disabled={commenting || !comment.trim()}>
-                {commenting ? "发送中" : "发送"}
-              </Button>
-            </form>
-          </section>
-        )}
-      </DialogContent>
+          </div>
+        </div>
+      </div>
       <AlertDialog
         open={confirmDelete}
         onOpenChange={(open) => {
@@ -564,7 +529,136 @@ export function ProjectTaskDialog({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Dialog>
+    </>
+  )
+}
+
+function TaskAssigneePicker({
+  targetId,
+  members,
+  value,
+  name,
+  theme,
+  disabled,
+  onChange,
+}: {
+  targetId: string
+  members: ProjectTaskAssignee[]
+  value: string
+  name: string
+  theme: "light" | "dark"
+  disabled: boolean
+  onChange: (id: string) => void
+}) {
+  const [query, setQuery] = useState("")
+  const options = useMemo(() => {
+    const createOption = (
+      id: string,
+      label: string,
+      fields: Parameters<typeof createUserSearchIndex>[0],
+    ) => ({ id, name: label, searchIndex: createUserSearchIndex(fields) })
+    const items = [
+      createOption("", "未分配", {
+        displayName: "未分配",
+        name: "",
+        nickname: "",
+        email: "",
+        phone: "",
+      }),
+      ...members
+        .filter((member) => member.status === "active")
+        .map((member) => createOption(member.id, member.displayName, member)),
+    ]
+    if (value && !items.some((option) => option.id === value)) {
+      items.splice(
+        1,
+        0,
+        createOption(value, name, { displayName: name, name, nickname: "", email: "", phone: "" }),
+      )
+    }
+    return items
+  }, [members, value, name])
+
+  return (
+    <Combobox
+      items={options}
+      filter={(option: { searchIndex: UserSearchIndex }, input) =>
+        matchesUserSearch(option.searchIndex, input)
+      }
+      value={options.find((option) => option.id === value)}
+      onValueChange={(option) => onChange(option?.id ?? "")}
+      itemToStringLabel={(option) => option.name}
+      itemToStringValue={(option) => option.id}
+      isItemEqualToValue={(option, selected) => option.id === selected.id}
+      inputValue={query}
+      onInputValueChange={setQuery}
+      onOpenChange={(open) => {
+        if (!open) setQuery("")
+      }}
+      autoHighlight
+      disabled={disabled}
+    >
+      <ComboboxTrigger
+        aria-label="负责人"
+        className="flex h-9 w-full items-center justify-between gap-1.5 rounded-md border border-input bg-transparent px-2.5 text-sm font-normal shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+      >
+        {value ? (
+          <TaskAssignee targetId={targetId} userId={value} name={name} theme={theme} />
+        ) : (
+          "未分配"
+        )}
+      </ComboboxTrigger>
+      <ComboboxContent className="min-w-(--anchor-width)">
+        <ComboboxInput
+          placeholder="姓名、昵称、邮箱或手机号"
+          aria-label="搜索负责人"
+          showTrigger={false}
+        />
+        <ComboboxEmpty>未找到匹配的负责人</ComboboxEmpty>
+        <ComboboxList>
+          {(option: { id: string; name: string }) => (
+            <ComboboxItem key={option.id} value={option}>
+              {option.id ? (
+                <TaskAssignee
+                  targetId={targetId}
+                  userId={option.id}
+                  name={option.name}
+                  theme={theme}
+                />
+              ) : (
+                option.name
+              )}
+            </ComboboxItem>
+          )}
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
+  )
+}
+
+function TaskAssignee({
+  targetId,
+  userId,
+  name,
+  theme,
+}: {
+  targetId: string
+  userId: string
+  name: string
+  theme: "light" | "dark"
+}) {
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <EntityAvatar
+        targetId={targetId}
+        type="user"
+        id={userId}
+        theme={theme}
+        size={20}
+        label={`${name}头像`}
+      />
+      <span className="truncate">{name}</span>
+    </span>
   )
 }
 
@@ -747,7 +841,7 @@ function TaskReminderField({
         </SelectContent>
       </Select>
       {value?.mode === "once" && (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid gap-2">
           <Field label="提醒日期（北京时间）" interactive>
             <TaskDatePicker
               label="提醒日期"
@@ -776,7 +870,7 @@ function TaskReminderField({
         </div>
       )}
       {value?.mode === "recurring" && (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid gap-2">
           <Field label="重复周期" interactive>
             <Select
               value={value.frequency}
@@ -811,7 +905,7 @@ function TaskReminderField({
             <TimeInput24Hour value={value.time} onChange={(time) => onChange({ ...value, time })} />
           </Field>
           {value.frequency === "weekly" && (
-            <div className="col-span-2 flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2">
               {[1, 2, 3, 4, 5, 6, 7].map((day) => (
                 <label key={day} className="flex items-center gap-1 text-xs">
                   <input
