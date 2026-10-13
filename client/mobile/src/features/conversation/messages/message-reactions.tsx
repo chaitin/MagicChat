@@ -120,7 +120,7 @@ function ReactionParticipants({
   return (
     <View style={styles.participants}>
       {reaction.users.map((user, index) => (
-        <Fragment key={user.id}>
+        <Fragment key={`${user.type ?? "user"}:${user.id}`}>
           {index > 0 ? (
             <Text style={[styles.participantText, { color: colors.textPrimary }]}>
               、

@@ -216,6 +216,7 @@ func TestHandleParsedServerMessageRepliesInCurrentConversationWhenTopicIsNotNeed
 		replyAgent,
 		router,
 		directAgentRunner{},
+		nil,
 		func(_ context.Context, message envelope) error {
 			sent = append(sent, message)
 			return nil
@@ -268,6 +269,7 @@ func TestHandleParsedServerMessageDefaultsToCurrentConversationWhenRoutingFails(
 		replyAgent,
 		router,
 		directAgentRunner{},
+		nil,
 		func(_ context.Context, message envelope) error {
 			sent = append(sent, message)
 			return nil

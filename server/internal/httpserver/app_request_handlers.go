@@ -25,6 +25,7 @@ import (
 const (
 	appMethodMessageSend                = "message.send"
 	appMethodMessageSendAsUser          = "message.send_as_user"
+	appMethodMessageReactionSet         = "message.reaction.set"
 	appMethodUsersGet                   = "users.get"
 	appMethodAppsGet                    = "apps.get"
 	appMethodContactsUsersList          = "contacts.users.list"
@@ -87,6 +88,20 @@ type appSendMessageResponse struct {
 	Conversation appMessageConversationPayload `json:"conversation"`
 	Created      bool                          `json:"created"`
 	Message      appMessagePayload             `json:"message"`
+}
+
+type appSetMessageReactionRequest struct {
+	ConversationID string `json:"conversation_id"`
+	MessageID      string `json:"message_id"`
+	Text           string `json:"text"`
+	Reacted        *bool  `json:"reacted"`
+}
+
+type appSetMessageReactionResponse struct {
+	ConversationID  string                    `json:"conversation_id"`
+	MessageID       string                    `json:"message_id"`
+	ReactionVersion int64                     `json:"reaction_version"`
+	Reactions       []messageReactionResponse `json:"reactions"`
 }
 
 type appCreateGroupConversationResponse struct {
@@ -308,6 +323,12 @@ func (s *Server) handleAppRequest(appID string, request realtime.Envelope) realt
 	switch method {
 	case appMethodConversationStatus:
 		return s.handleConversationStatus(appID, "app", request)
+	case appMethodMessageReactionSet:
+		response, err := s.handleAppSetMessageReaction(appID, request)
+		if err != nil {
+			return appRequestErrorResponse(request.ID, err)
+		}
+		return realtime.NewResponse(request.ID, response)
 	case appMethodMessageSend:
 		response, err := s.handleAppSendMessage(appID, request)
 		if err != nil {
@@ -496,6 +517,7 @@ func (s *Server) handleAppRequest(appID string, request realtime.Envelope) realt
 func isThirdPartyAppMethod(method string) bool {
 	switch method {
 	case appMethodMessageSend,
+		appMethodMessageReactionSet,
 		appMethodConversationStatus,
 		appMethodUsersGet,
 		appMethodAppsGet,
@@ -632,6 +654,31 @@ func (s *Server) handleAppAckEvents(appID string, request realtime.Envelope) (ap
 		return appAckEventsResponse{}, err
 	}
 	return appAckEventsResponse{Cursor: req.Cursor}, nil
+}
+
+func (s *Server) handleAppSetMessageReaction(appID string, request realtime.Envelope) (appSetMessageReactionResponse, error) {
+	var req appSetMessageReactionRequest
+	if err := json.Unmarshal(request.Payload, &req); err != nil || req.Reacted == nil {
+		return appSetMessageReactionResponse{}, newAppRequestFailure("invalid_request", "请求格式错误，reacted 必须为布尔值")
+	}
+	result, err := s.messages.SetAppReaction(context.Background(), messageapp.SetAppReactionCommand{
+		AppID: appID, ConversationID: req.ConversationID, MessageID: req.MessageID,
+		Reacted: *req.Reacted, Text: req.Text,
+	})
+	if err != nil {
+		return appSetMessageReactionResponse{}, mapMessageApplicationErrorForApp(err)
+	}
+	reactions := make([]messageReactionResponse, len(result.Reactions))
+	for index, reaction := range result.Reactions {
+		reactions[index] = messageReactionResponse{
+			Count: reaction.Count, ReactedByMe: reaction.ReactedByMe, Text: reaction.Text,
+			Users: newLegacyMessageReactionUserResponses(reaction.Users),
+		}
+	}
+	return appSetMessageReactionResponse{
+		ConversationID: result.ConversationID, MessageID: result.MessageID,
+		ReactionVersion: result.ReactionVersion, Reactions: reactions,
+	}, nil
 }
 
 func (s *Server) handleAppSendMessage(appID string, request realtime.Envelope) (appSendMessageResponse, error) {
@@ -2178,6 +2225,8 @@ func mapMessageApplicationErrorForApp(err error) error {
 		return newAppRequestFailure(string(messageErr.Code), messageErr.Message)
 	case messageapp.CodeInvalidRequest:
 		return newAppRequestFailure("invalid_request", messageErr.Message)
+	case messageapp.CodeConflict:
+		return newAppRequestFailure("conflict", messageErr.Message)
 	default:
 		return newAppRequestFailure("internal_error", "服务端错误")
 	}

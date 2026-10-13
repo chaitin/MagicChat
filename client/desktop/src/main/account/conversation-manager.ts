@@ -1041,6 +1041,7 @@ export class ConversationManager {
       return {
         id: value.id,
         name: typeof value.name === "string" ? value.name : "",
+        ...(value.type === "app" ? { type: "app" as const } : {}),
       }
     })
   }

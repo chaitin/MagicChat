@@ -197,7 +197,11 @@ export function normalizeMessageReactionUsers(
   ) {
     throw new ClientDataRequestError("消息表情响应格式不正确")
   }
-  return value.map((user) => ({ id: user.id!, name: user.name ?? "" }))
+  return value.map((user) => ({
+    id: user.id!,
+    name: user.name ?? "",
+    ...(user.type === "app" ? { type: "app" as const } : {}),
+  }))
 }
 
 function normalizeReactionVersion(value: number | undefined) {

@@ -77,6 +77,33 @@ describe("message reactions", () => {
     )
   })
 
+  it("preserves App participants and accepts App reaction events", () => {
+    const app = { id: "app-1", name: "助手", type: "app" as const }
+    expect(normalizeMessageReactions([
+      { text: "收到", count: 1, reacted_by_me: false, users: [app] },
+    ])[0].users).toEqual([app])
+    const event = normalizeMessageReactionsUpdatedEventPayload({
+      actor_reacted: true,
+      actor_text: "收到",
+      actor_user_id: "",
+      actor_app_id: "app-1",
+      conversation_id: "conversation-1",
+      message_id: "message-1",
+      reaction_version: 3,
+      reactions: [{ text: "收到", count: 1, users: [app] }],
+    })
+    expect(event.actorAppId).toBe("app-1")
+    expect(event.actorUserId).toBe("")
+    const message = applyMessageReactionsUpdate(createMessage(), event, "app-1")
+    expect(message.reactions).toEqual([
+      { text: "收到", count: 1, reactedByMe: false, users: [app] },
+    ])
+    expect(() => normalizeMessageReactionsUpdatedEventPayload({
+      actor_reacted: true, actor_text: "收到", actor_user_id: "",
+      conversation_id: "conversation-1", message_id: "message-1", reaction_version: 1, reactions: [],
+    })).toThrow()
+  })
+
   it("normalizes realtime snapshots", () => {
     expect(
       normalizeMessageReactionsUpdatedEventPayload({

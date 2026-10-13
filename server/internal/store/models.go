@@ -406,6 +406,13 @@ type MessageReactionState struct {
 	UpdatedAt time.Time `gorm:"not null"`
 }
 
+type MessageAppReaction struct {
+	MessageID string    `gorm:"type:uuid;primaryKey;index:message_app_reactions_message_text_index,priority:1;index:message_app_reactions_app_message_index,priority:2"`
+	AppID     string    `gorm:"type:uuid;primaryKey;index:message_app_reactions_app_message_index,priority:1"`
+	Text      string    `gorm:"size:128;primaryKey;index:message_app_reactions_message_text_index,priority:2"`
+	CreatedAt time.Time `gorm:"not null;index:message_app_reactions_message_text_index,priority:3"`
+}
+
 type MessageChoiceResponse struct {
 	ID             string          `gorm:"type:uuid;primaryKey"`
 	ConversationID string          `gorm:"type:uuid;not null;index:message_choice_responses_conversation_message_index,priority:1"`

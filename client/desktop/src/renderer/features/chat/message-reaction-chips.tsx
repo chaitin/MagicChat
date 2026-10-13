@@ -97,10 +97,10 @@ function ReactionParticipantSummary({
   return (
     <span className="inline-flex min-w-0 flex-1 flex-wrap items-center">
       {users.map((user, index) => (
-        <span className="inline-flex min-w-0 items-center" key={user.id}>
+        <span className="inline-flex min-w-0 items-center" key={`${user.type ?? "user"}:${user.id}`}>
           {index > 0 && <span>,&nbsp;</span>}
           <ContactProfilePopover
-            type="user"
+            type={user.type ?? "user"}
             id={user.id}
             fallbackName={user.name}
             triggerClassName="min-w-0 max-w-full text-left"
@@ -162,7 +162,7 @@ function ReactionUsersPopover({
         if (requestVersionRef.current !== requestVersion) return
         if (!result.ok) throw new Error(result.error.message)
         const missing = result.data.filter(
-          (user) => !user.name && !resolveLabel({ type: "user", id: user.id }),
+          (user) => user.type !== "app" && !user.name && !resolveLabel({ type: "user", id: user.id }),
         )
         const batches: string[][] = []
         for (let index = 0; index < missing.length; index += 100) {
@@ -220,9 +220,9 @@ function ReactionUsersPopover({
           ) : (
             <div className="grid gap-0.5">
               {users.map((user) => (
-                <div key={user.id} className="rounded-md px-2 py-2 text-sm">
+                <div key={`${user.type ?? "user"}:${user.id}`} className="rounded-md px-2 py-2 text-sm">
                   <ContactProfilePopover
-                    type="user"
+                    type={user.type ?? "user"}
                     id={user.id}
                     fallbackName={resolvedUser(user, resolveLabel).name}
                     triggerClassName="max-w-full text-left"
@@ -242,6 +242,6 @@ function ReactionUsersPopover({
 function resolvedUser(user: DesktopMessageReactionUser, resolveLabel: MentionLabelResolver) {
   return {
     ...user,
-    name: resolveLabel({ type: "user", id: user.id }) || user.name || "未知用户",
+    name: resolveLabel({ type: user.type ?? "user", id: user.id }) || user.name || (user.type === "app" ? "未知应用" : "未知用户"),
   }
 }

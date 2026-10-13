@@ -135,6 +135,7 @@ type ReactionCount struct {
 type ReactionUser struct {
 	ID   string
 	Name string
+	Type string
 }
 
 type SetReactionCommand struct {
@@ -153,10 +154,19 @@ type SetReactionResult struct {
 	Reactions       []ReactionSummary
 }
 
+type SetAppReactionCommand struct {
+	AppID          string
+	ConversationID string
+	MessageID      string
+	Reacted        bool
+	Text           string
+}
+
 type ReactionEvent struct {
 	ActorReacted    bool
 	ActorText       string
 	ActorUserID     string
+	ActorAppID      string
 	ConversationID  string
 	MessageID       string
 	ReactionVersion int64

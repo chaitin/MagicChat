@@ -361,11 +361,12 @@ ws.on("message", (raw) => {
 
 ### 4.1 能力列表
 
-普通第三方应用当前可以调用以下 19 个 RPC：
+普通第三方应用当前可以调用以下 20 个 RPC：
 
 | 分类 | 方法 | 能力 |
 | --- | --- | --- |
 | 消息 | `message.send` | 以应用身份发送消息。 |
+| 回应 | `message.reaction.set` | 以应用身份添加或移除消息上的文本表情。 |
 | 状态 | `conversation.status` | 向一对一会话中的在线用户同步临时状态。 |
 | 查询 | `users.get` | 查询应用可见用户。 |
 | 查询 | `apps.get` | 查询自己、公开或同群应用。 |
@@ -883,3 +884,92 @@ try {
 | `forbidden` | 当前应用不是该会话的有效成员。 |
 | `invalid_conversation` | 会话不是受支持的一对一应用会话。 |
 | `internal_error` | Server 暂时无法完成路由查询。 |
+
+### 4.22 `message.reaction.set`
+
+以当前认证应用的身份，为一条消息添加或移除文本表情。普通第三方应用与内置应用均可调用，不需要 `runas` 或用户触发授权。回应者始终是当前 App，不能指定其他应用或用户代为回应。
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `conversation_id` | 是 | 原消息所在会话的 UUID。 |
+| `message_id` | 是 | 当前应用可见、属于该会话的消息 UUID。 |
+| `text` | 是 | 表情或短文本，例如 `收到`、`OK` 或 Unicode 表情。 |
+| `reacted` | 是 | 布尔值；`true` 添加，`false` 移除当前应用自己的该项回应。 |
+
+添加 `👀` 接收回执的完整请求示例：
+
+```json
+{
+  "v": 1,
+  "kind": "request",
+  "id": "请求 UUID",
+  "method": "message.reaction.set",
+  "payload": {
+    "conversation_id": "原会话 UUID",
+    "message_id": "原消息 UUID",
+    "text": "👀",
+    "reacted": true
+  }
+}
+```
+
+成功响应的 `payload`：
+
+```json
+{
+  "conversation_id": "原会话 UUID",
+  "message_id": "原消息 UUID",
+  "reaction_version": 1,
+  "reactions": [
+    {
+      "text": "👀",
+      "count": 1,
+      "reacted_by_me": true,
+      "users": [{"id": "当前 App UUID", "type": "app", "name": "应用名称"}]
+    }
+  ]
+}
+```
+
+响应是当前消息的完整回应快照。`reacted_by_me` 表示当前调用应用是否添加了该项回应；`users` 是参与者摘要，最多返回 10 位，可能同时包含用户和应用。应用参与者带 `type: "app"`；未携带 `type` 的参与者为用户。`count` 包含全部用户和应用参与者。
+
+内容及权限规则：
+
+- `text` 会去除首尾空白并进行 Unicode NFC 规范化；规范化后不能为空，最多 32 个 Unicode 码点，UTF-8 编码不超过 128 字节，不能包含换行或控制字符。
+- 内容按纯文本展示，不支持图片、贴纸或 Markdown 渲染，也没有表情白名单。
+- 当前应用必须启用、未删除，仍是会话的有效成员，且会话可发言；应用单聊还须保持用户对应用的访问权限。
+- 在话题内添加回应时，应用须是话题参与者，话题及父会话须允许发言。消息不能早于当前应用的历史可见起点。
+- 已撤回、已删除、超出在线历史范围或系统消息不能添加回应。
+- 每个应用对同一条消息最多添加 8 种回应；一条消息最多有 32 种不同回应，用户与应用合并计算。
+- 重复添加已有回应或移除不存在的回应均成功，不重复计数、不增加 `reaction_version`。只有实际变更才递增版本并推送更新。
+- `reacted: false` 只移除当前应用自己的对应回应，不影响其他参与者；消息撤回时自动清除用户和应用回应。
+
+回应变更通过现有 `message.reactions_updated` 向会话中的用户推送。应用操作会携带 `actor_app_id`，`actor_user_id` 为空；参与者中的 App 同样带 `type: "app"`。它不是新消息，不增加未读、不改变消息序号或会话排序，也不会产生新的 `message.created` 事件。
+
+作为接收回执使用时，应在确认需要处理该消息后立即异步调用，不等待模型、历史读取、附件处理或话题创建：
+
+```js
+function onMessageCreated(payload) {
+  // 实际应用应为 request 设置短超时、有限重试和待处理数量上限。
+  void request("message.reaction.set", {
+    conversation_id: payload.conversation.id,
+    message_id: payload.message.id,
+    text: "👀",
+    reacted: true,
+  }).catch((error) => console.warn("接收回执发送失败", error));
+
+  return processMessage(payload);
+}
+```
+
+`👀` 只表示应用已接收到原消息，不表示模型已开始计算或任务完成。回执发送失败只记录日志，不改变正常处理流程和 `events.ack`；即使后续转入话题处理，回执也应贴在原消息上。
+
+常见错误：
+
+| 错误码 | 含义 |
+| --- | --- |
+| `invalid_request` | UUID、JSON、`reacted` 类型或 `text` 内容不合法。 |
+| `not_found` | 会话或原消息不存在、已删除或不在在线历史范围内。 |
+| `forbidden` | 应用无有效成员身份、消息不可见、未参与话题或会话不可发言。 |
+| `conflict` | 消息已撤回、为系统消息，或回应种类达到上限。 |
+| `internal_error` | Server 暂时无法完成操作。 |

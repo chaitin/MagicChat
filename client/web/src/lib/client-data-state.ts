@@ -302,12 +302,23 @@ function deduplicateAndSortMessages(messages: ClientMessage[]) {
     if (optimisticId && optimisticId !== message.id) {
       messagesById.delete(optimisticId)
     }
-    messagesById.set(
-      message.id,
+    let mergedMessage =
       existing?.topic && !message.topic
         ? { ...message, topic: existing.topic }
         : message
-    )
+    // A send confirmation can arrive after a newer realtime reaction update.
+    if (
+      existing &&
+      message.body.type !== "revoked" &&
+      existing.reactionVersion > message.reactionVersion
+    ) {
+      mergedMessage = {
+        ...mergedMessage,
+        reactionVersion: existing.reactionVersion,
+        reactions: existing.reactions,
+      }
+    }
+    messagesById.set(message.id, mergedMessage)
     if (message.clientMessageId) {
       idByClientMessageId.set(message.clientMessageId, message.id)
     }

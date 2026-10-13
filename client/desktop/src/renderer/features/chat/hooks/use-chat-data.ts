@@ -292,7 +292,7 @@ export function useChatData({
       }
       for (const reaction of message.reactions) {
         for (const user of reaction.users) {
-          if (user.id && !requestedUserNameIds.current.ids.has(user.id.toLowerCase())) {
+          if (user.type !== "app" && user.id && !requestedUserNameIds.current.ids.has(user.id.toLowerCase())) {
             ids.add(user.id.toLowerCase())
           }
         }

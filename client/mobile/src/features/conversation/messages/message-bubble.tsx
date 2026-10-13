@@ -282,7 +282,7 @@ export const MessageBubble = memo(function MessageBubble({
                       : undefined
                   }
                   onUserPress={(user) =>
-                    onAvatarPress({ id: user.id, type: "user" })
+                    onAvatarPress({ id: user.id, type: user.type ?? "user" })
                   }
                   reactions={message.reactions}
                 />

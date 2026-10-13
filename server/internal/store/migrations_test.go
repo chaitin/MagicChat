@@ -55,6 +55,7 @@ func TestMigrationDirectoryContainsExpectedMigrations(t *testing.T) {
 		"00040_add_user_reports.sql",
 		"00041_add_user_blocks.sql",
 		"00042_add_native_refresh_tokens.sql",
+		"00043_add_message_app_reactions.sql",
 	}
 	if len(matches) != len(want) {
 		t.Fatalf("migration file count = %d, want %d: %v", len(matches), len(want), matches)
@@ -62,6 +63,25 @@ func TestMigrationDirectoryContainsExpectedMigrations(t *testing.T) {
 	for index, match := range matches {
 		if got := filepath.Base(match); got != want[index] {
 			t.Fatalf("migration file %d = %q, want %q", index, got, want[index])
+		}
+	}
+}
+
+func TestMessageAppReactionsMigration(t *testing.T) {
+	rawSQL, err := os.ReadFile("../../migrations/00043_add_message_app_reactions.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql := normalizeSQL(string(rawSQL))
+	for _, required := range []string{
+		"create table message_app_reactions",
+		"message_id uuid not null references message_registry(id) on delete cascade",
+		"app_id uuid not null references apps(id) on delete cascade",
+		"primary key (message_id, app_id, text)",
+		"drop table message_app_reactions",
+	} {
+		if !strings.Contains(sql, required) {
+			t.Fatalf("migration missing %q", required)
 		}
 	}
 }

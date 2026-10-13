@@ -1081,7 +1081,7 @@ func openMessageTestDB(t *testing.T) *gorm.DB {
 		&store.User{}, &store.App{}, &store.Conversation{}, &store.ConversationMember{},
 		&store.Message{}, &store.AppEventOutbox{}, &store.AppConversation{}, &store.AppUserGrant{},
 		&store.ConversationTopic{}, &store.ConversationTopicParticipant{},
-		&store.MessageReaction{}, &store.MessageReactionState{},
+		&store.MessageReaction{}, &store.MessageAppReaction{}, &store.MessageReactionState{},
 		&store.MessageChoiceResponse{},
 		&store.Project{}, &store.ProjectGroup{},
 	); err != nil {

@@ -10,6 +10,7 @@ import (
 
 	fileapp "app/internal/application/file"
 	messageapp "app/internal/application/message"
+	"app/internal/store"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -82,7 +83,8 @@ type listChoiceSnapshotsResponse struct {
 
 type messageReactionUserResponse struct {
 	ID   string `json:"id"`
-	Name string `json:"-" swaggerignore:"true"`
+	Name string `json:"name,omitempty"`
+	Type string `json:"type,omitempty"`
 }
 
 type messageReactionResponse struct {
@@ -460,7 +462,10 @@ func newMessageReactionResponses(values []messageapp.ReactionSummary) []messageR
 func newMessageReactionUserResponses(values []messageapp.ReactionUser) []messageReactionUserResponse {
 	result := make([]messageReactionUserResponse, len(values))
 	for index, value := range values {
-		result[index] = messageReactionUserResponse{ID: value.ID, Name: value.Name}
+		result[index] = messageReactionUserResponse{ID: value.ID, Type: value.Type}
+		if value.Type == store.ConversationMemberTypeApp {
+			result[index].Name = value.Name
+		}
 	}
 	return result
 }

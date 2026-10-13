@@ -638,6 +638,7 @@ func TestHandleParsedServerMessageRunsGroupMessageWithDirectAppMention(t *testin
 		replyAgent,
 		topicRouterDecision(true),
 		directAgentRunner{},
+		nil,
 		func(_ context.Context, message envelope) error {
 			var payload sendMessageRequestPayload
 			if err := json.Unmarshal(message.Payload, &payload); err != nil {
@@ -808,7 +809,7 @@ func TestTopicSetupFailureUsesProcessingFallback(t *testing.T) {
 					t.Fatal("agent must not run after topic setup failure")
 					return nil
 				}),
-				topicRouterDecision(true), directAgentRunner{},
+				topicRouterDecision(true), directAgentRunner{}, nil,
 				func(_ context.Context, message envelope) error {
 					var reply sendMessageRequestPayload
 					if err := json.Unmarshal(message.Payload, &reply); err != nil {
@@ -1002,7 +1003,7 @@ func TestAppProcessingStatusContinuesThroughTopicRoutingAndStopsBeforeTopicRun(t
 	}
 	done := make(chan bool, 1)
 	go func() {
-		done <- handleParsedServerMessageWithTopicRouter(context.Background(), testMessageCreatedEnvelope(t, "user-1", "message-1", 1, "请深入处理"), "app-1", requester, replyAgentFunc(func(context.Context, agent.Request, agent.OutputSink) error { return nil }), router, directAgentRunner{}, writeJSON)
+		done <- handleParsedServerMessageWithTopicRouter(context.Background(), testMessageCreatedEnvelope(t, "user-1", "message-1", 1, "请深入处理"), "app-1", requester, replyAgentFunc(func(context.Context, agent.Request, agent.OutputSink) error { return nil }), router, directAgentRunner{}, nil, writeJSON)
 	}()
 	waitForSignal(t, routerEntered, "topic router")
 	waitForSignal(t, firstStatus, "initial processing status")

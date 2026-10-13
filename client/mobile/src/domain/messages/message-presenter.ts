@@ -29,7 +29,9 @@ export function collectMessageUserIds(messages: ClientMessage[]) {
       ids.add(message.replyTo.sender.id)
     }
     for (const reaction of message.reactions) {
-      for (const user of reaction.users) ids.add(user.id)
+      for (const user of reaction.users) {
+        if (user.type !== "app") ids.add(user.id)
+      }
     }
     for (const reply of message.topic?.recentReplies ?? []) {
       if (reply.sender.type === "user") ids.add(reply.sender.id)
@@ -132,6 +134,10 @@ export function buildPresentedMessages({
       reactions: message.reactions.map((reaction) => ({
         ...reaction,
         users: reaction.users.map((user) => {
+          if (user.type === "app") {
+            const name = appsById.get(user.id.toLowerCase())?.name.trim()
+            return name ? { ...user, name } : user
+          }
           const profile = usersById.get(user.id.toLowerCase())
           const name = profile?.nickname.trim() || profile?.name.trim()
           return name ? { ...user, name } : user

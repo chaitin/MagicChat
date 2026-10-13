@@ -561,6 +561,53 @@ describe("ClientDataProvider", () => {
     expect(screen.getByTestId("topic-count")).toHaveTextContent("0")
   })
 
+  it("WS 回执出现后，迟到的发送确认不会让表情消失", async () => {
+    vi.useFakeTimers()
+    let clientMessageId = ""
+    let releaseSendResponse!: () => void
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === "/api/client/me") return Promise.resolve(jsonResponse(createCurrentUserResponse()))
+      if (url === "/api/client/contacts") return Promise.resolve(jsonResponse(createContactsResponse()))
+      if (url === "/api/client/projects?limit=100") return Promise.resolve(jsonResponse(createProjectsResponse()))
+      if (url === "/api/client/conversations") {
+        return Promise.resolve(jsonResponse(createConversationsResponse([createConversationResponse("conversation-1")])))
+      }
+      if (url === "/api/client/conversations/conversation-1/messages" && init?.method === "POST") {
+        clientMessageId = JSON.parse(String(init.body)).client_message_id
+        return new Promise<Response>((resolve) => {
+          releaseSendResponse = () => resolve(jsonResponse({
+            success: true,
+            data: {
+              message: {
+                ...createMessagesResponse().data.messages[0],
+                client_message_id: clientMessageId,
+                reaction_version: 0,
+                sender: { id: "user-1", type: "user" },
+              },
+            },
+          }))
+        })
+      }
+      return Promise.reject(new Error(`unexpected request: ${url}`))
+    }))
+    render(
+      <MemoryRouter>
+        <ClientDataProvider>
+          <ReceiptSendRaceProbe getClientMessageId={() => clientMessageId} />
+        </ClientDataProvider>
+      </MemoryRouter>
+    )
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000) })
+    await act(async () => { screen.getByRole("button", { name: "send receipt message" }).click() })
+    expect(clientMessageId).not.toBe("")
+    await act(async () => { screen.getByRole("button", { name: "receive created message" }).click() })
+    await act(async () => { screen.getByRole("button", { name: "receive App receipt" }).click() })
+    expect(screen.getByTestId("receipt-send-state")).toHaveTextContent("1:👀")
+    await act(async () => { releaseSendResponse() })
+    expect(screen.getByTestId("receipt-send-state")).toHaveTextContent("1:👀")
+  })
+
   it("recovers exact reactions for version gaps and loaded-conversation sync", async () => {
     vi.useFakeTimers()
     let snapshotRequestCount = 0
@@ -1016,6 +1063,34 @@ function ReactionSyncProbe() {
         {message
           ? `${message.reactionVersion}:${message.reactions[0]?.text ?? "none"}`
           : "unloaded"}
+      </div>
+    </>
+  )
+}
+
+function ReceiptSendRaceProbe({ getClientMessageId }: { getClientMessageId: () => string }) {
+  const {
+    getConversationMessageState,
+    handleIncomingConversationMessage,
+    handleIncomingMessageReactionsUpdate,
+    sendConversationText,
+  } = useClientData()
+  const message = getConversationMessageState("conversation-1").messages.find((item) => item.id === "message-1")
+  return (
+    <>
+      <button aria-label="send receipt message" onClick={() => void sendConversationText("conversation-1", "hello")} />
+      <button aria-label="receive created message" onClick={() => handleIncomingConversationMessage({
+        ...createProbeMessage("message-1", "conversation-1", 1),
+        clientMessageId: getClientMessageId(),
+        sender: { id: "user-1", type: "user" },
+      }, { activeConversationId: "conversation-1", visible: true })} />
+      <button aria-label="receive App receipt" onClick={() => handleIncomingMessageReactionsUpdate({
+        actorReacted: true, actorText: "👀", actorUserId: "", actorAppId: "assistant",
+        conversationId: "conversation-1", messageId: "message-1", reactionVersion: 1,
+        reactions: [{ text: "👀", count: 1, users: [{ id: "assistant", name: "助手", type: "app" }] }],
+      })} />
+      <div data-testid="receipt-send-state">
+        {message ? `${message.reactionVersion}:${message.reactions[0]?.text ?? "none"}` : "unconfirmed"}
       </div>
     </>
   )

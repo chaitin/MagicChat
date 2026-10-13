@@ -168,6 +168,9 @@ func (s *Service) revokeForUser(ctx context.Context, userID, conversationID, mes
 		if err := tx.Where("message_id = ?", message.ID).Delete(&store.MessageReaction{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("message_id = ?", message.ID).Delete(&store.MessageAppReaction{}).Error; err != nil {
+			return err
+		}
 		if err := incrementMessageReactionVersion(tx, &reactionState, now); err != nil {
 			return err
 		}

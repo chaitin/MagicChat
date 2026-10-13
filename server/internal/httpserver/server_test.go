@@ -108,6 +108,7 @@ func migrateTestSchema(db *gorm.DB) error {
 		&store.ConversationUserPreference{},
 		&store.Message{},
 		&store.MessageReaction{},
+		&store.MessageAppReaction{},
 		&store.MessageReactionState{},
 		&store.MessageChoiceResponse{},
 		&store.DirectConversation{},

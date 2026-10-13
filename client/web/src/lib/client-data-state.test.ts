@@ -240,6 +240,51 @@ describe("mergeConversationMessages", () => {
     expect(mergeConversationMessages(current, [updated])).toEqual([updated])
   })
 
+  it("保留 WS 回执，不被迟到的空回应 HTTP 快照覆盖", () => {
+    const confirmed = createMessage("message-1", 1)
+    const received: ClientMessage = {
+      ...confirmed,
+      reactionVersion: 1,
+      reactions: [{
+        text: "👀",
+        count: 1,
+        reactedByMe: false,
+        users: [{ id: "assistant", name: "助手", type: "app" }],
+      }],
+    }
+    const delayedResponse = { ...confirmed, body: { type: "text" as const, content: "服务端确认内容" } }
+
+    const merged = mergeConversationMessages([received], [delayedResponse])
+    expect(merged[0].body).toEqual(delayedResponse.body)
+    expect(merged[0].reactionVersion).toBe(1)
+    expect(merged[0].reactions).toEqual(received.reactions)
+    expect(mergeConversationMessages([delayedResponse], [received])[0]).toEqual(received)
+    expect(mergeConversationMessages([], [received, delayedResponse])[0].reactions).toEqual(received.reactions)
+  })
+
+  it("接受较新版本的回应移除，不保留旧表情", () => {
+    const received: ClientMessage = {
+      ...createMessage("message-1", 1),
+      reactionVersion: 1,
+      reactions: [{ text: "👀", count: 1, reactedByMe: false, users: [] }],
+    }
+    const removed = { ...received, reactionVersion: 2, reactions: [] }
+    expect(mergeConversationMessages([received], [removed])).toEqual([removed])
+  })
+
+  it("消息撤回仍然清除表情，即使撤回快照未携带回应版本", () => {
+    const received: ClientMessage = {
+      ...createMessage("message-1", 1),
+      reactionVersion: 1,
+      reactions: [{ text: "👀", count: 1, reactedByMe: false, users: [] }],
+    }
+    const revoked: ClientMessage = {
+      ...createMessage("message-1", 1),
+      body: { type: "revoked" },
+    }
+    expect(mergeConversationMessages([received], [revoked])).toEqual([revoked])
+  })
+
   it("replaces an optimistic message by client message id", () => {
     const optimistic = {
       ...createMessage("optimistic:client-1", 2),

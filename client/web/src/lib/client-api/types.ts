@@ -572,6 +572,7 @@ export type MessageReactionResponse = {
 export type MessageReactionUserResponse = {
   id?: string
   name?: string
+  type?: "user" | "app"
 }
 
 export type SetMessageReactionResponse = {
@@ -685,6 +686,7 @@ export type MessageReactionsUpdatedEventPayloadResponse = {
   actor_reacted?: boolean
   actor_text?: string
   actor_user_id?: string
+  actor_app_id?: string
   conversation_id?: string
   message_id?: string
   reaction_version?: number
@@ -1308,6 +1310,7 @@ export type ClientMessageReaction = {
 export type ClientMessageReactionUser = {
   id: string
   name: string
+  type?: "user" | "app"
 }
 
 export type SetMessageReactionInput = {
@@ -1326,6 +1329,7 @@ export type MessageReactionsUpdatedEvent = {
   actorReacted: boolean
   actorText: string
   actorUserId: string
+  actorAppId?: string
   conversationId: string
   messageId: string
   reactionVersion: number

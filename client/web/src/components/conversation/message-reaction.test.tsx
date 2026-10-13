@@ -35,7 +35,11 @@ vi.mock("@/components/user-profile-popover", () => ({
   }) => <button aria-label={triggerAriaLabel}>{children}</button>,
 }))
 vi.mock("@/components/app-profile-popover", () => ({
-  AppProfilePopover: ({ children }: { children: ReactNode }) => children,
+  AppProfilePopover: ({ children, appId, triggerAriaLabel }: {
+    children: ReactNode
+    appId: string | null
+    triggerAriaLabel?: string
+  }) => <button data-profile-type="app" data-profile-id={appId} aria-label={triggerAriaLabel}>{children}</button>,
 }))
 
 describe("MessageBubble reactions", () => {
@@ -184,6 +188,18 @@ describe("MessageBubble reactions", () => {
         true
       )
     )
+  })
+
+  it("displays the received receipt using an App profile rather than a user profile", () => {
+    renderBubble({
+      messageOverrides: {
+        reactions: [{ text: "收到", count: 1, reactedByMe: false, users: [{ id: "app-1", name: "助手", type: "app" }] }],
+      },
+      onSetReaction: vi.fn(),
+    })
+    expect(screen.getByRole("button", { name: "助手资料" })).toHaveAttribute("data-profile-type", "app")
+    expect(screen.getByRole("button", { name: "助手资料" })).toHaveAttribute("data-profile-id", "app-1")
+    expect(screen.getByRole("button", { name: "添加表情 收到" })).toBeInTheDocument()
   })
 
   it("hides the picker in read-only topics but lets users remove their own reaction", () => {

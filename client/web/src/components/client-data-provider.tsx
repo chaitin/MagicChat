@@ -2132,7 +2132,9 @@ function messageUserIDs(message: ClientMessage) {
   if (message.replyTo?.sender.type === "user")
     ids.add(message.replyTo.sender.id)
   for (const reaction of message.reactions) {
-    for (const user of reaction.users) ids.add(user.id)
+    for (const user of reaction.users) {
+      if (user.type !== "app") ids.add(user.id)
+    }
   }
   for (const reply of message.topic?.recentReplies ?? []) {
     if (reply.sender.type === "user") ids.add(reply.sender.id)
@@ -2148,6 +2150,7 @@ function hydrateMessageUsers(
   const reactions = message.reactions.map((reaction) => {
     let usersChanged = false
     const users = reaction.users.map((user) => {
+      if (user.type === "app") return user
       const profile = usersById[user.id]
       const name = profile?.nickname || profile?.name
       if (!name || name === user.name) return user

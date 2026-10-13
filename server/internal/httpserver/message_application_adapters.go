@@ -3,6 +3,7 @@ package httpserver
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 
 	messageapp "app/internal/application/message"
 	"app/internal/realtime"
@@ -65,7 +66,14 @@ func (s *Server) PublishMessageReactionsUpdated(_ context.Context, userIDs []str
 	if len(userIDs) == 0 {
 		return
 	}
-	s.realtime.SendToUsers(userIDs, realtimeMessageReactionsUpdatedEvent(event))
+	queuedConnections := s.realtime.SendToUsers(userIDs, realtimeMessageReactionsUpdatedEvent(event))
+	if event.ActorAppID != "" {
+		slog.Info("app reaction update queued",
+			"conversation_id", event.ConversationID, "message_id", event.MessageID,
+			"app_id", event.ActorAppID, "reaction_version", event.ReactionVersion,
+			"recipient_users", len(userIDs), "queued_connections", queuedConnections,
+		)
+	}
 }
 
 func (s *Server) DeliverAppEvents(ctx context.Context, events []messageapp.AppEvent) {
@@ -141,7 +149,7 @@ func legacyMessageResponse(value messageapp.Message) messageResponse {
 func newLegacyMessageReactionUserResponses(values []messageapp.ReactionUser) []messageReactionUserResponse {
 	result := make([]messageReactionUserResponse, len(values))
 	for index, value := range values {
-		result[index] = messageReactionUserResponse{ID: value.ID, Name: value.Name}
+		result[index] = messageReactionUserResponse{ID: value.ID, Name: value.Name, Type: value.Type}
 	}
 	return result
 }

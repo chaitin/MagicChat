@@ -200,6 +200,7 @@ export type ClientMessageTopic = {
 export type ClientMessageReactionUser = {
   id: string
   name: string
+  type?: "user" | "app"
 }
 
 export type ClientMessageReaction = {
@@ -220,6 +221,7 @@ export type MessageReactionsUpdatedEvent = {
   actorReacted: boolean
   actorText: string
   actorUserId: string
+  actorAppId?: string
   conversationId: string
   messageId: string
   reactionVersion: number

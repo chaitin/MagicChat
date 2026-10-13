@@ -111,6 +111,7 @@ type messageReactionResponse struct {
 type messageReactionUserResponse struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+	Type string `json:"type,omitempty"`
 }
 
 type messageTopicResponse struct {
@@ -608,7 +609,7 @@ func realtimeMessageReactionsUpdatedEvent(event messageapp.ReactionEvent) realti
 		}
 	}
 	return realtime.NewEvent(realtime.EventMessageReactionsUpdated, messageReactionsUpdatedEventPayload{
-		ActorReacted: event.ActorReacted, ActorText: event.ActorText, ActorUserID: event.ActorUserID,
+		ActorReacted: event.ActorReacted, ActorText: event.ActorText, ActorUserID: event.ActorUserID, ActorAppID: event.ActorAppID,
 		ConversationID: event.ConversationID, MessageID: event.MessageID,
 		ReactionVersion: event.ReactionVersion, Reactions: reactions,
 	})
@@ -642,6 +643,7 @@ type messageReactionsUpdatedEventPayload struct {
 	ActorReacted    bool                           `json:"actor_reacted"`
 	ActorText       string                         `json:"actor_text"`
 	ActorUserID     string                         `json:"actor_user_id"`
+	ActorAppID      string                         `json:"actor_app_id,omitempty"`
 	ConversationID  string                         `json:"conversation_id"`
 	MessageID       string                         `json:"message_id"`
 	ReactionVersion int64                          `json:"reaction_version"`

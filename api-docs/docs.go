@@ -12111,6 +12111,12 @@ const docTemplate = `{
             "properties": {
                 "id": {
                     "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
                 }
             }
         },

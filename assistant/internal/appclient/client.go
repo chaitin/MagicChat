@@ -44,6 +44,7 @@ const (
 	methodMessageSend          = "message.send"
 	methodConversationStatus   = "conversation.status"
 	methodMessageSendAsUser    = "message.send_as_user"
+	methodMessageReactionSet   = "message.reaction.set"
 
 	methodConversationMessagesList = "conversation.messages.list"
 	methodConversationTopicCreate  = "conversation.topic.create"
@@ -68,6 +69,7 @@ type Client struct {
 	runner         *conversationAgentRunner
 	transport      *webSocketManager
 	requester      *reliableRequester
+	receipts       *messageReceiptSender
 
 	eventMu         sync.Mutex
 	eventQueue      []*queuedAppEvent
@@ -307,6 +309,7 @@ func New(ctx context.Context, cfg config.Config) (*Client, error) {
 	routerModel.MaxTokens = topicRouterMaxTokens
 
 	transport := newWebSocketManager(cfg, webSocketManagerOptions{})
+	requester := newReliableRequester(transport, reliableRequesterOptions{})
 	return &Client{
 		cfg:            cfg,
 		dialer:         websocket.DefaultDialer,
@@ -317,7 +320,8 @@ func New(ctx context.Context, cfg config.Config) (*Client, error) {
 			MaxSessions: cfg.Agent.MaxSessions,
 		}),
 		transport: transport,
-		requester: newReliableRequester(transport, reliableRequesterOptions{}),
+		requester: requester,
+		receipts:  newMessageReceiptSender(ctx, requester, cfg.AppID),
 	}, nil
 }
 
@@ -342,6 +346,7 @@ func newToolRegistry(ctx context.Context, servers []config.MCPServerConfig) (*mc
 }
 
 func (c *Client) Close() {
+	c.receipts.Close()
 	if c.runner != nil {
 		c.runner.CancelAll()
 	}
@@ -358,6 +363,9 @@ func (c *Client) Run(ctx context.Context) error {
 		}
 		if c.requester == nil {
 			c.requester = newReliableRequester(c.transport, reliableRequesterOptions{})
+		}
+		if c.receipts == nil {
+			c.receipts = newMessageReceiptSender(ctx, c.requester, c.cfg.AppID)
 		}
 		err := c.transport.Run(ctx, func(message envelope) bool {
 			return c.handleTransportMessage(ctx, message)
@@ -447,6 +455,7 @@ func (c *Client) drainAppEvents() {
 				c.assistantAgent,
 				c.topicRouter,
 				c.runner,
+				c.receipts.Submit,
 				func(writeCtx context.Context, outgoing envelope) error {
 					_, err := c.requester.RequestEnvelope(writeCtx, outgoing)
 					return err
@@ -621,10 +630,10 @@ func handleServerMessage(ctx context.Context, messageType int, data []byte, requ
 }
 
 func handleParsedServerMessage(ctx context.Context, message envelope, appID string, requester appRequester, assistantAgent replyAgent, runner agentRunner, writeJSON func(context.Context, envelope) error) bool {
-	return handleParsedServerMessageWithTopicRouter(ctx, message, appID, requester, assistantAgent, nil, runner, writeJSON)
+	return handleParsedServerMessageWithTopicRouter(ctx, message, appID, requester, assistantAgent, nil, runner, nil, writeJSON)
 }
 
-func handleParsedServerMessageWithTopicRouter(ctx context.Context, message envelope, appID string, requester appRequester, assistantAgent replyAgent, router topicRouter, runner agentRunner, writeJSON func(context.Context, envelope) error) bool {
+func handleParsedServerMessageWithTopicRouter(ctx context.Context, message envelope, appID string, requester appRequester, assistantAgent replyAgent, router topicRouter, runner agentRunner, onReceived func(messageCreatedPayload), writeJSON func(context.Context, envelope) error) bool {
 	if message.Kind == kindResponse {
 		return true
 	}
@@ -665,11 +674,13 @@ func handleParsedServerMessageWithTopicRouter(ctx context.Context, message envel
 		payload.Sender.Type,
 		payload.Sender.ID,
 	) {
+		notifyMessageReceived(onReceived, appID, payload)
 		return true
 	}
 	if !shouldHandleIncomingMessage(appID, payload, body) {
 		return true
 	}
+	notifyMessageReceived(onReceived, appID, payload)
 
 	senderName := payload.Sender.Name
 	if payload.Sender.Nickname != "" {

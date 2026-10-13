@@ -50,7 +50,9 @@ export function normalizeDesktopMessageDetails(payload: unknown): DesktopMessage
           ? reaction.users.flatMap((value) => {
               const user = asRecord(value)
               const id = stringValue(user?.id)
-              return id ? [{ id, name: stringValue(user?.name) }] : []
+              return id
+                ? [{ id, name: stringValue(user?.name), ...(user?.type === "app" ? { type: "app" as const } : {}) }]
+                : []
             })
           : []
         return text && count > 0

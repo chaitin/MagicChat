@@ -23,6 +23,7 @@ func TestThirdPartyAppWebSocketAllowsOnlyPublicRPCMethods(t *testing.T) {
 
 	for _, method := range []string{
 		appMethodMessageSend,
+		appMethodMessageReactionSet,
 		appMethodUsersGet,
 		appMethodAppsGet,
 		appMethodConversationsList,

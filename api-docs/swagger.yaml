@@ -1517,6 +1517,10 @@ definitions:
     properties:
       id:
         type: string
+      name:
+        type: string
+      type:
+        type: string
     type: object
   client.messageReplyToResponse:
     properties:

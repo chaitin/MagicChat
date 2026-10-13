@@ -9,6 +9,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	appapp "app/internal/application/app"
 	"app/internal/store"
 
 	"golang.org/x/text/unicode/norm"
@@ -40,6 +41,17 @@ type reactionMessageReference struct {
 }
 
 func (s *Service) SetReaction(ctx context.Context, cmd SetReactionCommand) (SetReactionResult, error) {
+	return s.setReaction(ctx, cmd, false)
+}
+
+func (s *Service) SetAppReaction(ctx context.Context, cmd SetAppReactionCommand) (SetReactionResult, error) {
+	return s.setReaction(ctx, SetReactionCommand{
+		AccountID: cmd.AppID, ConversationID: cmd.ConversationID, MessageID: cmd.MessageID,
+		Reacted: cmd.Reacted, Text: cmd.Text,
+	}, true)
+}
+
+func (s *Service) setReaction(ctx context.Context, cmd SetReactionCommand, asApp bool) (SetReactionResult, error) {
 	conversationID, err := normalizeRequiredUUID(cmd.ConversationID, "会话 ID")
 	if err != nil {
 		return SetReactionResult{}, InvalidRequestError(err.Error(), err)
@@ -48,7 +60,11 @@ func (s *Service) SetReaction(ctx context.Context, cmd SetReactionCommand) (SetR
 	if err != nil {
 		return SetReactionResult{}, InvalidRequestError(err.Error(), err)
 	}
-	accountID, err := normalizeRequiredUUID(cmd.AccountID, "用户 ID")
+	actorLabel := "用户 ID"
+	if asApp {
+		actorLabel = "应用 ID"
+	}
+	accountID, err := normalizeRequiredUUID(cmd.AccountID, actorLabel)
 	if err != nil {
 		return SetReactionResult{}, InvalidRequestError(err.Error(), err)
 	}
@@ -57,10 +73,28 @@ func (s *Service) SetReaction(ctx context.Context, cmd SetReactionCommand) (SetR
 		return SetReactionResult{}, InvalidRequestError(err.Error(), err)
 	}
 
+	validateAccess := validateSetReactionAccess
+	model := any(&store.MessageReaction{})
+	actorColumn := "user_id"
+	currentUserID := accountID
+	if asApp {
+		validateAccess = validateSetAppReactionAccess
+		model = &store.MessageAppReaction{}
+		actorColumn = "app_id"
+		currentUserID = ""
+	}
 	result := SetReactionResult{ConversationID: conversationID, MessageID: messageID}
 	recipients := []string{}
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		access, _, err := validateSetReactionAccess(tx, conversationID, messageID, accountID, cmd.Reacted)
+		if asApp {
+			if _, err := appapp.LockUsableApp(tx, accountID); err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return errConversationAccessDenied
+				}
+				return err
+			}
+		}
+		access, _, err := validateAccess(tx, conversationID, messageID, accountID, cmd.Reacted)
 		if err != nil {
 			return err
 		}
@@ -73,22 +107,22 @@ func (s *Service) SetReaction(ctx context.Context, cmd SetReactionCommand) (SetR
 		if err != nil {
 			return err
 		}
-		access, _, err = validateSetReactionAccess(tx, conversationID, messageID, accountID, cmd.Reacted)
+		access, _, err = validateAccess(tx, conversationID, messageID, accountID, cmd.Reacted)
 		if err != nil {
 			return err
 		}
 
-		var existing store.MessageReaction
-		existingQuery := tx.Where("message_id = ? AND user_id = ? AND text = ?", messageID, accountID, reactionText).
-			Limit(1).Find(&existing)
-		if existingQuery.Error != nil {
-			return existingQuery.Error
+		actorWhere := "message_id = ? AND " + actorColumn + " = ?"
+		var existingCount int64
+		if err := tx.Model(model).Where(actorWhere+" AND text = ?", messageID, accountID, reactionText).
+			Count(&existingCount).Error; err != nil {
+			return err
 		}
-		exists := existingQuery.RowsAffected > 0
+		exists := existingCount > 0
 		if cmd.Reacted && !exists {
 			var userReactionCount int64
-			if err := tx.Model(&store.MessageReaction{}).
-				Where("message_id = ? AND user_id = ?", messageID, accountID).
+			if err := tx.Model(model).
+				Where(actorWhere, messageID, accountID).
 				Count(&userReactionCount).Error; err != nil {
 				return err
 			}
@@ -96,14 +130,14 @@ func (s *Service) SetReaction(ctx context.Context, cmd SetReactionCommand) (SetR
 				return errReactionUserLimit
 			}
 			var sameTextCount int64
-			if err := tx.Model(&store.MessageReaction{}).
+			if err := allReactionRows(tx).
 				Where("message_id = ? AND text = ?", messageID, reactionText).
 				Count(&sameTextCount).Error; err != nil {
 				return err
 			}
 			if sameTextCount == 0 {
 				var distinctCount int64
-				if err := tx.Model(&store.MessageReaction{}).
+				if err := allReactionRows(tx).
 					Where("message_id = ?", messageID).
 					Distinct("text").Count(&distinctCount).Error; err != nil {
 					return err
@@ -112,16 +146,22 @@ func (s *Service) SetReaction(ctx context.Context, cmd SetReactionCommand) (SetR
 					return errReactionMessageLimit
 				}
 			}
-			if err := tx.Create(&store.MessageReaction{
+			reaction := any(&store.MessageReaction{
 				MessageID: messageID, UserID: accountID, Text: reactionText, CreatedAt: now,
-			}).Error; err != nil {
+			})
+			if asApp {
+				reaction = &store.MessageAppReaction{
+					MessageID: messageID, AppID: accountID, Text: reactionText, CreatedAt: now,
+				}
+			}
+			if err := tx.Create(reaction).Error; err != nil {
 				return err
 			}
 			result.Changed = true
 		}
 		if !cmd.Reacted && exists {
-			if err := tx.Where("message_id = ? AND user_id = ? AND text = ?", messageID, accountID, reactionText).
-				Delete(&store.MessageReaction{}).Error; err != nil {
+			if err := tx.Where(actorWhere+" AND text = ?", messageID, accountID, reactionText).
+				Delete(model).Error; err != nil {
 				return err
 			}
 			result.Changed = true
@@ -136,8 +176,21 @@ func (s *Service) SetReaction(ctx context.Context, cmd SetReactionCommand) (SetR
 			}
 		}
 		result.ReactionVersion = state.Version
-		summaries, err := loadReactionSummaries(tx, []string{messageID}, accountID)
+		summaries, err := loadReactionSummaries(tx, []string{messageID}, currentUserID)
 		result.Reactions = summaries[messageID]
+		if asApp {
+			var own []store.MessageAppReaction
+			if err := tx.Where("message_id = ? AND app_id = ?", messageID, accountID).Find(&own).Error; err != nil {
+				return err
+			}
+			for index := range result.Reactions {
+				for _, reaction := range own {
+					if result.Reactions[index].Text == reaction.Text {
+						result.Reactions[index].ReactedByMe = true
+					}
+				}
+			}
+		}
 		return err
 	})
 	if err != nil {
@@ -151,11 +204,15 @@ func (s *Service) SetReaction(ctx context.Context, cmd SetReactionCommand) (SetR
 				Count: reaction.Count, Text: reaction.Text, Users: reaction.Users,
 			}
 		}
-		s.reactionNotifications.PublishMessageReactionsUpdated(ctx, recipients, ReactionEvent{
-			ActorReacted: cmd.Reacted, ActorText: reactionText, ActorUserID: accountID,
+		event := ReactionEvent{
+			ActorReacted: cmd.Reacted, ActorText: reactionText, ActorUserID: currentUserID,
 			ConversationID: conversationID, MessageID: messageID,
 			ReactionVersion: result.ReactionVersion, Reactions: counts,
-		})
+		}
+		if asApp {
+			event.ActorAppID = accountID
+		}
+		s.reactionNotifications.PublishMessageReactionsUpdated(ctx, recipients, event)
 	}
 	return result, nil
 }
@@ -228,6 +285,37 @@ func validateSetReactionAccess(db *gorm.DB, conversationID, messageID, accountID
 		}
 		if access.Context.IsTopic() && access.Participant == nil {
 			return userConversationAccess{}, reactionMessageReference{}, errReactionTopicParticipation
+		}
+	}
+	return access, message, nil
+}
+
+func validateSetAppReactionAccess(db *gorm.DB, conversationID, messageID, appID string, reacted bool) (userConversationAccess, reactionMessageReference, error) {
+	conversation, member, participant, err := requireAppConversationAccess(db, conversationID, appID, false, false)
+	if err != nil {
+		return userConversationAccess{}, reactionMessageReference{}, err
+	}
+	access := userConversationAccess{Context: conversation, Member: member, Participant: participant}
+	message, err := loadReactionMessageReference(db, conversationID, messageID)
+	if err != nil {
+		return access, message, err
+	}
+	visibleFromSeq := member.HistoryVisibleFromSeq
+	if participant != nil {
+		visibleFromSeq = participant.HistoryVisibleFromSeq
+	}
+	if message.Seq < visibleFromSeq {
+		return access, message, errConversationAccessDenied
+	}
+	if err := validateAppConversationSendable(db, conversation, appID); err != nil {
+		return access, message, err
+	}
+	if reacted {
+		if message.RevokedAt != nil || message.SenderType == store.MessageSenderTypeSystem {
+			return access, message, errReactionMessageUnavailable
+		}
+		if conversation.IsTopic() && participant == nil {
+			return access, message, errReactionTopicParticipation
 		}
 	}
 	return access, message, nil
@@ -330,6 +418,7 @@ type reactionUserRecord struct {
 	Text         string
 	UserID       string
 	UserName     string
+	UserType     string
 }
 
 func attachMessageReactions(db *gorm.DB, messages []Message, currentUserID string) error {
@@ -366,13 +455,31 @@ func attachMessageReactions(db *gorm.DB, messages []Message, currentUserID strin
 	return nil
 }
 
+func allReactionRows(db *gorm.DB) *gorm.DB {
+	users := db.Model(&store.MessageReaction{}).Select("message_id, text, created_at")
+	apps := db.Model(&store.MessageAppReaction{}).Select("message_id, text, created_at")
+	return db.Table("(? UNION ALL ?) AS reactions", users, apps)
+}
+
+func reactionParticipantRows(db *gorm.DB) *gorm.DB {
+	users := db.Table("message_reactions AS r").
+		Select(`r.message_id, r.text, r.created_at, r.user_id, '' AS user_type,
+			COALESCE(NULLIF(TRIM(users.nickname), ''), NULLIF(TRIM(users.name), ''), '用户') AS user_name`).
+		Joins("JOIN users ON users.id = r.user_id")
+	apps := db.Table("message_app_reactions AS r").
+		Select(`r.message_id, r.text, r.created_at, r.app_id AS user_id, 'app' AS user_type,
+			COALESCE(NULLIF(TRIM(apps.name), ''), '应用') AS user_name`).
+		Joins("JOIN apps ON apps.id = r.app_id")
+	return db.Table("(? UNION ALL ?) AS mr", users, apps)
+}
+
 func loadReactionSummaries(db *gorm.DB, messageIDs []string, currentUserID string) (map[string][]ReactionSummary, error) {
 	result := make(map[string][]ReactionSummary, len(messageIDs))
 	if len(messageIDs) == 0 {
 		return result, nil
 	}
 	var records []reactionSummaryRecord
-	if err := db.Model(&store.MessageReaction{}).
+	if err := allReactionRows(db).
 		Select("message_id, text, COUNT(*) AS count").
 		Where("message_id IN ?", messageIDs).
 		Group("message_id, text").
@@ -414,15 +521,13 @@ func loadReactionSummaryUsers(db *gorm.DB, messageIDs []string) (map[string]map[
 	if len(messageIDs) == 0 {
 		return result, nil
 	}
-	ranked := db.Table("message_reactions AS mr").
-		Select(`mr.message_id, mr.text, mr.user_id,
-			COALESCE(NULLIF(TRIM(users.nickname), ''), NULLIF(TRIM(users.name), ''), '用户') AS user_name,
-			ROW_NUMBER() OVER (PARTITION BY mr.message_id, mr.text ORDER BY mr.created_at ASC, mr.user_id ASC) AS reaction_rank`).
-		Joins("JOIN users ON users.id = mr.user_id").
+	ranked := reactionParticipantRows(db).
+		Select(`mr.message_id, mr.text, mr.user_id, mr.user_type, mr.user_name,
+			ROW_NUMBER() OVER (PARTITION BY mr.message_id, mr.text ORDER BY mr.created_at ASC, mr.user_type ASC, mr.user_id ASC) AS reaction_rank`).
 		Where("mr.message_id IN ?", messageIDs)
 	var records []reactionUserRecord
 	if err := db.Table("(?) AS ranked_reactions", ranked).
-		Select("message_id", "text", "user_id", "user_name", "reaction_rank").
+		Select("message_id", "text", "user_id", "user_name", "user_type", "reaction_rank").
 		Where("reaction_rank <= ?", maxReactionSummaryUsers).
 		Order("message_id ASC, text ASC, reaction_rank ASC").
 		Scan(&records).Error; err != nil {
@@ -433,7 +538,7 @@ func loadReactionSummaryUsers(db *gorm.DB, messageIDs []string) (map[string]map[
 			result[record.MessageID] = make(map[string][]ReactionUser)
 		}
 		result[record.MessageID][record.Text] = append(
-			result[record.MessageID][record.Text], ReactionUser{ID: record.UserID, Name: record.UserName},
+			result[record.MessageID][record.Text], ReactionUser{ID: record.UserID, Name: record.UserName, Type: record.UserType},
 		)
 	}
 	return result, nil
@@ -470,18 +575,16 @@ func (s *Service) ListReactionUsers(ctx context.Context, cmd ListReactionUsersCo
 		return ListReactionUsersResult{}, mapReactionError(errConversationAccessDenied)
 	}
 	var records []reactionUserRecord
-	if err := db.Table("message_reactions AS mr").
-		Select(`mr.user_id,
-			COALESCE(NULLIF(TRIM(users.nickname), ''), NULLIF(TRIM(users.name), ''), '用户') AS user_name`).
-		Joins("JOIN users ON users.id = mr.user_id").
+	if err := reactionParticipantRows(db).
+		Select("mr.user_id, mr.user_name, mr.user_type").
 		Where("mr.message_id = ? AND mr.text = ?", messageID, reactionText).
-		Order("mr.created_at ASC, mr.user_id ASC").
+		Order("mr.created_at ASC, mr.user_type ASC, mr.user_id ASC").
 		Scan(&records).Error; err != nil {
 		return ListReactionUsersResult{}, internalError(err)
 	}
 	users := make([]ReactionUser, len(records))
 	for index, record := range records {
-		users[index] = ReactionUser{ID: record.UserID, Name: record.UserName}
+		users[index] = ReactionUser{ID: record.UserID, Name: record.UserName, Type: record.UserType}
 	}
 	return ListReactionUsersResult{
 		ConversationID: conversationID, MessageID: messageID, Text: reactionText, Users: users,

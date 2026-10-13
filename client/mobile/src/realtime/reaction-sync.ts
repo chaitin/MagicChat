@@ -93,8 +93,8 @@ function normalizeMessageReactionsUpdatedPayload(
     typeof value.actor_reacted !== "boolean" ||
     typeof value.actor_text !== "string" ||
     value.actor_text.length === 0 ||
-    typeof value.actor_user_id !== "string" ||
-    value.actor_user_id.length === 0 ||
+    !((typeof value.actor_user_id === "string" && value.actor_user_id.length > 0) ||
+      (typeof value.actor_app_id === "string" && value.actor_app_id.length > 0)) ||
     typeof value.conversation_id !== "string" ||
     value.conversation_id.length === 0 ||
     typeof value.message_id !== "string" ||
@@ -109,7 +109,8 @@ function normalizeMessageReactionsUpdatedPayload(
   return {
     actorReacted: value.actor_reacted,
     actorText: value.actor_text,
-    actorUserId: value.actor_user_id,
+    actorUserId: typeof value.actor_user_id === "string" ? value.actor_user_id : "",
+    ...(typeof value.actor_app_id === "string" && value.actor_app_id ? { actorAppId: value.actor_app_id } : {}),
     conversationId: value.conversation_id,
     messageId: value.message_id,
     reactionVersion: normalizeReactionVersion(value.reaction_version),

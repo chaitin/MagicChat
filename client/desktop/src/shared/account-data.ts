@@ -400,6 +400,7 @@ export type DesktopMessageChoiceState = {
 export type DesktopMessageReactionUser = {
   id: string
   name: string
+  type?: "user" | "app"
 }
 
 export type ResolveUserNamesInput = { targetId: string; userIds: string[] }

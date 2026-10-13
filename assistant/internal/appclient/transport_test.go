@@ -271,7 +271,7 @@ func readFakeServerRequest(conn *websocket.Conn, request *envelope) error {
 		if err := conn.ReadJSON(request); err != nil {
 			return err
 		}
-		if request.Method != methodConversationStatus {
+		if request.Method != methodConversationStatus && request.Method != methodMessageReactionSet {
 			return nil
 		}
 		ok := true

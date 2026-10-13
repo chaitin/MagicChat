@@ -149,7 +149,7 @@ export function normalizeMessageReactionUsers(
     if (!user || !id) {
       throw new ApiRequestError("消息表情参与者响应格式不正确")
     }
-    return { id, name }
+    return { id, name, ...(user.type === "app" ? { type: "app" as const } : {}) }
   })
 }
 

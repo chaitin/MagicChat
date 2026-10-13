@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { MessageReactionPicker } from "@/components/conversation/message-reaction-picker"
 import { messageReactionChipToneClassName } from "@/components/conversation/message-reaction-styles"
 import { UserProfilePopover } from "@/components/user-profile-popover"
+import { AppProfilePopover } from "@/components/app-profile-popover"
 import {
   listConversationMessageReactionUsers,
   type ClientMessageReaction,
@@ -136,7 +137,7 @@ function ReactionParticipantSummary({
       data-slot="message-reaction-participants"
     >
       {reaction.users.map((user, index) => (
-        <span className="inline-flex min-w-0 items-center" key={user.id}>
+        <span className="inline-flex min-w-0 items-center" key={`${user.type ?? "user"}:${user.id}`}>
           {index > 0 && <span>,&nbsp;</span>}
           <ReactionUserName user={user} />
         </span>
@@ -156,11 +157,24 @@ function ReactionParticipantSummary({
   )
 }
 
-function ReactionUserName({ user }: { user: ClientMessageReactionUser }) {
+function ReactionUserName({
+  user,
+  triggerClassName = "min-w-0 max-w-full break-all whitespace-normal transition-colors hover:text-(--weui-link) focus-visible:text-(--weui-link) data-[state=open]:text-(--weui-link)",
+}: {
+  user: ClientMessageReactionUser
+  triggerClassName?: string
+}) {
+  if (user.type === "app") {
+    return (
+      <AppProfilePopover appId={user.id} triggerAriaLabel={`${user.name}资料`} triggerClassName={triggerClassName}>
+        <span>{user.name}</span>
+      </AppProfilePopover>
+    )
+  }
   return (
     <UserProfilePopover
       triggerAriaLabel={`${user.name}资料`}
-      triggerClassName="min-w-0 max-w-full break-all whitespace-normal transition-colors hover:text-(--weui-link) focus-visible:text-(--weui-link) data-[state=open]:text-(--weui-link)"
+      triggerClassName={triggerClassName}
       userId={user.id}
     >
       <span>{user.name}</span>
@@ -197,8 +211,9 @@ function MessageReactionUsersPopover({
     )
       .then(async (nextUsers) => {
         if (clientData) {
-          await clientData.ensureUsers(nextUsers.map((user) => user.id))
+          await clientData.ensureUsers(nextUsers.filter((user) => user.type !== "app").map((user) => user.id))
           nextUsers = nextUsers.map((user) => {
+            if (user.type === "app") return user
             const profile = clientData.getUser(user.id)
             return profile
               ? { ...user, name: profile.nickname || profile.name }
@@ -249,14 +264,11 @@ function MessageReactionUsersPopover({
           ) : (
             <div className="grid gap-0.5">
               {users.map((user) => (
-                <UserProfilePopover
-                  key={user.id}
-                  triggerAriaLabel={`${user.name}资料`}
+                <ReactionUserName
+                  key={`${user.type ?? "user"}:${user.id}`}
+                  user={user}
                   triggerClassName="w-full rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent hover:text-(--weui-link) focus-visible:text-(--weui-link) data-[state=open]:bg-accent data-[state=open]:text-(--weui-link)"
-                  userId={user.id}
-                >
-                  <span className="truncate">{user.name}</span>
-                </UserProfilePopover>
+                />
               ))}
             </div>
           )}
