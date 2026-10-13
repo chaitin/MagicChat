@@ -332,8 +332,8 @@ export function createMessageMentionLabelResolver({
   currentUser,
 }: {
   contacts: ClientContacts
-  conversation: ClientConversation
-  currentUser: ClientUser
+  conversation?: ClientConversation
+  currentUser?: ClientUser
 }): MessageMentionLabelResolver {
   const userLabels = new Map(
     contacts.users.map(
@@ -343,9 +343,9 @@ export function createMessageMentionLabelResolver({
   const appLabels = new Map(
     contacts.apps.map((app) => [app.id.toLowerCase(), app.name] as const)
   )
-  userLabels.set(currentUser.id.toLowerCase(), getContactDisplayName(currentUser))
+  if (currentUser) userLabels.set(currentUser.id.toLowerCase(), getContactDisplayName(currentUser))
 
-  for (const member of conversation.members ?? []) {
+  for (const member of conversation?.members ?? []) {
     const labels = member.type === "app" ? appLabels : userLabels
     if (!labels.has(member.id.toLowerCase())) {
       labels.set(

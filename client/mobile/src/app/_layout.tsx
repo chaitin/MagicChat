@@ -3,6 +3,7 @@ import { useFonts } from "expo-font"
 import * as SplashScreen from "expo-splash-screen"
 import { useEffect, useState } from "react"
 
+import { initializeInputEmojiFallback } from "@/native/android-emoji-font-fallback"
 import { AppProviders } from "@/providers/app-providers"
 import { useAuth } from "@/providers/auth-provider"
 import { useServers } from "@/providers/server-provider"
@@ -16,11 +17,22 @@ export default function RootLayout() {
     "MiSans-Regular": require("../../assets/fonts/misans/MiSans-Regular.ttf"),
     "MiSans-Medium": require("../../assets/fonts/misans/MiSans-Medium.ttf"),
     "MiSans-Demibold": require("../../assets/fonts/misans/MiSans-Demibold.ttf"),
+    JiyingEmoji: require("../../assets/fonts/emoji/JiyingEmoji.ttf"),
   })
+  const [inputFontsInitialized, setInputFontsInitialized] = useState(false)
+  useEffect(() => {
+    if (!fontsLoaded && !fontError) return
+    let active = true
+    void initializeInputEmojiFallback().finally(() => {
+      if (active) setInputFontsInitialized(true)
+    })
+    return () => { active = false }
+  }, [fontError, fontsLoaded])
+  const fontsReady = (fontsLoaded || Boolean(fontError)) && inputFontsInitialized
   return (
     <AppProviders>
-      <NativeSplashController fontsReady={fontsLoaded || Boolean(fontError)} />
-      <Stack screenOptions={{ headerShown: false }}>
+      <NativeSplashController fontsReady={fontsReady} />
+      {fontsReady ? <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="init" />
         <Stack.Screen name="login" />
@@ -32,7 +44,7 @@ export default function RootLayout() {
           name="image-preview"
           options={{ animation: "fade", presentation: "fullScreenModal" }}
         />
-      </Stack>
+      </Stack> : null}
     </AppProviders>
   )
 }

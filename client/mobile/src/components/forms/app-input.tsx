@@ -1,9 +1,10 @@
 import { forwardRef, useState } from "react"
-import { StyleSheet, TextInput, type TextInputProps } from "react-native"
+import { StyleSheet, type TextInput as NativeTextInput, type TextInputProps } from "react-native"
+import { TextInput } from "@/components/mi-sans-text"
 
 import { useXGUITheme } from "@/xgui"
 
-export const AppInput = forwardRef<TextInput, TextInputProps>(function AppInput(
+export const AppInput = forwardRef<NativeTextInput, TextInputProps>(function AppInput(
   { onBlur, onFocus, style, ...props },
   ref
 ) {

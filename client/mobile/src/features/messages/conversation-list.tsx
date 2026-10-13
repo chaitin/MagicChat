@@ -21,6 +21,7 @@ import { ElasticOverscroll } from "@/components/layout/elastic-overscroll"
 import type { ServerTarget } from "@/core/server-target"
 import { isBuiltinAssistantConversation } from "@/domain/conversations/conversation-order"
 import { ConversationAvatar } from "@/features/messages/conversation-avatar"
+import { MessageContentIcon } from "@/features/conversation/messages/message-content-icon"
 import {
   findLatestUnreadConversationIndex,
   type ConversationListItemModel,
@@ -32,8 +33,7 @@ import {
   useXGUITheme,
 } from "@/xgui"
 
-const PARENT_ROW_HEIGHT = PixelRatio.roundToNearestPixel(64)
-const NESTED_ROW_HEIGHT = PixelRatio.roundToNearestPixel(52)
+const ROW_HEIGHT = PixelRatio.roundToNearestPixel(64)
 
 export function ConversationList({
   errorMessage,
@@ -235,23 +235,26 @@ function ConversationListItem({
       }}
       style={({ pressed }) => [
         styles.row,
-        item.nested ? styles.nestedRow : styles.parentRow,
         {
           backgroundColor: pressed ? colors.background1 : rowBackground,
         },
       ]}
     >
-      <View style={styles.avatar}>
+      <View style={[styles.avatar, item.nested && styles.topicAvatar]}>
+        {item.nested ? (
+          <View accessible={false} pointerEvents="none" style={styles.topicArrow}>
+            <MessageContentIcon kind="topic-arrow" color={colors.textPlaceholder} size={10} strokeWidth={1.5} />
+          </View>
+        ) : null}
         <ConversationAvatar
           conversation={conversation}
           server={server}
           surroundingBackground={rowBackground}
-          topicSourceOnly={item.nested}
+          compact={item.nested}
         />
       </View>
       <View style={styles.rowContent}>
         <ListItemContent
-          compact={item.nested}
           meta={item.lastMessageTime}
           subtitle={item.description}
           subtitleLeading={
@@ -259,9 +262,9 @@ function ConversationListItem({
               <Text
                 style={{
                   color: colors.destructive,
-                  fontSize: item.nested ? 12 : 14,
+                  fontSize: 14,
                   fontWeight: "600",
-                  lineHeight: item.nested ? 17 : 20,
+                  lineHeight: 20,
                 }}
               >
                 {item.unreadAlertLabel}
@@ -422,6 +425,8 @@ const styles = StyleSheet.create({
   },
   avatar: {
     alignItems: "center",
+    height: 44,
+    justifyContent: "center",
     marginRight: 10,
     width: 44,
   },
@@ -434,18 +439,20 @@ const styles = StyleSheet.create({
   list: {
     flex: 1,
   },
-  nestedRow: {
-    height: NESTED_ROW_HEIGHT,
-    paddingVertical: 4,
+  topicAvatar: {
+    alignItems: "flex-end",
   },
-  parentRow: {
-    height: PARENT_ROW_HEIGHT,
-    paddingVertical: 10,
+  topicArrow: {
+    left: 0,
+    position: "absolute",
+    top: 17,
   },
   row: {
     alignItems: "center",
     flexDirection: "row",
+    height: ROW_HEIGHT,
     paddingHorizontal: 16,
+    paddingVertical: 10,
     position: "relative",
   },
   rowContent: {

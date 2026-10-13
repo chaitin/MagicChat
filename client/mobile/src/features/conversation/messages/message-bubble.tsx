@@ -22,6 +22,7 @@ import { XGUILoadingIcon, useXGUITheme } from "@/xgui"
 
 export const MessageBubble = memo(function MessageBubble({
   currentUserId,
+  avatarType,
   highlighted = false,
   message,
   messageActionsEnabled = true,
@@ -47,6 +48,7 @@ export const MessageBubble = memo(function MessageBubble({
   server,
   showChoiceResponseCounts,
 }: {
+  avatarType?: "app" | "user"
   canAddReaction: boolean
   canCreateTopic: boolean
   canRespondToChoice: boolean
@@ -155,7 +157,7 @@ export const MessageBubble = memo(function MessageBubble({
         avatar={message.avatar}
         name={fromMe ? "我" : message.author}
         server={server}
-        type={message.sender?.type === "app" ? "app" : "user"}
+        type={avatarType ?? (message.sender?.type === "app" ? "app" : "user")}
       />
     </Pressable>
   ) : (
@@ -163,7 +165,7 @@ export const MessageBubble = memo(function MessageBubble({
       avatar={message.avatar}
       name={fromMe ? "我" : message.author}
       server={server}
-      type={message.sender?.type === "app" ? "app" : "user"}
+      type={avatarType ?? (message.sender?.type === "app" ? "app" : "user")}
     />
   )
 

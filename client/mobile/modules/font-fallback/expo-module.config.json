@@ -1,0 +1,9 @@
+{
+  "platforms": ["android", "apple"],
+  "apple": {
+    "modules": ["FontFallbackModule"]
+  },
+  "android": {
+    "modules": ["cloud.baizhi.fontfallback.FontFallbackModule"]
+  }
+}

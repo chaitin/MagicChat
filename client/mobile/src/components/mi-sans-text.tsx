@@ -1,4 +1,4 @@
-import { createContext, forwardRef, useContext } from "react"
+import { Children, Fragment, cloneElement, createContext, forwardRef, isValidElement, useContext, type ReactNode } from "react"
 import {
   StyleSheet,
   Text as NativeText,
@@ -7,6 +7,9 @@ import {
   type TextInputProps,
   type TextStyle,
 } from "react-native"
+
+import { getInputFontFamily } from "@/native/android-emoji-font-fallback"
+import { splitEmojiText } from "./emoji-text-runs"
 
 const TextFontContext = createContext<{ weight?: TextStyle["fontWeight"]; family?: string }>({})
 
@@ -20,7 +23,7 @@ function normalizedMiSansWeight(weight: TextStyle["fontWeight"]): TextStyle["fon
   return weight === "bold" || (weight !== undefined && Number(weight) >= 600) ? "600" : weight
 }
 
-export const Text = forwardRef<NativeText, TextProps>(function Text({ style, ...props }, ref) {
+export const Text = forwardRef<NativeText, TextProps>(function Text({ children, style, ...props }, ref) {
   const inherited = useContext(TextFontContext)
   const flattened = StyleSheet.flatten(style)
   const weight = flattened?.fontWeight ?? inherited.weight
@@ -35,9 +38,29 @@ export const Text = forwardRef<NativeText, TextProps>(function Text({ style, ...
           style,
           !family && { fontWeight: normalizedMiSansWeight(weight) },
         ]}
-      />
+      >
+        {renderEmojiChildren(children)}
+      </NativeText>
     </TextFontContext.Provider>
   )
+})
+
+function renderEmojiChildren(children: ReactNode): ReactNode {
+  return Children.map(children, (child) => {
+    if (typeof child === "string") {
+      return splitEmojiText(child).map((run, index) => run.emoji ? (
+        <NativeText key={index} style={styles.emoji}>{run.text}</NativeText>
+      ) : run.text)
+    }
+    if (isValidElement<{ children?: ReactNode }>(child) && child.type === Fragment) {
+      return cloneElement(child, undefined, renderEmojiChildren(child.props.children))
+    }
+    return child
+  })
+}
+
+const styles = StyleSheet.create({
+  emoji: { fontFamily: "JiyingEmoji", fontWeight: "normal", fontStyle: "normal" },
 })
 
 export const TextInput = forwardRef<NativeTextInput, TextInputProps>(function TextInput(
@@ -50,8 +73,8 @@ export const TextInput = forwardRef<NativeTextInput, TextInputProps>(function Te
       ref={ref}
       {...props}
       style={[
-        { fontFamily: flattened?.fontFamily ?? miSansForWeight(flattened?.fontWeight) },
         style,
+        { fontFamily: flattened?.fontFamily ?? getInputFontFamily(flattened?.fontWeight, miSansForWeight(flattened?.fontWeight)) },
         !flattened?.fontFamily && { fontWeight: normalizedMiSansWeight(flattened?.fontWeight) },
       ]}
     />

@@ -1,78 +1,16 @@
 import { Camera, Images, Paperclip } from "lucide-react-native"
+import AsyncStorage from "@react-native-async-storage/async-storage"
+import { useEffect, useRef, useState } from "react"
 import { Pressable, ScrollView, StyleSheet, View } from "react-native"
 import { Text } from "@/components/mi-sans-text"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
+import { addRecentEmoji, emojiItems, emojiLabels, normalizeRecentEmoji } from "@/features/conversation/composer/emoji-catalog"
 import { useXGUITheme } from "@/xgui"
 
 export type ComposerAccessoryMode = "attachments" | "emoji" | null
 
-const emojiItems = [
-  { label: "笑哭", value: "😂" },
-  { label: "笑到打滚", value: "🤣" },
-  { label: "大笑", value: "😄" },
-  { label: "流汗笑", value: "😅" },
-  { label: "眯眼笑", value: "😆" },
-  { label: "笑脸", value: "😀" },
-  { label: "开心", value: "😃" },
-  { label: "露齿笑", value: "😁" },
-  { label: "微笑", value: "😊" },
-  { label: "浅笑", value: "🙂" },
-  { label: "眨眼", value: "😉" },
-  { label: "喜爱", value: "🥰" },
-  { label: "花痴", value: "😍" },
-  { label: "飞吻", value: "😘" },
-  { label: "拥抱", value: "🤗" },
-  { label: "星星眼", value: "🤩" },
-  { label: "坏笑", value: "😏" },
-  { label: "偷笑", value: "🤭" },
-  { label: "眨眼吐舌", value: "😜" },
-  { label: "倒脸", value: "🙃" },
-  { label: "好吃", value: "😋" },
-  { label: "滑稽", value: "🤪" },
-  { label: "酷", value: "😎" },
-  { label: "嘘", value: "🤫" },
-  { label: "思考", value: "🤔" },
-  { label: "翻白眼", value: "🙄" },
-  { label: "捂脸", value: "🤦" },
-  { label: "摊手", value: "🤷" },
-  { label: "面无表情", value: "😑" },
-  { label: "尴尬", value: "😬" },
-  { label: "融化", value: "🫠" },
-  { label: "小丑", value: "🤡" },
-  { label: "大哭", value: "😭" },
-  { label: "可怜", value: "🥺" },
-  { label: "忍住眼泪", value: "🥹" },
-  { label: "哭", value: "😢" },
-  { label: "沮丧", value: "😔" },
-  { label: "含泪微笑", value: "🥲" },
-  { label: "叹气", value: "😮‍💨" },
-  { label: "脸红", value: "😳" },
-  { label: "愤怒", value: "😡" },
-  { label: "生气", value: "😤" },
-  { label: "惊恐", value: "😱" },
-  { label: "爆炸头", value: "🤯" },
-  { label: "庆祝", value: "🥳" },
-  { label: "睡觉", value: "😴" },
-  { label: "打哈欠", value: "🥱" },
-  { label: "敬礼", value: "🫡" },
-  { label: "赞", value: "👍" },
-  { label: "鼓掌", value: "👏" },
-  { label: "拜托", value: "🙏" },
-  { label: "好的", value: "👌" },
-  { label: "加油", value: "💪" },
-  { label: "胜利", value: "✌️" },
-  { label: "握手", value: "🤝" },
-  { label: "踩", value: "👎" },
-  { label: "挥手", value: "👋" },
-  { label: "关注", value: "👀" },
-  { label: "爱心", value: "❤️" },
-  { label: "爱心手势", value: "🫶" },
-  { label: "火", value: "🔥" },
-  { label: "庆祝礼花", value: "🎉" },
-  { label: "完成", value: "✅" },
-  { label: "错误", value: "❌" },
-] as const
+const recentStorageKey = "jiying-mobile:expression-picker:recent"
 
 export function ComposerAccessoryPanel({
   disabled,
@@ -91,6 +29,39 @@ export function ComposerAccessoryPanel({
 }) {
   const insets = useSafeAreaInsets()
   const { colors } = useXGUITheme()
+  const [recent, setRecent] = useState<string[]>([])
+  const recentRef = useRef<string[]>([])
+  const recentLoadRef = useRef<Promise<void>>(Promise.resolve())
+  const recentWriteRef = useRef<Promise<void>>(Promise.resolve())
+
+  useEffect(() => {
+    if (mode !== "emoji") return
+    let active = true
+    recentLoadRef.current = AsyncStorage.getItem(recentStorageKey)
+      .then((saved) => {
+        if (!saved) return
+        const next = normalizeRecentEmoji([
+          ...recentRef.current,
+          ...normalizeRecentEmoji(JSON.parse(saved) as unknown),
+        ])
+        recentRef.current = next
+        if (active) setRecent(next)
+      })
+      .catch(() => undefined)
+    return () => { active = false }
+  }, [mode])
+
+  function selectEmoji(value: string) {
+    const next = addRecentEmoji(recentRef.current, value)
+    recentRef.current = next
+    setRecent(next)
+    recentWriteRef.current = recentWriteRef.current
+      .then(() => recentLoadRef.current)
+      .then(() => AsyncStorage.setItem(recentStorageKey, JSON.stringify(recentRef.current)))
+      .catch(() => undefined)
+    onEmojiPress(value)
+  }
+
   if (!mode) return null
 
   return (
@@ -118,27 +89,55 @@ export function ComposerAccessoryPanel({
         </View>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} style={styles.emojiScroll}>
-          <View style={styles.emojiGrid}>
-            {emojiItems.map((emoji) => (
-              <Pressable
-                accessibilityLabel={emoji.label}
-                accessibilityRole="button"
-                accessibilityState={{ disabled }}
-                disabled={disabled}
-                key={emoji.value}
-                onPress={() => onEmojiPress(emoji.value)}
-                pressRetentionOffset={0}
-                style={({ pressed }) => [
-                  styles.emojiButton,
-                  pressed ? { backgroundColor: colors.background2 } : null,
-                ]}
-              >
-                <Text style={styles.emojiText}>{emoji.value}</Text>
-              </Pressable>
-            ))}
-          </View>
+          {recent.length > 0 ? (
+            <EmojiSection disabled={disabled} label="最近使用" onSelect={selectEmoji} values={recent} />
+          ) : null}
+          <EmojiSection
+            disabled={disabled}
+            label="所有表情"
+            onSelect={selectEmoji}
+            values={emojiItems.map(([value]) => value)}
+          />
         </ScrollView>
       )}
+    </View>
+  )
+}
+
+function EmojiSection({
+  disabled,
+  label,
+  onSelect,
+  values,
+}: {
+  disabled: boolean
+  label: string
+  onSelect: (value: string) => void
+  values: readonly string[]
+}) {
+  const { colors } = useXGUITheme()
+  return (
+    <View>
+      <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.textSecondary }]}>{label}</Text>
+      <View style={styles.emojiGrid}>
+        {values.map((value) => (
+          <Pressable
+            accessibilityLabel={emojiLabels.get(value) ?? value}
+            accessibilityRole="button"
+            accessibilityState={{ disabled }}
+            disabled={disabled}
+            key={value}
+            onPress={() => onSelect(value)}
+            pressRetentionOffset={0}
+            style={({ pressed }) => [
+              styles.emojiButton,
+              pressed ? { backgroundColor: colors.background2 } : null,
+            ]}
+          >
+            <Text style={styles.emojiText}>{value}</Text>
+          </Pressable>
+        ))}
+      </View>
     </View>
   )
 }
@@ -183,7 +182,8 @@ function AccessoryAction({
 const styles = StyleSheet.create({
   attachments: { flexDirection: "row", flexWrap: "wrap", minHeight: 132, paddingHorizontal: 13, paddingVertical: 18 },
   emojiScroll: { maxHeight: 184 },
-  emojiGrid: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 13, paddingVertical: 13 },
+  emojiGrid: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 13, paddingVertical: 4 },
+  sectionTitle: { fontSize: 13, lineHeight: 20, paddingHorizontal: 13, paddingTop: 10 },
   action: { alignItems: "center", gap: 7, width: "25%" },
   actionLabel: { fontSize: 13, lineHeight: 20 },
   accessoryButton: {

@@ -39,7 +39,7 @@ export function MessageMentionText({
                 {textPart.value}
               </Text>
             ) : (
-              <Fragment key={`plain:${textIndex}`}>{textPart.value}</Fragment>
+              <Text key={`plain:${textIndex}`}>{textPart.value}</Text>
             )
           )}
         </Fragment>

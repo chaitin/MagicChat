@@ -1,5 +1,6 @@
 import { installTestAccountRuntime } from "./auth-runtime-test-helper.ts"
 import assert from "node:assert/strict"
+import { readFile } from "node:fs/promises"
 import test from "node:test"
 
 import { fetchConversations } from "../src/data/conversations/conversations-api.ts"
@@ -17,6 +18,52 @@ import {
   findLatestUnreadConversationIndex,
   formatUnreadCount,
 } from "../src/features/messages/conversation-list-model.ts"
+
+const source = (path: string) => readFile(new URL(`../src/${path}`, import.meta.url), "utf8")
+
+test("话题和普通对话共用64px行高、正文样式与未读提示字号", async () => {
+  const list = await source("features/messages/conversation-list.tsx")
+  assert.match(list, /const ROW_HEIGHT = PixelRatio\.roundToNearestPixel\(64\)/)
+  assert.match(list, /row: \{[\s\S]*?height: ROW_HEIGHT,[\s\S]*?paddingVertical: 10/)
+  assert.doesNotMatch(list, /NESTED_ROW_HEIGHT|PARENT_ROW_HEIGHT|nestedRow|parentRow/)
+  const content = list.split("<ListItemContent")[1].split("</Pressable>")[0]
+  assert.doesNotMatch(content, /compact=|item\.nested \? (12|17)/)
+  assert.match(content, /fontSize: 14,[\s\S]*?lineHeight: 20/)
+  assert.match(content, /title=\{conversation\.name\}/)
+  assert.match(content, /meta=\{item\.lastMessageTime\}/)
+})
+
+test("话题保留44px头像列，箭头在左，小头像靠右且文字列不缩进", async () => {
+  const list = await source("features/messages/conversation-list.tsx")
+  assert.match(list, /style=\{\[styles\.avatar, item\.nested && styles\.topicAvatar\]\}/)
+  assert.match(list, /item\.nested \? \([\s\S]*?accessible=\{false\} pointerEvents="none"[\s\S]*?kind="topic-arrow".*size=\{10\}/)
+  assert.match(list, /avatar: \{[\s\S]*?height: 44,[\s\S]*?marginRight: 10,[\s\S]*?width: 44/)
+  assert.match(list, /topicAvatar: \{\s*alignItems: "flex-end"/)
+  assert.match(list, /topicArrow: \{\s*left: 0,[\s\S]*?position: "absolute",[\s\S]*?top: 17/)
+  assert.match(list, /<ConversationAvatar[\s\S]*?compact=\{item\.nested\}/)
+  assert.doesNotMatch(list, /topicSourceOnly/)
+})
+
+test("话题头像采用Desktop的24px主头像和12px来源角标，保留未读徽标", async () => {
+  const avatar = await source("features/messages/conversation-avatar.tsx")
+  assert.match(avatar, /const size = compact \? 28 : 44/)
+  assert.match(avatar, /<BaseConversationAvatar[^>]*compact=\{compact\}/)
+  assert.match(avatar, /avatar=\{conversation\.avatar\}[\s\S]*?size=\{compact \? 24 : 44\}/)
+  assert.match(avatar, /avatar=\{sourceSender\.avatar\} rounded server=\{server\} size=\{compact \? 12 : 18\}/)
+  assert.match(avatar, /compact && styles\.compactTopicSource/)
+  assert.match(avatar, /count=\{conversation\.unreadCount\}[\s\S]*?dot=\{conversation\.notificationMuted\}/)
+  assert.doesNotMatch(avatar, /usesTopicSourceAvatar|topicSourceOnly|rounded=\{compact\}/)
+})
+
+test("话题箭头使用Desktop同源Hugeicons单模块，不影响点击和排序", async () => {
+  const icons = await source("features/conversation/messages/message-content-icon.tsx")
+  assert.match(icons, /import ArrowMoveDownRightIcon from "@hugeicons\/core-free-icons\/dist\/esm\/ArrowMoveDownRightIcon"/)
+  assert.match(icons, /"topic-arrow": ArrowMoveDownRightIcon/)
+  const list = await source("features/messages/conversation-list.tsx")
+  assert.match(list, /onPress=\{handlePress\}/)
+  assert.match(list, /if \(conversation\.type === "topic"\) return/)
+  assert.match(list, /const swipable = conversation\.type !== "topic"/)
+})
 
 const EMPTY_CONTACTS: ClientContacts = {
   apps: [],

@@ -3,20 +3,19 @@ import {
   useAudioPlayer,
   useAudioPlayerStatus,
 } from "expo-audio"
-import { AudioLines, Pause, Play } from "lucide-react-native"
-import { useCallback, useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Pressable, View } from "react-native"
 import { Text } from "@/components/mi-sans-text"
 
-import { NativeIconButton } from "@/components/buttons/native-icon-button"
-import { ThemedIcon } from "@/components/icons/themed-icon"
+import { MessageActionButton } from "@/features/conversation/messages/message-action-button"
+import { MessageContentIcon } from "@/features/conversation/messages/message-content-icon"
 import type { ResourceLoadState } from "@/data/resources"
-import { formatVoiceDuration } from "@/domain/messages/message-presenter"
+import { formatVoicePlaybackTime } from "@/features/conversation/voice/voice-message-presentation"
 import {
   activateVoicePlayer,
   deactivateVoicePlayer,
 } from "@/features/conversation/voice/voice-message-player-state"
-import { XGUILoadingIcon, useXGUITheme, useXGUIToast } from "@/xgui"
+import { useXGUITheme, useXGUIToast } from "@/xgui"
 
 export function VoiceMessagePlayer({
   durationMS,
@@ -45,11 +44,18 @@ export function VoiceMessagePlayer({
   const playWhenReadyRef = useRef(false)
   const retriedResourceRef = useRef(false)
   const shownPlaybackErrorRef = useRef("")
+  const [hasPlaybackStarted, setHasPlaybackStarted] = useState(false)
+  const [isStarting, setIsStarting] = useState(false)
+  const displayedDuration = hasPlaybackStarted && !playerStatus.didJustFinish && !playerStatus.error
+    ? playerStatus.currentTime * 1_000
+    : durationMS
   const isLoading =
-    state?.status === "loading" ||
+    isStarting || state?.status === "loading" ||
     (resourceUri.length > 0 && playerStatus.isBuffering)
 
   const startPlayback = useCallback(async () => {
+    setIsStarting(true)
+    setHasPlaybackStarted(true)
     try {
       await setAudioModeAsync({
         allowsRecording: false,
@@ -67,8 +73,11 @@ export function VoiceMessagePlayer({
       activateVoicePlayer({ id: playerId, pause: () => player.pause() })
       player.play()
     } catch (error: unknown) {
+      setHasPlaybackStarted(false)
       deactivateVoicePlayer(player.id)
       toast.show({ message: `${"无法播放语音"}：${error instanceof Error ? error.message : "请稍后重试"}`, modal: false, type: "text", duration: 1_000 })
+    } finally {
+      setIsStarting(false)
     }
   }, [player, playerId, playerStatus.didJustFinish, toast])
 
@@ -79,8 +88,14 @@ export function VoiceMessagePlayer({
   }, [resourceUri, startPlayback])
 
   useEffect(() => {
-    if (playerStatus.didJustFinish) deactivateVoicePlayer(playerId)
-  }, [playerId, playerStatus.didJustFinish])
+    const subscription = player.addListener("playbackStatusUpdate", (status) => {
+      if (status.didJustFinish || status.error) {
+        setHasPlaybackStarted(false)
+        deactivateVoicePlayer(playerId)
+      }
+    })
+    return () => subscription.remove()
+  }, [player, playerId])
 
   useEffect(() => {
     const playbackError = playerStatus.error?.trim() ?? ""
@@ -112,6 +127,7 @@ export function VoiceMessagePlayer({
       didLongPressRef.current = false
       return
     }
+    if (isLoading) return
     if (playerStatus.playing) {
       player.pause()
       deactivateVoicePlayer(playerId)
@@ -134,45 +150,31 @@ export function VoiceMessagePlayer({
         didLongPressRef.current = true
         onLongPress()
       }}
-      style={{ gap: 7, width: "100%" }}
+      style={{ alignItems: "center", flexDirection: "row", gap: 12, width: "100%" }}
     >
-      <View style={{ alignItems: "center", flexDirection: "row", gap: 13 }}>
-        <ThemedIcon
-          color={colors.brand5}
-          icon={AudioLines}
-          size={22}
-        />
-        <Text style={{ color: colors.brand5, flex: 1, fontSize: 15, lineHeight: 23 }}>
-          语音 {formatVoiceDuration(durationMS)}
+      <MessageContentIcon color={colors.textPrimary} kind="voice" size={28} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text numberOfLines={1} style={{ color: colors.textPrimary, fontSize: 14, lineHeight: 24 }}>
+          语音 - {formatVoicePlaybackTime(displayedDuration)}
         </Text>
-        <NativeIconButton
-          accessibilityLabel={playerStatus.playing ? "暂停语音" : "播放语音"}
-          disabled={isLoading}
-          onLongPress={() => {
-            didLongPressRef.current = true
-            onLongPress()
-          }}
-          onPress={handlePress}
-          onPressIn={() => {
-            didLongPressRef.current = false
-          }}
-        >
-          {isLoading ? (
-            <XGUILoadingIcon color={colors.brand5} size={18} />
-          ) : (
-            <ThemedIcon
-              color={colors.brand5}
-              icon={playerStatus.playing ? Pause : Play}
-              size={18}
-            />
-          )}
-        </NativeIconButton>
+        <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 12, lineHeight: 16 }}>
+          {transcript || "暂无文字摘要"}
+        </Text>
       </View>
-      {transcript ? (
-        <Text style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>
-          {transcript}
-        </Text>
-      ) : null}
+      <MessageActionButton
+        accessibilityLabel={isLoading ? "正在加载语音" : playerStatus.playing ? "暂停语音" : "播放语音"}
+        kind={isLoading ? "loading" : playerStatus.playing ? "pause" : "play"}
+        strokeWidth={isLoading ? 1.5 : 2}
+        disabled={isLoading}
+        onLongPress={() => {
+          didLongPressRef.current = true
+          onLongPress()
+        }}
+        onPress={handlePress}
+        onPressIn={() => {
+          didLongPressRef.current = false
+        }}
+      />
     </Pressable>
   )
 }

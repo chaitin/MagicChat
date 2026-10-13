@@ -6,11 +6,13 @@
     "node": ">=22 <26"
   },
   "dependencies": {
+    "@hugeicons/core-free-icons": "4.3.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@tabler/icons-react-native": "^3.46.0",
     "@tanstack/react-query": "^5.101.2",
     "expo": "~57.0.7",
     "expo-application": "~57.0.2",
+    "expo-asset": "~57.0.6",
     "expo-audio": "~57.0.2",
     "expo-blur": "~57.0.2",
     "expo-camera": "~57.0.6",

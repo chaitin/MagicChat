@@ -97,10 +97,11 @@ test("附件面板保留安全区、按钮间距和表情滚动高度", async ()
   assert.match(accessory, /marginBottom: -insets\.bottom, paddingBottom: insets\.bottom/)
   assert.match(accessory, /attachments: \{ flexDirection: "row", flexWrap: "wrap", minHeight: 132, paddingHorizontal: 13, paddingVertical: 18 \}/)
   assert.match(accessory, /emojiScroll: \{ maxHeight: 184 \}/)
-  assert.match(accessory, /emojiGrid: \{ flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 13, paddingVertical: 13 \}/)
+  assert.match(accessory, /emojiGrid: \{ flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 13, paddingVertical: 4 \}/)
   assert.match(accessory, /action: \{ alignItems: "center", gap: 7, width: "25%" \}/)
   assert.match(accessory, /disabled=\{disabled\}[\s\S]*?onPress=\{onPress\}/)
-  assert.match(accessory, /onPress=\{\(\) => onEmojiPress\(emoji\.value\)\}/)
+  assert.match(accessory, /onPress=\{\(\) => onSelect\(value\)\}/)
+  assert.match(accessory, /onEmojiPress\(value\)/)
 })
 
 test("头像外层保留尺寸、裁切、圆角与群头像图层", async () => {
@@ -122,7 +123,7 @@ test("会话头像保留话题来源定位、未读徽标和列表背景", async
     source("features/messages/conversation-list.tsx"),
     source("features/search/search-result-list.tsx"),
   ])
-  assert.match(avatar, /const size = topicSourceOnly \? 28 : 44/)
+  assert.match(avatar, /const size = compact \? 28 : 44/)
   assert.match(avatar, /topicSource: \{ borderRadius: 34, bottom: -4, padding: 1, position: "absolute", right: -4, zIndex: 1 \}/)
   assert.match(avatar, /accessible accessibilityLabel=\{`话题来源：\$\{sourceSender\.name\}`\}/)
   assert.match(avatar, /conversation\.unreadCount > 0 \? \([\s\S]*?<XGUIBadge/)
@@ -167,7 +168,7 @@ test("编辑页保留安全区、居中宽度与输入焦点行为", async () =>
 test("会话列表未读提醒保留主题色和字体规格", async () => {
   const list = await source("features/messages/conversation-list.tsx")
   assert.match(list, /item\.unreadAlertLabel \? \([\s\S]*?<Text[\s\S]*?color: colors\.destructive/)
-  assert.match(list, /fontSize: item\.nested \? 12 : 14/)
+  assert.match(list, /fontSize: 14/)
   assert.match(list, /fontWeight: "600"/)
 })
 

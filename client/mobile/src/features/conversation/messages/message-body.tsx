@@ -1,16 +1,7 @@
-import {
-  Download,
-  ExternalLink,
-  FileText,
-  Link as LinkIcon,
-  MessagesSquare,
-} from "lucide-react-native"
 import { memo, useRef, useState } from "react"
 import { Alert, Image, Linking, Pressable, View } from "react-native"
 import { Text } from "@/components/mi-sans-text"
 
-import { NativeIconButton } from "@/components/buttons/native-icon-button"
-import { ThemedIcon } from "@/components/icons/themed-icon"
 import type { ClientMessageBody } from "@/core/models"
 import type { ResourceLoadState } from "@/data/resources"
 import {
@@ -29,8 +20,11 @@ import { MessageChart } from "@/features/conversation/messages/message-chart"
 import { CollapsibleMessageContent } from "@/features/conversation/messages/collapsible-message-content"
 import { MessageMentionText } from "@/features/conversation/messages/message-mention-text"
 import { MessageVideo } from "@/features/conversation/messages/message-video"
+import { MessageContentIcon } from "@/features/conversation/messages/message-content-icon"
+import { useOpenChatRecord } from "@/features/chat-records/chat-record-provider"
+import { MessageActionButton } from "@/features/conversation/messages/message-action-button"
 import { VoiceMessagePlayer } from "@/features/conversation/voice/voice-message-player"
-import { XGUILoadingIcon, useXGUITheme } from "@/xgui"
+import { useXGUITheme } from "@/xgui"
 
 export const MessageBody = memo(function MessageBody({
   body,
@@ -104,10 +98,8 @@ export const MessageBody = memo(function MessageBody({
 
   if (body.type === "link") {
     return (
-      <MessageLinkCard
-        accent="brand5"
-        description={body.url}
-        icon={LinkIcon}
+      <MessageLinkBody
+        url={body.url}
         onLongPress={onMessageLongPress}
         onPress={() => void openExternalUrl(body.url)}
         title={body.title || "链接"}
@@ -118,9 +110,7 @@ export const MessageBody = memo(function MessageBody({
   if (body.type === "card") {
     return (
       <MessageLinkCard
-        accent="link"
         description={body.description}
-        icon={ExternalLink}
         onLongPress={onMessageLongPress}
         onPress={body.url.trim() ? () => void openExternalUrl(body.url) : undefined}
         title={body.title}
@@ -135,6 +125,7 @@ export const MessageBody = memo(function MessageBody({
   if (body.type === "file") {
     const state = resourceStates.get(body.fileId)
     const isLoading = state?.status === "loading"
+    const isDownloaded = state?.status === "ready" && Boolean(state.resource)
     return (
       <Pressable
         accessible={false}
@@ -142,41 +133,36 @@ export const MessageBody = memo(function MessageBody({
           didLongPressResourceRef.current = true
           onMessageLongPress()
         }}
-        style={{ gap: 7, width: "100%" }}
+        style={{ alignItems: "center", flexDirection: "row", gap: 12, width: "100%" }}
       >
-        <View style={{ alignItems: "center", flexDirection: "row", gap: 13 }}>
-          <ThemedIcon color={colors.brand5} icon={FileText} size={22} />
-          <Text style={{ color: colors.brand5, flex: 1, fontSize: 15, lineHeight: 23 }}>
-            文件 {formatFileSize(body.sizeBytes)}
+        <MessageContentIcon color={colors.textPrimary} kind="attachment" size={28} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text numberOfLines={1} style={{ color: colors.textPrimary, fontSize: 14, lineHeight: 24 }}>
+            {body.name}
           </Text>
-          <NativeIconButton
-            accessibilityLabel={`打开文件 ${body.name}`}
-            disabled={isLoading}
-            onLongPress={() => {
-              didLongPressResourceRef.current = true
-              onMessageLongPress()
-            }}
-            onPress={() => {
-              if (didLongPressResourceRef.current) {
-                didLongPressResourceRef.current = false
-                return
-              }
-              onResourcePress(body.fileId)
-            }}
-            onPressIn={() => {
-              didLongPressResourceRef.current = false
-            }}
-          >
-            {isLoading ? (
-              <XGUILoadingIcon color={colors.brand5} size={18} />
-            ) : (
-              <ThemedIcon color={colors.brand5} icon={Download} size={18} />
-            )}
-          </NativeIconButton>
+          <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 12, lineHeight: 16 }}>
+            {isLoading ? "下载中" : formatFileSize(body.sizeBytes)}
+          </Text>
         </View>
-        <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>
-          {body.name}
-        </Text>
+        <MessageActionButton
+          accessibilityLabel={isLoading ? `正在下载文件 ${body.name}` : isDownloaded ? `打开文件 ${body.name}` : `下载并打开文件 ${body.name}`}
+          kind={isLoading ? "loading" : isDownloaded ? "open" : "download"}
+          disabled={isLoading}
+          onLongPress={() => {
+            didLongPressResourceRef.current = true
+            onMessageLongPress()
+          }}
+          onPress={() => {
+            if (didLongPressResourceRef.current) {
+              didLongPressResourceRef.current = false
+              return
+            }
+            onResourcePress(body.fileId)
+          }}
+          onPressIn={() => {
+            didLongPressResourceRef.current = false
+          }}
+        />
       </Pressable>
     )
   }
@@ -456,23 +442,53 @@ function MessageImageStatus({
   )
 }
 
+function MessageLinkBody({ title, url, onLongPress, onPress }: {
+  title: string
+  url: string
+  onLongPress: () => void
+  onPress: () => void
+}) {
+  const { colors } = useXGUITheme()
+  const didLongPressRef = useRef(false)
+  return (
+    <Pressable
+      accessibilityLabel={`${title}，${url}`}
+      accessibilityRole="link"
+      onLongPress={() => {
+        didLongPressRef.current = true
+        onLongPress()
+      }}
+      onPress={() => {
+        if (didLongPressRef.current) {
+          didLongPressRef.current = false
+          return
+        }
+        onPress()
+      }}
+      onPressIn={() => { didLongPressRef.current = false }}
+      style={{ alignItems: "center", flexDirection: "row", gap: 12, width: "100%" }}
+    >
+      <MessageContentIcon color={colors.textPrimary} kind="link" size={28} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text numberOfLines={1} style={{ color: colors.textPrimary, fontSize: 14, lineHeight: 24 }}>{title}</Text>
+        <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 12, lineHeight: 16 }}>{url}</Text>
+      </View>
+    </Pressable>
+  )
+}
+
 function MessageLinkCard({
-  accent,
   description,
-  icon,
   onLongPress,
   onPress,
   title,
 }: {
-  accent: "brand5" | "link"
   description: string
-  icon: typeof LinkIcon
   onLongPress: () => void
   onPress?: () => void
   title: string
 }) {
   const { colors } = useXGUITheme()
-  const accentColor = accent === "brand5" ? colors.brand5 : colors.link
   const didLongPressRef = useRef(false)
 
   return (
@@ -493,16 +509,13 @@ function MessageLinkCard({
       onPressIn={() => {
         didLongPressRef.current = false
       }}
-      style={{ backgroundColor: "transparent", gap: 7, width: "100%" }}
+      style={{ backgroundColor: "transparent", gap: 8, width: "100%" }}
     >
-      <View style={{ alignItems: "center", flexDirection: "row", gap: 7 }}>
-        <ThemedIcon color={accentColor} icon={icon} size={18} />
-        <Text numberOfLines={1} style={{ color: accentColor, flex: 1, fontSize: 15, fontWeight: "600", lineHeight: 23 }}>
-          {title}
-        </Text>
-      </View>
+      <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: "500", lineHeight: 23 }}>
+        {title}
+      </Text>
       {description.trim() ? (
-        <Text numberOfLines={4} style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>
+        <Text numberOfLines={3} style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>
           {description}
         </Text>
       ) : null}
@@ -520,6 +533,8 @@ function ForwardBundleBody({
   resolveMentionLabel: MessageMentionLabelResolver
 }) {
   const { colors } = useXGUITheme()
+  const openRecord = useOpenChatRecord()
+  const didLongPressRef = useRef(false)
   const firstItem = body.items[0]
   const firstSummary = firstItem
     ? firstItem.summary.trim() ||
@@ -527,14 +542,24 @@ function ForwardBundleBody({
     : "暂无消息"
 
   return (
-    <Pressable accessible={false} onLongPress={onLongPress} style={{ gap: 7, width: "100%" }}>
-      <View style={{ alignItems: "center", flexDirection: "row", gap: 13 }}>
-        <ThemedIcon color={colors.brand5} icon={MessagesSquare} size={22} />
-        <Text style={{ color: colors.brand5, flex: 1, fontSize: 15, lineHeight: 23 }}>聊天记录</Text>
+    <Pressable
+      accessibilityLabel={`聊天记录，${body.itemCount} 条`}
+      accessibilityRole="button"
+      onLongPress={() => { didLongPressRef.current = true; onLongPress() }}
+      onPress={() => {
+        if (didLongPressRef.current) { didLongPressRef.current = false; return }
+        openRecord(body)
+      }}
+      onPressIn={() => { didLongPressRef.current = false }}
+      style={{ alignItems: "center", flexDirection: "row", gap: 12, width: "100%" }}
+    >
+      <MessageContentIcon color={colors.textPrimary} kind="forward" size={28} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text numberOfLines={1} style={{ color: colors.textPrimary, fontSize: 14, lineHeight: 24 }}>聊天记录</Text>
+        <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 12, lineHeight: 16 }}>
+          {body.itemCount} 条 - {firstSummary}
+        </Text>
       </View>
-      <Text numberOfLines={2} style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>
-        {body.itemCount} 条 - {firstSummary}
-      </Text>
     </Pressable>
   )
 }

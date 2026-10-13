@@ -1,10 +1,11 @@
 import { Redirect, Stack } from "expo-router"
 
 import { useAuth } from "@/providers/auth-provider"
+import { ChatRecordProvider } from "@/features/chat-records/chat-record-provider"
 import { useXGUITheme } from "@/xgui"
 
 export default function AppStackLayout() {
-  const { isAuthenticated, isHydrated } = useAuth()
+  const { generation, isAuthenticated, isHydrated, session } = useAuth()
   const { colors } = useXGUITheme()
 
   if (!isHydrated) return null
@@ -14,36 +15,39 @@ export default function AppStackLayout() {
   }
 
   return (
-    <Stack
-      screenOptions={{
-        contentStyle: { backgroundColor: colors.background0 },
-        headerShown: false,
-      }}
-    >
-      <Stack.Screen name="(drawer)" />
-      <Stack.Screen name="create-group" />
-      <Stack.Screen
-        name="conversation/[conversationId]"
-        options={{ animation: "ios_from_right" }}
-      />
-      <Stack.Screen name="conversation/[conversationId]/details" />
-      <Stack.Screen name="conversation/[conversationId]/report" />
-      <Stack.Screen name="conversation/[conversationId]/add-members" />
-      <Stack.Screen name="conversation/[conversationId]/edit-group/[field]" />
-      <Stack.Screen
-        name="conversation/[parentConversationId]/topic/[conversationId]"
-      />
-      <Stack.Screen name="entity/[entityType]/[entityId]" />
-      <Stack.Screen name="contacts/[category]" />
-      <Stack.Screen name="office/projects" />
-      <Stack.Screen name="search" />
-      <Stack.Screen name="profile" />
-      <Stack.Screen name="profile-nickname" />
-      <Stack.Screen name="account-deactivation" />
-      <Stack.Screen name="qr-scanner" />
-      <Stack.Screen name="qr-result" />
-      <Stack.Screen name="qr-webview" />
-      <Stack.Screen name="storage" />
-    </Stack>
+    <ChatRecordProvider scopeKey={JSON.stringify([session?.id, session?.url, session?.userId, generation])}>
+      <Stack
+        screenOptions={{
+          contentStyle: { backgroundColor: colors.background0 },
+          headerShown: false,
+        }}
+      >
+        <Stack.Screen name="(drawer)" />
+        <Stack.Screen name="create-group" />
+        <Stack.Screen
+          name="conversation/[conversationId]"
+          options={{ animation: "ios_from_right" }}
+        />
+        <Stack.Screen name="chat-records/[recordId]" options={{ animation: "ios_from_right" }} />
+        <Stack.Screen name="conversation/[conversationId]/details" />
+        <Stack.Screen name="conversation/[conversationId]/report" />
+        <Stack.Screen name="conversation/[conversationId]/add-members" />
+        <Stack.Screen name="conversation/[conversationId]/edit-group/[field]" />
+        <Stack.Screen
+          name="conversation/[parentConversationId]/topic/[conversationId]"
+        />
+        <Stack.Screen name="entity/[entityType]/[entityId]" />
+        <Stack.Screen name="contacts/[category]" />
+        <Stack.Screen name="office/projects" />
+        <Stack.Screen name="search" />
+        <Stack.Screen name="profile" />
+        <Stack.Screen name="profile-nickname" />
+        <Stack.Screen name="account-deactivation" />
+        <Stack.Screen name="qr-scanner" />
+        <Stack.Screen name="qr-result" />
+        <Stack.Screen name="qr-webview" />
+        <Stack.Screen name="storage" />
+      </Stack>
+    </ChatRecordProvider>
   )
 }
