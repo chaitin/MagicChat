@@ -24,6 +24,7 @@ function NativeText({ style, children, onPress }: { style?: unknown; children?: 
     "data-font": font.fontFamily,
     "data-weight": font.fontWeight,
     "data-clickable": typeof onPress === "function" || undefined,
+    "data-decoration": font.textDecorationLine,
   }, children)
 }
 
@@ -137,6 +138,18 @@ test("Markdown普通/加粗/斜体/代码文本全部使用同源emoji", () => {
   }))
   assertEmojiFonts(html, ["🙂", "😂", "😮‍💨", "😵‍💫"])
   assert.ok(html.includes('data-weight="600"'))
+})
+
+test("Markdown链接没有下划线，保留点击、Emoji字体与删除线", () => {
+  const html = renderToStaticMarkup(React.createElement(markdown.MarkdownMessage, {
+    ...mentionProps,
+    content: "[说明🙂](https://example.invalid) ~~删除~~",
+    serverUrl: "https://server.invalid",
+  }))
+  assert.ok(html.includes('data-clickable="true"'))
+  assert.ok(!html.includes('data-decoration="underline"'))
+  assert.ok(html.includes('data-decoration="line-through"'))
+  assertEmojiFonts(html, ["🙂"])
 })
 
 test("链接与提及里的emoji字体正确且点击入口保留", () => {

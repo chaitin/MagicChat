@@ -210,7 +210,7 @@ export const MessageComposer = forwardRef<
       mentionTriggerRef.current = mentionTrigger
       setAccessoryMode(null)
       Keyboard.dismiss()
-      requestAnimationFrame(() => setMentionPickerOpen(true))
+      setMentionPickerOpen(true)
     }
   }
 

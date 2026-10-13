@@ -267,19 +267,17 @@ function ChoiceSelectionControl({
       style={[
         styles.selectionControl,
         {
-          backgroundColor: selected ? colors.brand : "transparent",
-          borderColor: selected ? colors.brand : colors.textPlaceholder,
+          backgroundColor: selected ? colors.brand : colors.background0,
         },
       ]}
     >
-      {selected && type === "checkbox" ? (
-        <Check color={colors.textOnColor} size={15} strokeWidth={2.4} />
-      ) : null}
-      {selected && type === "radio" ? (
+      {type === "checkbox" ? (
+        <Check color={colors.textOnColor} size={10} strokeWidth={2} />
+      ) : (
         <View
           style={[styles.radioDot, { backgroundColor: colors.textOnColor }]}
         />
-      ) : null}
+      )}
     </View>
   )
 }
@@ -323,18 +321,18 @@ const styles = StyleSheet.create({
     top: 0,
   },
   radioDot: {
-    borderRadius: 4,
-    height: 8,
-    width: 8,
+    borderRadius: 2.5,
+    height: 5,
+    width: 5,
   },
   selectionControl: {
     alignItems: "center",
-    borderRadius: 11,
-    borderWidth: 1,
-    height: 22,
+    borderRadius: 8,
+    borderWidth: 0,
+    height: 16,
     justifyContent: "center",
-    marginRight: 12,
-    width: 22,
+    marginRight: 8,
+    width: 16,
   },
   submitButton: {
     height: 40,

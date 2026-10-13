@@ -51,6 +51,7 @@ export type XGUIHalfScreenDialogProps = {
   headerLeading?: ReactNode
   onAnimationComplete?: (open: boolean) => void
   onOpenChange: (open: boolean) => void
+  waitForKeyboardToHide?: boolean
   open: boolean
   title: string
 }
@@ -67,17 +68,21 @@ export function XGUIHalfScreenDialog({
   onOpenChange,
   open,
   title,
+  waitForKeyboardToHide = true,
 }: XGUIHalfScreenDialogProps) {
   const { colors } = useXGUITheme()
   const insets = useSafeAreaInsets()
   const { height: windowHeight } = useWindowDimensions()
   const panelHeight = Math.round(windowHeight * HALF_SCREEN_HEIGHT_RATIO)
   const [presentation, setPresentation] = useState(() => ({
-    keyboardReady: !open || !Keyboard.isVisible(),
+    keyboardReady:
+      !open || !waitForKeyboardToHide || !Keyboard.isVisible(),
     open,
   }))
   const presentationOpen =
-    open && presentation.open === open && presentation.keyboardReady
+    open &&
+    presentation.open === open &&
+    (!waitForKeyboardToHide || presentation.keyboardReady)
   const [rendered, setRendered] = useState(presentationOpen)
   const [backdropOpacity] = useState(() => new Animated.Value(0))
   const [panelTranslateY] = useState(() => new Animated.Value(panelHeight))
@@ -88,7 +93,8 @@ export function XGUIHalfScreenDialog({
 
   if (presentation.open !== open) {
     setPresentation({
-      keyboardReady: !open || !Keyboard.isVisible(),
+      keyboardReady:
+        !open || !waitForKeyboardToHide || !Keyboard.isVisible(),
       open,
     })
   }
@@ -103,7 +109,7 @@ export function XGUIHalfScreenDialog({
       Keyboard.dismiss()
       return
     }
-    if (presentation.keyboardReady) return
+    if (!waitForKeyboardToHide || presentation.keyboardReady) return
     const hideSubscription = Keyboard.addListener("keyboardDidHide", () => {
       setPresentation((current) =>
         current.open ? { ...current, keyboardReady: true } : current
@@ -111,7 +117,7 @@ export function XGUIHalfScreenDialog({
     })
     Keyboard.dismiss()
     return () => hideSubscription.remove()
-  }, [open, presentation.keyboardReady])
+  }, [open, presentation.keyboardReady, waitForKeyboardToHide])
 
   useEffect(() => {
     if (open) closeRequestedRef.current = false

@@ -42,7 +42,7 @@ export function TopicReplyPreview({
                       server={server}
                     />
                     <Text numberOfLines={1} style={styles.replyText}>
-                      <Text style={{ color: colors.textPrimary, fontWeight: "600" }}>
+                      <Text style={{ color: colors.textPrimary }}>
                         {reply.author}
                       </Text>
                       <Text style={{ color: colors.textSecondary }}>

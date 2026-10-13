@@ -136,6 +136,7 @@ export function MentionPickerSheet({
         onOpenChange={handleOpenChange}
         open={open}
         title="选择提醒的人"
+        waitForKeyboardToHide={false}
       >
         <HalfScreenSearchInput
           onChangeText={setKeyword}

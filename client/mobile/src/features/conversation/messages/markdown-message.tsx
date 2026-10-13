@@ -471,7 +471,7 @@ function renderInlineNode(
       context.serverUrl
     )
     return (
-      <Text key={key} onPress={url ? () => void openMarkdownUrl(url) : undefined} style={[styles.text, { color: context.linkColor, textDecorationLine: "underline" }]}>
+      <Text key={key} onPress={url ? () => void openMarkdownUrl(url) : undefined} style={[styles.text, { color: context.linkColor }]}>
         {children}
       </Text>
     )

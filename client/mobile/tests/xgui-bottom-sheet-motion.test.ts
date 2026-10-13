@@ -42,8 +42,9 @@ test("选择器与半屏弹层均使用原生覆盖层和动画", async () => {
   assert.match(halfScreen, /animationCompleteRef\.current\?\.\(false\)/)
   assert.match(
     halfScreen,
-    /presentation\.open === open && presentation\.keyboardReady/
+    /presentation\.open === open &&[\s\S]*?\(!waitForKeyboardToHide \|\| presentation\.keyboardReady\)/
   )
+  assert.match(halfScreen, /waitForKeyboardToHide = true/)
   assert.match(halfScreen, /stopTogether: false/)
   assert.match(halfScreen, /Keyboard\.addListener\("keyboardDidHide"/)
   assert.doesNotMatch(halfScreen, /react-native-reanimated|runOnJS|withTiming/)
@@ -60,6 +61,16 @@ test("选择器与半屏弹层均使用原生覆盖层和动画", async () => {
   assert.match(motion, /XGUI_SHEET_UPWARD_DRAG_RESISTANCE = 0\.25/)
   assert.match(halfScreen, /bottom: -XGUI_SHEET_BOTTOM_OVERSCAN/)
   assert.match(halfScreen, /styles\.bottomOverscan/)
+})
+
+test("提及选择器不等待键盘收起就开始显示", async () => {
+  const [composer, picker] = await Promise.all([
+    source("src/features/conversation/composer/message-composer.tsx"),
+    source("src/features/conversation/composer/mention-picker-sheet.tsx"),
+  ])
+
+  assert.match(composer, /Keyboard\.dismiss\(\)\s*setMentionPickerOpen\(true\)/)
+  assert.match(picker, /waitForKeyboardToHide=\{false\}/)
 })
 
 test("弹层上拉使用阻尼并限制最大越界距离", () => {

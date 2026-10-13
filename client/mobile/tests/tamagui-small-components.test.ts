@@ -220,6 +220,8 @@ test("回应按钮与话题预览保留点击、折行与单行省略", async ()
   assert.equal(reactions.match(/onPressIn=\{\(event\) => event\.stopPropagation\(\)\}/g)?.length, 2)
   assert.match(topic, /<Text numberOfLines=\{1\} style=\{styles\.replyText\}>/)
   assert.match(topic, /onPress=\{onOpen\}/)
+  assert.match(topic, /<Text style=\{\{ color: colors\.textPrimary \}\}>\s*\{reply\.author\}/)
+  assert.doesNotMatch(topic, /<Text style=\{\{[^}]*fontWeight[^}]*\}\}>\s*\{reply\.author\}/)
   assert.match(topic, /height: StyleSheet\.hairlineWidth/)
 })
 
