@@ -331,7 +331,9 @@ export function GroupConversationInfo({
             conversationId={activeConversation.id}
             key={activeConversation.id}
             linkedProjects={activeConversation.projects ?? []}
-            onConversationsChanged={refreshConversations}
+            onConversationsChanged={async () => {
+              await refreshConversations()
+            }}
             onProjectsChanged={refreshProjects}
           />
 

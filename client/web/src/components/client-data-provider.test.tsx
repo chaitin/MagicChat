@@ -1056,7 +1056,7 @@ function ReactionSyncProbe() {
       />
       <button
         aria-label="sync loaded messages"
-        onClick={syncLoadedConversationMessages}
+        onClick={() => syncLoadedConversationMessages()}
         type="button"
       />
       <div data-testid="reaction-state">
