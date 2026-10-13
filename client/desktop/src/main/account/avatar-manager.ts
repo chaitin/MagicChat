@@ -42,14 +42,16 @@ export class AvatarManager {
     this.avatarDirectory = path.join(accountDirectory, "avatars")
   }
 
-  getAvatar(request: Omit<AvatarRequest, "targetId">): Promise<AvatarResult> {
+  async getAvatar(request: Omit<AvatarRequest, "targetId">): Promise<AvatarResult> {
     validateReference(request.type, request.id)
     if (request.cacheOnly === true) return this.resolveCachedAvatar(request)
     const key = `${request.type}:${request.id}:${request.theme}`
-    const existing = this.inFlight.get(key)
+    if (request.refresh === true) await this.inFlight.get(key)?.catch(() => undefined)
+    const operationKey = request.refresh === true ? `${key}:refresh` : key
+    const existing = this.inFlight.get(operationKey)
     if (existing) return existing
-    const operation = this.resolveAvatar(request).finally(() => this.inFlight.delete(key))
-    this.inFlight.set(key, operation)
+    const operation = this.resolveAvatar(request).finally(() => this.inFlight.delete(operationKey))
+    this.inFlight.set(operationKey, operation)
     return operation
   }
 
@@ -124,6 +126,7 @@ export class AvatarManager {
     if (
       projectCache &&
       projectCacheAvailable &&
+      !request.refresh &&
       Date.now() - projectCache.checkedAt < AVATAR_MAX_AGE_MS
     ) {
       return { status: "ready", type: "project", resourceUrl: resourceUrl(projectCache) }
@@ -143,14 +146,14 @@ export class AvatarManager {
     const fallbackType = descriptor?.type ?? fallbackTypeFor(request.type)
     if (!descriptor) return { status: "fallback", type: fallbackType }
     if (descriptor.type === "group" && !descriptor.avatarUrl) {
-      return this.resolveGroupComposite(descriptor, request.theme)
+      return this.resolveGroupComposite(descriptor, request.theme, request.refresh)
     }
-    const record = await this.ensureOrdinaryAvatar(descriptor)
+    const record = await this.ensureOrdinaryAvatar(descriptor, request.refresh)
     if (record) return { status: "ready", type: descriptor.type, resourceUrl: resourceUrl(record) }
     if (descriptor.type === "group") {
       const refreshed = this.contacts.getAvatarDescriptor("group", descriptor.id)
       if (refreshed && !refreshed.avatarUrl) {
-        return this.resolveGroupComposite(refreshed, request.theme)
+        return this.resolveGroupComposite(refreshed, request.theme, request.refresh)
       }
     }
     return { status: "fallback", type: descriptor.type }
@@ -176,13 +179,15 @@ export class AvatarManager {
     return this.projects.getAvatarDescriptor(entityId)
   }
 
-  private ensureOrdinaryAvatar(
+  private async ensureOrdinaryAvatar(
     descriptor: AvatarDescriptor | AvatarMemberDescriptor,
+    refresh = false,
   ): Promise<AvatarCacheRecord | undefined> {
     const key = `${descriptor.type}:${descriptor.id}`
     const existing = this.resourceInFlight.get(key)
-    if (existing) return existing
-    const operation = this.loadOrdinaryAvatar(descriptor).finally(() =>
+    if (existing && !refresh) return existing
+    if (existing) await existing.catch(() => undefined)
+    const operation = this.loadOrdinaryAvatar(descriptor, refresh).finally(() =>
       this.resourceInFlight.delete(key),
     )
     this.resourceInFlight.set(key, operation)
@@ -191,16 +196,17 @@ export class AvatarManager {
 
   private async loadOrdinaryAvatar(
     descriptor: AvatarDescriptor | AvatarMemberDescriptor,
+    refresh = false,
   ): Promise<AvatarCacheRecord | undefined> {
     const cached = this.database.getAvatarCache(descriptor.type, descriptor.id)
     const cachedAvailable = cached ? await fileExists(this.localPath(cached.localFile)) : false
     const now = Date.now()
 
-    if (cached && cachedAvailable && now - cached.checkedAt < AVATAR_MAX_AGE_MS) return cached
+    if (!refresh && cached && cachedAvailable && now - cached.checkedAt < AVATAR_MAX_AGE_MS) return cached
     let currentDescriptor = descriptor
     if (
       (descriptor.type === "user" || descriptor.type === "group" || descriptor.type === "app") &&
-      (!descriptor.avatarUrl || (cached && cachedAvailable))
+      (refresh || !descriptor.avatarUrl || (cached && cachedAvailable))
     ) {
       try {
         const refreshed = await this.contacts.refreshAvatarDescriptor(
@@ -214,7 +220,7 @@ export class AvatarManager {
       }
     }
     const sourceUrl = normalizeSourceUrl(this.serverUrl, currentDescriptor.avatarUrl)
-    if (cached && cachedAvailable && cached.sourceUrl === sourceUrl) {
+    if (!refresh && cached && cachedAvailable && cached.sourceUrl === sourceUrl) {
       this.database.touchAvatarCache(cached.type, cached.entityId, now)
       return { ...cached, checkedAt: now }
     }
@@ -226,7 +232,7 @@ export class AvatarManager {
     try {
       const downloaded = await this.client.downloadAvatar(sourceUrl)
       const extension = avatarExtensionFor(downloaded.contentType)
-      const resourceKey = cacheResourceKey(descriptor.type, descriptor.id, sourceUrl)
+      const resourceKey = cacheResourceKey(descriptor.type, descriptor.id, `${sourceUrl}:${createHash("sha256").update(downloaded.bytes).digest("hex")}`)
       const localFile = `${resourceKey}.${extension}`
       await mkdir(this.avatarDirectory, { recursive: true })
       const temporary = this.localPath(`${randomUUID()}.tmp`)
@@ -254,34 +260,39 @@ export class AvatarManager {
   private async resolveGroupComposite(
     descriptor: AvatarDescriptor,
     theme: "light" | "dark",
+    refresh = false,
   ): Promise<AvatarResult> {
     const cacheType = `group-composite-v${compositeStyleVersion}-${theme}`
     const legacy = this.database.deleteAvatarCache(`group-composite-${theme}`, descriptor.id)
     if (legacy) await removeFile(this.localPath(legacy.localFile))
     const cached = this.database.getAvatarCache(cacheType, descriptor.id)
     const cachedAvailable = cached ? await fileExists(this.localPath(cached.localFile)) : false
-    if (cached && cachedAvailable && Date.now() - cached.checkedAt < AVATAR_MAX_AGE_MS) {
+    if (!refresh && cached && cachedAvailable && Date.now() - cached.checkedAt < AVATAR_MAX_AGE_MS) {
       return { status: "ready", type: "group", resourceUrl: resourceUrl(cached) }
     }
 
     let currentDescriptor = descriptor
     let validatedAt: number | undefined
-    if (cached && cachedAvailable) {
+    if (refresh || (cached && cachedAvailable)) {
       try {
         const refreshed = await this.contacts.refreshAvatarDescriptor("group", descriptor.id)
         if (!refreshed) {
-          return { status: "ready", type: "group", resourceUrl: resourceUrl(cached) }
+          return cached && cachedAvailable
+            ? { status: "ready", type: "group", resourceUrl: resourceUrl(cached) }
+            : { status: "fallback", type: "group" }
         }
         currentDescriptor = refreshed
         validatedAt = Date.now()
         if (currentDescriptor.avatarUrl) {
-          const direct = await this.ensureOrdinaryAvatar(currentDescriptor)
+          const direct = await this.ensureOrdinaryAvatar(currentDescriptor, refresh)
           return direct
             ? { status: "ready", type: "group", resourceUrl: resourceUrl(direct) }
             : { status: "fallback", type: "group" }
         }
       } catch {
-        return { status: "ready", type: "group", resourceUrl: resourceUrl(cached) }
+        return cached && cachedAvailable
+          ? { status: "ready", type: "group", resourceUrl: resourceUrl(cached) }
+          : { status: "fallback", type: "group" }
       }
     }
 
@@ -291,7 +302,7 @@ export class AvatarManager {
     const tiles = await Promise.all(
       members.map(async (member) => ({
         member,
-        record: await this.ensureOrdinaryAvatar(member),
+        record: await this.ensureOrdinaryAvatar(member, refresh),
       })),
     )
     const signature = compositeSignature({
@@ -302,7 +313,7 @@ export class AvatarManager {
       members: tiles.map(({ member, record }) => ({
         type: member.type,
         id: member.id,
-        avatarUrl: record?.sourceUrl ?? "",
+        avatarUrl: record?.resourceKey ?? "",
       })),
     })
     if (cached && cachedAvailable && cached.sourceUrl === `composite:${signature}`) {

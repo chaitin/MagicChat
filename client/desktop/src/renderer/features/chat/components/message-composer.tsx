@@ -59,6 +59,7 @@ export function MessageComposer({
   resolvedTheme,
   replyTarget,
   mentionLabelResolver,
+  builtinAssistantName,
   markdownMode,
   takingScreenshot,
   selectingFile,
@@ -90,6 +91,7 @@ export function MessageComposer({
   resolvedTheme: "light" | "dark"
   replyTarget: DesktopMessageReplyTarget | null
   mentionLabelResolver: MentionLabelResolver
+  builtinAssistantName: string | undefined
   markdownMode: boolean
   takingScreenshot: boolean
   selectingFile: boolean
@@ -284,7 +286,7 @@ export function MessageComposer({
               aria-expanded={Boolean(mentionTrigger && filteredCandidates.length)}
               aria-controls={mentionTrigger && filteredCandidates.length ? menuId : undefined}
               aria-autocomplete="list"
-              placeholder={markdownMode ? "输入 Markdown 消息" : "输入消息"}
+              placeholder={`${markdownMode ? "输入 Markdown 消息" : "输入消息"}${builtinAssistantName ? `，可以 @${builtinAssistantName} 来请求 AI 的帮助` : ""}`}
               className={cn("max-h-48 min-h-24 select-text", markdownMode && "font-mono")}
               onBlur={() => {
                 setMentionTrigger(null)

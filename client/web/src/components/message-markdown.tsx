@@ -1,6 +1,6 @@
 import * as React from "react"
 import katex from "katex"
-import ReactMarkdown from "react-markdown"
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown"
 import remarkFlexibleMarkers from "remark-flexible-markers"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
@@ -12,6 +12,8 @@ import {
   type MentionLabelResolver,
 } from "@/lib/message-mentions"
 import { cn } from "@/lib/utils"
+import { resolveDocumentImageURLs } from "@/lib/document-image-api"
+import { markdownAttachmentFileId } from "../../../shared/markdown-attachment"
 import { AppProfilePopover } from "@/components/app-profile-popover"
 import { MarkdownCodeBlock } from "@/components/markdown-code-block"
 import { MessageInlineLink } from "@/components/message-inline-link"
@@ -121,6 +123,13 @@ export const MarkdownRenderer = React.memo(function MarkdownRenderer({
         allowedElements={allowedMarkdownElements}
         components={components}
         remarkPlugins={remarkPlugins}
+        urlTransform={(url, key, node) =>
+          key === "src" &&
+          node.tagName === "img" &&
+          markdownAttachmentFileId(url)
+            ? url
+            : defaultUrlTransform(url)
+        }
         skipHtml
         unwrapDisallowed
       >
@@ -201,6 +210,15 @@ function createMarkdownComponents(
     ),
     hr: () => <hr className="h-px border-0 bg-foreground/20" />,
     img: ({ alt, src }) => {
+      const fileId = markdownAttachmentFileId(src)
+      if (fileId)
+        return (
+          <MarkdownAttachmentImage
+            fileId={fileId}
+            alt={alt ?? ""}
+            variant={variant}
+          />
+        )
       const imageSource = getMarkdownImageSource(src)
 
       return imageSource ? (
@@ -396,6 +414,69 @@ function getMarkdownCodeText(children: React.ReactNode) {
     .map((child) => (typeof child === "string" ? child : ""))
     .join("")
     .replace(/\n$/, "")
+}
+
+function MarkdownAttachmentImage({
+  fileId,
+  alt,
+  variant,
+}: {
+  fileId: string
+  alt: string
+  variant: "document" | "message"
+}) {
+  const [url, setURL] = React.useState("")
+  const [error, setError] = React.useState("")
+  const [attempt, setAttempt] = React.useState(0)
+  React.useEffect(() => {
+    let active = true
+    setURL("")
+    setError("")
+    void resolveDocumentImageURLs([fileId], attempt > 0)
+      .then((result) => {
+        if (!active) return
+        const source = getMarkdownImageSource(
+          result.urls.find((item) => item.fileId === fileId)?.url
+        )
+        if (!source) throw new Error("图片不存在或已过期")
+        setURL(source)
+      })
+      .catch((reason: unknown) => {
+        if (active)
+          setError(reason instanceof Error ? reason.message : "图片加载失败")
+      })
+    return () => {
+      active = false
+    }
+  }, [fileId, attempt])
+  if (error)
+    return (
+      <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+        {alt || "图片"}：{error}
+        <button
+          type="button"
+          className="text-(--weui-link) hover:underline"
+          onClick={() => setAttempt((value) => value + 1)}
+        >
+          重试
+        </button>
+      </span>
+    )
+  return url ? (
+    <img
+      alt={alt}
+      className={cn(
+        "my-1 block h-auto max-w-full rounded-md object-contain",
+        variant === "message" && "max-h-80"
+      )}
+      loading="lazy"
+      decoding="async"
+      src={url}
+      onError={() => setError("图片加载失败或已过期")}
+    />
+  ) : (
+    <span className="text-xs text-muted-foreground">图片加载中…</span>
+  )
 }
 
 function getMarkdownImageSource(src: string | Blob | undefined) {

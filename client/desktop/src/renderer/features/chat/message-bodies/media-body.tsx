@@ -320,8 +320,7 @@ function MediaProgressOverlay({
 }) {
   const percentage = progressPercentage(downloadedBytes, totalBytes)
   return (
-    <span className="absolute inset-0 flex items-center justify-center bg-black/35 text-xs text-white">
-      {percentage === undefined ? "下载中" : `${percentage}%`}
+    <span className="absolute inset-0 bg-black/35">
       <span className="absolute right-0 bottom-0 left-0 h-1 bg-white/25">
         <span
           className={cn(

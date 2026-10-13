@@ -97,7 +97,7 @@ export function MessageReactionChips({
               }
               type="button"
             >
-              {reaction.text}
+              <span className="font-emoji">{reaction.text}</span>
             </button>
             <ReactionParticipantSummary
               conversationId={conversationId}
@@ -245,7 +245,7 @@ function MessageReactionUsersPopover({
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72 p-0">
         <div className="border-b px-4 py-3 text-sm font-medium">
-          {reaction.text} 的参与者（{reaction.count}）
+          <span className="font-emoji">{reaction.text}</span> 的参与者（{reaction.count}）
         </div>
         <div className="max-h-72 overflow-y-auto p-2">
           {loading ? (

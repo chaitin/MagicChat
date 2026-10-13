@@ -9,3 +9,7 @@
 | MiSans-Demibold.woff2 | `7afe3737efaf6a137db0ef4857fbe4033a8802756485ebc7f008e96a4bdedcf2` |
 
 官方压缩包未附授权文件；发布前需核对字体使用与分发条款。
+
+## Noto Color Emoji
+
+Emoji 使用与 Desktop 一致的 `@infolektuell/noto-color-emoji@0.2.0` WOFF2/COLRv1 字体包，原字体为 Google Noto Color Emoji，许可为 OFL-1.1。随发布资源附带的原始许可位于 `public/licenses/noto-color-emoji.txt`。支持 COLRv1 的浏览器加载原包 WOFF2 子集；支持 sbix 而不支持 COLRv1 的浏览器（例如 Safari）使用共享目录 `assets/fonts/noto-color-emoji/JiyingEmoji.ttf` 中的同源彩色位图。两种技术都不支持的旧浏览器仍会回退到系统字体，不保证完全一致。

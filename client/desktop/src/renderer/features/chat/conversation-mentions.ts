@@ -18,7 +18,7 @@ export type MentionCandidate = {
   searchText: string
 }
 
-const builtinAssistantAppId = "00000000-0000-0000-0000-000000000001"
+export const builtinAssistantAppId = "00000000-0000-0000-0000-000000000001"
 
 export function createMentionCandidates(
   conversation: DesktopConversation | null,

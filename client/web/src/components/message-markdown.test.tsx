@@ -1,9 +1,66 @@
-import { render, screen } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { MessageMarkdown } from "@/components/message-markdown"
+import { resolveDocumentImageURLs } from "@/lib/document-image-api"
+
+vi.mock("@/lib/document-image-api", () => ({
+  resolveDocumentImageURLs: vi.fn(),
+}))
 
 describe("MessageMarkdown", () => {
+  beforeEach(() => vi.mocked(resolveDocumentImageURLs).mockReset())
+
+  it("resolves Desktop attachment references by file ID instead of persisting signed URLs", async () => {
+    vi.mocked(resolveDocumentImageURLs).mockResolvedValue({
+      missingFileIds: [],
+      urls: [
+        {
+          fileId: "file-1",
+          url: "https://example.com/image?signature=temporary",
+          expiresAt: "2099-01-01T00:00:00Z",
+        },
+      ],
+    })
+    render(<MessageMarkdown content="![截图](attachment:file-1)" />)
+    expect(await screen.findByRole("img", { name: "截图" })).toHaveAttribute(
+      "src",
+      "https://example.com/image?signature=temporary"
+    )
+    expect(resolveDocumentImageURLs).toHaveBeenCalledWith(["file-1"], false)
+  })
+
+  it("refreshes the read URL on retry without modifying the Markdown reference", async () => {
+    vi.mocked(resolveDocumentImageURLs)
+      .mockRejectedValueOnce(new Error("图片已过期"))
+      .mockResolvedValueOnce({
+        missingFileIds: [],
+        urls: [
+          {
+            fileId: "file-1",
+            url: "https://example.com/refreshed",
+            expiresAt: "2099-01-01T00:00:00Z",
+          },
+        ],
+      })
+    render(<MessageMarkdown content="![截图](attachment:file-1)" />)
+    fireEvent.click(await screen.findByRole("button", { name: "重试" }))
+    expect(await screen.findByRole("img", { name: "截图" })).toHaveAttribute(
+      "src",
+      "https://example.com/refreshed"
+    )
+    expect(resolveDocumentImageURLs).toHaveBeenLastCalledWith(["file-1"], true)
+  })
+
+  it("does not allow attachment URLs in links or resolve malformed file references", async () => {
+    const { container } = render(
+      <MessageMarkdown content="[链接](attachment:file-1)\n\n![非法图片](attachment:../other)\n\n![脚本](javascript:alert)" />
+    )
+    await waitFor(() => expect(container.querySelector("a")).toBeNull())
+    expect(container.querySelector("img")).toBeNull()
+    expect(resolveDocumentImageURLs).not.toHaveBeenCalled()
+  })
+
   it("preserves rendered DOM nodes when only the mention resolver changes", () => {
     const { rerender } = render(
       <MessageMarkdown

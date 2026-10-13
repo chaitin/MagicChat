@@ -144,12 +144,26 @@ describe("conversation message selection", () => {
     const card = screen.getByRole("button", {
       name: /\[聊天记录\] 2 条 - 第一条/,
     })
+    expect(card).toHaveClass("flex", "items-center", "gap-3")
+    expect(card.querySelector("svg")).toHaveClass("size-7", "text-foreground")
     await user.click(card)
 
     const dialog = screen.getByRole("dialog")
     expect(dialog).not.toHaveTextContent("[聊天记录] 2 条 - 第一条")
     expect(dialog).toHaveTextContent("Alice")
     expect(dialog).toHaveTextContent("Bob")
+    const item = within(dialog).getByText("第一条").closest<HTMLElement>("[data-forward-bundle-item-body]")!
+    expect(item).toHaveClass("w-fit", "max-w-full", "bg-muted")
+    const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue()
+    vi.stubGlobal("isSecureContext", true)
+    try {
+      await user.pointer({ keys: "[MouseRight]", target: item })
+      await user.click(screen.getByRole("menuitem", { name: "复制" }))
+      expect(writeText).toHaveBeenCalledWith("第一条")
+    } finally {
+      vi.unstubAllGlobals()
+      writeText.mockRestore()
+    }
 
     const nestedCard = screen.getByRole("button", {
       name: /\[聊天记录\] 1 条 - 内层消息/,

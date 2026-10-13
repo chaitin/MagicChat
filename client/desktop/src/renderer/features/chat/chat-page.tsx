@@ -167,6 +167,7 @@ export function ChatPage({
     loadAfterMessages,
     loadMessageGap,
     resolveMentionLabel,
+    builtinAssistantName,
     onlineContactKeys,
     setMessageReaction,
     setConversationPinned,
@@ -873,6 +874,7 @@ export function ChatPage({
                       resolvedTheme={resolvedTheme}
                       replyTarget={replyTarget}
                       mentionLabelResolver={resolveMentionLabel}
+                      builtinAssistantName={builtinAssistantName}
                       markdownMode={markdownMode}
                       takingScreenshot={takingScreenshot}
                       selectingFile={selectingFile}

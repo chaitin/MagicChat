@@ -20,6 +20,7 @@ import { MessageAttachment } from "@/components/message-attachment"
 import { MessageImage } from "@/components/message-image"
 import { MessageTextWithLinks } from "@/components/message-inline-link"
 import { MessageLink } from "@/components/message-link"
+import { MessageContentIcon } from "@/components/message-content-icon"
 import { MessageMarkdown } from "@/components/message-markdown"
 import { MessageCard } from "@/components/message-card"
 import { MessageRenderErrorBoundary } from "@/components/message-render-error-boundary"
@@ -631,7 +632,7 @@ function areAppProfilesEqual(
 }
 
 async function copyMessageToClipboard(
-  message: ConversationPanelMessage,
+  message: Pick<ConversationPanelMessage, "body">,
   selectedText: string,
   messageElement: HTMLElement | null,
   mentionLabelResolver: MentionLabelResolver
@@ -683,7 +684,7 @@ function rangeIntersectsElement(range: Range, element: HTMLElement) {
 }
 
 function getMessageCopyText(
-  message: ConversationPanelMessage,
+  message: Pick<ConversationPanelMessage, "body">,
   mentionLabelResolver: MentionLabelResolver
 ) {
   switch (message.body.type) {
@@ -986,7 +987,7 @@ function TopicReplyPreview({
       )}
       <div className="flex w-full items-center justify-between gap-3">
         <button
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-teal-600 transition-colors hover:text-teal-500 disabled:pointer-events-none dark:text-teal-400 dark:hover:text-teal-300"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-(--weui-link) disabled:pointer-events-none"
           disabled={!onOpen}
           onClick={onOpen}
           type="button"
@@ -1320,18 +1321,16 @@ function ForwardBundleMessage({
     <Dialog>
       <DialogTrigger asChild>
         <button
-          className="grid w-80 max-w-full cursor-pointer gap-2 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={summary}
+          className="flex w-80 max-w-full cursor-pointer items-center gap-3 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
           type="button"
         >
-          <span className="flex min-w-0 items-center gap-3">
-            <MessagesSquare
-              aria-hidden="true"
-              className="size-4.5 shrink-0 text-muted-foreground"
-            />
-            <span className="min-w-0 flex-1 text-sm">聊天记录</span>
-          </span>
-          <span className="block truncate text-xs text-muted-foreground">
-            {summary}
+          <MessageContentIcon kind="forward" className="size-7 shrink-0 text-foreground" strokeWidth={1.5} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate leading-6">聊天记录</span>
+            <span className="block max-w-full truncate text-xs text-muted-foreground" title={summary}>
+              {summary.replace(/^\[聊天记录\]\s*/, "")}
+            </span>
           </span>
         </button>
       </DialogTrigger>
@@ -1348,7 +1347,7 @@ function ForwardBundleMessage({
               className="border-b py-4 last:border-b-0"
               key={`${item.sentAt}-${index}`}
             >
-              <div className="mb-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+              <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="truncate font-medium text-foreground/80">
                   {item.senderName}
                 </span>
@@ -1378,17 +1377,29 @@ function ForwardBundleItemBody({
   currentUserId: string
   mentionLabelResolver: MentionLabelResolver
 }) {
+  const elementRef = React.useRef<HTMLDivElement>(null)
+  const selectedTextRef = React.useRef("")
   return (
-    <div
-      className="w-full rounded-md bg-zinc-100 p-3 dark:bg-zinc-800"
-      data-forward-bundle-item-body
+    <MessageActionMenu
+      onCopy={() => {
+        const selected = selectedTextRef.current
+        selectedTextRef.current = ""
+        void copyMessageToClipboard({ body }, selected, elementRef.current, mentionLabelResolver)
+      }}
     >
-      <MessageBodyRenderer
-        body={body}
-        currentUserId={currentUserId}
-        mentionLabelResolver={mentionLabelResolver}
-      />
-    </div>
+      <div
+        ref={elementRef}
+        className="w-fit max-w-full rounded-md bg-muted p-3 hover:bg-foreground/5 data-[state=open]:bg-foreground/5"
+        data-forward-bundle-item-body
+        onContextMenu={() => { selectedTextRef.current = getSelectedTextWithinElement(elementRef.current) }}
+      >
+        <MessageBodyRenderer
+          body={body}
+          currentUserId={currentUserId}
+          mentionLabelResolver={mentionLabelResolver}
+        />
+      </div>
+    </MessageActionMenu>
   )
 }
 

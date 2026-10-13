@@ -10,6 +10,7 @@ import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import type { MentionTarget } from "@/lib/message-mentions"
 import { shouldReloadConversationListForSelection } from "@/features/chat/conversation-list-order"
 import { createCoalescedConversationListLoader } from "@/features/chat/conversation-list-loader"
+import { builtinAssistantAppId } from "../conversation-mentions"
 import {
   boundMessageWindow,
   MAX_VISIBLE_MESSAGES,
@@ -1001,6 +1002,7 @@ export function useChatData({
     loadAfterMessages,
     loadMessageGap,
     resolveMentionLabel,
+    builtinAssistantName: mentionLabels.get(`app:${builtinAssistantAppId}`)?.trim(),
     onlineContactKeys: onlineContacts?.targetId === targetId ? onlineContacts.keys : null,
     setMessageReaction,
     setConversationPinned,

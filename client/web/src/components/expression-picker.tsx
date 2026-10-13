@@ -189,7 +189,7 @@ function ExpressionSection({
             variant="ghost"
             onClick={() => onSelect(item)}
           >
-            <span aria-hidden="true">{item.value}</span>
+            <span className="font-emoji" aria-hidden="true">{item.value}</span>
           </Button>
         ))}
       </div>

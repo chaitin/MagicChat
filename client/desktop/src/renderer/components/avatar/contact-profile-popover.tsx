@@ -175,7 +175,7 @@ function ActiveContactProfilePopover({
     if (openingAvatar) return
     setOpeningAvatar(true)
     try {
-      const avatar = await window.desktop!.accountData.getAvatar({ targetId, type, id, theme })
+      const avatar = await window.desktop!.accountData.getAvatar({ targetId, type, id, theme, refresh: true })
       if (!avatar.ok) throw new Error(avatar.error.message)
       if (avatar.data.status !== "ready") {
         showToast({ title: "暂无可预览的头像", status: "info" })
@@ -337,6 +337,7 @@ function ActiveContactProfilePopover({
                 theme={theme}
                 size={56}
                 label={name}
+                refresh
               />
             </button>
             <div className="min-w-0 flex-1">

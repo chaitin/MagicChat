@@ -44,7 +44,12 @@ describe("conversation topic preview", () => {
     expect(onOpenTopic).toHaveBeenCalledWith("topic-1")
     onOpenTopic.mockClear()
 
-    await userEvent.click(screen.getByRole("button", { name: "查看话题" }))
+    const openTopic = screen.getByRole("button", { name: "查看话题" })
+    expect(openTopic).toHaveClass("text-(--weui-link)")
+    expect(openTopic.className).not.toMatch(/hover:|transition-colors|text-teal/)
+    await userEvent.hover(openTopic)
+    expect(openTopic).toHaveClass("text-(--weui-link)")
+    await userEvent.click(openTopic)
     expect(onOpenTopic).toHaveBeenCalledWith("topic-1")
   })
 })

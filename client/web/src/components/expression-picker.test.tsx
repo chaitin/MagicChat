@@ -24,7 +24,9 @@ describe("ExpressionPicker", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "打开表情" }))
     const allSection = screen.getByRole("region", { name: "所有表情" })
-    fireEvent.click(within(allSection).getByRole("button", { name: "握手" }))
+    const handshake = within(allSection).getByRole("button", { name: "握手" })
+    expect(handshake.querySelector("span")).toHaveClass("font-emoji")
+    fireEvent.click(handshake)
 
     expect(onSelect).toHaveBeenCalledWith({
       label: "握手",

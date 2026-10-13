@@ -28,6 +28,7 @@ export function EntityAvatar({
   className,
   imageBackgroundClassName = "bg-xgui-background-1",
   cacheOnly = false,
+  refresh = false,
 }: {
   targetId: string
   type: AvatarType
@@ -38,11 +39,12 @@ export function EntityAvatar({
   className?: string
   imageBackgroundClassName?: string
   cacheOnly?: boolean
+  refresh?: boolean
 }) {
   const defaultFallbackType = type === "topic" ? "group" : type
   const [result, setResult] = useState<AvatarResult | null>(null)
   const retryCount = useRef(0)
-  const referenceKey = `${targetId}:${type}:${id}:${theme}:${cacheOnly}`
+  const referenceKey = `${targetId}:${type}:${id}:${theme}:${cacheOnly}:${refresh}`
   const currentReference = useRef(referenceKey)
   currentReference.current = referenceKey
 
@@ -54,7 +56,7 @@ export function EntityAvatar({
       setResult({ status: "fallback", type: defaultFallbackType })
       return
     }
-    function refresh() {
+    function reload(force = false) {
       const current = ++generation
       setResult(null)
       void window
@@ -64,6 +66,7 @@ export function EntityAvatar({
           id,
           theme,
           ...(cacheOnly ? { cacheOnly: true } : {}),
+          ...(force ? { refresh: true } : {}),
         })
         .then((response) => {
           if (cancelled || current !== generation) return
@@ -75,7 +78,7 @@ export function EntityAvatar({
           }
         })
     }
-    refresh()
+    reload(refresh)
     const unsubscribe =
       (type === "user" || type === "group") && !cacheOnly
         ? window.desktop.accountData.onChanged((event) => {
@@ -86,7 +89,7 @@ export function EntityAvatar({
                   event.domains.includes("contacts") &&
                   event.conversationIds.includes(id)))
             ) {
-              refresh()
+              reload()
             }
           })
         : undefined
@@ -94,7 +97,7 @@ export function EntityAvatar({
       cancelled = true
       unsubscribe?.()
     }
-  }, [cacheOnly, defaultFallbackType, id, targetId, theme, type])
+  }, [cacheOnly, defaultFallbackType, id, refresh, targetId, theme, type])
 
   async function retryAfterRenderFailure() {
     const failedReference = referenceKey
