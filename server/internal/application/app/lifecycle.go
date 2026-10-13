@@ -217,6 +217,7 @@ func deleteUnauthorizedDirectAppEvents(tx *gorm.DB, appID string, allowedUserIDs
 				SELECT 1
 				FROM app_conversations ac
 				WHERE ac.app_id = ?
+				  AND ac.app_initiated = false
 				  AND ac.user_id NOT IN ?
 				  AND CAST(ac.conversation_id AS TEXT) IN (
 					app_event_outbox.payload -> 'conversation' ->> 'id',

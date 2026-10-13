@@ -6,6 +6,7 @@ import (
 	"time"
 
 	appapp "app/internal/application/app"
+	conversationapp "app/internal/application/conversation"
 	"app/internal/application/conversationaccess"
 	"app/internal/store"
 
@@ -28,11 +29,26 @@ func (s *Service) CreateAsApp(ctx context.Context, cmd CreateAsAppCommand) (Crea
 	choiceUserIDs := []string{}
 
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if _, err := appapp.LockUsableApp(tx, cmd.AppID); err != nil {
+		app, err := appapp.LockUsableApp(tx, cmd.AppID)
+		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return errConversationAccessDenied
 			}
 			return err
+		}
+		if err := lockAppMessageSend(tx, cmd.AppID); err != nil {
+			return err
+		}
+		now, err := s.appMessageSendTime(tx)
+		if err != nil {
+			return err
+		}
+		if cmd.TargetUserID != "" {
+			opened, _, err := conversationapp.OpenAppInitiatedConversation(tx, app, cmd.TargetUserID, now)
+			if err != nil {
+				return err
+			}
+			cmd.ConversationID = opened.ID
 		}
 		access, member, participant, err := requireAppConversationAccess(tx, cmd.ConversationID, cmd.AppID, true, false)
 		if err != nil {
@@ -62,6 +78,26 @@ func (s *Service) CreateAsApp(ctx context.Context, cmd CreateAsAppCommand) (Crea
 		if participant != nil {
 			visibleFromSeq = participant.HistoryVisibleFromSeq
 		}
+		var recipient *string
+		if directID, ok := conversationaccess.DirectAppConversationID(access); ok {
+			var relation store.AppConversation
+			if err := tx.First(&relation, "conversation_id = ?", directID).Error; err != nil {
+				return err
+			}
+			var user store.User
+			if err := tx.First(&user, "id = ? AND status = ?", relation.UserID, store.UserStatusActive).Error; err != nil {
+				return err
+			}
+			recipient = &relation.UserID
+			if relation.AppID == cmd.AppID {
+				if err := tx.Model(&store.AppConversation{}).Where("conversation_id = ?", directID).Update("app_initiated", true).Error; err != nil {
+					return err
+				}
+			}
+		}
+		if err := reserveAppMessageSend(tx, cmd.AppID, cmd.ClientMessageID, recipient, now); err != nil {
+			return err
+		}
 		if err := validateReplyToMessage(tx, cmd.ConversationID, visibleFromSeq, replyToMessageID); err != nil {
 			return err
 		}
@@ -69,7 +105,13 @@ func (s *Service) CreateAsApp(ctx context.Context, cmd CreateAsAppCommand) (Crea
 		if err != nil {
 			return err
 		}
-		now := time.Now().UTC()
+		now, err = s.appMessageSendTime(tx)
+		if err != nil {
+			return err
+		}
+		if err := tx.Model(&store.AppMessageSend{}).Where("app_id = ? AND client_message_id = ?", cmd.AppID, cmd.ClientMessageID).Update("created_at", now).Error; err != nil {
+			return err
+		}
 		message = store.Message{
 			ID: uuid.NewString(), ConversationID: cmd.ConversationID, Seq: conversation.LastMessageSeq + 1,
 			SenderType: store.MessageSenderTypeApp, SenderID: &cmd.AppID, ClientMessageID: &cmd.ClientMessageID,

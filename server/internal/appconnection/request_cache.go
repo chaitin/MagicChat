@@ -113,6 +113,11 @@ func (c *requestCache) Do(appID string, request realtime.Envelope, execute func(
 	c.totalBytes += entry.sizeBytes
 	c.touchLocked(entry)
 	close(entry.done)
+	// A transient refusal must be re-evaluated after the sender waits;
+	// successful responses retain the usual idempotency cache.
+	if response.Error != nil && response.Error.Code == "rate_limited" {
+		c.removeLocked(key, entry)
+	}
 	c.enforceLimitsLocked()
 	c.mu.Unlock()
 	return response

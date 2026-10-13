@@ -555,7 +555,7 @@ func loadUserAccessibleAppIDSet(db *gorm.DB, userID string, apps map[string]stor
 	}
 	sort.Strings(appIDs)
 	var accessibleIDs []string
-	if err := appapp.ApplyUserAccessScope(db.Model(&store.App{}), userID).
+	if err := appapp.ApplyConversationUserAccessScope(db.Model(&store.App{}), userID).
 		Where("apps.id IN ?", appIDs).Order("apps.id ASC").Pluck("apps.id", &accessibleIDs).Error; err != nil {
 		return nil, err
 	}

@@ -593,7 +593,21 @@ type AppConversation struct {
 	User           User         `gorm:"constraint:OnDelete:CASCADE;"`
 	ConversationID string       `gorm:"type:uuid;not null;uniqueIndex"`
 	Conversation   Conversation `gorm:"constraint:OnDelete:CASCADE;"`
+	AppInitiated   bool         `gorm:"not null;default:false"`
 	CreatedAt      time.Time    `gorm:"not null"`
+}
+
+type AppMessageSendState struct {
+	AppID string `gorm:"type:uuid;primaryKey"`
+	App   App    `gorm:"constraint:OnDelete:CASCADE;"`
+}
+
+type AppMessageSend struct {
+	AppID           string    `gorm:"type:uuid;primaryKey;index:app_message_sends_window,priority:1"`
+	App             App       `gorm:"constraint:OnDelete:CASCADE;"`
+	ClientMessageID string    `gorm:"size:128;primaryKey"`
+	RecipientUserID *string   `gorm:"type:uuid"`
+	CreatedAt       time.Time `gorm:"not null;index:app_message_sends_window,priority:2"`
 }
 
 type AppUserGrant struct {

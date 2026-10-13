@@ -123,6 +123,8 @@ func migrateTestSchema(db *gorm.DB) error {
 		&store.TemporaryFile{},
 		&store.App{},
 		&store.AppConversation{},
+		&store.AppMessageSendState{},
+		&store.AppMessageSend{},
 		&store.AppUserGrant{},
 		&store.ConversationTopic{},
 		&store.ConversationTopicParticipant{},

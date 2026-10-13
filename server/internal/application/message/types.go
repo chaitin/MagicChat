@@ -337,6 +337,7 @@ type CreateAsAppCommand struct {
 	Body             json.RawMessage
 	ClientMessageID  string
 	ConversationID   string
+	TargetUserID     string
 	Finalize         FinalizeBody
 	ReplyToMessageID string
 }

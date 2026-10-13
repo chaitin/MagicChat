@@ -46,8 +46,9 @@ type Envelope struct {
 }
 
 type ErrorPayload struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code              string `json:"code"`
+	Message           string `json:"message"`
+	RetryAfterSeconds int    `json:"retry_after_seconds,omitempty"`
 }
 
 func NewEvent(event string, payload any) Envelope {

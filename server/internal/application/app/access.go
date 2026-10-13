@@ -55,6 +55,19 @@ func LockUserAccessibleApp(db *gorm.DB, appID string, userID string) (store.App,
 	return lockApp(query)
 }
 
+// ApplyConversationUserAccessScope permits replies to an app-initiated direct
+// conversation without exposing the application in discovery directories.
+func ApplyConversationUserAccessScope(query *gorm.DB, userID string) *gorm.DB {
+	return ApplyUsableScope(query).Where(
+		"visibility = ? OR creator_user_id = ? OR (visibility = ? AND "+userGrantExistsSQL+") OR EXISTS (SELECT 1 FROM app_conversations ac WHERE ac.app_id = apps.id AND ac.user_id = ? AND ac.app_initiated = ?)",
+		store.AppVisibilityPublic, userID, store.AppVisibilityRestricted, userID, userID, true,
+	)
+}
+
+func LockConversationUserApp(db *gorm.DB, appID, userID string) (store.App, error) {
+	return lockApp(ApplyConversationUserAccessScope(appLockQuery(db, []string{appID}), userID))
+}
+
 // LockUserAccessibleApps acquires shared row locks in stable ID order and
 // returns all usable applications the user may discover and use directly.
 func LockUserAccessibleApps(db *gorm.DB, appIDs []string, userID string) ([]store.App, error) {

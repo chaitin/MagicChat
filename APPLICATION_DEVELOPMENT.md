@@ -445,7 +445,14 @@ function resolvePendingRequest(replyTo, envelope) {
 }
 ```
 
-`target.type=user` 会创建或复用用户与应用的一对一会话，目标用户必须处于应用可见范围内。其他目标要求当前应用仍是会话成员且会话可发言。
+`target.type=user` 会创建或复用用户与应用的一对一会话。只要目标是有效用户，应用不受自身 `visibility`（创建者、指定用户或公开）限制即可主动发送；目标用户会收到应用消息并可以回复。应用需要知道目标用户 ID，`users.get` 的可见范围规则不因此改变。其他目标要求当前应用仍是会话成员且会话可发言。
+
+每个应用的 `message.send` 共享以下滚动 60 秒限额（所有 WebSocket 连接合计）：
+
+- 最多发送 50 条消息；
+- 最多向 5 个不同用户发送私聊消息。向同一用户重复发送不增加人数，但仍计入 50 条消息。
+
+超出任一限额时请求会失败，错误码为 `rate_limited`，并可能包含 `retry_after_seconds`。被限流的请求不会创建会话或消息；等待后使用原请求 ID 重试即可。
 
 可发送的消息类型包括 `text`、`markdown`、`choice`、`link`、`card`、`chart`、`image` 和 `file`。不能发送 `entity_card`。图片和文件应提供可由 Server 拉取的 URL，整个 Envelope 仍受 1 MiB 限制。
 

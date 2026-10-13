@@ -39,7 +39,7 @@ func RequireUserDirectAppAccess(db *gorm.DB, value Context, userID string) error
 		}
 		return err
 	}
-	if _, err := appapp.LockUserAccessibleApp(db, relation.AppID, relation.UserID); err != nil {
+	if _, err := appapp.LockConversationUserApp(db, relation.AppID, relation.UserID); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrDirectAppAccessDenied
 		}
@@ -49,6 +49,14 @@ func RequireUserDirectAppAccess(db *gorm.DB, value Context, userID string) error
 }
 
 func RequireAppDirectUserAccess(db *gorm.DB, value Context, appID string) error {
+	return requireAppDirectAccess(db, value, appID, false)
+}
+
+func RequireAppDirectSendAccess(db *gorm.DB, value Context, appID string) error {
+	return requireAppDirectAccess(db, value, appID, true)
+}
+
+func requireAppDirectAccess(db *gorm.DB, value Context, appID string, sending bool) error {
 	conversationID, ok := DirectAppConversationID(value)
 	if !ok {
 		return nil
@@ -78,7 +86,13 @@ func RequireAppDirectUserAccess(db *gorm.DB, value Context, appID string) error 
 		}
 		return err
 	}
-	if _, err := appapp.LockUserAccessibleApp(db, relation.AppID, relation.UserID); err != nil {
+	var err error
+	if sending {
+		_, err = appapp.LockUsableApp(db, relation.AppID)
+	} else {
+		_, err = appapp.LockConversationUserApp(db, relation.AppID, relation.UserID)
+	}
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrDirectAppAccessDenied
 		}

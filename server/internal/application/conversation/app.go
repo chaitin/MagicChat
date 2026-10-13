@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	appapp "app/internal/application/app"
 	"app/internal/appregistry"
@@ -84,23 +85,8 @@ func (s *Service) getOrCreateAccessibleAppConversation(db *gorm.DB, current stor
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
-		conversation = store.Conversation{ID: uuid.NewString(), Kind: store.ConversationKindApp, Name: app.Name, Avatar: app.Avatar, CreatedByUserID: current.ID, Status: store.ConversationStatusActive, PostingPolicy: store.ConversationPostingPolicyOpen, Visibility: store.ConversationVisibilityPrivate, CreatedAt: now, UpdatedAt: now}
-		if err := tx.Create(&conversation).Error; err != nil {
-			return err
-		}
-		members := []store.ConversationMember{
-			{ConversationID: conversation.ID, MemberType: store.ConversationMemberTypeUser, MemberID: current.ID, Role: store.ConversationMemberRoleOwner, JoinedAt: now, HistoryVisibleFromSeq: 1},
-			{ConversationID: conversation.ID, MemberType: store.ConversationMemberTypeApp, MemberID: app.ID, Role: store.ConversationMemberRoleMember, JoinedAt: now, HistoryVisibleFromSeq: 1},
-		}
-		if err := tx.Create(&members).Error; err != nil {
-			return err
-		}
-		if !appregistry.IsAIAssistantAppID(app.ID) {
-			if err := ensureAssistantMember(tx, conversation.ID, 1, now); err != nil {
-				return err
-			}
-		}
-		if err := tx.Create(&store.AppConversation{AppID: app.ID, UserID: current.ID, ConversationID: conversation.ID, CreatedAt: now}).Error; err != nil {
+		conversation, err = createAppConversation(tx, app, current.ID, now, false)
+		if err != nil {
 			return err
 		}
 		created = true
@@ -115,6 +101,46 @@ func (s *Service) getOrCreateAccessibleAppConversation(db *gorm.DB, current stor
 		return store.Conversation{}, store.App{}, false, err
 	}
 	return conversation, app, created, nil
+}
+
+// OpenAppInitiatedConversation runs inside the message transaction so a failed
+// send cannot leave an empty conversation or grant reply access.
+func OpenAppInitiatedConversation(tx *gorm.DB, app store.App, userID string, now time.Time) (store.Conversation, bool, error) {
+	var user store.User
+	if err := tx.First(&user, "id = ? AND status = ?", userID, store.UserStatusActive).Error; err != nil {
+		return store.Conversation{}, false, err
+	}
+	existing, err := findAppByUser(tx, app.ID, userID)
+	if err == nil {
+		err = tx.Model(&store.AppConversation{}).Where("app_id = ? AND user_id = ?", app.ID, userID).Update("app_initiated", true).Error
+		return existing, false, err
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return store.Conversation{}, false, err
+	}
+	conversation, err := createAppConversation(tx, app, userID, now, true)
+	return conversation, true, err
+}
+
+func createAppConversation(tx *gorm.DB, app store.App, userID string, now time.Time, initiated bool) (store.Conversation, error) {
+	conversation := store.Conversation{ID: uuid.NewString(), Kind: store.ConversationKindApp, Name: app.Name, Avatar: app.Avatar, CreatedByUserID: userID, Status: store.ConversationStatusActive, PostingPolicy: store.ConversationPostingPolicyOpen, Visibility: store.ConversationVisibilityPrivate, CreatedAt: now, UpdatedAt: now}
+	if err := tx.Create(&conversation).Error; err != nil {
+		return store.Conversation{}, err
+	}
+	members := []store.ConversationMember{
+		{ConversationID: conversation.ID, MemberType: store.ConversationMemberTypeUser, MemberID: userID, Role: store.ConversationMemberRoleOwner, JoinedAt: now, HistoryVisibleFromSeq: 1},
+		{ConversationID: conversation.ID, MemberType: store.ConversationMemberTypeApp, MemberID: app.ID, Role: store.ConversationMemberRoleMember, JoinedAt: now, HistoryVisibleFromSeq: 1},
+	}
+	if err := tx.Create(&members).Error; err != nil {
+		return store.Conversation{}, err
+	}
+	if !appregistry.IsAIAssistantAppID(app.ID) {
+		if err := ensureAssistantMember(tx, conversation.ID, 1, now); err != nil {
+			return store.Conversation{}, err
+		}
+	}
+	err := tx.Create(&store.AppConversation{AppID: app.ID, UserID: userID, ConversationID: conversation.ID, AppInitiated: initiated, CreatedAt: now}).Error
+	return conversation, err
 }
 
 func findAppByUser(db *gorm.DB, appID, userID string) (store.Conversation, error) {

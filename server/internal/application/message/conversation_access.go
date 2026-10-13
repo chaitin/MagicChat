@@ -146,7 +146,7 @@ func validateAppConversationSendable(db *gorm.DB, value conversationaccess.Conte
 			return err
 		}
 	}
-	if err := conversationaccess.RequireAppDirectUserAccess(db, value, appID); err != nil {
+	if err := conversationaccess.RequireAppDirectSendAccess(db, value, appID); err != nil {
 		if errors.Is(err, conversationaccess.ErrDirectAppAccessDenied) {
 			return errAppDirectAccessDenied
 		}

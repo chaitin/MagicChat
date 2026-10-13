@@ -306,8 +306,9 @@ type appConversationSummaryPayload struct {
 }
 
 type appRequestFailure struct {
-	Code    string
-	Message string
+	Code              string
+	Message           string
+	RetryAfterSeconds int
 }
 
 func (e appRequestFailure) Error() string {
@@ -732,7 +733,8 @@ func (s *Server) handleAppSendMessage(appID string, request realtime.Envelope) (
 
 	createdMessage, err := s.messages.CreateAsApp(context.Background(), messageapp.CreateAsAppCommand{
 		AppID: appID, Body: prepared.Body, ClientMessageID: request.ID, ConversationID: conversation.ID,
-		Finalize: messageapp.FinalizeBody(prepared.Finalize), ReplyToMessageID: req.ReplyToMessageID,
+		TargetUserID: target.UserID,
+		Finalize:     messageapp.FinalizeBody(prepared.Finalize), ReplyToMessageID: req.ReplyToMessageID,
 	})
 	if err != nil {
 		return appSendMessageResponse{}, mapMessageApplicationErrorForApp(err)
@@ -741,7 +743,7 @@ func (s *Server) handleAppSendMessage(appID string, request realtime.Envelope) (
 
 	return appSendMessageResponse{
 		Conversation: appMessageConversationPayload{
-			ID:   conversation.ID,
+			ID:   message.ConversationID,
 			Name: conversation.Name,
 			Type: conversation.Kind,
 		},
@@ -2071,15 +2073,6 @@ func (s *Server) prepareAppSendFileMessageBody(ctx context.Context, envelope app
 func (s *Server) findAppSendMessageConversation(appID string, target appSendMessageTarget) (store.Conversation, error) {
 	switch target.Type {
 	case appMessageTargetUser:
-		if !appregistry.IsAIAssistantAppID(appID) {
-			allowed, err := s.apps.CanUserAccess(context.Background(), appID, target.UserID)
-			if err != nil {
-				return store.Conversation{}, err
-			}
-			if !allowed {
-				return store.Conversation{}, newAppRequestFailure("forbidden", "应用无权联系该用户")
-			}
-		}
 		var user store.User
 		err := s.db.First(&user, "id = ? AND status = ?", target.UserID, store.UserStatusActive).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -2097,18 +2090,20 @@ func (s *Server) findAppSendMessageConversation(appID string, target appSendMess
 			return store.Conversation{}, newAppRequestFailure("forbidden", "应用不可用")
 		}
 
-		opened, _, err := s.conversations.OpenAppForUser(
-			context.Background(),
-			conversationActorFromUser(user),
-			app.ID,
-		)
-		if err != nil {
-			if conversationapp.ErrorCodeOf(err) == conversationapp.CodeForbidden {
-				return store.Conversation{}, newAppRequestFailure("forbidden", conversationapp.ErrorMessage(err))
+		var relation store.AppConversation
+		if err := s.db.First(&relation, "app_id = ? AND user_id = ?", app.ID, user.ID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				// Creation is deferred to the message transaction so rate-limited
+				// or otherwise failed requests cannot leave an empty conversation.
+				return store.Conversation{Name: app.Name, Kind: store.ConversationKindApp}, nil
 			}
 			return store.Conversation{}, err
 		}
-		return store.Conversation{ID: opened.ID, Name: opened.Name, Kind: opened.Type}, nil
+		var conversation store.Conversation
+		if err := s.db.First(&conversation, "id = ?", relation.ConversationID).Error; err != nil {
+			return store.Conversation{}, err
+		}
+		return conversation, nil
 	case appMessageTargetGroup, appMessageTargetApp:
 		return s.findAppWritableConversation(appID, target.ConversationID, target.Type)
 	case appMessageTargetTopic:
@@ -2191,7 +2186,9 @@ func (s *Server) findAppWritableConversation(appID string, conversationID string
 func appRequestErrorResponse(replyTo string, err error) realtime.Envelope {
 	var requestErr appRequestFailure
 	if errors.As(err, &requestErr) {
-		return realtime.NewErrorResponse(replyTo, requestErr.Code, requestErr.Message)
+		response := realtime.NewErrorResponse(replyTo, requestErr.Code, requestErr.Message)
+		response.Error.RetryAfterSeconds = requestErr.RetryAfterSeconds
+		return response
 	}
 
 	return realtime.NewErrorResponse(replyTo, "internal_error", "服务端错误")
@@ -2217,6 +2214,8 @@ func mapMessageApplicationErrorForApp(err error) error {
 		return mapAppMessageError(err)
 	}
 	switch messageErr.Code {
+	case messageapp.CodeRateLimited:
+		return appRequestFailure{Code: "rate_limited", Message: messageErr.Message, RetryAfterSeconds: messageErr.RetryAfterSeconds}
 	case messageapp.CodeNotFound:
 		return newAppRequestFailure("not_found", messageErr.Message)
 	case messageapp.CodeForbidden:

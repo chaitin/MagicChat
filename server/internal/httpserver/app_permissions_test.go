@@ -96,7 +96,7 @@ func TestThirdPartyAppWebSocketAllowsOnlyPublicRPCMethods(t *testing.T) {
 	requireAppErrorResponse(t, runAsResponse, "forbidden")
 }
 
-func TestThirdPartyAppMessageSendEnforcesUserVisibility(t *testing.T) {
+func TestThirdPartyAppMessageSendAllowsAnyActiveUser(t *testing.T) {
 	server, db := newTestRouter(t)
 	defer server.Close()
 	now := time.Date(2026, 7, 16, 12, 30, 0, 0, time.UTC)
@@ -162,12 +162,14 @@ func TestThirdPartyAppMessageSendEnforcesUserVisibility(t *testing.T) {
 		name string
 		conn *websocket.Conn
 	}{
-		{name: "creator cannot contact other", conn: creatorConn},
-		{name: "restricted cannot contact ungranted", conn: restrictedConn},
+		{name: "creator can contact other", conn: creatorConn},
+		{name: "restricted can contact ungranted", conn: restrictedConn},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			response := send(test.conn, "deny-"+uuid.NewString(), other.ID)
-			requireAppErrorResponse(t, response, "forbidden")
+			response := send(test.conn, "allow-"+uuid.NewString(), other.ID)
+			if response.OK == nil || !*response.OK {
+				t.Fatalf("response = %#v, want success", response)
+			}
 		})
 	}
 

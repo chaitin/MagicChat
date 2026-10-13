@@ -5,6 +5,7 @@ import "errors"
 type ErrorCode string
 
 const (
+	CodeRateLimited              ErrorCode = "rate_limited"
 	CodeInvalidRequest           ErrorCode = "invalid_request"
 	CodeForbidden                ErrorCode = "forbidden"
 	CodeDirectFriendshipRequired ErrorCode = "direct_friendship_required"
@@ -19,9 +20,10 @@ const (
 )
 
 type Error struct {
-	Code    ErrorCode
-	Message string
-	Cause   error
+	Code              ErrorCode
+	Message           string
+	Cause             error
+	RetryAfterSeconds int
 }
 
 func (e *Error) Error() string {

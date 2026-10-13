@@ -1,6 +1,8 @@
 package message
 
 import (
+	"time"
+
 	"app/internal/application/directmessagepolicy"
 	"app/internal/config"
 
@@ -9,6 +11,7 @@ import (
 
 type Dependencies struct {
 	DB                     *gorm.DB
+	Now                    func() time.Time
 	Bodies                 BodyProcessor
 	ForwardBodies          ForwardBodySanitizer
 	Files                  TemporaryFileValidator
@@ -26,6 +29,7 @@ type Dependencies struct {
 
 type Service struct {
 	db                     *gorm.DB
+	now                    func() time.Time
 	bodies                 BodyProcessor
 	forwardBodies          ForwardBodySanitizer
 	files                  TemporaryFileValidator
@@ -43,11 +47,11 @@ type Service struct {
 
 func NewService(deps Dependencies) *Service {
 	return &Service{
-		db: deps.DB, bodies: deps.Bodies, forwardBodies: deps.ForwardBodies, files: deps.Files,
+		db: deps.DB, now: deps.Now, bodies: deps.Bodies, forwardBodies: deps.ForwardBodies, files: deps.Files,
 		taskNotificationBodies: deps.TaskNotificationBodies, taskReminderBodies: deps.TaskReminderBodies,
 		apps: deps.Apps, notifications: deps.Notifications,
 		reactionNotifications: deps.ReactionNotifications,
-		appEvents: deps.AppEvents, appEventLocker: deps.AppEventLocker,
+		appEvents:             deps.AppEvents, appEventLocker: deps.AppEventLocker,
 		beforeAppEventLock:     deps.BeforeAppEventLock,
 		afterUserMessageCommit: deps.AfterUserMessageCommit,
 		directMessaging:        deps.DirectMessaging,

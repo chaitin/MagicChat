@@ -214,15 +214,15 @@ func TestDirectAppMessagesRequireCurrentAccessWhileGroupMessagesUseMembership(t 
 	if ErrorCodeOf(err) != CodeForbidden || ErrorMessage(err) != "你当前无权直接使用此应用" {
 		t.Fatalf("user direct error = %v", err)
 	}
-	_, err = service.CreateAsApp(context.Background(), CreateAsAppCommand{
+	created, err := service.CreateAsApp(context.Background(), CreateAsAppCommand{
 		AppID: fixture.app.ID, ConversationID: fixture.conversation.ID,
 		ClientMessageID: "denied-app-direct", Body: json.RawMessage(`{"type":"text","content":"hello"}`),
 		Finalize: func(_ context.Context, body json.RawMessage) (json.RawMessage, string, error) {
 			return body, "hello", nil
 		},
 	})
-	if ErrorCodeOf(err) != CodeForbidden || ErrorMessage(err) != "对方当前无权直接使用此应用" {
-		t.Fatalf("app direct error = %v", err)
+	if err != nil || !created.Created {
+		t.Fatalf("app direct send = %#v, error = %v", created, err)
 	}
 	if _, err := service.List(context.Background(), ListCommand{
 		AccountID: fixture.user.ID, ConversationID: fixture.conversation.ID, Limit: 20,
@@ -1079,7 +1079,7 @@ func openMessageTestDB(t *testing.T) *gorm.DB {
 	}
 	if err := db.AutoMigrate(
 		&store.User{}, &store.App{}, &store.Conversation{}, &store.ConversationMember{},
-		&store.Message{}, &store.AppEventOutbox{}, &store.AppConversation{}, &store.AppUserGrant{},
+		&store.Message{}, &store.AppEventOutbox{}, &store.AppConversation{}, &store.AppMessageSendState{}, &store.AppMessageSend{}, &store.AppUserGrant{},
 		&store.ConversationTopic{}, &store.ConversationTopicParticipant{},
 		&store.MessageReaction{}, &store.MessageAppReaction{}, &store.MessageReactionState{},
 		&store.MessageChoiceResponse{},
