@@ -11,6 +11,7 @@ COPY client/web/package.json client/web/pnpm-lock.yaml client/web/pnpm-workspace
 RUN pnpm install --frozen-lockfile
 
 COPY client/web/ ./
+COPY client/shared/ /src/client/shared/
 COPY assets/fonts/ /src/assets/fonts/
 COPY client/admin/public/assets/avatars/builtin /src/client/admin/public/assets/avatars/builtin
 RUN pnpm build
