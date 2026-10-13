@@ -1,11 +1,8 @@
 import { File } from "expo-file-system"
-// eslint-disable-next-line import/no-unresolved
-import IconUser from "@tabler/icons-react-native/IconUser"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Image as NativeImage, Platform, StyleSheet, View } from "react-native"
-import { captureRef, releaseCapture } from "react-native-view-shot"
+import { SvgXml } from "react-native-svg"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { Platform, StyleSheet } from "react-native"
 
-import { CachedAvatarTileImage } from "@/components/avatar/cached-avatar-image"
 import {
   createGroupAvatarIdentity,
   GroupAvatarGenerationLimiter,
@@ -15,12 +12,8 @@ import {
   type GroupAvatarGenerationSnapshot,
   type GroupAvatarVisualTokens,
 } from "@/components/avatar/group-avatar-cache"
-import {
-  AVATAR_FALLBACK_ICON_STROKE_WIDTH,
-  getGroupAvatarFallbackIconSize,
-  getGroupAvatarGridSize,
-  type AvatarMember,
-} from "@/components/avatar/avatar-strategy"
+import { getGroupAvatarGridSize, type AvatarMember } from "@/components/avatar/avatar-strategy"
+import { buildGroupAvatarSvg, type CompositeAvatarTile } from "@/components/avatar/group-avatar-svg"
 import type { ResolvedResource } from "@/core/resource-models"
 import type { ServerTarget } from "@/core/server-target"
 import {
@@ -39,7 +32,8 @@ type GroupAvatarTask = {
 }
 const tasks = new Map<string, GroupAvatarTask>()
 const generationLimiter = new GroupAvatarGenerationLimiter(2)
-let captureQueue = Promise.resolve()
+const GROUP_AVATAR_MAX_AGE_MS = 24 * 60 * 60 * 1_000
+let generationQueue = Promise.resolve()
 subscribeResourceCacheCleared((server) => {
   epochs.invalidate(server)
   if (server) memory.clearServer(server)
@@ -48,7 +42,7 @@ subscribeResourceCacheCleared((server) => {
 
 class GroupAvatarOwnerUnmountedError extends Error {
   constructor() {
-    super("Group avatar capture owner unmounted")
+    super("Group avatar generation owner unmounted")
   }
 }
 class GroupAvatarGenerationInvalidatedError extends Error {
@@ -68,27 +62,24 @@ export function useGroupAvatarComposite({ entries, server, theme, tokens }: {
   const memoryKey = `${server.id}\n${server.url}\n${identity}`
   const [resourceState, setResourceState] = useState(() => ({
     memoryKey,
-    resource: memory.get(memoryKey) ?? null,
+    resource: memory.get(memoryKey, GROUP_AVATAR_MAX_AGE_MS) ?? null,
   }))
-  const resource =
-    resourceState.memoryKey === memoryKey ? resourceState.resource : null
+  const resource = resourceState.memoryKey === memoryKey ? resourceState.resource : null
   const [generate, setGenerate] = useState(false)
-  const [generationSnapshot, setGenerationSnapshot] =
-    useState<GroupAvatarGenerationSnapshot | null>(null)
+  const [generationSnapshot, setGenerationSnapshot] = useState<GroupAvatarGenerationSnapshot | null>(null)
   const [attempt, setAttempt] = useState(0)
   const resolver = useRef<((resource: ResolvedResource) => void) | null>(null)
   const rejecter = useRef<((error: unknown) => void) | null>(null)
   const releaseGenerationRef = useRef<(() => void) | null>(null)
+  const renderRetryRef = useRef({ memoryKey, count: 0 })
   const serverRef = useRef(server)
-  useEffect(() => {
-    serverRef.current = server
-  }, [server])
+  useEffect(() => { serverRef.current = server }, [server])
 
   useEffect(() => {
     if (Platform.OS === "web") return
     const activeServer = serverRef.current
     let active = true
-    const cached = memory.get(memoryKey)
+    const cached = memory.get(memoryKey, GROUP_AVATAR_MAX_AGE_MS)
     if (cached) {
       queueMicrotask(() => {
         if (active) setResourceState({ memoryKey, resource: cached })
@@ -104,7 +95,7 @@ export function useGroupAvatarComposite({ entries, server, theme, tokens }: {
         rejectOwnedTask = reject
         resolver.current = resolve
         rejecter.current = reject
-        void getCachedResource(activeServer, identity).then((disk) => {
+        void getCachedResource(activeServer, identity, { maxAgeMs: GROUP_AVATAR_MAX_AGE_MS }).then((disk) => {
           if (!epochs.isCurrent(activeServer, snapshot)) {
             reject(new GroupAvatarGenerationInvalidatedError())
           } else if (disk) {
@@ -141,14 +132,10 @@ export function useGroupAvatarComposite({ entries, server, theme, tokens }: {
       },
       (error) => {
         if (tasks.get(memoryKey) === currentTask) tasks.delete(memoryKey)
-        if (
-          active &&
-          (error instanceof GroupAvatarOwnerUnmountedError ||
-            error instanceof GroupAvatarGenerationInvalidatedError)
-        ) {
+        if (active && (error instanceof GroupAvatarOwnerUnmountedError || error instanceof GroupAvatarGenerationInvalidatedError)) {
           setAttempt((current) => current + 1)
         }
-      }
+      },
     )
     return () => {
       active = false
@@ -162,24 +149,17 @@ export function useGroupAvatarComposite({ entries, server, theme, tokens }: {
     releaseGenerationRef.current?.()
     releaseGenerationRef.current = null
   }, [])
-
-  const complete = useCallback(
-    (value: ResolvedResource) => {
-      const activeServer = serverRef.current
-      if (
-        !generationSnapshot ||
-        !epochs.isCurrent(activeServer, generationSnapshot)
-      ) {
-        rejecter.current?.(new GroupAvatarGenerationInvalidatedError())
-        void removeCachedResource(activeServer, identity)
-      } else {
-        resolver.current?.(value)
-      }
-      releaseGeneration()
-      setGenerate(false)
-    },
-    [generationSnapshot, identity, releaseGeneration]
-  )
+  const complete = useCallback((value: ResolvedResource) => {
+    const activeServer = serverRef.current
+    if (!generationSnapshot || !epochs.isCurrent(activeServer, generationSnapshot)) {
+      rejecter.current?.(new GroupAvatarGenerationInvalidatedError())
+      void removeCachedResource(activeServer, identity)
+    } else {
+      resolver.current?.(value)
+    }
+    releaseGeneration()
+    setGenerate(false)
+  }, [generationSnapshot, identity, releaseGeneration])
   const fail = useCallback((error: unknown) => {
     rejecter.current?.(error)
     releaseGeneration()
@@ -189,15 +169,19 @@ export function useGroupAvatarComposite({ entries, server, theme, tokens }: {
     const activeServer = serverRef.current
     memory.delete(memoryKey)
     setResourceState({ memoryKey, resource: null })
-    void removeCachedResource(activeServer, identity).finally(() => {
-      setAttempt((current) => current + 1)
-    })
+    if (renderRetryRef.current.memoryKey !== memoryKey) {
+      renderRetryRef.current = { memoryKey, count: 0 }
+    }
+    const retry = renderRetryRef.current.count++ < 1
+    void removeCachedResource(activeServer, identity)
+      .catch(() => undefined)
+      .then(() => { if (retry) setAttempt((current) => current + 1) })
   }, [identity, memoryKey])
 
   return { complete, fail, generate, generationSnapshot, identity, invalidate, resource }
 }
 
-export function GroupAvatarGenerator({ complete, entries, fail, identity, server, size, snapshot, tokens }: {
+export function GroupAvatarGenerator({ complete, entries, fail, identity, server, snapshot, theme }: {
   complete: (resource: ResolvedResource) => void
   entries: AvatarMember[]
   fail: (error: unknown) => void
@@ -205,9 +189,9 @@ export function GroupAvatarGenerator({ complete, entries, fail, identity, server
   server: ServerTarget
   size: number
   snapshot: GroupAvatarGenerationSnapshot
+  theme: "light" | "dark"
   tokens: GroupAvatarVisualTokens
 }) {
-  const ref = useRef<View>(null)
   const completeRef = useRef(complete)
   const failRef = useRef(fail)
   const serverRef = useRef(server)
@@ -216,57 +200,25 @@ export function GroupAvatarGenerator({ complete, entries, fail, identity, server
     failRef.current = fail
     serverRef.current = server
   }, [complete, fail, server])
-  const ready = useRef(new Set<number>())
-  const [readyCount, setReadyCount] = useState(0)
-  const gridSize = getGroupAvatarGridSize(entries.length)
-  const rows = Array.from({ length: Math.ceil(entries.length / gridSize) }, (_, row) => entries.slice(row * gridSize, row * gridSize + gridSize))
-  const markReady = (index: number) => {
-    if (ready.current.has(index)) return
-    ready.current.add(index)
-    setReadyCount(ready.current.size)
-  }
 
   useEffect(() => {
     const activeServer = serverRef.current
-    if (readyCount !== entries.length || !ref.current) return
     let active = true
     const ensureActive = () => {
       if (!active) throw new GroupAvatarOwnerUnmountedError()
     }
-    const capture = async () => {
+    const generateSvg = async () => {
       await waitForNextFrame()
       ensureActive()
-      if (!epochs.isCurrent(activeServer, snapshot)) {
-        throw new GroupAvatarGenerationInvalidatedError()
-      }
-      const uri = await captureRef(ref, {
-        format: "png",
-        height: GROUP_AVATAR_OUTPUT_SIZE,
-        quality: 1,
-        result: "tmpfile",
-        width: GROUP_AVATAR_OUTPUT_SIZE,
-      })
-      let target: Awaited<ReturnType<typeof createResourceCacheTarget>> | null = null
+      if (!epochs.isCurrent(activeServer, snapshot)) throw new GroupAvatarGenerationInvalidatedError()
+      const svg = buildCompositeAvatar(entries, theme)
+      ensureActive()
+      if (!epochs.isCurrent(activeServer, snapshot)) throw new GroupAvatarGenerationInvalidatedError()
+      const target = await createResourceCacheTarget(activeServer, identity, ".svg", { versioned: true })
+      const temporaryUri = target.temporaryFile.uri
       try {
-        ensureActive()
-        if (!epochs.isCurrent(activeServer, snapshot)) {
-          throw new GroupAvatarGenerationInvalidatedError()
-        }
-        target = await createResourceCacheTarget(activeServer, identity, ".png")
-        ensureActive()
-        const source = new File(uri)
-        const capturedBytes = await source.bytes()
-        ensureActive()
-        target.temporaryFile.write(capturedBytes)
-        if (!epochs.isCurrent(activeServer, snapshot)) {
-          throw new GroupAvatarGenerationInvalidatedError()
-        }
-        const copiedSize = capturedBytes.byteLength
-        if (copiedSize <= 0) {
-          throw new Error("Group avatar capture produced an empty PNG")
-        }
-        const resource = await commitResourceCacheTarget(target, copiedSize)
-        target = null
+        target.temporaryFile.write(svg)
+        const resource = await commitResourceCacheTarget(target, new TextEncoder().encode(svg).byteLength)
         ensureActive()
         if (!epochs.isCurrent(activeServer, snapshot)) {
           await removeCachedResource(activeServer, identity)
@@ -274,53 +226,39 @@ export function GroupAvatarGenerator({ complete, entries, fail, identity, server
         }
         completeRef.current(resource)
       } finally {
-        if (target?.temporaryFile.exists) target.temporaryFile.delete()
-        releaseCapture(uri)
+        // File.move updates the source object's URI to the destination.
+        const temporaryFile = new File(temporaryUri)
+        if (temporaryFile.exists) temporaryFile.delete()
       }
     }
-    const queued = captureQueue.then(capture)
-    const handled = queued.catch((error) => {
-      if (active) failRef.current(error)
+    const queued = generationQueue.then(generateSvg)
+    const handled = queued.catch((error) => { if (active) failRef.current(error) })
+    generationQueue = handled.then(() => undefined, () => undefined)
+    return () => { active = false }
+  }, [entries, identity, snapshot, theme])
+
+  return null
+}
+
+function buildCompositeAvatar(entries: AvatarMember[], theme: "light" | "dark") {
+  const tiles: CompositeAvatarTile[] = entries.map((member) => ({
+    type: member.type === "app" ? "app" : "user",
+  }))
+  return buildGroupAvatarSvg(tiles, theme, GROUP_AVATAR_OUTPUT_SIZE)
+}
+
+export function CompositeImage({ fallback, onError, uri }: { fallback?: ReactNode; onError: () => void; uri: string }) {
+  const [xml, setXml] = useState<string | null>(null)
+  useEffect(() => {
+    let active = true
+    new File(uri).text().then((value) => {
+      if (active) setXml(value)
+    }).catch(() => {
+      if (active) onError()
     })
-    captureQueue = handled.then(() => undefined, () => undefined)
-    return () => {
-      active = false
-    }
-  }, [entries.length, identity, readyCount, size, snapshot])
-
-  return (
-    <View accessibilityElementsHidden collapsable={false} importantForAccessibility="no-hide-descendants" pointerEvents="none" ref={ref} style={{ backgroundColor: tokens.background1, height: size, left: 0, overflow: "hidden", position: "absolute", top: 0, width: size, zIndex: 0 }}>
-      <View style={{ flex: 1, justifyContent: "center" }}>
-        {rows.map((row, rowIndex) => (
-          <View key={rowIndex} style={{ alignSelf: "center", backgroundColor: tokens.fallbackBackground, flexDirection: "row", height: size / gridSize }}>
-            {row.map((member, columnIndex) => {
-              const index = rowIndex * gridSize + columnIndex
-              return <GroupTile key={`${member.name}-${index}`} member={member} onReady={() => markReady(index)} server={server} size={size / gridSize} tokens={tokens} />
-            })}
-          </View>
-        ))}
-      </View>
-    </View>
-  )
-}
-
-function GroupTile({ member, onReady, server, size, tokens }: { member: AvatarMember; onReady: () => void; server: ServerTarget; size: number; tokens: GroupAvatarVisualTokens }) {
-  useEffect(() => { if (!member.avatar) onReady() }, [member.avatar, onReady])
-  const overlap = StyleSheet.hairlineWidth
-  return (
-    <View style={{ alignItems: "center", backgroundColor: tokens.fallbackBackground, height: size, justifyContent: "center", width: size }}>
-      <IconUser color={tokens.textOnColor} size={getGroupAvatarFallbackIconSize(size)} strokeWidth={AVATAR_FALLBACK_ICON_STROKE_WIDTH} />
-      {member.avatar ? (
-        <View style={{ backgroundColor: tokens.background1, bottom: -overlap, left: 0, position: "absolute", right: -overlap, top: 0 }}>
-          <CachedAvatarTileImage avatar={member.avatar} onReady={onReady} server={server} />
-        </View>
-      ) : null}
-    </View>
-  )
-}
-
-export function CompositeImage({ onError, uri }: { onError: () => void; uri: string }) {
-  return <NativeImage onError={onError} resizeMode="cover" source={{ uri }} style={[StyleSheet.absoluteFill, { zIndex: 2 }]} />
+    return () => { active = false }
+  }, [onError, uri])
+  return xml ? <SvgXml height="100%" width="100%" onError={onError} xml={xml} style={[StyleSheet.absoluteFill, { zIndex: 0 }]} /> : fallback ?? null
 }
 
 function waitForNextFrame() {

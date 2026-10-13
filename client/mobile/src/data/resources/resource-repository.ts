@@ -31,6 +31,8 @@ import type {
 import { SharedTaskPool } from "@/data/resources/shared-task-pool"
 import { resolveServerAssetUrl } from "@/lib/server-asset-url"
 
+const AVATAR_MAX_AGE_MS = 24 * 60 * 60 * 1_000
+
 const downloadTasks = new SharedTaskPool<ResolvedResource>()
 
 export async function getCachedAttachmentResource(
@@ -139,13 +141,19 @@ export function resolveAvatarResourceUrl(
 export async function ensureAvatarResource(
   server: ServerTarget,
   reference: AvatarResourceReference,
-  options: { signal?: AbortSignal } = {}
+  options: { force?: boolean; signal?: AbortSignal } = {}
 ): Promise<ResolvedResource | null> {
   const sourceUrl = resolveAvatarResourceUrl(server, reference.url)
   if (!sourceUrl) return null
   const identity = getAvatarIdentity(sourceUrl)
+  if (options.force) {
+    await Promise.allSettled(downloadTasks.listByPrefix(`${createDownloadTaskPrefix(server)}${identity}`))
+  }
   const cached = await getCachedResource(server, identity)
-  if (cached) return cached
+  const fresh = await getCachedResource(server, identity, {
+    maxAgeMs: AVATAR_MAX_AGE_MS,
+  })
+  if (fresh && !options.force) return fresh
 
   if (Platform.OS === "web") {
     return createRemoteResource(identity, sourceUrl, 0)
@@ -155,15 +163,23 @@ export async function ensureAvatarResource(
     server,
     identity,
     async () => {
-      const rechecked = await getCachedResource(server, identity)
-      if (rechecked) return rechecked
-
-      return downloadToCache({
-        extension: getUrlExtension(sourceUrl, ".image"),
-        identity,
-        server,
-        sourceUrl,
+      const rechecked = await getCachedResource(server, identity, {
+        maxAgeMs: AVATAR_MAX_AGE_MS,
       })
+      if (rechecked && !options.force) return rechecked
+
+      try {
+        return await downloadToCache({
+          extension: getUrlExtension(sourceUrl, ".image"),
+          identity,
+          server,
+          sourceUrl,
+          versioned: true,
+        })
+      } catch (error) {
+        if (cached) return cached
+        throw error
+      }
     },
     options.signal
   )
@@ -250,14 +266,16 @@ async function downloadToCache({
   identity,
   server,
   sourceUrl,
+  versioned = false,
 }: {
   expectedSizeBytes?: number
   extension: string
   identity: string
   server: ServerTarget
   sourceUrl: string
+  versioned?: boolean
 }) {
-  const target = await createResourceCacheTarget(server, identity, extension)
+  const target = await createResourceCacheTarget(server, identity, extension, { versioned })
   const downloaded = await downloadResource({
     expectedSizeBytes,
     sourceUrl,

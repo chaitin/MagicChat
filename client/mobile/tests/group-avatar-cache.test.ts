@@ -34,8 +34,8 @@ test("group avatar identity is stable, short, and visually sensitive", () => {
 })
 
 test("group avatar output uses a bounded cache-friendly size", () => {
-  assert.equal(GROUP_AVATAR_OUTPUT_SIZE, 192)
-  assert.ok(GROUP_AVATAR_GENERATOR_VERSION >= 9)
+  assert.equal(GROUP_AVATAR_OUTPUT_SIZE, 256)
+  assert.ok(GROUP_AVATAR_GENERATOR_VERSION >= 11)
 })
 
 test("group avatar generation limiter bounds work and releases cancelled owners", () => {

@@ -10,6 +10,7 @@ const CACHE_ROOT_NAME = "magicchat-resources-v1"
 const MAX_CACHE_SIZE_BYTES = 512 * 1024 * 1024
 
 type CacheEntry = {
+  checkedAt?: number
   fileName: string
   identity: string
   lastAccessedAt: number
@@ -70,7 +71,8 @@ export async function clearResourceCache(): Promise<void> {
 
 export async function getCachedResource(
   server: ServerTarget,
-  identity: string
+  identity: string,
+  options: { maxAgeMs?: number } = {}
 ): Promise<ResolvedResource | null> {
   if (Platform.OS === "web") return null
 
@@ -90,6 +92,12 @@ export async function getCachedResource(
     await removeCacheEntry(cacheId, file)
     return null
   }
+  if (
+    options.maxAgeMs !== undefined &&
+    (entry.checkedAt === undefined || Date.now() - entry.checkedAt >= options.maxAgeMs)
+  ) {
+    return null
+  }
 
   entry.lastAccessedAt = Date.now()
   void queueIndexWrite(index)
@@ -99,7 +107,8 @@ export async function getCachedResource(
 export async function createResourceCacheTarget(
   server: ServerTarget,
   identity: string,
-  extension: string
+  extension: string,
+  options: { versioned?: boolean } = {}
 ): Promise<ResourceCacheTarget> {
   await prepareResourceCache()
   const root = getCacheRoot()
@@ -109,7 +118,7 @@ export async function createResourceCacheTarget(
   filesDirectory.create({ idempotent: true, intermediates: true })
   temporaryDirectory.create({ idempotent: true, intermediates: true })
   const resourceKey = hashString(identity)
-  const fileName = `${resourceKey}${extension}`
+  const fileName = `${resourceKey}${options.versioned ? `.${createOperationId()}` : ""}${extension}`
 
   return {
     cacheId: createCacheId(serverKey, identity),
@@ -130,17 +139,24 @@ export async function commitResourceCacheTarget(
   if (target.finalFile.exists) target.finalFile.delete()
   await target.temporaryFile.move(target.finalFile, { overwrite: true })
 
+  const now = Date.now()
   const entry: CacheEntry = {
+    checkedAt: now,
     fileName: target.finalFile.name,
     identity: target.identity,
-    lastAccessedAt: Date.now(),
+    lastAccessedAt: now,
     serverKey: target.serverKey,
     sizeBytes,
   }
 
   await mutateCacheIndex(async (index) => {
+    const previous = index.entries[target.cacheId]
     index.entries[target.cacheId] = entry
     await persistCacheIndex(index)
+    if (previous && previous.fileName !== entry.fileName) {
+      const file = new File(getCacheRoot(), previous.serverKey, "files", previous.fileName)
+      try { if (file.exists) file.delete() } catch { /* The new entry remains authoritative. */ }
+    }
   })
   await pruneResourceCache()
 

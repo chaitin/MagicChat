@@ -6,10 +6,12 @@ import IconRobotFace from "@tabler/icons-react-native/IconRobotFace"
 import IconUser from "@tabler/icons-react-native/IconUser"
 // eslint-disable-next-line import/no-unresolved
 import IconUsers from "@tabler/icons-react-native/IconUsers"
-import type { ComponentType } from "react"
+import { useMemo, type ComponentType } from "react"
 import { View } from "react-native"
+import { SvgXml } from "react-native-svg"
 
 import { CachedAvatarImage } from "@/components/avatar/cached-avatar-image"
+import { buildGroupAvatarSvg } from "@/components/avatar/group-avatar-svg"
 import {
   CompositeImage,
   GroupAvatarGenerator,
@@ -70,7 +72,10 @@ export function AppAvatar({
     : rounded
       ? resolvedSize / 2
       : Math.max(4, resolvedSize * 0.12)
-  const entries = type === "group" ? selectGroupAvatarMembers(members) : []
+  const entries = useMemo(
+    () => type === "group" ? selectGroupAvatarMembers(members) : [],
+    [members, type]
+  )
 
   return (
     <View
@@ -99,12 +104,23 @@ export function AppAvatar({
 
 function CompositeGroupAvatar({ entries, server, size, theme }: { entries: AvatarMember[]; server: ServerTarget; size: number; theme: "light" | "dark" }) {
   const { colors } = useXGUITheme()
-  const tokens = { background1: colors.background1, fallbackBackground: colors.indigo, textOnColor: colors.textOnColor }
+  const tokens = useMemo(
+    () => ({ background1: colors.background1, fallbackBackground: colors.indigo, textOnColor: colors.textOnColor }),
+    [colors.background1, colors.indigo, colors.textOnColor]
+  )
   const composite = useGroupAvatarComposite({ entries, server, theme, tokens })
+  const backgroundXml = useMemo(
+    () => buildGroupAvatarSvg(entries.map((member) => ({ type: member.type === "app" ? "app" : "user" })), theme),
+    [entries, theme]
+  )
+  const background = <SvgXml height={size} width={size} xml={backgroundXml} />
   return (
     <>
-      {composite.generate && composite.generationSnapshot ? <GroupAvatarGenerator complete={composite.complete} entries={entries} fail={composite.fail} identity={composite.identity} key={composite.identity} server={server} size={size} snapshot={composite.generationSnapshot} tokens={tokens} /> : null}
-      {composite.resource ? <CompositeImage onError={composite.invalidate} uri={composite.resource.uri} /> : <MemberGrid entries={entries} server={server} size={size} />}
+      {composite.generate && composite.generationSnapshot ? <GroupAvatarGenerator complete={composite.complete} entries={entries} fail={composite.fail} identity={composite.identity} key={composite.identity} server={server} size={size} snapshot={composite.generationSnapshot} theme={theme} tokens={tokens} /> : null}
+      {composite.resource ? (
+        <CompositeImage fallback={background} key={composite.resource.uri} onError={composite.invalidate} uri={composite.resource.uri} />
+      ) : background}
+      <MemberGrid entries={entries} server={server} size={size} />
     </>
   )
 }
@@ -142,7 +158,6 @@ function MemberGrid({
   server: ServerTarget
   size: number
 }) {
-  const { colors } = useXGUITheme()
   const columns = getGroupAvatarGridSize(entries.length)
   const tileSize = size / columns
   const rows = Array.from(
@@ -154,7 +169,6 @@ function MemberGrid({
   return (
     <View
       style={{
-        backgroundColor: colors.background1,
         height: size,
         justifyContent: "center",
         left: 0,
@@ -169,23 +183,15 @@ function MemberGrid({
           key={rowIndex}
           style={{
             alignSelf: "center",
-            backgroundColor: colors.indigo,
             flexDirection: "row",
             height: tileSize,
             justifyContent: "center",
           }}
         >
           {row.map((member, columnIndex) => (
-            <AppAvatar
-              accessibilityLabel={member.nickname || member.name}
-              avatar={null}
-              key={`${member.name}-${rowIndex}-${columnIndex}`}
-              rounded={false}
-              server={server}
-              size={tileSize}
-              square
-              type="user"
-            />
+            <View key={`${member.name}-${rowIndex}-${columnIndex}`} style={{ height: tileSize, width: tileSize, overflow: "hidden" }}>
+              {member.avatar ? <CachedAvatarImage avatar={member.avatar} server={server} /> : null}
+            </View>
           ))}
         </View>
       ))}

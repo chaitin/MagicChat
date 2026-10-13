@@ -1,11 +1,12 @@
-import { useLocalSearchParams, useRouter } from "expo-router"
-import { useEffect, useMemo, useState } from "react"
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router"
+import { useCallback, useMemo, useState } from "react"
 import { Alert, ScrollView, StyleSheet, View } from "react-native"
 
 import { ContentState } from "@/components/feedback/content-state"
 import { isSvgUrl } from "@/components/avatar/cached-avatar-image"
 import { AppHeader } from "@/components/navigation/app-header"
 import { ApiRequestError } from "@/data/api-client"
+import { contactManager } from "@/data/contacts/contact-manager"
 import { useOpenEntityConversation } from "@/data/conversations/conversation-hooks"
 import type { ServerTarget } from "@/core/server-target"
 import {
@@ -46,7 +47,6 @@ export function EntityDetailScreen() {
     contacts,
     conversations,
     currentUser,
-    ensureUsers,
     isReady,
     usersById,
   } = useClientData()
@@ -54,11 +54,13 @@ export function EntityDetailScreen() {
   const entityId = getFirstParam(params.entityId)
   const entityTypeParam = getFirstParam(params.entityType)
   const entityType = isEntityType(entityTypeParam) ? entityTypeParam : null
-  useEffect(() => {
-    if (entityType === "user" && entityId) {
-      void ensureUsers([entityId]).catch(() => undefined)
-    }
-  }, [ensureUsers, entityId, entityType])
+  useFocusEffect(useCallback(() => {
+    if (!entityId || !entityType) return
+    const refresh = entityType === "user"
+      ? contactManager.refreshUsers(session, [entityId])
+      : contactManager.refresh(session)
+    void refresh.catch(() => undefined)
+  }, [entityId, entityType, session]))
   const profileContacts = useMemo(
     () => ({ ...contacts, users: Object.values(usersById) }),
     [contacts, usersById]
@@ -158,15 +160,47 @@ function EntityProfileContent({
   const toast = useXGUIToast()
   const [galleryOpen, setGalleryOpen] = useState(false)
   const [isSavingAvatar, setIsSavingAvatar] = useState(false)
+  const [isRefreshingAvatar, setIsRefreshingAvatar] = useState(false)
   const avatarResource = useCachedAvatar(server, profile.avatar)
-  const canPreviewAvatar = Boolean(profile.avatar.trim() && avatarResource.uri)
+  const refreshAvatar = avatarResource.refetch
+  const [previewResource, setPreviewResource] = useState<{
+    avatar: string
+    resource: NonNullable<typeof avatarResource.resource>
+  } | null>(null)
+  const displayedAvatarResource =
+    previewResource?.avatar === profile.avatar
+      ? previewResource.resource
+      : avatarResource.resource
+  const canPreviewAvatar = Boolean(profile.avatar.trim())
+  useFocusEffect(useCallback(() => {
+    if (profile.avatar.trim()) void refreshAvatar().catch(() => undefined)
+  }, [profile.avatar, refreshAvatar]))
+
+  async function handleAvatarPreview() {
+    if (!canPreviewAvatar || isRefreshingAvatar) return
+    setIsRefreshingAvatar(true)
+    try {
+      const refreshed = await refreshAvatar()
+      const resource = refreshed.data ?? avatarResource.resource
+      if (!resource) {
+        toast.show({ duration: 1_000, message: "暂无可预览的头像", modal: false, type: "text" })
+        return
+      }
+      setPreviewResource({ avatar: profile.avatar, resource })
+      setGalleryOpen(true)
+    } catch (error: unknown) {
+      toast.show({ duration: 1_000, message: error instanceof Error ? error.message : "头像加载失败，请稍后重试", modal: false, type: "error" })
+    } finally {
+      setIsRefreshingAvatar(false)
+    }
+  }
 
   async function handleSaveAvatar() {
-    if (!avatarResource.resource || isSavingAvatar) return
+    if (!displayedAvatarResource || isSavingAvatar) return
     setIsSavingAvatar(true)
 
     try {
-      await saveImageToMediaLibrary(avatarResource.resource)
+      await saveImageToMediaLibrary(displayedAvatarResource)
       toast.show({
         duration: 1_000,
         message: "头像已保存到系统相册",
@@ -204,7 +238,7 @@ function EntityProfileContent({
             descriptionNumberOfLines={3}
             leading={
             <EntityDetailAvatar
-              onPress={canPreviewAvatar ? () => setGalleryOpen(true) : undefined}
+              onPress={canPreviewAvatar ? () => void handleAvatarPreview() : undefined}
               profile={profile}
               server={server}
             />
@@ -225,7 +259,7 @@ function EntityProfileContent({
         />
       </View>
       </ScrollView>
-      {avatarResource.uri ? (
+      {displayedAvatarResource?.uri ? (
         <XGUIGallery
           accessibilityLabel={`${profile.displayName}的头像`}
           onOpenChange={setGalleryOpen}
@@ -233,7 +267,7 @@ function EntityProfileContent({
           open={galleryOpen}
           saving={isSavingAvatar}
           source={{
-            uri: avatarResource.uri,
+            uri: displayedAvatarResource.uri,
             svg: isSvgUrl(avatarResource.sourceUrl),
           }}
         />

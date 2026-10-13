@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import type { AuthenticatedTarget, ServerTarget } from "@/core/server-target"
@@ -8,7 +8,6 @@ import {
   ensureAvatarResource,
   getCachedAttachmentResource,
   invalidateAttachmentResource,
-  invalidateAvatarResource,
   resolveAvatarResourceUrl,
 } from "@/data/resources/resource-repository"
 import type {
@@ -19,18 +18,22 @@ import type {
 import { getRememberedAttachmentResource } from "@/data/resources/attachment-resource-memory"
 
 export function useCachedAvatar(server: ServerTarget, avatar: string) {
+  const queryClient = useQueryClient()
   const sourceUrl = resolveAvatarResourceUrl(server, avatar)
   const query = useQuery({
     enabled: sourceUrl.length > 0,
     queryFn: ({ signal }) =>
       ensureAvatarResource(server, { type: "avatar", url: sourceUrl }, { signal }),
     queryKey: queryKeys.avatarResource(server, sourceUrl),
-    staleTime: Infinity,
+    staleTime: 24 * 60 * 60 * 1_000,
   })
   const refetch = useCallback(async () => {
-    await invalidateAvatarResource(server, sourceUrl)
-    return query.refetch()
-  }, [query, server, sourceUrl])
+    const queryKey = queryKeys.avatarResource(server, sourceUrl)
+    await queryClient.cancelQueries({ queryKey })
+    const data = await ensureAvatarResource(server, { type: "avatar", url: sourceUrl }, { force: true })
+    queryClient.setQueryData(queryKey, data)
+    return { data }
+  }, [queryClient, server, sourceUrl])
 
   return {
     error: query.error,

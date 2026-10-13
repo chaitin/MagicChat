@@ -2,8 +2,8 @@ import type { AvatarMember } from "@/components/avatar/avatar-strategy"
 import type { ServerTarget } from "@/core/server-target"
 import { resolveServerAssetUrl } from "@/lib/server-asset-url"
 
-export const GROUP_AVATAR_GENERATOR_VERSION = 9
-export const GROUP_AVATAR_OUTPUT_SIZE = 192
+export const GROUP_AVATAR_GENERATOR_VERSION = 11
+export const GROUP_AVATAR_OUTPUT_SIZE = 256
 
 type PendingGeneration = {
   cancelled: boolean
@@ -155,19 +155,23 @@ export function hashString(value: string) {
 }
 
 export class GroupAvatarMemoryCache<T> {
-  private readonly values = new Map<string, T>()
+  private readonly values = new Map<string, { cachedAt: number; value: T }>()
   private readonly maximum: number
   constructor(maximum = 128) { this.maximum = maximum }
-  get(key: string) {
-    const value = this.values.get(key)
-    if (value === undefined) return undefined
+  get(key: string, maxAgeMs?: number) {
+    const entry = this.values.get(key)
+    if (entry === undefined) return undefined
+    if (maxAgeMs !== undefined && Date.now() - entry.cachedAt >= maxAgeMs) {
+      this.values.delete(key)
+      return undefined
+    }
     this.values.delete(key)
-    this.values.set(key, value)
-    return value
+    this.values.set(key, entry)
+    return entry.value
   }
   set(key: string, value: T) {
     this.values.delete(key)
-    this.values.set(key, value)
+    this.values.set(key, { cachedAt: Date.now(), value })
     while (this.values.size > this.maximum) {
       const oldest = this.values.keys().next().value
       if (oldest === undefined) break
