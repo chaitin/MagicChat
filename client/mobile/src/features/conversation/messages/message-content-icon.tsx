@@ -1,4 +1,5 @@
 import ArrowMoveDownRightIcon from "@hugeicons/core-free-icons/dist/esm/ArrowMoveDownRightIcon"
+import Copy01Icon from "@hugeicons/core-free-icons/dist/esm/Copy01Icon"
 import DocumentAttachmentIcon from "@hugeicons/core-free-icons/dist/esm/DocumentAttachmentIcon"
 import Download01Icon from "@hugeicons/core-free-icons/dist/esm/Download01Icon"
 import ExternalLinkIcon from "@hugeicons/core-free-icons/dist/esm/ExternalLinkIcon"
@@ -16,6 +17,7 @@ import Svg, { Circle, Path } from "react-native-svg"
 const icons = {
   "topic-arrow": ArrowMoveDownRightIcon,
   attachment: DocumentAttachmentIcon,
+  copy: Copy01Icon,
   download: Download01Icon,
   open: Folder02Icon,
   loading: Loading03Icon,

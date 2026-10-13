@@ -214,6 +214,7 @@ function createMarkdownComponents(
       if (fileId)
         return (
           <MarkdownAttachmentImage
+            key={fileId}
             fileId={fileId}
             alt={alt ?? ""}
             variant={variant}
@@ -430,8 +431,6 @@ function MarkdownAttachmentImage({
   const [attempt, setAttempt] = React.useState(0)
   React.useEffect(() => {
     let active = true
-    setURL("")
-    setError("")
     void resolveDocumentImageURLs([fileId], attempt > 0)
       .then((result) => {
         if (!active) return
@@ -456,7 +455,11 @@ function MarkdownAttachmentImage({
         <button
           type="button"
           className="text-(--weui-link) hover:underline"
-          onClick={() => setAttempt((value) => value + 1)}
+          onClick={() => {
+            setURL("")
+            setError("")
+            setAttempt((value) => value + 1)
+          }}
         >
           重试
         </button>

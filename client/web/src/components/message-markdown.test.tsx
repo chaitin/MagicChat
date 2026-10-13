@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { MessageMarkdown } from "@/components/message-markdown"
@@ -50,6 +50,117 @@ describe("MessageMarkdown", () => {
       "https://example.com/refreshed"
     )
     expect(resolveDocumentImageURLs).toHaveBeenLastCalledWith(["file-1"], true)
+  })
+
+  it("clears the image error while a retry is pending", async () => {
+    let resolveRetry!: (
+      result: Awaited<ReturnType<typeof resolveDocumentImageURLs>>
+    ) => void
+    vi.mocked(resolveDocumentImageURLs)
+      .mockRejectedValueOnce(new Error("图片已过期"))
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRetry = resolve
+        })
+      )
+    render(<MessageMarkdown content="![截图](attachment:file-1)" />)
+    fireEvent.click(await screen.findByRole("button", { name: "重试" }))
+
+    expect(screen.getByText("图片加载中…")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "重试" })).toBeNull()
+    await act(async () => {
+      resolveRetry({
+        missingFileIds: [],
+        urls: [
+          {
+            fileId: "file-1",
+            url: "https://example.com/refreshed",
+            expiresAt: "2099-01-01T00:00:00Z",
+          },
+        ],
+      })
+    })
+    expect(screen.getByRole("img", { name: "截图" })).toHaveAttribute(
+      "src",
+      "https://example.com/refreshed"
+    )
+  })
+
+  it("resets retry state when switching to another attachment", async () => {
+    vi.mocked(resolveDocumentImageURLs)
+      .mockRejectedValueOnce(new Error("图片已过期"))
+      .mockRejectedValueOnce(new Error("仍然无法加载"))
+      .mockResolvedValueOnce({
+        missingFileIds: [],
+        urls: [
+          {
+            fileId: "file-2",
+            url: "https://example.com/second",
+            expiresAt: "2099-01-01T00:00:00Z",
+          },
+        ],
+      })
+    const { rerender } = render(
+      <MessageMarkdown content="![截图](attachment:file-1)" />
+    )
+    fireEvent.click(await screen.findByRole("button", { name: "重试" }))
+    await screen.findByText("截图：仍然无法加载")
+
+    rerender(<MessageMarkdown content="![截图](attachment:file-2)" />)
+    expect(screen.getByText("图片加载中…")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "重试" })).toBeNull()
+    expect(await screen.findByRole("img", { name: "截图" })).toHaveAttribute(
+      "src",
+      "https://example.com/second"
+    )
+    expect(resolveDocumentImageURLs).toHaveBeenLastCalledWith(["file-2"], false)
+  })
+
+  it("ignores an old attachment response after switching images", async () => {
+    let resolveFirst!: (
+      result: Awaited<ReturnType<typeof resolveDocumentImageURLs>>
+    ) => void
+    vi.mocked(resolveDocumentImageURLs)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirst = resolve
+        })
+      )
+      .mockResolvedValueOnce({
+        missingFileIds: [],
+        urls: [
+          {
+            fileId: "file-2",
+            url: "https://example.com/second",
+            expiresAt: "2099-01-01T00:00:00Z",
+          },
+        ],
+      })
+    const { rerender } = render(
+      <MessageMarkdown content="![截图](attachment:file-1)" />
+    )
+    rerender(<MessageMarkdown content="![截图](attachment:file-2)" />)
+    expect(await screen.findByRole("img", { name: "截图" })).toHaveAttribute(
+      "src",
+      "https://example.com/second"
+    )
+
+    await act(async () => {
+      resolveFirst({
+        missingFileIds: [],
+        urls: [
+          {
+            fileId: "file-1",
+            url: "https://example.com/first",
+            expiresAt: "2099-01-01T00:00:00Z",
+          },
+        ],
+      })
+    })
+    expect(screen.getByRole("img", { name: "截图" })).toHaveAttribute(
+      "src",
+      "https://example.com/second"
+    )
   })
 
   it("does not allow attachment URLs in links or resolve malformed file references", async () => {

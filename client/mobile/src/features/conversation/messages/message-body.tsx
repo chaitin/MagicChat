@@ -1,3 +1,4 @@
+import * as Clipboard from "expo-clipboard"
 import { memo, useRef, useState } from "react"
 import { Alert, Image, Linking, Pressable, View } from "react-native"
 import { Text } from "@/components/mi-sans-text"
@@ -24,7 +25,7 @@ import { MessageContentIcon } from "@/features/conversation/messages/message-con
 import { useOpenChatRecord } from "@/features/chat-records/chat-record-provider"
 import { MessageActionButton } from "@/features/conversation/messages/message-action-button"
 import { VoiceMessagePlayer } from "@/features/conversation/voice/voice-message-player"
-import { useXGUITheme } from "@/xgui"
+import { useXGUITheme, useXGUIToast } from "@/xgui"
 
 export const MessageBody = memo(function MessageBody({
   body,
@@ -449,31 +450,53 @@ function MessageLinkBody({ title, url, onLongPress, onPress }: {
   onPress: () => void
 }) {
   const { colors } = useXGUITheme()
+  const toast = useXGUIToast()
   const didLongPressRef = useRef(false)
+
+  async function copyLink() {
+    try {
+      await Clipboard.setStringAsync(url)
+      toast.show({ message: "链接已复制", modal: false, type: "text", duration: 1_000 })
+    } catch {
+      toast.show({ message: "复制链接失败", modal: false, type: "text", duration: 1_000 })
+    }
+  }
+
   return (
-    <Pressable
-      accessibilityLabel={`${title}，${url}`}
-      accessibilityRole="link"
-      onLongPress={() => {
-        didLongPressRef.current = true
-        onLongPress()
-      }}
-      onPress={() => {
-        if (didLongPressRef.current) {
-          didLongPressRef.current = false
-          return
-        }
-        onPress()
-      }}
-      onPressIn={() => { didLongPressRef.current = false }}
-      style={{ alignItems: "center", flexDirection: "row", gap: 12, width: "100%" }}
-    >
-      <MessageContentIcon color={colors.textPrimary} kind="link" size={28} />
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text numberOfLines={1} style={{ color: colors.textPrimary, fontSize: 14, lineHeight: 24 }}>{title}</Text>
-        <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 12, lineHeight: 16 }}>{url}</Text>
-      </View>
-    </Pressable>
+    <View style={{ width: "100%" }}>
+      <Pressable
+        accessibilityLabel={`${title}，${url}`}
+        accessibilityRole="link"
+        onLongPress={() => {
+          didLongPressRef.current = true
+          onLongPress()
+        }}
+        onPress={() => {
+          if (didLongPressRef.current) {
+            didLongPressRef.current = false
+            return
+          }
+          onPress()
+        }}
+        onPressIn={() => { didLongPressRef.current = false }}
+        style={{ alignItems: "center", flexDirection: "row", gap: 12, width: "100%" }}
+      >
+        <MessageContentIcon color={colors.textPrimary} kind="link" size={28} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text numberOfLines={1} style={{ color: colors.textPrimary, fontSize: 14, lineHeight: 24, paddingRight: 32 }}>{title}</Text>
+          <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 12, lineHeight: 16 }}>{url}</Text>
+        </View>
+      </Pressable>
+      <Pressable
+        accessibilityLabel="复制链接"
+        accessibilityRole="button"
+        hitSlop={10}
+        onPress={() => void copyLink()}
+        style={({ pressed }) => ({ alignItems: "center", height: 24, justifyContent: "center", opacity: pressed ? 0.5 : 1, position: "absolute", right: 0, top: 0, width: 24 })}
+      >
+        <MessageContentIcon color={colors.textSecondary} kind="copy" size={14} strokeWidth={1.5} />
+      </Pressable>
+    </View>
   )
 }
 

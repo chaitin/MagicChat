@@ -37,6 +37,19 @@ test("链接仍外部打开、长按不触发链接，普通卡片保持独立�
   assert.match(body, /await Linking\.openURL\(url\)/)
 })
 
+test("链接标题右侧提供独立复制按钮，复制完整URL并显示结果", async () => {
+  const body = await source("features/conversation/messages/message-body.tsx")
+  const link = body.split("function MessageLinkBody(")[1].split("function MessageLinkCard(")[0]
+  assert.match(link, /await Clipboard\.setStringAsync\(url\)/)
+  assert.match(link, /message: "链接已复制"/)
+  assert.match(link, /message: "复制链接失败"/)
+  assert.match(link, /lineHeight: 24, paddingRight: 32/)
+  assert.match(link, /<\/Pressable>\s*<Pressable\s*accessibilityLabel="复制链接"/)
+  assert.match(link, /accessibilityRole="button"\s*hitSlop=\{10\}\s*onPress=\{\(\) => void copyLink\(\)\}/)
+  assert.match(link, /position: "absolute", right: 0, top: 0/)
+  assert.match(link, /kind="copy" size=\{14\} strokeWidth=\{1\.5\}/)
+})
+
 test("普通卡片样式对齐Desktop，保留宽度与长按/点击交互", async () => {
   const body = await source("features/conversation/messages/message-body.tsx")
   const card = body.split("function MessageLinkCard(")[1].split("function ForwardBundleBody(")[0]

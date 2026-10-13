@@ -1,4 +1,5 @@
 import * as React from "react"
+import Copy01Icon from "@hugeicons/core-free-icons/dist/esm/Copy01Icon"
 import DocumentAttachmentIcon from "@hugeicons/core-free-icons/dist/esm/DocumentAttachmentIcon"
 import Download01Icon from "@hugeicons/core-free-icons/dist/esm/Download01Icon"
 import ExternalLinkIcon from "@hugeicons/core-free-icons/dist/esm/ExternalLinkIcon"
@@ -10,6 +11,7 @@ import Volume02Icon from "@hugeicons/core-free-icons/dist/esm/Volume02Icon"
 
 const icons = {
   attachment: DocumentAttachmentIcon,
+  copy: Copy01Icon,
   download: Download01Icon,
   loading: Loading03Icon,
   link: ExternalLinkIcon,

@@ -1,5 +1,5 @@
 import { useId, useState, type ReactNode } from "react"
-import { ExternalLinkIcon, Loading03Icon } from "@hugeicons/core-free-icons"
+import { Copy01Icon, ExternalLinkIcon, Loading03Icon } from "@hugeicons/core-free-icons"
 import type { DesktopMessageBody, DesktopMessageChoiceState } from "../../../../shared/account-data"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
@@ -34,28 +34,52 @@ export function LinkBody({
     }
   }
 
+  async function copyLink() {
+    try {
+      const result = await window.desktop!.copyText(url)
+      if (!result.ok) throw new Error(result.error.message)
+      showToast({ status: "success", title: "链接已复制" })
+    } catch {
+      showToast({ status: "error", title: "复制链接失败" })
+    }
+  }
+
   return (
-    <button
-      type="button"
-      className={cn(
-        "flex w-80 max-w-full cursor-pointer items-center gap-3 text-left",
-        flush && "px-3 py-2.5",
-      )}
-      onClick={() => void openLink()}
-    >
-      <HugeiconsIcon
-        icon={ExternalLinkIcon}
-        className="size-7 shrink-0 text-foreground"
-        strokeWidth={1.5}
-        aria-hidden
-      />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate">{title}</span>
-        <span className="block max-w-full truncate text-xs text-muted-foreground" title={url}>
-          {url}
+    <div className="relative w-80 max-w-full">
+      <button
+        type="button"
+        className={cn(
+          "flex w-full cursor-pointer items-center gap-3 text-left",
+          flush && "px-3 py-2.5",
+        )}
+        onClick={() => void openLink()}
+      >
+        <HugeiconsIcon
+          icon={ExternalLinkIcon}
+          className="size-7 shrink-0 text-foreground"
+          strokeWidth={1.5}
+          aria-hidden
+        />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate pr-7">{title}</span>
+          <span className="block max-w-full truncate text-xs text-muted-foreground" title={url}>
+            {url}
+          </span>
         </span>
-      </span>
-    </button>
+      </button>
+      <button
+        type="button"
+        aria-label="复制链接"
+        title="复制链接"
+        className={cn(
+          "absolute right-0 top-0 flex size-5 cursor-pointer items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          flush && "right-3 top-2.5",
+        )}
+        onClick={() => void copyLink()}
+      >
+        <HugeiconsIcon icon={Copy01Icon} className="size-3.5" strokeWidth={1.5} aria-hidden />
+      </button>
+    </div>
   )
 }
 
