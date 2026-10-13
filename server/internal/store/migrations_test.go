@@ -56,6 +56,7 @@ func TestMigrationDirectoryContainsExpectedMigrations(t *testing.T) {
 		"00041_add_user_blocks.sql",
 		"00042_add_native_refresh_tokens.sql",
 		"00043_add_message_app_reactions.sql",
+		"00044_add_app_message_send_limits.sql",
 	}
 	if len(matches) != len(want) {
 		t.Fatalf("migration file count = %d, want %d: %v", len(matches), len(want), matches)
