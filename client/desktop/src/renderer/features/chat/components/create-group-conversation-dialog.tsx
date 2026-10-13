@@ -23,6 +23,7 @@ import type {
   DesktopContactUser,
   DesktopConversation,
 } from "../../../../shared/account-data"
+import { createUserSearchIndex, matchesUserSearch } from "../../../../shared/user-search"
 import { CANDIDATE_ROW_HEIGHT, useVirtualCandidateRows } from "../virtual-candidate-rows"
 
 type Candidate = DesktopContactUser | DesktopContactApp
@@ -52,15 +53,26 @@ export function CreateGroupConversationDialog({
   const [keyword, setKeyword] = useState("")
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [creating, setCreating] = useState(false)
-  const candidates = useMemo(() => {
-    const query = keyword.trim().toLocaleLowerCase()
-    const source: Candidate[] = [
+  const source = useMemo<Candidate[]>(
+    () => [
       ...contacts.filter((contact) => contact.id.toLowerCase() !== currentUserId.toLowerCase()),
       ...apps,
-    ]
+    ],
+    [apps, contacts, currentUserId],
+  )
+  const userSearchIndexes = useMemo(
+    () => new Map(contacts.map((contact) => [contact.id, createUserSearchIndex(contact)])),
+    [contacts],
+  )
+  const candidates = useMemo(() => {
+    const query = keyword.trim().toLocaleLowerCase()
     if (!query) return source
-    return source.filter((candidate) => candidateSearchText(candidate).includes(query))
-  }, [apps, contacts, currentUserId, keyword])
+    return source.filter((candidate) =>
+      candidate.avatarType === "user"
+        ? matchesUserSearch(userSearchIndexes.get(candidate.id)!, query)
+        : [candidate.name, candidate.description].join("\n").toLocaleLowerCase().includes(query),
+    )
+  }, [source, userSearchIndexes, keyword])
   const virtual = useVirtualCandidateRows(candidates.length, keyword)
   const canCreate = Boolean(name.trim()) && !loading && !creating
   const selectedUserCount = [...selected].filter((key) => key.startsWith("user:")).length
@@ -238,12 +250,4 @@ function candidateKey(candidate: Candidate) {
 
 function candidateDisplayName(candidate: Candidate) {
   return candidate.avatarType === "user" ? candidate.nickname || candidate.name : candidate.name
-}
-
-function candidateSearchText(candidate: Candidate) {
-  return candidate.avatarType === "user"
-    ? [candidate.name, candidate.nickname, candidate.email, candidate.phone]
-        .join("\n")
-        .toLocaleLowerCase()
-    : [candidate.name, candidate.description].join("\n").toLocaleLowerCase()
 }

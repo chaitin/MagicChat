@@ -50,6 +50,11 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { canPinConversation } from "../conversation-action-policy"
 import { formatFileSize } from "../message-bodies/utils"
+import {
+  createUserSearchIndex,
+  matchesUserSearch,
+  type UserSearchIndex,
+} from "../../../../shared/user-search"
 import { CANDIDATE_ROW_HEIGHT, useVirtualCandidateRows } from "../virtual-candidate-rows"
 import { GroupAvatarPicker } from "./group-avatar-picker"
 
@@ -409,6 +414,7 @@ type InviteCandidate = {
   type: "user" | "app"
   name: string
   searchText: string
+  userSearchIndex: UserSearchIndex | null
 }
 
 const inviteNameCollator = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" })
@@ -511,9 +517,8 @@ function InviteMembers(props: PanelProps) {
         id: user.id,
         type: "user",
         name: user.nickname || user.name,
-        searchText: [user.name, user.nickname, user.email, user.phone]
-          .join("\n")
-          .toLocaleLowerCase(),
+        searchText: "",
+        userSearchIndex: createUserSearchIndex(user),
       })
     }
     for (const app of directory.apps) {
@@ -524,6 +529,7 @@ function InviteMembers(props: PanelProps) {
         type: "app",
         name: app.name,
         searchText: [app.name, app.description].join("\n").toLocaleLowerCase(),
+        userSearchIndex: null,
       })
     }
     for (const member of info.members) {
@@ -534,6 +540,15 @@ function InviteMembers(props: PanelProps) {
           type: member.type,
           name: member.name,
           searchText: member.name.toLocaleLowerCase(),
+          userSearchIndex:
+            member.type === "user"
+              ? createUserSearchIndex({
+                  name: member.name,
+                  nickname: "",
+                  email: "",
+                  phone: "",
+                })
+              : null,
         })
       }
     }
@@ -547,7 +562,9 @@ function InviteMembers(props: PanelProps) {
     })
   }, [canInviteApps, currentUserId, directory, existing, info])
   const visible = candidates.filter((candidate) =>
-    candidate.searchText.includes(query.trim().toLocaleLowerCase()),
+    candidate.userSearchIndex
+      ? matchesUserSearch(candidate.userSearchIndex, query)
+      : candidate.searchText.includes(query.trim().toLocaleLowerCase()),
   )
   const virtual = useVirtualCandidateRows(visible.length, query)
   const selectedUserCount = [...selected].filter((key) => key.startsWith("user:")).length

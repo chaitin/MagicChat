@@ -8,6 +8,7 @@ import {
   formatDateKey,
   ganttSpan,
   isValid24HourTime,
+  mergeTaskLabels,
   parseDateKey,
   shanghaiReminderDateTime,
   shanghaiReminderISO,
@@ -57,6 +58,16 @@ test("成员接口省略姓名时由现有用户解析接口补全，不将 ID �
     withResolvedMemberNames(members, [{ id: "u1", name: "u1" }])[0]?.displayName,
     "未知成员",
   )
+})
+
+test("标签回车和保存合并草稿时去重、清除空白，保留标签顺序和逗号文本", () => {
+  const labels = ["发版", "设计"]
+  assert.deepEqual(mergeTaskLabels(labels, "  测试  "), ["发版", "设计", "测试"])
+  assert.deepEqual(mergeTaskLabels(labels, "  发版  "), labels)
+  assert.deepEqual(mergeTaskLabels(labels, "  "), labels)
+  assert.deepEqual(mergeTaskLabels(["发版", "发版", "  "], "设计"), labels)
+  assert.deepEqual(mergeTaskLabels(labels, "产品,设计"), ["发版", "设计", "产品,设计"])
+  assert.deepEqual(labels, ["发版", "设计"])
 })
 
 test("24 小时制时间只接受 HH:mm 且限制小时分钟范围", () => {

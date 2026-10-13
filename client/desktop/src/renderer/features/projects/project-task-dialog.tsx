@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react"
-import { CalendarDays, MessageSquare, Trash2 } from "lucide-react"
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
+import { CalendarDays, MessageSquare, Trash2, X } from "lucide-react"
 import { zhCN } from "date-fns/locale"
 import type {
   DesktopProjectTask,
@@ -18,6 +18,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import {
@@ -40,6 +41,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { cn } from "@/lib/utils"
 import {
   TaskPriorityIcon,
   TaskStatusIcon,
@@ -59,6 +61,7 @@ import {
   taskStatusLabels,
   formatDateKey,
   isValid24HourTime,
+  mergeTaskLabels,
   parseDateKey,
   shanghaiReminderDateTime,
   shanghaiReminderISO,
@@ -72,7 +75,7 @@ type TaskForm = {
   assigneeUserId: string
   startDate: string
   dueDate: string
-  labels: string
+  labels: string[]
   reminder: ProjectTaskReminderInput | null
 }
 
@@ -85,7 +88,7 @@ function initialForm(task: DesktopProjectTask | null): TaskForm {
     assigneeUserId: task?.assignee?.id ?? "",
     startDate: task?.startDate ?? "",
     dueDate: task?.dueDate ?? "",
-    labels: task?.labels.join(", ") ?? "",
+    labels: task?.labels ?? [],
     reminder: task?.reminder ?? null,
   }
 }
@@ -108,6 +111,7 @@ export function ProjectTaskDialog({
   onChanged: () => Promise<void>
 }) {
   const [form, setForm] = useState<TaskForm>(() => initialForm(task))
+  const [labelDraft, setLabelDraft] = useState("")
   const details = task
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
@@ -167,14 +171,8 @@ export function ProjectTaskDialog({
     if (!title) return setError("请填写任务标题")
     if (form.startDate && form.dueDate && form.startDate > form.dueDate)
       return setError("开始日期不能晚于截止日期")
-    const labels = [
-      ...new Set(
-        form.labels
-          .split(/[,，]/)
-          .map((value) => value.trim())
-          .filter(Boolean),
-      ),
-    ]
+    const labels = mergeTaskLabels(form.labels, labelDraft)
+    if (labels.length > 20) return setError("最多添加 20 个标签")
     setSaving(true)
     try {
       const fields = {
@@ -263,14 +261,21 @@ export function ProjectTaskDialog({
     <>
       <div className="flex h-full min-h-0 flex-col">
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="grid items-start gap-4 p-5 md:grid-cols-[minmax(0,3fr)_minmax(0,1fr)] md:grid-rows-[auto_1fr]">
+          <div
+            className={cn(
+              "grid min-h-full items-start gap-4 p-5 md:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]",
+              task
+                ? "md:grid-rows-[minmax(min-content,1fr)_auto]"
+                : "md:grid-rows-[minmax(min-content,1fr)]",
+            )}
+          >
             <form
               id="project-task-form"
               className="contents"
               onSubmit={(event) => void save(event)}
             >
-              <div className="grid min-w-0 gap-4 md:col-start-1 md:row-start-1">
-                <Field label="任务标题">
+              <div className="grid min-w-0 gap-3 md:col-start-1 md:row-start-1 md:grid-rows-[auto_auto_minmax(min-content,1fr)] md:self-stretch">
+                <Field label="标题">
                   <Input
                     autoFocus
                     required
@@ -280,24 +285,44 @@ export function ProjectTaskDialog({
                     onChange={(event) => change("title", event.target.value)}
                   />
                 </Field>
-                <Field label="标签（逗号分隔）">
-                  <Input
-                    value={form.labels}
+                <Field label="标签" interactive>
+                  <TaskLabelInput
+                    labels={form.labels}
+                    draft={labelDraft}
                     disabled={saving}
-                    onChange={(event) => change("labels", event.target.value)}
-                    placeholder="例如：发版, 设计"
+                    onDraftChange={setLabelDraft}
+                    onAdd={() => {
+                      const labels = mergeTaskLabels(form.labels, labelDraft)
+                      if (labels.length > 20) {
+                        setError("最多添加 20 个标签")
+                        return
+                      }
+                      change("labels", labels)
+                      setLabelDraft("")
+                    }}
+                    onRemove={(label) =>
+                      change(
+                        "labels",
+                        form.labels.filter((item) => item !== label),
+                      )
+                    }
                   />
                 </Field>
-                <Field label="任务描述">
+                <Field label="详细说明" className="min-h-0 grid-rows-[auto_minmax(6rem,1fr)]">
                   <Textarea
-                    className="min-h-24"
+                    className="h-full min-h-24 resize-none field-sizing-fixed"
                     value={form.description}
                     disabled={saving}
                     onChange={(event) => change("description", event.target.value)}
                   />
                 </Field>
               </div>
-              <div className="grid min-w-0 content-start gap-3 md:col-start-2 md:row-start-1 md:row-span-2">
+              <div
+                className={cn(
+                  "grid min-w-0 content-start gap-3 md:col-start-2 md:row-start-1",
+                  task && "md:row-span-2",
+                )}
+              >
                 <Field label="状态" interactive>
                   <Select
                     value={form.status}
@@ -533,6 +558,73 @@ export function ProjectTaskDialog({
   )
 }
 
+function TaskLabelInput({
+  labels,
+  draft,
+  disabled,
+  onDraftChange,
+  onAdd,
+  onRemove,
+}: {
+  labels: string[]
+  draft: string
+  disabled: boolean
+  onDraftChange: (value: string) => void
+  onAdd: () => void
+  onRemove: (label: string) => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  return (
+    <div
+      role="group"
+      aria-label="标签"
+      className={cn(
+        "flex min-h-9 min-w-0 flex-wrap items-center gap-1.5 rounded-md border border-input bg-transparent px-2.5 py-1 shadow-xs focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30",
+        disabled && "cursor-not-allowed opacity-50",
+      )}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) inputRef.current?.focus()
+      }}
+    >
+      {labels.map((label) => (
+        <Badge key={label} variant="secondary" className="h-6 max-w-full gap-1">
+          <span className="truncate" title={label}>
+            {label}
+          </span>
+          <button
+            type="button"
+            aria-label={`删除标签 ${label}`}
+            disabled={disabled}
+            className="flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
+            onClick={() => {
+              onRemove(label)
+              inputRef.current?.focus()
+            }}
+          >
+            <X className="size-3" aria-hidden />
+          </button>
+        </Badge>
+      ))}
+      <Input
+        ref={inputRef}
+        aria-label="添加标签"
+        value={draft}
+        maxLength={64}
+        disabled={disabled}
+        placeholder="输入后按回车添加"
+        className="h-6 min-w-28 flex-1 rounded-none border-0 bg-transparent p-0 shadow-none focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent"
+        onChange={(event) => onDraftChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" || event.nativeEvent.isComposing || event.keyCode === 229)
+            return
+          event.preventDefault()
+          onAdd()
+        }}
+      />
+    </div>
+  )
+}
+
 function TaskAssigneePicker({
   targetId,
   members,
@@ -609,11 +701,7 @@ function TaskAssigneePicker({
         )}
       </ComboboxTrigger>
       <ComboboxContent className="min-w-(--anchor-width)">
-        <ComboboxInput
-          placeholder="姓名、昵称、邮箱或手机号"
-          aria-label="搜索负责人"
-          showTrigger={false}
-        />
+        <ComboboxInput placeholder="搜索用户" aria-label="搜索负责人" showTrigger={false} />
         <ComboboxEmpty>未找到匹配的负责人</ComboboxEmpty>
         <ComboboxList>
           {(option: { id: string; name: string }) => (
@@ -666,10 +754,12 @@ function Field({
   label,
   children,
   interactive = false,
+  className,
 }: {
   label: string
   children: React.ReactNode
   interactive?: boolean
+  className?: string
 }) {
   const content = (
     <>
@@ -678,9 +768,9 @@ function Field({
     </>
   )
   return interactive ? (
-    <div className="grid min-w-0 gap-1 text-sm">{content}</div>
+    <div className={cn("grid min-w-0 gap-1 text-sm", className)}>{content}</div>
   ) : (
-    <label className="grid min-w-0 gap-1 text-sm">{content}</label>
+    <label className={cn("grid min-w-0 gap-1 text-sm", className)}>{content}</label>
   )
 }
 

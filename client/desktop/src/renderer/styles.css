@@ -7,10 +7,11 @@
 @custom-variant hover (&:hover);
 
 @theme inline {
-  --font-sans: "Noto Color Emoji", "MiSans", sans-serif;
+  --font-sans: "MiSans", "Noto Color Emoji", sans-serif;
   --font-emoji: "Noto Color Emoji", "MiSans", sans-serif;
-  --font-serif: "Noto Color Emoji", "MiSans", sans-serif;
-  --font-mono: "Noto Color Emoji", "JetBrains Mono", "MiSans", "PingFang SC", "Microsoft YaHei", monospace;
+  --font-serif: "MiSans", "Noto Color Emoji", sans-serif;
+  --font-mono:
+    "JetBrains Mono", "MiSans", "PingFang SC", "Microsoft YaHei", "Noto Color Emoji", monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

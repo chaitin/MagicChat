@@ -20,6 +20,10 @@ export function withResolvedMemberNames(
   }))
 }
 
+export function mergeTaskLabels(labels: readonly string[], draft: string): string[] {
+  return [...new Set([...labels, draft].map((label) => label.trim()).filter(Boolean))]
+}
+
 export const taskStatuses: ProjectTaskStatus[] = ["todo", "in_progress", "done", "canceled"]
 export const taskStatusLabels: Record<ProjectTaskStatus, string> = {
   todo: "待办",
