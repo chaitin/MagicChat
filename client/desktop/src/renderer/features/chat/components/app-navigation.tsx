@@ -41,6 +41,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 export type AppSection =
@@ -137,81 +138,103 @@ export function AppRail({
   }
 
   return (
-    <aside className="flex w-14 shrink-0 flex-col items-center bg-xgui-background-6 py-3">
-      <AccountMenu
-        targetId={targetId}
-        serverUrl={serverUrl}
-        onUserUpdated={onUserUpdated}
-        userId={userId}
-        userName={userName}
-        userEmail={userEmail}
-        resolvedTheme={resolvedTheme}
-        onSignOut={onSignOut}
-        onRequestQuit={onRequestQuit}
-      />
+    <TooltipProvider delayDuration={1000} skipDelayDuration={0}>
+      <aside className="flex w-14 shrink-0 flex-col items-center bg-xgui-background-6 py-3">
+        <AccountMenu
+          targetId={targetId}
+          serverUrl={serverUrl}
+          onUserUpdated={onUserUpdated}
+          userId={userId}
+          userName={userName}
+          userEmail={userEmail}
+          resolvedTheme={resolvedTheme}
+          onSignOut={onSignOut}
+          onRequestQuit={onRequestQuit}
+        />
 
-      <nav className="flex flex-1 flex-col gap-2" aria-label="主导航">
-        {navigationItems.map((item) => {
-          const active = activeSection === item.id
-          return (
+        <nav className="flex flex-1 flex-col gap-2" aria-label="主导航">
+          {navigationItems.map((item) => {
+            const active = activeSection === item.id
+            return (
+              <Tooltip key={item.id}>
+                <TooltipTrigger asChild>
+                  <BeButton
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      "relative rounded-full hover:bg-foreground/10",
+                      active &&
+                        "bg-xgui-brand text-background hover:bg-xgui-brand hover:text-background",
+                    )}
+                    aria-label={
+                      item.id === "chat" && hasUnreadMessages ? "聊天，有未读消息" : item.label
+                    }
+                    aria-current={active ? "page" : undefined}
+                    onClick={() => onSectionChange(item.id)}
+                  >
+                    <HugeiconsIcon icon={item.icon} aria-hidden />
+                    {item.id === "chat" && hasUnreadMessages && (
+                      <AvatarBadge
+                        className="pointer-events-none top-0.5 right-0.5 bottom-auto size-2! bg-xgui-destructive"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </BeButton>
+                </TooltipTrigger>
+                <TooltipContent side="right" sideOffset={8}>
+                  {item.label}
+                </TooltipContent>
+              </Tooltip>
+            )
+          })}
+        </nav>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
             <BeButton
-              key={item.id}
               type="button"
               variant="ghost"
               size="icon"
-              className={cn(
-                "relative rounded-full hover:bg-foreground/10",
-                active && "bg-xgui-brand text-background hover:bg-xgui-brand hover:text-background",
-              )}
-              aria-label={item.id === "chat" && hasUnreadMessages ? "聊天，有未读消息" : item.label}
-              aria-current={active ? "page" : undefined}
-              title={item.label}
-              onClick={() => onSectionChange(item.id)}
+              className="mb-2 rounded-lg hover:bg-foreground/10"
+              aria-label="即应官网"
+              onClick={() => void openHomepage()}
             >
-              <HugeiconsIcon icon={item.icon} aria-hidden />
-              {item.id === "chat" && hasUnreadMessages && (
-                <AvatarBadge
-                  className="pointer-events-none top-0.5 right-0.5 bottom-auto size-2! bg-xgui-destructive"
-                  aria-hidden="true"
-                />
-              )}
+              <HugeiconsIcon icon={Home07Icon} aria-hidden />
             </BeButton>
-          )
-        })}
-      </nav>
+          </TooltipTrigger>
+          <TooltipContent side="right" sideOffset={8}>
+            即应官网
+          </TooltipContent>
+        </Tooltip>
 
-      <BeButton
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="mb-2 rounded-lg hover:bg-foreground/10"
-        aria-label="即应官网"
-        title="即应官网"
-        onClick={() => void openHomepage()}
-      >
-        <HugeiconsIcon icon={Home07Icon} aria-hidden />
-      </BeButton>
-
-      <SettingsDialog
-        theme={theme}
-        catalog={catalog}
-        disabled={isPreview}
-        onThemeChange={onThemeChange}
-        onCatalogChange={onCatalogChange}
-        trigger={
-          <BeButton
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="rounded-lg hover:bg-foreground/10"
-            aria-label="设置"
-            title="设置"
-          >
-            <HugeiconsIcon icon={Settings02Icon} aria-hidden />
-          </BeButton>
-        }
-      />
-    </aside>
+        <Tooltip>
+          <SettingsDialog
+            theme={theme}
+            catalog={catalog}
+            disabled={isPreview}
+            onThemeChange={onThemeChange}
+            onCatalogChange={onCatalogChange}
+            trigger={
+              <TooltipTrigger asChild>
+                <BeButton
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-lg hover:bg-foreground/10"
+                  aria-label="设置"
+                >
+                  <HugeiconsIcon icon={Settings02Icon} aria-hidden />
+                </BeButton>
+              </TooltipTrigger>
+            }
+          />
+          <TooltipContent side="right" sideOffset={8}>
+            设置
+          </TooltipContent>
+        </Tooltip>
+      </aside>
+    </TooltipProvider>
   )
 }
 
@@ -252,25 +275,31 @@ function AccountMenu({
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            aria-label="用户菜单"
-            title={userName}
-            className="mb-6 flex size-10 shrink-0 items-center justify-center rounded-sm bg-xgui-background-1 outline-none transition-colors hover:bg-foreground/10 focus-visible:ring-3 focus-visible:ring-ring/50 data-[state=open]:bg-foreground/10"
-          >
-            <EntityAvatar
-              targetId={targetId}
-              type="user"
-              id={userId}
-              theme={resolvedTheme}
-              size={36}
-              label={`${userName}头像`}
-              className="rounded-sm"
-              imageBackgroundClassName="bg-transparent"
-            />
-          </button>
-        </DropdownMenuTrigger>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="用户菜单"
+                className="mb-6 flex size-10 shrink-0 items-center justify-center rounded-sm bg-xgui-background-1 outline-none transition-colors hover:bg-foreground/10 focus-visible:ring-3 focus-visible:ring-ring/50 data-[state=open]:bg-foreground/10"
+              >
+                <EntityAvatar
+                  targetId={targetId}
+                  type="user"
+                  id={userId}
+                  theme={resolvedTheme}
+                  size={36}
+                  label={`${userName}头像`}
+                  className="rounded-sm"
+                  imageBackgroundClassName="bg-transparent"
+                />
+              </button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="right" sideOffset={8}>
+            {userName} · 用户菜单
+          </TooltipContent>
+        </Tooltip>
         <DropdownMenuContent side="right" align="start" sideOffset={8} className="w-64">
           <div
             role="group"
