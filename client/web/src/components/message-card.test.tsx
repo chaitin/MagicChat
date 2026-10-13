@@ -10,7 +10,7 @@ describe("MessageCard", () => {
     renderCard(createCard("/projects/project-1?taskId=task-1"))
 
     expect(screen.getByText("任务标题")).toHaveClass("truncate")
-    expect(screen.getByText("任务说明")).toHaveClass("whitespace-pre-wrap")
+    expect(screen.getByText("任务说明")).toHaveClass("line-clamp-3", "break-all", "whitespace-pre-wrap")
     expect(screen.getByText("任务说明")).not.toHaveClass("truncate")
     expect(
       screen.getByRole("link", { name: "任务标题，查看详情" })

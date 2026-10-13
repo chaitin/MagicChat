@@ -54,7 +54,7 @@ function CardContent({ card }: { card: ClientCardMessageBody }) {
     <>
       <div className="truncate text-sm">{card.title}</div>
       {card.description.trim() && (
-        <div className="text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
+        <div className="line-clamp-3 break-all text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
           {card.description}
         </div>
       )}
