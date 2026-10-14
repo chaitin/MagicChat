@@ -12,8 +12,8 @@ import (
 
 const (
 	appMessageSendWindow = time.Minute
-	appMessageSendLimit  = 50
-	appMessageUserLimit  = 5
+	appMessageSendLimit  = 300
+	appMessageUserLimit  = 30
 )
 
 // Lock before any conversation rows: all connections and server instances share

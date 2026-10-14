@@ -137,6 +137,7 @@ const bridge: DesktopBridge = {
     listBindableProjects: (targetId) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listBindableProjects, targetId),
     listProjects: (targetId) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listProjects, targetId),
+    createProject: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.createProject, input),
     listProjectTasks: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listProjectTasks, input),
     getProjectTask: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getProjectTask, input),
     createProjectTask: (input) =>

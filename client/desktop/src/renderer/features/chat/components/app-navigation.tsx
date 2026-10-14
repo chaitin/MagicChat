@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react"
 import {
-  AppleReminderIcon,
   ChatIcon,
   ContentWritingIcon,
   CrosshairIcon,
@@ -44,14 +43,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
-export type AppSection =
-  | "chat"
-  | "contacts"
-  | "projects"
-  | "goals"
-  | "documents"
-  | "tasks"
-  | "drive"
+export type AppSection = "chat" | "contacts" | "projects" | "goals" | "documents" | "drive"
 
 export function SectionPlaceholder({ section }: { section: Exclude<AppSection, "chat"> }) {
   const label = {
@@ -59,7 +51,6 @@ export function SectionPlaceholder({ section }: { section: Exclude<AppSection, "
     projects: "项目管理",
     goals: "目标管理",
     documents: "文档",
-    tasks: "任务",
     drive: "云网盘",
   }[section]
   return (
@@ -116,9 +107,8 @@ export function AppRail({
     { id: "chat", label: "聊天", icon: ChatIcon },
     { id: "contacts", label: "通讯录", icon: UserSquareIcon },
     { id: "projects", label: "项目管理", icon: FolderClosedIcon },
-    { id: "goals", label: "目标管理", icon: CrosshairIcon },
     { id: "documents", label: "文档", icon: ContentWritingIcon },
-    { id: "tasks", label: "任务", icon: AppleReminderIcon },
+    { id: "goals", label: "目标管理", icon: CrosshairIcon },
     { id: "drive", label: "云网盘", icon: FloppyDiskIcon },
   ] as const
 

@@ -1,5 +1,9 @@
 import { AuthFailure, isRecord } from "../../shared/auth.ts"
-import type { DesktopProjectList, DesktopProjectSummary } from "../../shared/account-data"
+import type {
+  CreateProjectInput,
+  DesktopProjectList,
+  DesktopProjectSummary,
+} from "../../shared/account-data"
 import type { AuthenticatedClient } from "./authenticated-client"
 import type { AvatarDescriptor } from "./avatar-types"
 import type { ContactManager } from "./contact-manager"
@@ -62,6 +66,27 @@ export class ProjectManager {
       if (cursor) seenCursors.add(cursor)
     } while (cursor)
     return { personalProject, projects }
+  }
+
+  async create(
+    input: Pick<CreateProjectInput, "name" | "groupIds">,
+  ): Promise<DesktopProjectSummary> {
+    const name = typeof input?.name === "string" ? input.name.trim() : ""
+    if (!name || [...name].length > 120) {
+      throw new AuthFailure("invalid_project_name", "项目名称长度必须为 1 到 120 个字符")
+    }
+    if (
+      !Array.isArray(input.groupIds) ||
+      input.groupIds.length > 100 ||
+      input.groupIds.some((id) => typeof id !== "string" || !id || id.length > 128)
+    ) {
+      throw new AuthFailure("invalid_group_ids", "项目最多关联 100 个有效群聊")
+    }
+    const data = await this.client.post("/api/client/projects", {
+      name,
+      group_ids: input.groupIds,
+    })
+    return projectSummary(data)
   }
 
   getAvatarDescriptor(projectId: string): Promise<AvatarDescriptor> {

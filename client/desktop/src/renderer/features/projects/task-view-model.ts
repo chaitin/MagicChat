@@ -78,6 +78,16 @@ export function daysBetween(date: Date, first: Date): number {
   )
 }
 
+export function isGanttColumnCurrent(
+  first: Date,
+  today: Date,
+  index: number,
+  unitDays: number,
+): boolean {
+  const offset = daysBetween(today, first)
+  return offset >= index * unitDays && offset < (index + 1) * unitDays
+}
+
 export function taskDateRange(task: DesktopProjectTask): { start: Date; end: Date } | null {
   const start = parseDateKey(task.startDate)
   const end = parseDateKey(task.dueDate)
@@ -93,6 +103,18 @@ export function calendarTasksOnDate(tasks: DesktopProjectTask[], date: Date): De
     const range = taskDateRange(task)
     return range && formatDateKey(range.start) <= key && key <= formatDateKey(range.end)
   })
+}
+
+export function ganttColumnSpan(
+  task: DesktopProjectTask,
+  origin: Date,
+  unitDays: number,
+): { left: number; width: number } | null {
+  const span = ganttSpan(task, origin)
+  if (!span) return null
+  const firstColumn = Math.floor(span.left / unitDays)
+  const lastColumn = Math.floor((span.left + span.width - 1) / unitDays)
+  return { left: firstColumn, width: lastColumn - firstColumn + 1 }
 }
 
 export function ganttSpan(

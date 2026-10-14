@@ -351,11 +351,11 @@ export function ProjectTasksPage({
       className="@container/task-pane flex min-h-0 min-w-0 flex-1 flex-col bg-card"
       aria-label="项目任务"
     >
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-2.5">
+      <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b px-3 pt-2.5 pb-[9px]">
         <div
           role="group"
           aria-label="任务视图"
-          className="flex shrink-0 items-center gap-1 @max-[549px]/task-pane:hidden"
+          className="flex shrink-0 items-center gap-1 @max-[849px]/task-pane:hidden"
         >
           {views.map(({ id, label, icon: Icon }) => (
             <Button
@@ -380,7 +380,7 @@ export function ProjectTasksPage({
               pressScale={1}
               whileHover={{ scale: 1 }}
               aria-label={`切换任务视图，当前：${activeViewDetails.label}`}
-              className="hidden shrink-0 rounded-lg hover:bg-foreground/10 [&_svg]:size-4 @max-[549px]/task-pane:inline-flex"
+              className="hidden shrink-0 rounded-lg hover:bg-foreground/10 [&_svg]:size-4 @max-[849px]/task-pane:inline-flex"
             >
               <ActiveViewIcon />
               {activeViewDetails.label}
@@ -408,7 +408,7 @@ export function ProjectTasksPage({
               placeholder="搜索任务"
               value={filters.keyword}
               onChange={(event) => changeFilter("keyword", event.target.value)}
-              className="w-32"
+              className="h-8 w-32"
             />
           </form>
           <DropdownMenu>

@@ -50,6 +50,7 @@ export function ContactsPage({
   onOpenConversation,
   onCreateGroup,
   onCreateApp,
+  onCreateProject,
   onRefresh,
   onSelectSearchResult,
   onSearchResultCloseAutoFocus,
@@ -63,6 +64,7 @@ export function ContactsPage({
   onOpenConversation: (conversationId: string) => void
   onCreateGroup: () => void
   onCreateApp: () => void
+  onCreateProject: () => void
   onRefresh: () => void
   onSelectSearchResult: (result: LocalSearchResult) => void
   onSearchResultCloseAutoFocus: () => void
@@ -265,6 +267,7 @@ export function ContactsPage({
           onSearchResultCloseAutoFocus={onSearchResultCloseAutoFocus}
           onCreateGroup={onCreateGroup}
           onCreateApp={onCreateApp}
+          onCreateProject={onCreateProject}
           onRefresh={onRefresh}
         />
         <ScrollArea

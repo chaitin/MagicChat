@@ -2,6 +2,7 @@ import type {
   AddGroupMembersInput,
   AddProjectTaskCommentInput,
   AvatarRequest,
+  CreateProjectInput,
   CreateProjectTaskInput,
   BindConversationProjectInput,
   ConversationTargetInput,
@@ -171,6 +172,11 @@ export class AccountDataFacade {
   async listProjects(targetId: string) {
     await this.ready(targetId)
     return this.requireRuntime().listProjects()
+  }
+
+  async createProject(input: CreateProjectInput) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().createProject(input)
   }
 
   async listProjectTasks(input: ListProjectTasksInput) {

@@ -336,6 +336,10 @@ export class AuthController {
     return this.accountData.listProjects(...args)
   }
 
+  createProject(...args: Parameters<AccountDataFacade["createProject"]>) {
+    return this.accountData.createProject(...args)
+  }
+
   listProjectTasks(...args: Parameters<AccountDataFacade["listProjectTasks"]>) {
     return this.accountData.listProjectTasks(...args)
   }

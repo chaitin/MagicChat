@@ -33,7 +33,8 @@ import {
   calendarTasksOnDate,
   daysBetween,
   formatDateKey,
-  ganttSpan,
+  ganttColumnSpan,
+  isGanttColumnCurrent,
   taskDateRange,
   taskStatusLabels,
   taskStatuses,
@@ -493,6 +494,7 @@ export function TaskCalendarView({
           <div className="grid grid-cols-7">
             {cells.map((day) => {
               const matches = calendarTasksOnDate(tasks, day)
+              const dateLabel = formatDateKey(day).slice(5)
               return (
                 <div
                   key={formatDateKey(day)}
@@ -502,22 +504,23 @@ export function TaskCalendarView({
                       "bg-xgui-background-1 text-muted-foreground",
                   )}
                 >
-                  <span
-                    className={cn(
-                      "inline-flex size-6 items-center justify-center rounded-full",
-                      formatDateKey(day) === today && "bg-primary text-primary-foreground",
+                  <div className="flex h-6 items-center">
+                    {formatDateKey(day) === today ? (
+                      <Badge variant="default" className="h-6" aria-current="date">
+                        {dateLabel}
+                      </Badge>
+                    ) : (
+                      <span className="px-2">{dateLabel}</span>
                     )}
-                  >
-                    {day.getDate()}
-                  </span>
-                  <div className="grid gap-1">
+                  </div>
+                  <div className="mt-1.5 grid gap-1">
                     {matches.map((task) => (
                       <button
                         key={task.id}
                         type="button"
                         onClick={() => onOpen(task)}
                         className={cn(
-                          "w-full cursor-pointer truncate rounded border px-1 py-0.5 text-left transition-colors",
+                          "h-7 w-full cursor-pointer truncate rounded border px-1 py-0.5 text-left transition-colors",
                           statusColors[task.status],
                           timelineStatusColors[task.status],
                           statusHoverColors[task.status],
@@ -556,6 +559,9 @@ export function TaskGanttView({
   const spanDays = Math.max(21, daysBetween(last, first) + 1)
   const unitDays = spanDays > 90 ? Math.ceil(spanDays / 90 / 7) * 7 : 1
   const columns = Math.ceil(spanDays / unitDays)
+  const columnWidth = 64
+  const timelineWidth = columns * columnWidth
+  const today = new Date()
   return (
     <div aria-label="任务甘特图" className="grid gap-4 p-4">
       {unscheduled.length > 0 && <UnscheduledTasksSection tasks={unscheduled} onOpen={onOpen} />}
@@ -568,33 +574,31 @@ export function TaskGanttView({
             className="w-full [&_[data-slot=scroll-area-scrollbar]]:z-20"
             viewportClassName="overflow-y-hidden"
           >
-            <div className="min-w-max pb-3" style={{ width: Math.max(700, 220 + columns * 48) }}>
+            <div className="min-w-max pb-3" style={{ width: 224 + timelineWidth }}>
               <header className="flex h-10 border-b text-xs font-medium">
                 <div className="sticky left-0 z-10 flex w-56 shrink-0 items-center border-r bg-card px-3">
                   任务
                 </div>
-                <div
-                  className="relative flex-1"
-                  style={{
-                    backgroundSize: `${(unitDays / spanDays) * 100}% 100%`,
-                    backgroundImage:
-                      "linear-gradient(to right, var(--border) 1px, transparent 1px)",
-                  }}
-                >
-                  {Array.from({ length: columns }, (_, index) => (
-                    <span
-                      key={index}
-                      className="inline-block w-12 truncate border-r px-1 py-3 text-center"
-                    >
-                      {formatDateKey(addDays(first, index * unitDays)).slice(5)}
-                    </span>
-                  ))}
+                <div className="relative flex flex-1">
+                  {Array.from({ length: columns }, (_, index) => {
+                    const isCurrent = isGanttColumnCurrent(first, today, index, unitDays)
+                    const dateLabel = formatDateKey(addDays(first, index * unitDays)).slice(5)
+                    return (
+                      <span
+                        key={index}
+                        aria-current={isCurrent ? "date" : undefined}
+                        className="inline-flex h-full w-16 shrink-0 items-center justify-center border-r px-1 text-center"
+                      >
+                        {isCurrent ? <Badge variant="default">{dateLabel}</Badge> : dateLabel}
+                      </span>
+                    )
+                  })}
                 </div>
               </header>
               {scheduled.map((task) => {
-                const span = ganttSpan(task, first)!
+                const span = ganttColumnSpan(task, first, unitDays)!
                 return (
-                  <div key={task.id} className="flex h-12 border-b text-sm last:border-b-0">
+                  <div key={task.id} className="flex h-10 border-b text-sm last:border-b-0">
                     <button
                       type="button"
                       onClick={() => onOpen(task)}
@@ -606,23 +610,23 @@ export function TaskGanttView({
                     <div
                       className="relative flex-1 bg-muted/20"
                       style={{
-                        backgroundSize: `${(unitDays / spanDays) * 100}% 100%`,
+                        backgroundSize: `${columnWidth}px 100%`,
                         backgroundImage:
-                          "linear-gradient(to right, var(--border) 1px, transparent 1px)",
+                          "linear-gradient(to left, var(--border) 1px, transparent 1px)",
                       }}
                     >
                       <button
                         type="button"
                         onClick={() => onOpen(task)}
                         className={cn(
-                          "absolute top-2 h-8 min-w-3 cursor-pointer truncate rounded border px-2 text-left text-xs transition-colors",
+                          "absolute top-1/2 h-7 min-w-3 -translate-y-1/2 cursor-pointer truncate rounded border px-2 text-left text-xs transition-colors",
                           statusColors[task.status],
                           timelineStatusColors[task.status],
                           statusHoverColors[task.status],
                         )}
                         style={{
-                          left: `${(span.left / spanDays) * 100}%`,
-                          width: `${(span.width / spanDays) * 100}%`,
+                          left: span.left * columnWidth,
+                          width: span.width * columnWidth,
                         }}
                         title={task.title}
                       >

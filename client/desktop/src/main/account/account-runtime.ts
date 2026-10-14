@@ -238,6 +238,11 @@ export class AccountRuntime {
     return this.projectManager!.listProjects()
   }
 
+  createProject(input: Parameters<ProjectManager["create"]>[0]) {
+    this.assertInitialized()
+    return this.projectManager!.create(input)
+  }
+
   listProjectTasks(input: Parameters<ProjectTaskManager["list"]>[0]) {
     this.assertInitialized()
     return this.projectTaskManager!.list(input)

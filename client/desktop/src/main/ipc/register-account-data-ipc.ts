@@ -4,6 +4,7 @@ import {
   type AddGroupMembersInput,
   type AddProjectTaskCommentInput,
   type BindConversationProjectInput,
+  type CreateProjectInput,
   type CreateProjectTaskInput,
   type ConversationTargetInput,
   type LocalAttachmentPageInput,
@@ -103,6 +104,9 @@ export function registerAccountDataIpc({
     auth.listBindableProjects(input as string),
   )
   handle(ACCOUNT_DATA_CHANNELS.listProjects, (input) => auth.listProjects(input as string))
+  handle(ACCOUNT_DATA_CHANNELS.createProject, (input) =>
+    auth.createProject(input as CreateProjectInput),
+  )
   handle(ACCOUNT_DATA_CHANNELS.listProjectTasks, (input) =>
     auth.listProjectTasks(input as ListProjectTasksInput),
   )

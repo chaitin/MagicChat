@@ -23,6 +23,8 @@ type ProjectsPageProps = {
   onSearchResultCloseAutoFocus: () => void
   onCreateGroup: () => void
   onCreateApp: () => void
+  onCreateProject: () => void
+  createdProjectId: string | null
 }
 
 export function ProjectsPage(props: ProjectsPageProps) {
@@ -37,12 +39,18 @@ function AccountProjectsPage({
   onSearchResultCloseAutoFocus,
   onCreateGroup,
   onCreateApp,
+  onCreateProject,
+  createdProjectId,
 }: ProjectsPageProps) {
   const [list, setList] = useState<DesktopProjectList | null>(null)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(createdProjectId)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [refresh, setRefresh] = useState(0)
+
+  useEffect(() => {
+    if (createdProjectId) setSelectedId(createdProjectId)
+  }, [createdProjectId])
 
   useEffect(() => {
     let disposed = false
@@ -71,7 +79,7 @@ function AccountProjectsPage({
     return () => {
       disposed = true
     }
-  }, [targetId, refresh])
+  }, [targetId, refresh, createdProjectId])
 
   return (
     <section className="grid min-w-0 flex-1 grid-cols-[19rem_minmax(0,1fr)] bg-card">
@@ -85,6 +93,7 @@ function AccountProjectsPage({
           onSearchResultCloseAutoFocus={onSearchResultCloseAutoFocus}
           onCreateGroup={onCreateGroup}
           onCreateApp={onCreateApp}
+          onCreateProject={onCreateProject}
           onRefresh={() => setRefresh((current) => current + 1)}
         />
         <ScrollArea

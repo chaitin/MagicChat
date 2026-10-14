@@ -19,6 +19,7 @@ export const ACCOUNT_DATA_CHANNELS = {
   uploadGroupAvatar: "desktop-next:v1:conversation-group-avatar-upload",
   listBindableProjects: "desktop-next:v1:projects-bindable-list",
   listProjects: "desktop-next:v1:projects-list",
+  createProject: "desktop-next:v1:project-create",
   listProjectTasks: "desktop-next:v1:project-tasks-list",
   getProjectTask: "desktop-next:v1:project-task-get",
   createProjectTask: "desktop-next:v1:project-task-create",
@@ -179,6 +180,12 @@ export type DesktopConversationTopic = {
     name: string
     type: "user" | "app"
   }
+}
+
+export type CreateProjectInput = {
+  targetId: string
+  name: string
+  groupIds: string[]
 }
 
 export type DesktopProjectSummary = { id: string; name: string; description: string }
@@ -803,6 +810,7 @@ export interface AccountDataBridge {
   uploadGroupAvatar(input: UploadGroupAvatarInput): Promise<AuthResult<DesktopConversation>>
   listBindableProjects(targetId: string): Promise<AuthResult<DesktopProjectSummary[]>>
   listProjects(targetId: string): Promise<AuthResult<DesktopProjectList>>
+  createProject(input: CreateProjectInput): Promise<AuthResult<DesktopProjectSummary>>
   listProjectTasks(
     input: ListProjectTasksInput,
   ): Promise<AuthResult<ProjectPage<DesktopProjectTask>>>

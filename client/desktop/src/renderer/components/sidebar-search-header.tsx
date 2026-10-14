@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import {
   CirclePlusIcon,
+  FolderClosedIcon,
   RefreshIcon,
   Search01Icon,
   UserMultiple02Icon,
@@ -27,6 +28,7 @@ export function SidebarSearchHeader({
   onSearchResultCloseAutoFocus,
   onCreateGroup,
   onCreateApp,
+  onCreateProject,
   onRefresh,
 }: {
   searchLabel: string
@@ -37,6 +39,7 @@ export function SidebarSearchHeader({
   onSearchResultCloseAutoFocus: () => void
   onCreateGroup: () => void
   onCreateApp: () => void
+  onCreateProject: () => void
   onRefresh: () => void
 }) {
   const [searchOpen, setSearchOpen] = useState(false)
@@ -98,6 +101,10 @@ export function SidebarSearchHeader({
             <DropdownMenuItem onSelect={onCreateApp}>
               <HugeiconsIcon icon={CirclePlusIcon} aria-hidden />
               创建应用
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={onCreateProject}>
+              <HugeiconsIcon icon={FolderClosedIcon} aria-hidden />
+              创建项目
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={onRefresh}>
               <HugeiconsIcon icon={RefreshIcon} aria-hidden />

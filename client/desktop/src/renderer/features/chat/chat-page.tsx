@@ -27,6 +27,7 @@ import { hasUnmutedUnreadConversations, unmutedUnreadCount } from "./conversatio
 import { ClientAppDialog } from "../contacts/client-app-dialog"
 import { ContactsPage } from "../contacts/contacts-page"
 import { ProjectsPage } from "../projects/projects-page"
+import { ProjectCreateDialog } from "../projects/project-create-dialog"
 import { ChatHeader } from "./components/chat-header"
 import { ConversationSidebar } from "./components/conversation-sidebar"
 import { CreateGroupConversationDialog } from "./components/create-group-conversation-dialog"
@@ -122,6 +123,13 @@ export function ChatPage({
   const [activeSection, setActiveSection] = useState<AppSection>("chat")
   const [actionDialog, setActionDialog] = useState<"group" | "app" | null>(null)
   const [actionDirectory, setActionDirectory] = useState<DesktopContactDirectory | null>(null)
+  const [createProjectTarget, setCreateProjectTarget] = useState<string | null>(null)
+  const [createdProject, setCreatedProject] = useState<{ targetId: string; id: string } | null>(
+    null,
+  )
+  useEffect(() => {
+    setCreateProjectTarget(null)
+  }, [targetId])
   const actionRequestRef = useRef(0)
   const [searchMessageTarget, setSearchMessageTarget] = useState<{
     conversationId: string
@@ -181,6 +189,10 @@ export function ChatPage({
     retryMessage,
     loadBeforeMessages,
   } = useChatData({ targetId, userId, userName, activeSection })
+  const projectGroups = useMemo(
+    () => conversations.filter((conversation) => conversation.type === "group"),
+    [conversations],
+  )
   const hasUnreadMessages = hasUnmutedUnreadConversations(conversations)
   const unreadCount = unmutedUnreadCount(conversations)
   const selection = useMessageSelection(`${targetId}:${selectedId ?? ""}`)
@@ -695,6 +707,10 @@ export function ChatPage({
     void openActionDialog("app")
   }, [openActionDialog])
 
+  const createProject = useCallback(() => {
+    setCreateProjectTarget(targetId)
+  }, [targetId])
+
   async function submitForward(targetConversationIds: string[]) {
     if (!forwardOperation || !window.desktop) throw new Error("转发操作不可用")
     const result = await window.desktop.accountData.forwardMessages({
@@ -747,6 +763,7 @@ export function ChatPage({
             onSelect={selectConversation}
             onCreateGroup={createGroup}
             onCreateApp={createApp}
+            onCreateProject={createProject}
             onRefresh={onRefresh}
             onSelectSearchResult={selectSearchResult}
             onSearchResultCloseAutoFocus={focusComposer}
@@ -936,6 +953,7 @@ export function ChatPage({
           }}
           onCreateGroup={() => void openActionDialog("group")}
           onCreateApp={() => void openActionDialog("app")}
+          onCreateProject={createProject}
           onRefresh={onRefresh}
           onSelectSearchResult={selectSearchResult}
           onSearchResultCloseAutoFocus={focusComposer}
@@ -951,9 +969,26 @@ export function ChatPage({
           onSearchResultCloseAutoFocus={focusComposer}
           onCreateGroup={() => void openActionDialog("group")}
           onCreateApp={() => void openActionDialog("app")}
+          onCreateProject={createProject}
+          createdProjectId={createdProject?.targetId === targetId ? createdProject.id : null}
         />
       ) : (
         <SectionPlaceholder section={activeSection} />
+      )}
+      {createProjectTarget === targetId && (
+        <ProjectCreateDialog
+          key={targetId}
+          targetId={targetId}
+          theme={resolvedTheme}
+          groups={projectGroups}
+          loading={loadingConversations}
+          onClose={() => setCreateProjectTarget(null)}
+          onCreated={(project) => {
+            setCreateProjectTarget(null)
+            setCreatedProject({ targetId, id: project.id })
+            setActiveSection("projects")
+          }}
+        />
       )}
       {actionDialog === "group" && (
         <CreateGroupConversationDialog

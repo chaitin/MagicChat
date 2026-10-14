@@ -51,6 +51,7 @@ export const ConversationSidebar = memo(function ConversationSidebar({
   onSelect,
   onCreateGroup,
   onCreateApp,
+  onCreateProject,
   onRefresh,
   onSelectSearchResult,
   onSearchResultCloseAutoFocus,
@@ -69,6 +70,7 @@ export const ConversationSidebar = memo(function ConversationSidebar({
   onSelect: (id: string) => void
   onCreateGroup: () => void
   onCreateApp: () => void
+  onCreateProject: () => void
   onRefresh: () => void
   onSelectSearchResult: (result: LocalSearchResult) => void
   onSearchResultCloseAutoFocus: () => void
@@ -149,6 +151,7 @@ export const ConversationSidebar = memo(function ConversationSidebar({
           onSearchResultCloseAutoFocus={onSearchResultCloseAutoFocus}
           onCreateGroup={onCreateGroup}
           onCreateApp={onCreateApp}
+          onCreateProject={onCreateProject}
           onRefresh={onRefresh}
         />
 
