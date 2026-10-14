@@ -142,7 +142,7 @@ function conversationAvatarIdentity(
         ? member.type === "app" &&
           (value.is_builtin_assistant === true ||
             member.id !== "00000000-0000-0000-0000-000000000001")
-        : member.id !== currentUserId,
+        : member.type === "user" && member.id !== currentUserId,
     )
     if (preferred) return { type: preferred.type, id: preferred.id }
     if (conversationType === "app") return { type: "app", id: conversationId }
