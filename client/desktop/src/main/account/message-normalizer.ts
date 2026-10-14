@@ -342,6 +342,12 @@ function systemEventSummary(event: string, body: Record<string, unknown>) {
       return `${actor || "成员"} 已退出群聊`
     case "group_member_removed":
       return `${actor || "管理员"} 已将 ${displayName(body.target) || "成员"} 移出群聊`
+    case "group_member_role_updated": {
+      const target = displayName(body.target) || "成员"
+      if (body.role === "admin") return `${actor || "管理员"} 将 ${target} 设为管理员`
+      if (body.role === "member") return `${actor || "管理员"} 取消了 ${target} 的管理员`
+      return "系统消息"
+    }
     case "group_name_updated":
       return `${actor || "管理员"} 修改群聊名称为 ${stringValue(body.name)}`
     case "group_announcement_updated":

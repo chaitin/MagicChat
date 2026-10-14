@@ -36,6 +36,7 @@ const MAX_VERTICAL_CHART_HEIGHT = 320
 
 type ChartPalette = {
   background: string
+  border: string
   colors: string[]
   grid: string
   muted: string
@@ -67,10 +68,10 @@ export const MessageChart = memo(function MessageChart({
   return (
     <Pressable accessible={false} onLongPress={onLongPress} style={{ gap: 7, width: "100%" }}>
       <Text style={{ color: colors.textPrimary, fontSize: 15, lineHeight: 23 }}>{chart.title}</Text>
-      <View style={{ backgroundColor: colors.foreground3, height: StyleSheet.hairlineWidth }} />
+      <View style={{ backgroundColor: palette.border, height: StyleSheet.hairlineWidth }} />
       <ChartBody chart={chart} palette={palette} />
-      <View style={{ backgroundColor: colors.foreground3, height: StyleSheet.hairlineWidth }} />
-      <Text style={{ color: colors.textPrimary, fontSize: 15, lineHeight: 23 }}>{chart.description}</Text>
+      <View style={{ backgroundColor: palette.border, height: StyleSheet.hairlineWidth }} />
+      <Text style={{ color: palette.muted, fontSize: 15, lineHeight: 23 }}>{chart.description}</Text>
     </Pressable>
   )
 })
@@ -656,7 +657,7 @@ function RadarMessageChart({
           {visibleSeries.map(({ index, series }) => (
             <Polygon
               fill={palette.colors[index]}
-              fillOpacity={0.25}
+              fillOpacity={0.18}
               key={seriesKey(index)}
               points={series.values
                 .map((value, axisIndex) => {
@@ -837,7 +838,7 @@ function ChartLegend({
   items: ChartLegendItem[]
   onToggle: (key: string) => void
 }) {
-  const { colors } = useXGUITheme()
+  const palette = useChartPalette()
   if (!always && items.length <= 1) return null
 
   return (
@@ -857,7 +858,7 @@ function ChartLegend({
           >
             <View style={{ alignItems: "center", flexDirection: "row", gap: 4, paddingVertical: 2 }}>
               <View style={{ backgroundColor: item.color, borderRadius: 2, height: 8, width: 8 }} />
-              <Text style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>{item.label}</Text>
+              <Text style={{ color: palette.muted, fontSize: 14, lineHeight: 21 }}>{item.label}</Text>
             </View>
           </Pressable>
         )
@@ -874,16 +875,17 @@ function ChartTapResult({
   label: string | null
 }) {
   const { colors } = useXGUITheme()
+  const palette = useChartPalette()
   if (!label || details.length === 0) return null
 
   return (
-    <View style={{ backgroundColor: colors.background1, borderColor: colors.foreground3, borderRadius: 7, borderWidth: 1, gap: 2, padding: 7 }}>
+    <View style={{ backgroundColor: colors.background1, borderColor: palette.border, borderRadius: 7, borderWidth: 1, gap: 2, padding: 7 }}>
       <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: "600", lineHeight: 21 }}>{label}</Text>
       {details.map((detail) => (
         <View key={`${detail.label}:${detail.value}`} style={{ alignItems: "center", flexDirection: "row", gap: 7, justifyContent: "space-between" }}>
           <View style={{ alignItems: "center", flex: 1, flexDirection: "row", gap: 4 }}>
             <View style={{ backgroundColor: detail.color, borderRadius: 2, height: 8, width: 8 }} />
-            <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>{detail.label}</Text>
+            <Text numberOfLines={1} style={{ color: palette.muted, fontSize: 14, lineHeight: 21 }}>{detail.label}</Text>
           </View>
           <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: "600", lineHeight: 21 }}>{detail.value}</Text>
         </View>
@@ -963,21 +965,23 @@ function useHiddenChartItems() {
 }
 
 function useChartPalette(): ChartPalette {
-  const { colors } = useXGUITheme()
+  const { colors, colorScheme } = useXGUITheme()
   return useMemo(
     () => ({
       background: colors.background2,
+      border: colorScheme === "dark" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.09)",
       colors: [
+        colors.brand,
         colors.blue,
-        colors.indigo,
+        colors.orange,
         colors.purple,
-        colors.green,
-        colors.lightGreen,
+        colors.yellow,
       ],
-      grid: colors.foreground3,
-      muted: colors.textSecondary,
+      // Match Desktop's foreground (90% black / 80% white) at 5% opacity.
+      grid: colorScheme === "dark" ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.045)",
+      muted: colorScheme === "dark" ? "#A3A3A3" : "#737373",
       text: colors.textPrimary,
     }),
-    [colors]
+    [colors, colorScheme]
   )
 }

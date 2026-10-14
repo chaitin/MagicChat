@@ -63,7 +63,8 @@ export function ClientConversationRealtimeSync() {
             message.body.event === "group_name_updated" ||
             message.body.event === "group_announcement_updated" ||
             message.body.event === "group_member_left" ||
-            message.body.event === "group_member_removed")
+            message.body.event === "group_member_removed" ||
+            message.body.event === "group_member_role_updated")
         ) {
           void refreshConversations().catch(() => undefined)
         }

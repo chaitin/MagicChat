@@ -432,6 +432,10 @@ export type ClientSystemEventUserRef = {
 
 export type ClientSystemEventMessageBody =
   | {
+      event: "friendship_created"
+      type: "system_event"
+    }
+  | {
       event: "group_members_invited"
       invitees: ClientSystemEventUserRef[]
       inviter: ClientSystemEventUserRef
@@ -457,6 +461,19 @@ export type ClientSystemEventMessageBody =
       actor: ClientSystemEventUserRef
       event: "group_member_removed"
       target: ClientSystemEventUserRef
+      type: "system_event"
+    }
+  | {
+      actor: ClientSystemEventUserRef
+      event: "group_member_role_updated"
+      role: "admin" | "member"
+      target: ClientSystemEventUserRef
+      type: "system_event"
+    }
+  | {
+      actor: ClientSystemEventUserRef
+      announcement: string
+      event: "group_announcement_updated"
       type: "system_event"
     }
   | {

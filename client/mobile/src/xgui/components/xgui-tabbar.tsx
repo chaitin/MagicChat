@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     paddingBottom: 6,
-    paddingTop: 6,
+    paddingTop: 10,
   },
   label: {
     fontSize: 12,

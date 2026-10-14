@@ -71,6 +71,48 @@ test("群聊邀请系统消息显示邀请人和成员", () => {
   })
 })
 
+test("设置和取消管理员系统消息显示操作者与目标成员或应用", () => {
+  for (const [role, expected] of [
+    ["admin", "张三 将 李四 设为管理员"],
+    ["member", "张三 取消了 李四 的管理员"],
+  ]) {
+    const details = normalizeDesktopMessageDetails({
+      body: {
+        type: "system_event",
+        event: "group_member_role_updated",
+        actor: { id: "user-1", display_name: "张三" },
+        target: { id: "user-2", display_name: "李四" },
+        role,
+      },
+    })
+    assert.deepEqual(details.body, {
+      type: "system_event",
+      event: "group_member_role_updated",
+      summary: expected,
+    })
+    assert.equal(summarizeDesktopMessageBody(details.body), expected)
+  }
+  const details = normalizeDesktopMessageDetails({
+    body: {
+      type: "system_event",
+      event: "group_member_role_updated",
+      role: "admin",
+      actor: { id: "app-1", display_name: "群管助手", type: "app" },
+      target: { id: "app-2", display_name: "日报助手", type: "app" },
+    },
+  })
+  assert.equal(summarizeDesktopMessageBody(details.body), "群管助手 将 日报助手 设为管理员")
+})
+
+test("无效管理员角色不展示错误的设置或取消文案", () => {
+  for (const role of [undefined, "owner", "unknown"]) {
+    const details = normalizeDesktopMessageDetails({
+      body: { type: "system_event", event: "group_member_role_updated", role },
+    })
+    assert.equal(summarizeDesktopMessageBody(details.body), "系统消息")
+  }
+})
+
 test("媒体与文件消息摘要带类型前缀", () => {
   assert.equal(
     summarizeDesktopMessageBody({

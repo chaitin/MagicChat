@@ -24,6 +24,9 @@ function isMessageInitiatedByUser(message: ClientMessage, userId: string) {
   if (message.body.type !== "system_event") {
     return false
   }
+  if (message.body.event === "friendship_created") {
+    return false
+  }
   if (message.body.event === "group_members_invited") {
     return message.body.inviter.id === userId
   }

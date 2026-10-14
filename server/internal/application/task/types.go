@@ -98,6 +98,7 @@ type ListCommand struct {
 	Priority  Field[string]
 	Assignee  Field[string]
 	Label     Field[string]
+	Labels    []string
 	StartFrom Field[string]
 	StartTo   Field[string]
 	DueFrom   Field[string]

@@ -436,18 +436,7 @@ export class ConversationManager {
   }
 
   async getConversationInfo(conversationId: string) {
-    this.assertConversationId(conversationId)
-    const current = this.database
-      .listConversations(conversationId)
-      .find((item) => item.id === conversationId)
-    const conversation = current ?? this.viewedTopics.get(conversationId)
-    if (
-      !conversation ||
-      (!current &&
-        !this.database.hasCurrentConversation(conversation.topic?.parentConversationId ?? ""))
-    ) {
-      throw new AuthFailure("conversation_not_found", "对话不存在")
-    }
+    const conversation = this.requireReadableConversation(conversationId)
     const payload = this.database.getConversationPayload(conversationId)
     if (!isRecord(payload)) throw new AuthFailure("invalid_conversation", "会话信息不可用")
     const info = {
@@ -742,6 +731,22 @@ export class ConversationManager {
     return conversation
   }
 
+  private requireReadableConversation(conversationId: string): DesktopConversation {
+    this.assertConversationId(conversationId)
+    const current = this.database
+      .listConversations(conversationId)
+      .find((item) => item.id === conversationId)
+    const conversation = current ?? this.viewedTopics.get(conversationId)
+    if (
+      !conversation ||
+      (!current &&
+        !this.database.hasCurrentConversation(conversation.topic?.parentConversationId ?? ""))
+    ) {
+      throw new AuthFailure("conversation_not_found", "对话不存在")
+    }
+    return conversation
+  }
+
   private assertCurrentConversation(conversationId: string, type?: string) {
     this.assertConversationId(conversationId)
     const conversation = this.database
@@ -810,7 +815,7 @@ export class ConversationManager {
   }
 
   getLocalMessageContext(conversationId: string, messageId: string) {
-    this.assertCurrentConversation(conversationId)
+    this.requireReadableConversation(conversationId)
     if (typeof messageId !== "string" || !messageId || messageId.length > 128) {
       throw new AuthFailure("invalid_message", "消息不存在")
     }
@@ -835,7 +840,7 @@ export class ConversationManager {
   }
 
   listLocalMessagesAfter(conversationId: string, afterSeq: number) {
-    this.assertCurrentConversation(conversationId)
+    this.requireReadableConversation(conversationId)
     if (!Number.isSafeInteger(afterSeq) || afterSeq <= 0) {
       throw new AuthFailure("invalid_message_seq", "消息序号不正确")
     }

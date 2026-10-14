@@ -65,6 +65,12 @@ export class ProjectTaskManager {
         input.assigneeUserIds.map((id) => checkedId(id, "负责人")).join(","),
       )
     }
+    if (input.labels !== undefined) {
+      if (!Array.isArray(input.labels)) invalidInput()
+      for (const label of input.labels) {
+        query.append("label", checkedText(label, "标签", 256))
+      }
+    }
     const data = await this.client.get(`${path}${query.size ? `?${query}` : ""}`)
     return parsePage(data, "tasks", (value) => parseTask(value, input.projectId))
   }

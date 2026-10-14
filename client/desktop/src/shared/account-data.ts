@@ -266,6 +266,7 @@ export type ListProjectTasksInput = ProjectTargetInput & {
   statuses?: ProjectTaskStatus[]
   priorities?: ProjectTaskPriority[]
   assigneeUserIds?: string[]
+  labels?: string[]
 }
 export type ProjectTaskMutation = {
   title?: string

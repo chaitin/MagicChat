@@ -154,6 +154,17 @@ export function MessageComposer({
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.nativeEvent.isComposing || event.keyCode === 229) return
+    if (event.key === "Enter" && (event.ctrlKey || event.shiftKey)) {
+      event.preventDefault()
+      const textarea = event.currentTarget
+      const start = textarea.selectionStart
+      const end = textarea.selectionEnd
+      onDraftChange(`${textarea.value.slice(0, start)}\n${textarea.value.slice(end)}`)
+      setMentionTrigger(null)
+      setSelectedMentionIndex(0)
+      requestAnimationFrame(() => textarea.setSelectionRange(start + 1, start + 1))
+      return
+    }
     if (mentionTrigger && event.key === "Escape") {
       event.preventDefault()
       setMentionTrigger(null)

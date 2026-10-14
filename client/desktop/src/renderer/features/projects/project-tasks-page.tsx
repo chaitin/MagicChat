@@ -10,10 +10,12 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  Tag,
 } from "lucide-react"
 import type {
   DesktopProjectTask,
   ListProjectTasksInput,
+  ProjectTaskAssignee,
   ProjectTaskPriority,
   ProjectTaskStatus,
 } from "../../../shared/account-data"
@@ -40,6 +42,7 @@ import {
   TaskPriorityIcon,
   TaskStatusIcon,
 } from "./project-task-views"
+import { TaskAssigneePicker } from "./task-assignee-picker"
 import {
   taskPriorities,
   taskPriorityLabels,
@@ -49,13 +52,23 @@ import {
 
 type TaskView = "list" | "board" | "calendar" | "gantt"
 type TaskFilters = {
+  assigneeUserIds: string[]
   keyword: string
+  labels: string[]
   statuses: ProjectTaskStatus[]
   priorities: ProjectTaskPriority[]
 }
 
 type TaskCacheKey = string
 const taskPageCache = new Map<TaskCacheKey, DesktopProjectTask[]>()
+const taskPageLoads = new Map<
+  TaskCacheKey,
+  {
+    items: DesktopProjectTask[]
+    listeners: Set<(items: DesktopProjectTask[]) => void>
+    promise: Promise<DesktopProjectTask[]>
+  }
+>()
 
 function taskCacheKey(input: ListProjectTasksInput): TaskCacheKey {
   return JSON.stringify([
@@ -64,6 +77,8 @@ function taskCacheKey(input: ListProjectTasksInput): TaskCacheKey {
     input.keyword ?? "",
     [...(input.statuses ?? [])].sort(),
     [...(input.priorities ?? [])].sort(),
+    [...(input.assigneeUserIds ?? [])].sort(),
+    [...(input.labels ?? [])].sort(),
   ])
 }
 const views: { id: TaskView; label: string; icon: typeof ListTodo }[] = [
@@ -73,7 +88,9 @@ const views: { id: TaskView; label: string; icon: typeof ListTodo }[] = [
   { id: "gantt", label: "甘特图", icon: ChartGantt },
 ]
 const defaultFilters: TaskFilters = {
+  assigneeUserIds: [],
   keyword: "",
+  labels: [],
   statuses: [],
   priorities: [],
 }
@@ -108,6 +125,68 @@ export function ProjectTasksPage({
   const [reload, setReload] = useState(0)
   const [assigneeNames, setAssigneeNames] = useState<Map<string, string>>(() => new Map())
   const requestedAssigneeIds = useRef(new Set<string>())
+  const [assignees, setAssignees] = useState<ProjectTaskAssignee[]>([])
+  const [assigneesLoading, setAssigneesLoading] = useState(true)
+  const [availableLabels, setAvailableLabels] = useState<string[]>([])
+  const [labelsLoading, setLabelsLoading] = useState(true)
+  const [labelsError, setLabelsError] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    const input = { targetId, projectId }
+    const key = taskCacheKey(input)
+    const cached = taskPageCache.get(key)
+    if (cached) setAvailableLabels(collectTaskLabels(cached))
+    setLabelsLoading(true)
+    setLabelsError(false)
+    void loadAllTasks(
+      input,
+      (items) => {
+        if (active) setAvailableLabels(collectTaskLabels(items))
+      },
+      reload,
+    )
+      .then((items) => {
+        if (active) taskPageCache.set(key, items)
+      })
+      .catch(() => {
+        if (active) setLabelsError(true)
+      })
+      .finally(() => {
+        if (active) setLabelsLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [targetId, projectId, reload])
+  const selectedAssigneeId = filters.assigneeUserIds[0] ?? ""
+  const selectedAssigneeName =
+    assignees.find((member) => member.id === selectedAssigneeId)?.displayName ||
+    assigneeNames.get(selectedAssigneeId) ||
+    "未知成员"
+
+  useEffect(() => {
+    let active = true
+    setAssigneesLoading(true)
+    void loadAllAssignees(targetId, projectId)
+      .then((members) => {
+        if (active) setAssignees(members)
+      })
+      .catch((reason: unknown) => {
+        if (active) {
+          showToast({
+            status: "error",
+            title: reason instanceof Error ? reason.message : "加载负责人失败",
+          })
+        }
+      })
+      .finally(() => {
+        if (active) setAssigneesLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [targetId, projectId, reload, showToast])
 
   useEffect(() => {
     let active = true
@@ -123,13 +202,17 @@ export function ProjectTasksPage({
       setTasks([])
       setLoading(true)
     }
-    void loadAllTasks(input, (items) => {
-      if (!active) return
-      receivedPage = true
-      taskPageCache.set(key, items)
-      setTasks(items)
-      setLoading(false)
-    })
+    void loadAllTasks(
+      input,
+      (items) => {
+        if (!active) return
+        receivedPage = true
+        taskPageCache.set(key, items)
+        setTasks(items)
+        setLoading(false)
+      },
+      reload,
+    )
       .then((items) => {
         if (!active) return
         taskPageCache.set(key, items)
@@ -268,7 +351,7 @@ export function ProjectTasksPage({
       className="@container/task-pane flex min-h-0 min-w-0 flex-1 flex-col bg-card"
       aria-label="项目任务"
     >
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2.5">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-2.5">
         <div
           role="group"
           aria-label="任务视图"
@@ -325,7 +408,7 @@ export function ProjectTasksPage({
               placeholder="搜索任务"
               value={filters.keyword}
               onChange={(event) => changeFilter("keyword", event.target.value)}
-              className="w-36"
+              className="w-32"
             />
           </form>
           <DropdownMenu>
@@ -340,7 +423,7 @@ export function ProjectTasksPage({
                 筛选
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-48" align="end">
+            <DropdownMenuContent className="max-h-96 w-48 overflow-y-auto" align="end">
               <DropdownMenuLabel>状态</DropdownMenuLabel>
               {taskStatuses.map((status) => (
                 <DropdownMenuCheckboxItem
@@ -382,8 +465,53 @@ export function ProjectTasksPage({
                   {taskPriorityLabels[priority]}
                 </DropdownMenuCheckboxItem>
               ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>标签</DropdownMenuLabel>
+              {[...new Set([...availableLabels, ...filters.labels])].map((label) => (
+                <DropdownMenuCheckboxItem
+                  key={label}
+                  checked={filters.labels.includes(label)}
+                  className="cursor-pointer hover:bg-foreground/10 focus:bg-foreground/10 data-highlighted:bg-foreground/10"
+                  onSelect={(event) => event.preventDefault()}
+                  onCheckedChange={() =>
+                    changeFilter(
+                      "labels",
+                      filters.labels.includes(label)
+                        ? filters.labels.filter((item) => item !== label)
+                        : [...filters.labels, label],
+                    )
+                  }
+                >
+                  <Tag className="size-4 shrink-0" />
+                  <span className="truncate" title={label}>
+                    {label}
+                  </span>
+                </DropdownMenuCheckboxItem>
+              ))}
+              {(labelsLoading || labelsError || availableLabels.length === 0) && (
+                <DropdownMenuItem disabled>
+                  {labelsLoading
+                    ? "正在加载标签…"
+                    : labelsError
+                      ? "标签加载失败，请刷新"
+                      : "暂无标签"}
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
+          <TaskAssigneePicker
+            targetId={targetId}
+            members={assignees}
+            value={selectedAssigneeId}
+            name={selectedAssigneeName}
+            theme={resolvedTheme}
+            disabled={assigneesLoading}
+            emptyLabel={assigneesLoading ? "加载负责人…" : "所有负责人"}
+            ariaLabel="筛选负责人"
+            className="h-8 w-24 shrink-0 @max-[779px]/task-pane:hidden"
+            contentClassName="min-w-48"
+            onChange={(id) => changeFilter("assigneeUserIds", id ? [id] : [])}
+          />
           <Button
             type="button"
             variant="outline"
@@ -455,29 +583,87 @@ export function ProjectTasksPage({
 }
 
 function hasFilters(filters: TaskFilters) {
-  return Boolean(filters.keyword || filters.priorities.length || filters.statuses.length)
+  return Boolean(
+    filters.keyword ||
+    filters.priorities.length ||
+    filters.statuses.length ||
+    filters.assigneeUserIds.length ||
+    filters.labels.length,
+  )
 }
 
-async function loadAllTasks(
-  input: ListProjectTasksInput,
-  onPage: (items: DesktopProjectTask[]) => void,
-): Promise<DesktopProjectTask[]> {
-  const items: DesktopProjectTask[] = []
+function collectTaskLabels(tasks: DesktopProjectTask[]): string[] {
+  return [...new Set(tasks.flatMap((task) => task.labels))].sort((a, b) =>
+    a.localeCompare(b, "zh-CN"),
+  )
+}
+
+async function loadAllAssignees(
+  targetId: string,
+  projectId: string,
+): Promise<ProjectTaskAssignee[]> {
+  const items: ProjectTaskAssignee[] = []
   const seen = new Set<string>()
   let cursor: string | null = null
   do {
-    const result = await window.desktop!.accountData.listProjectTasks({
-      ...input,
+    const result = await window.desktop!.accountData.listProjectTaskAssignees({
+      targetId,
+      projectId,
       limit: 100,
       ...(cursor ? { cursor } : {}),
     })
     if (!result.ok) throw new Error(result.error.message)
     items.push(...result.data.items)
-    onPage([...items])
     cursor = result.data.nextCursor
     if (cursor && (!result.data.items.length || seen.has(cursor)))
-      throw new Error("任务列表分页格式不正确")
+      throw new Error("项目成员分页格式不正确")
     if (cursor) seen.add(cursor)
   } while (cursor)
-  return items
+  return items.filter((member) => member.status === "active")
+}
+
+async function loadAllTasks(
+  input: ListProjectTasksInput,
+  onPage: (items: DesktopProjectTask[]) => void,
+  generation = 0,
+): Promise<DesktopProjectTask[]> {
+  const key = `${taskCacheKey(input)}\n${generation}`
+  const pending = taskPageLoads.get(key)
+  if (pending) {
+    pending.listeners.add(onPage)
+    try {
+      if (pending.items.length) onPage([...pending.items])
+      return await pending.promise
+    } finally {
+      pending.listeners.delete(onPage)
+    }
+  }
+  const items: DesktopProjectTask[] = []
+  const listeners = new Set([onPage])
+  const promise = (async () => {
+    const seen = new Set<string>()
+    let cursor: string | null = null
+    do {
+      const result = await window.desktop!.accountData.listProjectTasks({
+        ...input,
+        limit: 100,
+        ...(cursor ? { cursor } : {}),
+      })
+      if (!result.ok) throw new Error(result.error.message)
+      items.push(...result.data.items)
+      for (const listener of listeners) listener([...items])
+      cursor = result.data.nextCursor
+      if (cursor && (!result.data.items.length || seen.has(cursor)))
+        throw new Error("任务列表分页格式不正确")
+      if (cursor) seen.add(cursor)
+    } while (cursor)
+    return items
+  })()
+  const load = { items, listeners, promise }
+  taskPageLoads.set(key, load)
+  try {
+    return await promise
+  } finally {
+    taskPageLoads.delete(key)
+  }
 }

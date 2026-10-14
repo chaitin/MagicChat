@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 
@@ -13,8 +13,16 @@ import {
 import type { ClientChartMessageBody } from "@/lib/client-data-api"
 
 beforeAll(() => {
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
-    new DOMRect(0, 0, 448, 256)
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+    function (this: HTMLElement) {
+      if (this.classList.contains("recharts-legend-wrapper")) {
+        return new DOMRect(0, 0, 448, 24)
+      }
+      if (this.id === "recharts_measurement_span") {
+        return new DOMRect(0, 0, (this.textContent?.length ?? 0) * 8, 14)
+      }
+      return new DOMRect(0, 0, 448, 256)
+    }
   )
 })
 
@@ -37,9 +45,75 @@ describe("MessageChart", () => {
     expect(shouldShowChartLegend(2)).toBe(true)
     expect(config.series1.label).toBe("发送")
     expect(config.series2.label).toBe("接收")
-    expect(config.series1.theme).toEqual(chartColors[0])
-    expect(config.series2.theme).toEqual(chartColors[1])
+    expect(config.series1.color).toBe(chartColors[0])
+    expect(config.series2.color).toBe(chartColors[1])
   })
+
+  it("uses Desktop chart tokens for all five series", () => {
+    expect(chartColors).toEqual([
+      "var(--chart-1)",
+      "var(--chart-2)",
+      "var(--chart-3)",
+      "var(--chart-4)",
+      "var(--chart-5)",
+    ])
+    const config = createChartSeriesConfig(
+      chartColors.map((_, index) => ({ name: `系列${index + 1}` }))
+    )
+    Object.values(config).forEach((item, index) => {
+      expect(item.color).toBe(chartColors[index])
+      expect(item.theme).toBeUndefined()
+    })
+  })
+
+  it.each(["line", "bar", "pie", "radar"] as const)(
+    "keeps %s colors scoped to the chart and uses Desktop muted text",
+    (chartType) => {
+      const chart = createCharts().find((item) => item.chartType === chartType)!
+      const { container } = render(<MessageChart chart={chart} />)
+      expect(
+        container.querySelector('[data-slot="message-chart"]')
+      ).toHaveClass(
+        "[--muted-foreground:#737373]",
+        "dark:[--muted-foreground:#a3a3a3]"
+      )
+      expect(screen.getByText(chart.description)).toHaveClass(
+        "text-muted-foreground"
+      )
+      const styles = container.querySelector(
+        '[data-slot="chart"] style'
+      )?.textContent
+      expect(styles).toContain("var(--chart-1)")
+      expect(styles).toContain("var(--chart-2)")
+      expect(styles).not.toContain("--color-sky-")
+    }
+  )
+
+  it.each(["line", "bar", "radar"] as const)(
+    "uses Desktop foreground at 5% opacity for the %s grid",
+    async (chartType) => {
+      const chart = createCharts().find((item) => item.chartType === chartType)!
+      const { container } = render(<MessageChart chart={chart} />)
+      await waitFor(() => {
+        const grid = container.querySelectorAll(
+          ".recharts-cartesian-grid line, .recharts-polar-grid-angle line, .recharts-polar-grid-concentric polygon"
+        )
+        expect(grid.length).toBeGreaterThan(0)
+        grid.forEach((line) =>
+          expect(line).toHaveAttribute(
+            "stroke",
+            "color-mix(in srgb, var(--foreground) 5%, transparent)"
+          )
+        )
+        if (chartType === "radar") {
+          const polygon = container.querySelector(
+            ".recharts-radar-polygon path"
+          )
+          expect(polygon).toHaveAttribute("fill-opacity", "0.18")
+        }
+      })
+    }
+  )
 
   it.each(["line", "bar", "radar"] as const)(
     "toggles a %s series by clicking its legend item",
@@ -53,7 +127,12 @@ describe("MessageChart", () => {
       render(<MessageChart chart={chart} />)
 
       const firstLegendItem = screen.getByRole("button", {
-        name: chartType === "radar" ? "本周" : chartType === "bar" ? "新增" : "发送",
+        name:
+          chartType === "radar"
+            ? "本周"
+            : chartType === "bar"
+              ? "新增"
+              : "发送",
       })
       expect(firstLegendItem).toHaveAttribute("aria-pressed", "true")
       expect(firstLegendItem).toHaveAttribute("data-state", "on")

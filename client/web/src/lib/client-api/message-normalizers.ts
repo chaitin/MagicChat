@@ -11,6 +11,7 @@ import type {
   GroupMemberJoinedSystemEventBodyResponse,
   GroupMemberLeftSystemEventBodyResponse,
   GroupMemberRemovedSystemEventBodyResponse,
+  GroupMemberRoleUpdatedSystemEventBodyResponse,
   GroupNameUpdatedSystemEventBodyResponse,
   GroupAnnouncementUpdatedSystemEventBodyResponse,
   MessageRevokedSystemEventBodyResponse,
@@ -36,6 +37,7 @@ import type {
   ClientGroupMemberJoinedSystemEventBody,
   ClientGroupMemberLeftSystemEventBody,
   ClientGroupMemberRemovedSystemEventBody,
+  ClientGroupMemberRoleUpdatedSystemEventBody,
   ClientGroupNameUpdatedSystemEventBody,
   ClientGroupAnnouncementUpdatedSystemEventBody,
   ClientMessageRevokedSystemEventBody,
@@ -592,6 +594,7 @@ function normalizeSystemEventMessageBody(
     | GroupMemberJoinedSystemEventBodyResponse
     | GroupMemberLeftSystemEventBodyResponse
     | GroupMemberRemovedSystemEventBodyResponse
+    | GroupMemberRoleUpdatedSystemEventBodyResponse
     | GroupNameUpdatedSystemEventBodyResponse
     | GroupAnnouncementUpdatedSystemEventBodyResponse
     | MessageRevokedSystemEventBodyResponse
@@ -604,6 +607,7 @@ function normalizeSystemEventMessageBody(
   | ClientGroupMemberJoinedSystemEventBody
   | ClientGroupMemberLeftSystemEventBody
   | ClientGroupMemberRemovedSystemEventBody
+  | ClientGroupMemberRoleUpdatedSystemEventBody
   | ClientGroupNameUpdatedSystemEventBody
   | ClientGroupAnnouncementUpdatedSystemEventBody
   | ClientMessageRevokedSystemEventBody
@@ -702,6 +706,23 @@ function normalizeSystemEventMessageBody(
     return {
       actor: normalizeSystemEventUserRef(body.actor),
       event: "group_member_removed",
+      target: normalizeSystemEventUserRef(body.target),
+      type: "system_event",
+    }
+  }
+
+  if (body.event === "group_member_role_updated") {
+    if (
+      !isSystemEventUserRefResponse(body.actor) ||
+      !isSystemEventUserRefResponse(body.target) ||
+      (body.role !== "admin" && body.role !== "member")
+    ) {
+      throw new ClientDataRequestError("消息响应格式不正确")
+    }
+    return {
+      actor: normalizeSystemEventUserRef(body.actor),
+      event: "group_member_role_updated",
+      role: body.role,
       target: normalizeSystemEventUserRef(body.target),
       type: "system_event",
     }

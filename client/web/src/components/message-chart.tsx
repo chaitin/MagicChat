@@ -44,6 +44,7 @@ import type {
 const defaultChartHeight = 256
 const defaultChartWidth = 480
 const radarGridAnchorKey = "radarGridAnchor"
+const chartGridColor = "color-mix(in srgb, var(--foreground) 5%, transparent)"
 
 export const MessageChart = React.memo(function MessageChart({
   chart,
@@ -52,7 +53,7 @@ export const MessageChart = React.memo(function MessageChart({
 }) {
   return (
     <div
-      className="grid w-120 max-w-full gap-3"
+      className="grid w-120 max-w-full gap-3 [--muted-foreground:#737373] dark:[--muted-foreground:#a3a3a3]"
       data-chart-type={chart.chartType}
       data-slot="message-chart"
     >
@@ -98,7 +99,7 @@ function LineMessageChart({ chart }: { chart: ClientLineChartMessageBody }) {
           data={data}
           margin={{ left: 4, right: 12 }}
         >
-          <CartesianGrid vertical={false} />
+          <CartesianGrid stroke={chartGridColor} vertical={false} />
           <XAxis
             axisLine={false}
             dataKey="label"
@@ -113,7 +114,7 @@ function LineMessageChart({ chart }: { chart: ClientLineChartMessageBody }) {
             <ChartLegend
               content={
                 <ChartLegendContent
-                  className="flex-wrap"
+                  className="flex-wrap text-muted-foreground"
                   hiddenKeys={hiddenKeys}
                   onItemToggle={toggleKey}
                 />
@@ -189,7 +190,7 @@ function BarMessageChart({ chart }: { chart: ClientBarChartMessageBody }) {
             layout={getBarChartLayout(chart.data.direction)}
             margin={{ left: 12, right: 12 }}
           >
-            <CartesianGrid horizontal={false} />
+            <CartesianGrid stroke={chartGridColor} horizontal={false} />
             <XAxis axisLine={false} hide tickLine={false} type="number" />
             <YAxis
               axisLine={false}
@@ -204,7 +205,7 @@ function BarMessageChart({ chart }: { chart: ClientBarChartMessageBody }) {
               <ChartLegend
                 content={
                   <ChartLegendContent
-                    className="flex-wrap"
+                    className="flex-wrap text-muted-foreground"
                     hiddenKeys={hiddenKeys}
                     onItemToggle={toggleKey}
                   />
@@ -220,7 +221,7 @@ function BarMessageChart({ chart }: { chart: ClientBarChartMessageBody }) {
             layout={getBarChartLayout(chart.data.direction)}
             margin={{ left: 4, right: 12 }}
           >
-            <CartesianGrid vertical={false} />
+            <CartesianGrid stroke={chartGridColor} vertical={false} />
             <XAxis
               axisLine={false}
               dataKey="label"
@@ -235,7 +236,7 @@ function BarMessageChart({ chart }: { chart: ClientBarChartMessageBody }) {
               <ChartLegend
                 content={
                   <ChartLegendContent
-                    className="flex-wrap"
+                    className="flex-wrap text-muted-foreground"
                     hiddenKeys={hiddenKeys}
                     onItemToggle={toggleKey}
                   />
@@ -255,7 +256,7 @@ function PieMessageChart({ chart }: { chart: ClientPieChartMessageBody }) {
   const config: ChartConfig = {}
   const data = chart.data.items.map((item, index) => {
     const key = itemKey(index)
-    config[key] = { label: item.name, theme: chartColors[index] }
+    config[key] = { label: item.name, color: chartColors[index] }
     return {
       fill: `var(--color-${key})`,
       key,
@@ -280,7 +281,7 @@ function PieMessageChart({ chart }: { chart: ClientPieChartMessageBody }) {
         <ChartLegend
           content={
             <ChartLegendContent
-              className="flex-wrap"
+              className="flex-wrap text-muted-foreground"
               hiddenKeys={hiddenKeys}
               nameKey="key"
               onItemToggle={toggleKey}
@@ -323,8 +324,12 @@ function RadarMessageChart({ chart }: { chart: ClientRadarChartMessageBody }) {
       }}
     >
       <RadarChart accessibilityLayer data={data} outerRadius="70%">
-        <PolarGrid />
-        <PolarAngleAxis dataKey="axis" tickFormatter={formatAxisLabel} />
+        <PolarGrid stroke={chartGridColor} />
+        <PolarAngleAxis
+          dataKey="axis"
+          tick={{ fill: "var(--muted-foreground)" }}
+          tickFormatter={formatAxisLabel}
+        />
         <PolarRadiusAxis axisLine={false} domain={[0, 100]} tick={false} />
         <ChartTooltip
           content={<RadarTooltipContent series={chart.data.series} />}
@@ -333,7 +338,7 @@ function RadarMessageChart({ chart }: { chart: ClientRadarChartMessageBody }) {
           <ChartLegend
             content={
               <ChartLegendContent
-                className="flex-wrap"
+                className="flex-wrap text-muted-foreground"
                 hiddenKeys={hiddenKeys}
                 onItemToggle={toggleKey}
               />
@@ -359,7 +364,7 @@ function RadarMessageChart({ chart }: { chart: ClientRadarChartMessageBody }) {
             <Radar
               dataKey={key}
               fill={`var(--color-${key})`}
-              fillOpacity={0.3}
+              fillOpacity={0.18}
               hide={hiddenKeys.has(key)}
               key={key}
               stroke={`var(--color-${key})`}

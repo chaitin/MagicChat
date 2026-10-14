@@ -412,6 +412,9 @@ export function formatClientMessageBodySummary(
   }
   if (body.type === "revoked") return "该消息已被撤回"
   if (body.type === "unsupported") return "暂不支持查看该消息"
+  if (body.event === "friendship_created") {
+    return "你们已成为好友，现在可以开始聊天了"
+  }
   if (body.event === "message_revoked") {
     return `${body.actor.displayName} 撤回了一条消息`
   }
@@ -434,6 +437,16 @@ export function formatClientMessageBodySummary(
   }
   if (body.event === "group_member_removed") {
     return `${body.actor.displayName} 已将 ${body.target.displayName} 移出群聊`
+  }
+  if (body.event === "group_member_role_updated") {
+    return body.role === "admin"
+      ? `${body.actor.displayName} 将 ${body.target.displayName} 设为管理员`
+      : `${body.actor.displayName} 取消了 ${body.target.displayName} 的管理员`
+  }
+  if (body.event === "group_announcement_updated") {
+    return body.announcement
+      ? `${body.actor.displayName} 更新了群公告`
+      : `${body.actor.displayName} 清空了群公告`
   }
   if (body.event === "group_name_updated") {
     return `${body.actor.displayName} 修改群聊名称为 ${body.name}`

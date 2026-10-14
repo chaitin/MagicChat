@@ -2,26 +2,11 @@ import type { ClientBarChartMessageBody } from "@/lib/client-data-api"
 import type { ChartConfig } from "@/components/ui/chart"
 
 const chartColors = [
-  {
-    dark: "var(--color-sky-300, #7dd3fc)",
-    light: "var(--color-sky-700, #0369a1)",
-  },
-  {
-    dark: "var(--color-sky-400, #38bdf8)",
-    light: "var(--color-sky-600, #0284c7)",
-  },
-  {
-    dark: "var(--color-sky-500, #0ea5e9)",
-    light: "var(--color-sky-500, #0ea5e9)",
-  },
-  {
-    dark: "var(--color-sky-600, #0284c7)",
-    light: "var(--color-sky-400, #38bdf8)",
-  },
-  {
-    dark: "var(--color-sky-700, #0369a1)",
-    light: "var(--color-sky-300, #7dd3fc)",
-  },
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
 ] as const
 
 function getBarChartLayout(
@@ -69,7 +54,7 @@ function createChartSeriesConfig(
   return Object.fromEntries(
     series.map((item, index) => [
       `series${index + 1}`,
-      { label: item.name, theme: chartColors[index] },
+      { label: item.name, color: chartColors[index] },
     ])
   )
 }

@@ -2,6 +2,8 @@ package task
 
 import (
 	"context"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +13,30 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
+
+func TestNormalizeListLabelsPreservesSingleLabelAndDeduplicatesExactValues(t *testing.T) {
+	filters, err := normalizeListFilters(ListCommand{
+		Label:  Field[string]{Present: true, Value: " Backend "},
+		Labels: []string{"Frontend", "Backend", "one,two"},
+	})
+	if err != nil || !reflect.DeepEqual(filters.Labels, []string{"Frontend", "Backend", "one,two"}) {
+		t.Fatalf("labels = %#v, err = %v", filters.Labels, err)
+	}
+	for _, labels := range [][]string{{""}, {"   "}, {strings.Repeat("界", 33)}, {"valid", "bad\x00label"}} {
+		if _, err := normalizeListFilters(ListCommand{Labels: labels}); ErrorCodeOf(err) != CodeInvalidRequest {
+			t.Fatalf("labels = %#v, err = %v", labels, err)
+		}
+	}
+}
+
+func TestLabelFilterPostgresUsesArrayOverlap(t *testing.T) {
+	db := openTaskTestDB(t)
+	var tasks []store.Task
+	query := applyListFilters(db.Session(&gorm.Session{DryRun: true}).Model(&store.Task{}), "postgres", listFilters{Labels: []string{"Backend", "Frontend"}}).Find(&tasks)
+	if query.Error != nil || !strings.Contains(query.Statement.SQL.String(), "tasks.labels &&") {
+		t.Fatalf("SQL = %q, err = %v", query.Statement.SQL.String(), query.Error)
+	}
+}
 
 func TestServiceTaskLifecycleAndNotificationPort(t *testing.T) {
 	db := openTaskTestDB(t)

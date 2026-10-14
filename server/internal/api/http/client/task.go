@@ -157,7 +157,7 @@ func (a *TaskAPI) RegisterRoutes(group *echo.Group) {
 // @Param status query string false "状态，多个值用逗号分隔：todo、in_progress、done、canceled"
 // @Param priority query string false "优先级，多个值用逗号分隔：1、2、3"
 // @Param assignee_user_id query string false "负责人用户 ID，多个值用逗号分隔"
-// @Param label query string false "标签"
+// @Param label query []string false "标签，包含任意一个即匹配，可重复传入" collectionFormat(multi)
 // @Param start_date_from query string false "开始日期下限，格式 YYYY-MM-DD"
 // @Param start_date_to query string false "开始日期上限，格式 YYYY-MM-DD"
 // @Param due_date_from query string false "截止日期下限，格式 YYYY-MM-DD"
@@ -194,7 +194,7 @@ func (a *TaskAPI) list(c echo.Context) error {
 	cmd.Status = queryStringField(params, "status")
 	cmd.Priority = queryStringField(params, "priority")
 	cmd.Assignee = queryStringField(params, "assignee_user_id")
-	cmd.Label = queryStringField(params, "label")
+	cmd.Labels = params["label"]
 	cmd.StartFrom = queryStringField(params, "start_date_from")
 	cmd.StartTo = queryStringField(params, "start_date_to")
 	cmd.DueFrom = queryStringField(params, "due_date_from")

@@ -8695,8 +8695,12 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "type": "string",
-                        "description": "标签",
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "标签，包含任意一个即匹配，可重复传入",
                         "name": "label",
                         "in": "query"
                     },

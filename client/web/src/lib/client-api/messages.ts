@@ -1341,6 +1341,12 @@ export function formatClientMessageBodySummary(body: ClientMessageBody) {
     return `${body.actor.displayName} 已将 ${body.target.displayName} 移出群聊`
   }
 
+  if (body.event === "group_member_role_updated") {
+    return body.role === "admin"
+      ? `${body.actor.displayName} 将 ${body.target.displayName} 设为管理员`
+      : `${body.actor.displayName} 取消了 ${body.target.displayName} 的管理员`
+  }
+
   if (body.event === "group_name_updated") {
     return `${body.actor.displayName} 修改群聊名称为 ${body.name}`
   }
@@ -1412,6 +1418,7 @@ export function isClientMessageInitiatedByUser(
     message.body.event === "group_member_joined" ||
     message.body.event === "group_member_left" ||
     message.body.event === "group_member_removed" ||
+    message.body.event === "group_member_role_updated" ||
     message.body.event === "group_name_updated" ||
     message.body.event === "group_announcement_updated" ||
     message.body.event === "message_revoked" ||

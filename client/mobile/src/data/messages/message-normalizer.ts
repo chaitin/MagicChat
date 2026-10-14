@@ -493,6 +493,10 @@ function normalizeSystemEvent(
 ): ClientSystemEventMessageBody {
   const event = asString(body.event)
 
+  if (event === "friendship_created") {
+    return { event, type: "system_event" }
+  }
+
   if (event === "group_members_invited") {
     const inviter = normalizeSystemUser(body.inviter)
     const invitees = Array.isArray(body.invitees)
@@ -535,6 +539,21 @@ function normalizeSystemEvent(
     const target = normalizeSystemUser(body.target)
     if (!target) throw new Error("invalid message body")
     return { actor, event, target, type: "system_event" }
+  }
+
+  if (event === "group_member_role_updated") {
+    const target = normalizeSystemUser(body.target)
+    const role = body.role
+    if (!target || (role !== "admin" && role !== "member")) {
+      throw new Error("invalid message body")
+    }
+    return { actor, event, role, target, type: "system_event" }
+  }
+
+  if (event === "group_announcement_updated") {
+    const announcement = asString(body.announcement)
+    if (announcement === undefined) throw new Error("invalid message body")
+    return { actor, announcement, event, type: "system_event" }
   }
 
   if (event === "group_name_updated") {

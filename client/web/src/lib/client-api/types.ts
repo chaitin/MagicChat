@@ -453,6 +453,14 @@ export type GroupMemberRemovedSystemEventBodyResponse = {
   type?: "system_event"
 }
 
+export type GroupMemberRoleUpdatedSystemEventBodyResponse = {
+  actor?: SystemEventUserRefResponse
+  event?: "group_member_role_updated"
+  role?: string
+  target?: SystemEventUserRefResponse
+  type?: "system_event"
+}
+
 export type GroupNameUpdatedSystemEventBodyResponse = {
   actor?: SystemEventUserRefResponse
   event?: "group_name_updated"
@@ -502,6 +510,7 @@ export type MessageBodyResponse =
   | GroupMemberJoinedSystemEventBodyResponse
   | GroupMemberLeftSystemEventBodyResponse
   | GroupMemberRemovedSystemEventBodyResponse
+  | GroupMemberRoleUpdatedSystemEventBodyResponse
   | GroupNameUpdatedSystemEventBodyResponse
   | GroupAnnouncementUpdatedSystemEventBodyResponse
   | MessageRevokedSystemEventBodyResponse
@@ -1184,6 +1193,14 @@ export type ClientGroupMemberRemovedSystemEventBody = {
   type: "system_event"
 }
 
+export type ClientGroupMemberRoleUpdatedSystemEventBody = {
+  actor: ClientSystemEventUserRef
+  event: "group_member_role_updated"
+  role: "admin" | "member"
+  target: ClientSystemEventUserRef
+  type: "system_event"
+}
+
 export type ClientGroupNameUpdatedSystemEventBody = {
   actor: ClientSystemEventUserRef
   event: "group_name_updated"
@@ -1235,6 +1252,7 @@ export type ClientMessageBody =
   | ClientGroupMemberJoinedSystemEventBody
   | ClientGroupMemberLeftSystemEventBody
   | ClientGroupMemberRemovedSystemEventBody
+  | ClientGroupMemberRoleUpdatedSystemEventBody
   | ClientGroupNameUpdatedSystemEventBody
   | ClientGroupAnnouncementUpdatedSystemEventBody
   | ClientMessageRevokedSystemEventBody

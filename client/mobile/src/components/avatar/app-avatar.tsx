@@ -7,7 +7,7 @@ import IconUser from "@tabler/icons-react-native/IconUser"
 // eslint-disable-next-line import/no-unresolved
 import IconUsers from "@tabler/icons-react-native/IconUsers"
 import { useMemo, type ComponentType } from "react"
-import { View } from "react-native"
+import { PixelRatio, View } from "react-native"
 import { SvgXml } from "react-native-svg"
 
 import { CachedAvatarImage } from "@/components/avatar/cached-avatar-image"
@@ -21,7 +21,7 @@ import {
   AVATAR_FALLBACK_ICON_STROKE_WIDTH,
   getAvatarFallbackColor,
   getAvatarFallbackIconSize,
-  getGroupAvatarGridSize,
+  getGroupAvatarTileRects,
   selectGroupAvatarMembers,
   type AppAvatarType,
   type AvatarMember,
@@ -158,19 +158,12 @@ function MemberGrid({
   server: ServerTarget
   size: number
 }) {
-  const columns = getGroupAvatarGridSize(entries.length)
-  const tileSize = size / columns
-  const rows = Array.from(
-    { length: Math.ceil(entries.length / columns) },
-    (_, rowIndex) =>
-      entries.slice(rowIndex * columns, (rowIndex + 1) * columns)
-  )
+  const tiles = getGroupAvatarTileRects(entries.length, size, PixelRatio.get())
 
   return (
     <View
       style={{
         height: size,
-        justifyContent: "center",
         left: 0,
         position: "absolute",
         top: 0,
@@ -178,21 +171,9 @@ function MemberGrid({
         zIndex: 1,
       }}
     >
-      {rows.map((row, rowIndex) => (
-        <View
-          key={rowIndex}
-          style={{
-            alignSelf: "center",
-            flexDirection: "row",
-            height: tileSize,
-            justifyContent: "center",
-          }}
-        >
-          {row.map((member, columnIndex) => (
-            <View key={`${member.name}-${rowIndex}-${columnIndex}`} style={{ height: tileSize, width: tileSize, overflow: "hidden" }}>
-              {member.avatar ? <CachedAvatarImage avatar={member.avatar} server={server} /> : null}
-            </View>
-          ))}
+      {entries.map((member, index) => (
+        <View key={`${member.name}-${index}`} style={{ ...tiles[index], overflow: "hidden", position: "absolute" }}>
+          {member.avatar ? <CachedAvatarImage avatar={member.avatar} server={server} /> : null}
         </View>
       ))}
     </View>

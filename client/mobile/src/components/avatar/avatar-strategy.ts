@@ -39,6 +39,25 @@ export function getGroupAvatarGridSize(memberCount: number): 2 | 3 {
   return memberCount <= 4 ? 2 : 3
 }
 
+export function getGroupAvatarTileRects(memberCount: number, size: number, pixelRatio: number) {
+  const columns = getGroupAvatarGridSize(memberCount)
+  const rows = Math.ceil(memberCount / columns)
+  const verticalOffset = (columns - rows) / (2 * columns)
+  // Share rounded boundaries instead of accumulating separately rounded row heights.
+  const edge = (fraction: number) => fraction === 1 ? size : Math.round(fraction * size * pixelRatio) / pixelRatio
+  return Array.from({ length: memberCount }, (_, index) => {
+    const row = Math.floor(index / columns)
+    const column = index % columns
+    const columnsInRow = Math.min(columns, memberCount - row * columns)
+    const horizontalOffset = (columns - columnsInRow) / (2 * columns)
+    const left = edge(horizontalOffset + column / columns)
+    const right = edge(horizontalOffset + (column + 1) / columns)
+    const top = edge(verticalOffset + row / columns)
+    const bottom = edge(verticalOffset + (row + 1) / columns)
+    return { left, top, width: right - left, height: bottom - top }
+  })
+}
+
 export function getAvatarFallbackColor(type: AppAvatarType) {
   return ({ app: "blue", group: "yellow", project: "orange", user: "indigo" } as const)[type]
 }

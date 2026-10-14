@@ -865,7 +865,7 @@ func TestTaskListFiltersEveryFieldAndCombinesCriteria(t *testing.T) {
 	})
 	controlLabel := insertTaskTestFixture(t, db, taskFixtureInput{
 		ProjectID: project.ID, Creator: owner, Title: "Control label", Status: store.TaskStatusCanceled,
-		Priority: store.TaskPriorityMedium, Labels: []string{"Line\nBreak"}, UpdatedAt: now,
+		Priority: store.TaskPriorityMedium, Labels: []string{"Line\nBreak", "one,two"}, UpdatedAt: now,
 	})
 	secondAssigned := insertTaskTestFixture(t, db, taskFixtureInput{
 		ProjectID: project.ID, Creator: owner, Assignee: &secondAssignee, Title: "Second assignee task",
@@ -886,6 +886,10 @@ func TestTaskListFiltersEveryFieldAndCombinesCriteria(t *testing.T) {
 		{name: "assignee", query: "assignee_user_id=" + assignee.ID, want: []string{matching.ID}},
 		{name: "multiple assignees", query: "assignee_user_id=" + assignee.ID + "," + secondAssignee.ID, want: []string{matching.ID, secondAssigned.ID}},
 		{name: "exact label", query: "label=" + url.QueryEscape(" Backend "), want: []string{matching.ID}},
+		{name: "multiple labels match any", query: "label=Backend&label=Frontend", want: []string{matching.ID, done.ID}},
+		{name: "multiple labels do not duplicate task", query: "label=Backend&label=urgent&label=Backend", want: []string{matching.ID}},
+		{name: "label containing comma stays literal", query: "label=" + url.QueryEscape("one,two"), want: []string{controlLabel.ID}},
+		{name: "multiple labels combined with status", query: "label=Backend&label=Frontend&status=done", want: []string{done.ID}},
 		{name: "label substring is not equal", query: "label=Back", want: []string{}},
 		{name: "label with control character", query: "label=" + url.QueryEscape("Line\nBreak"), want: []string{controlLabel.ID}},
 		{name: "start from", query: "start_date_from=2026-07-10", want: []string{matching.ID, done.ID, canceled.ID}},
@@ -931,6 +935,8 @@ func TestTaskListRejectsInvalidFilters(t *testing.T) {
 		"empty assignee item":   "assignee_user_id=" + uuid.NewString() + ",,",
 		"NUL keyword":           "keyword=" + url.QueryEscape("bad\x00keyword"),
 		"blank label":           "label=" + url.QueryEscape("   "),
+		"blank repeated label":  "label=Backend&label=",
+		"bad repeated label":    "label=Backend&label=" + url.QueryEscape("bad\x00label"),
 		"NUL label":             "label=" + url.QueryEscape("bad\x00label"),
 		"long label":            "label=" + url.QueryEscape(strings.Repeat("界", 33)),
 		"bad start from":        "start_date_from=2026-02-30",

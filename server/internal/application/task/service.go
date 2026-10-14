@@ -54,7 +54,7 @@ type listFilters struct {
 	Statuses        []string
 	Priorities      []int16
 	AssigneeUserIDs []string
-	Label           *string
+	Labels          []string
 	StartDateFrom   *time.Time
 	StartDateTo     *time.Time
 	DueDateFrom     *time.Time
@@ -471,15 +471,23 @@ func normalizeListFilters(cmd ListCommand) (listFilters, error) {
 			return filters, err
 		}
 	}
+	labels := append([]string(nil), cmd.Labels...)
 	if cmd.Label.Present {
-		label := strings.TrimSpace(cmd.Label.Value)
+		labels = append(labels, cmd.Label.Value)
+	}
+	seenLabels := make(map[string]struct{}, len(labels))
+	for _, raw := range labels {
+		label := strings.TrimSpace(raw)
 		if err := validateText(label, "任务标签"); err != nil {
 			return filters, err
 		}
 		if count := utf8.RuneCountInString(label); count < 1 || count > 32 {
 			return filters, invalid("标签长度必须为 1 到 32 个字符", nil)
 		}
-		filters.Label = &label
+		if _, exists := seenLabels[label]; !exists {
+			seenLabels[label] = struct{}{}
+			filters.Labels = append(filters.Labels, label)
+		}
 	}
 	if cmd.StartFrom.Present {
 		filters.StartDateFrom, err = parseFilterDate(cmd.StartFrom.Value, "start_date_from")
@@ -597,11 +605,11 @@ func applyListFilters(query *gorm.DB, dialect string, filters listFilters) *gorm
 	if len(filters.AssigneeUserIDs) > 0 {
 		query = query.Where("assignee_user_id IN ?", filters.AssigneeUserIDs)
 	}
-	if filters.Label != nil {
+	if len(filters.Labels) > 0 {
 		if dialect == "sqlite" {
-			query = query.Where("EXISTS (SELECT 1 FROM json_each('[' || substr(tasks.labels, 2, length(tasks.labels) - 2) || ']') AS task_label WHERE task_label.value = ?)", *filters.Label)
+			query = query.Where("EXISTS (SELECT 1 FROM json_each('[' || substr(tasks.labels, 2, length(tasks.labels) - 2) || ']') AS task_label WHERE task_label.value IN ?)", filters.Labels)
 		} else {
-			query = query.Where("tasks.labels @> ?", pq.Array([]string{*filters.Label}))
+			query = query.Where("tasks.labels && ?", pq.Array(filters.Labels))
 		}
 	}
 	if filters.StartDateFrom != nil {

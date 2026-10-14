@@ -72,6 +72,33 @@ test("任务筛选及游标使用受限路径，解析 Web 对应的任务结构
   })
 })
 
+test("多标签使用重复label参数，标签中的逗号和特殊字符不被拆分", async () => {
+  let path = ""
+  const manager = managerFor({
+    get: async (url: string) => {
+      path = url
+      return { tasks: [], next_cursor: null }
+    },
+  })
+  const labels = ["Backend", "one,two", "标签 & 部署"]
+  await manager.list({
+    targetId,
+    projectId,
+    labels,
+    statuses: ["todo"],
+    assigneeUserIds: ["u1"],
+    keyword: "发布",
+  })
+  const query = new URLSearchParams(path.split("?")[1])
+  assert.deepEqual(query.getAll("label"), labels)
+  assert.equal(query.get("status"), "todo")
+  assert.equal(query.get("assignee_user_id"), "u1")
+  assert.equal(query.get("keyword"), "发布")
+  await manager.list({ targetId, projectId, labels: [] })
+  assert.equal(new URLSearchParams(path.split("?")[1]).has("label"), false)
+  await assert.rejects(manager.list({ targetId, projectId, labels: "Backend" } as never))
+})
+
 test("创建、编辑和删除使用正确方法及 snake_case 字段", async () => {
   const calls: Array<[string, string, unknown]> = []
   const manager = managerFor({

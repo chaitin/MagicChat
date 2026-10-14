@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
+import { readFile } from "node:fs/promises"
 import test from "node:test"
 
+import { xguiColors } from "../src/xgui/theme/colors.ts"
 import { normalizeClientMessage } from "../src/data/messages/message-normalizer.ts"
 import {
   createLinePathSegments,
@@ -9,6 +11,33 @@ import {
   scaleChartValue,
   truncateChartLabel,
 } from "../src/domain/messages/message-chart-geometry.ts"
+
+test("chart series colors match Desktop in both themes", async () => {
+  const source = await readFile(new URL("../src/features/conversation/messages/message-chart.tsx", import.meta.url), "utf8")
+  const palette = source.split("function useChartPalette()")[1]
+  const keys = [...palette.matchAll(/colors\.(brand|blue|orange|purple|yellow)\b/g)].map((match) => match[1])
+  assert.deepEqual(keys, ["brand", "blue", "orange", "purple", "yellow"])
+  const desktop = await readFile(new URL("../../desktop/src/renderer/styles.css", import.meta.url), "utf8")
+  const [light, dark] = desktop.split(".dark {")
+  for (const [theme, css] of [["light", light], ["dark", dark]] as const) {
+    keys.forEach((key, index) => {
+      assert.match(css, new RegExp(`--chart-${index + 1}: var\\(--xgui-${key}\\);`))
+      const desktopColor = css.match(new RegExp(`--xgui-${key}: (#[a-f0-9]+);`))?.[1]
+      assert.equal(xguiColors[theme][key as "brand" | "blue" | "orange" | "purple" | "yellow"].toLowerCase(), desktopColor)
+    })
+  }
+})
+
+test("chart grid, radar fill and muted text match Desktop without changing global colors", async () => {
+  const source = await readFile(new URL("../src/features/conversation/messages/message-chart.tsx", import.meta.url), "utf8")
+  assert.match(source, /grid: colorScheme === "dark" \? "rgba\(255,255,255,0\.04\)" : "rgba\(0,0,0,0\.045\)"/)
+  assert.match(source, /border: colorScheme === "dark" \? "rgba\(255,255,255,0\.08\)" : "rgba\(0,0,0,0\.09\)"/)
+  assert.match(source, /muted: colorScheme === "dark" \? "#A3A3A3" : "#737373"/)
+  assert.match(source, /fillOpacity=\{0\.18\}/)
+  assert.match(source, /color: palette\.muted[^\n]*\{chart\.description\}/)
+  assert.match(source, /color: palette\.muted[^\n]*\{item\.label\}/)
+  assert.doesNotMatch(source, /fillOpacity=\{0\.25\}|colors\.textSecondary|grid: colors\.foreground3/)
+})
 
 const baseMessage = {
   conversation_id: "conversation",
