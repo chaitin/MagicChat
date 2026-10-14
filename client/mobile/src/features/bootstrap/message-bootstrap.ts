@@ -3,6 +3,7 @@ import type { AuthenticatedTarget } from "@/core/server-target"
 import { flattenVisibleConversations } from "@/domain/conversations/conversation-order"
 import { AUTO_MESSAGE_PAGE_SIZE, catchUpMessagesTo, createMessageSyncBudget } from "@/features/bootstrap/message-sync-budget"
 import type { MessageSyncState } from "@/data/messages/message-cache-store"
+import { traceMobileStartup } from "@/diagnostics/mobile-startup"
 
 export const MESSAGE_BOOTSTRAP_CONVERSATION_LIMIT = 30
 export const MESSAGE_BOOTSTRAP_MESSAGE_LIMIT = 20
@@ -71,10 +72,19 @@ async function runBoundedBootstrap(
   onPage?: (conversationId: string, page: ClientMessageList) => void
 ) {
   // Local hydration is independent of server availability and starts alongside refresh.
+  const localStartedAt = performance.now()
+  let localConversationCount = 0
+  let localMessageCount = 0
+  traceMobileStartup("bootstrap.local.start")
   const hydrateLocal = dependencies
     .listLocalConversations(target)
-    .then((conversations) =>
-      runWithConcurrency(
+    .then((conversations) => {
+      localConversationCount = conversations.length
+      if (process.env.EXPO_PUBLIC_MOBILE_PERF === "1" && process.env.EXPO_PUBLIC_MOBILE_SKIP_HISTORY_WARMUP === "1") {
+        traceMobileStartup("bootstrap.local.skipped", { count: localConversationCount })
+        return
+      }
+      return runWithConcurrency(
         conversations,
         MESSAGE_BOOTSTRAP_LOCAL_CONCURRENCY,
         async (conversation) => {
@@ -85,6 +95,7 @@ async function runBoundedBootstrap(
               MESSAGE_BOOTSTRAP_MESSAGE_LIMIT
             )
             .then((page) => {
+              localMessageCount += page.messages.length
               // A concurrent network result is authoritative and may contain a newer seq.
               if (page.messages.length > 0 && !results.has(conversation.id)) {
                 results.set(conversation.id, page)
@@ -94,9 +105,12 @@ async function runBoundedBootstrap(
             .catch(() => undefined)
         }
       )
-    )
-    .catch(() => undefined)
+    })
+    .then(() => traceMobileStartup("bootstrap.local.ready", { count: localConversationCount, loaded: localMessageCount, elapsedMs: performance.now() - localStartedAt }))
+    .catch(() => traceMobileStartup("bootstrap.local.failed", { elapsedMs: performance.now() - localStartedAt, failures: 1 }))
 
+  const networkStartedAt = performance.now()
+  traceMobileStartup("bootstrap.network.start")
   const synchronizeNetwork = dependencies
     .refreshConversations(target)
     .then(async (conversations) => {
@@ -123,6 +137,7 @@ async function runBoundedBootstrap(
           if (dependencies.isUnauthorizedError(error)) throw error
         }
       })
+      traceMobileStartup("bootstrap.network.ready", { count: selected.length, elapsedMs: performance.now() - networkStartedAt })
     })
     .catch((error: unknown) => {
       // Offline refresh is non-fatal, but authentication failures must keep logging out.

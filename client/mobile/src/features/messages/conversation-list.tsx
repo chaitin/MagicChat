@@ -38,6 +38,7 @@ const ROW_HEIGHT = PixelRatio.roundToNearestPixel(64)
 export function ConversationList({
   errorMessage,
   hasKeyword,
+  isLoading,
   items,
   onConversationDelete,
   onConversationLongPress,
@@ -51,6 +52,7 @@ export function ConversationList({
 }: {
   errorMessage?: string
   hasKeyword: boolean
+  isLoading: boolean
   items: ConversationListItemModel[]
   onConversationDelete: (item: ConversationListItemModel) => void
   onConversationLongPress: (item: ConversationListItemModel) => void
@@ -76,7 +78,7 @@ export function ConversationList({
   const latestUnreadIndex = findLatestUnreadConversationIndex(items)
 
   useEffect(() => {
-    if (scrollToUnreadRequest === 0 || latestUnreadIndex < 0) return
+    if (isLoading || scrollToUnreadRequest === 0 || latestUnreadIndex < 0) return
 
     openSwipeableRef.current?.close()
     listRef.current?.scrollToIndex({
@@ -85,7 +87,7 @@ export function ConversationList({
       viewOffset: 8,
       viewPosition: 0,
     })
-  }, [latestUnreadIndex, scrollToUnreadRequest])
+  }, [isLoading, latestUnreadIndex, scrollToUnreadRequest])
 
   return (
     <ElasticOverscroll>
@@ -95,19 +97,22 @@ export function ConversationList({
       bounces
       overScrollMode={Platform.OS === "android" ? "never" : "always"}
       contentContainerStyle={
-        items.length === 0
+        isLoading || items.length === 0
           ? [styles.content, styles.emptyContent]
           : styles.content
       }
-      data={items}
+      // Let the first local preview read finish before mounting expensive row components.
+      data={isLoading ? [] : items}
+      maxToRenderPerBatch={4}
+      windowSize={5}
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
       keyExtractor={(item) => item.conversation.id}
       ListEmptyComponent={
-        <ContentState message={hasKeyword ? "没有匹配的会话" : "暂无会话"} />
+        <ContentState loading={isLoading} message={isLoading ? "正在加载会话" : hasKeyword ? "没有匹配的会话" : "暂无会话"} />
       }
       ListFooterComponent={
-        items.length > 0 ? (
+        !isLoading && items.length > 0 ? (
           <XGUIListCountFooter count={items.length} noun="对话" />
         ) : null
       }
@@ -137,6 +142,12 @@ export function ConversationList({
       }}
       ref={listRef}
       renderItem={({ item }) => (
+        process.env.EXPO_PUBLIC_MOBILE_PERF === "1" && process.env.EXPO_PUBLIC_MOBILE_MINIMAL_CONVERSATION_ROWS === "1" ? (
+          <View style={{ height: ROW_HEIGHT, justifyContent: "center", paddingHorizontal: 14 }}>
+            <Text>{item.conversation.name}</Text>
+            <Text>{item.description}</Text>
+          </View>
+        ) : (
         <ConversationListItem
           item={item}
           last={false}
@@ -165,6 +176,7 @@ export function ConversationList({
           }}
           server={server}
         />
+        )
       )}
       showsVerticalScrollIndicator={false}
       style={styles.list}

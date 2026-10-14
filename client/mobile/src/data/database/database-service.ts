@@ -1,6 +1,7 @@
 import { Platform } from "react-native"
 
 import { recordMobilePerf } from "@/diagnostics/mobile-perf"
+import { traceMobileStartup } from "@/diagnostics/mobile-startup"
 
 import { DATABASE_VERSION } from "@/data/database/database-version"
 import { emitDatabaseTelemetry } from "@/data/database/database-telemetry"
@@ -43,6 +44,8 @@ function createWebAdapter(): DatabaseAdapter {
 }
 
 async function openNativeAdapter(): Promise<DatabaseAdapter> {
+  const startedAt = performance.now()
+  traceMobileStartup("database.open.start")
   const { openDatabaseAsync } = await import("expo-sqlite")
   const database = await openDatabaseAsync(DATABASE_NAME)
   try {
@@ -53,7 +56,18 @@ async function openNativeAdapter(): Promise<DatabaseAdapter> {
         : params as DatabaseBindParams
     const narrow = (target: typeof database): MaintenanceDatabase => ({
       getFirst: <T>(sql: string, ...params: DatabaseBindArguments) => target.getFirstAsync<T>(sql, bind(params)),
-      getAll: <T>(sql: string, ...params: DatabaseBindArguments) => target.getAllAsync<T>(sql, bind(params)),
+      getAll: <T>(sql: string, ...params: DatabaseBindArguments) => {
+        if (process.env.EXPO_PUBLIC_MOBILE_PERF === "1" && process.env.EXPO_PUBLIC_MOBILE_PROBE_PREVIEW_SQL === "1" && sql.includes("(SELECT m.payload_json FROM cached_messages m")) {
+          const probeStartedAt = performance.now()
+          try {
+            const rows = target.getAllSync<T>(sql, bind(params))
+            traceMobileStartup("database.previews.sync_probe", { elapsedMs: performance.now() - probeStartedAt, count: rows.length, failures: 0 })
+          } catch {
+            traceMobileStartup("database.previews.sync_probe", { elapsedMs: performance.now() - probeStartedAt, failures: 1 })
+          }
+        }
+        return target.getAllAsync<T>(sql, bind(params))
+      },
       run: (sql: string, ...params: DatabaseBindArguments) => target.runAsync(sql, bind(params)),
       exec: (sql: string) => target.execAsync(sql),
       transaction: async <T>(operation: (transaction: MaintenanceDatabase) => Promise<T>) => {
@@ -65,6 +79,7 @@ async function openNativeAdapter(): Promise<DatabaseAdapter> {
       },
     })
     const access = narrow(database)
+    traceMobileStartup("database.open.ready", { elapsedMs: performance.now() - startedAt })
     return {
       reader: access,
       writer: access,
@@ -85,6 +100,18 @@ async function openNativeAdapter(): Promise<DatabaseAdapter> {
 }
 
 function observeDatabaseOperation(metric: DatabaseOperationMetric) {
+  const timings = { queueMs: metric.queueDurationMs, executionMs: metric.executionDurationMs, failures: metric.errorCategory ? 1 : 0 }
+  if (metric.name === "database.migration") traceMobileStartup("database.initialize", timings)
+  if (metric.name === "messages.previews.list") traceMobileStartup("database.previews", timings)
+  if (metric.name === "messages.cache.optimize") traceMobileStartup("database.maintenance", timings)
+  if (metric.name === "conversations.list") traceMobileStartup("database.conversations", timings)
+  if (metric.name === "messages.page.read") {
+    recordMobilePerf("messages.page_read_ms", metric.executionDurationMs)
+    recordMobilePerf("messages.page_queue_ms", metric.queueDurationMs)
+    if (metric.executionDurationMs >= 50 || metric.queueDurationMs >= 50 || metric.errorCategory) {
+      traceMobileStartup("database.messages", timings)
+    }
+  }
   if (metric.name === "conversations.list") {
     recordMobilePerf("conversations.sqlite_list_ms", metric.executionDurationMs)
   } else if (metric.name === "conversations.upsert-batch") {

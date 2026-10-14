@@ -4,11 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
 import {
+  MOBILE_PERF_ENABLED,
   measureMobilePerf,
   recordConversationNavigation,
   recordConversationPressIn,
   recordMobilePerf,
 } from "@/diagnostics/mobile-perf"
+import { traceMobileStartup } from "@/diagnostics/mobile-startup"
 import {
   useDismissConversation,
   useSetConversationMuted,
@@ -81,7 +83,7 @@ export function MessagesScreen() {
   useEffect(() => {
     recordMobilePerf("messages.commit")
   })
-  const latestMessages = useLatestLocalMessages(session, conversations)
+  const { latestMessages, isLoading: isPreviewLoading } = useLatestLocalMessages(session, conversations)
 
   const networkFailure = blockingBootstrapError !== null
   const items = useMemo(
@@ -98,6 +100,14 @@ export function MessagesScreen() {
       ),
     [contacts, conversations, currentUser?.id, latestMessages, listNow, session.userId]
   )
+
+  useEffect(() => {
+    if (!MOBILE_PERF_ENABLED) return
+    traceMobileStartup("messages.list.commit", {
+      count: isPreviewLoading ? 0 : items.length,
+      loaded: isPreviewLoading ? 0 : items.filter((item) => latestMessages.has(item.conversation.id)).length,
+    })
+  }, [isPreviewLoading, items, latestMessages])
 
   useEffect(() => {
     const interval = setInterval(
@@ -255,6 +265,7 @@ export function MessagesScreen() {
       >
         <ConversationList
           hasKeyword={false}
+          isLoading={isPreviewLoading}
           items={items}
           onConversationDelete={handleRequestDismiss}
           onConversationLongPress={handleConversationLongPress}
