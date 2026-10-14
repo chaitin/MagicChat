@@ -470,6 +470,19 @@ void app.whenReady().then(async () => {
     taskWindows.getContext(event.sender)
     return auth.getAppSettings().then((settings) => settings.theme)
   })
+  ipcMain.handle(TASK_WINDOW_CHANNELS.editText, (event, action: unknown) =>
+    authResult(async () => {
+      if (event.senderFrame !== event.sender.mainFrame) {
+        throw new AuthFailure("untrusted_sender", "任务窗口请求来源不受信任")
+      }
+      taskWindows.getContext(event.sender)
+      if (action !== "copy" && action !== "cut" && action !== "paste" && action !== "delete") {
+        throw new AuthFailure("invalid_edit_action", "不支持的编辑操作")
+      }
+      event.sender[action]()
+      return null
+    }),
+  )
   ipcMain.handle(MEDIA_CHANNELS.previewInitialize, (event) => {
     if (event.senderFrame !== event.sender.mainFrame || !mediaPreview.ownsSender(event.sender)) {
       throw new AuthFailure("untrusted_sender", "窗口请求来源不受信任")

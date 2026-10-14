@@ -12,6 +12,7 @@ export const TASK_WINDOW_CHANNELS = {
   changed: "desktop-next:v1:task-window-changed",
   notifyChanged: "desktop-next:v1:task-window-notify-changed",
   getTheme: "desktop-next:v1:task-window-get-theme",
+  editText: "desktop-next:v1:task-window-edit-text",
   themeChanged: "desktop-next:v1:task-window-theme-changed",
 } as const
 
@@ -19,6 +20,7 @@ export interface TaskWindowBridge {
   initialize(): Promise<TaskWindowContext>
   notifyChanged(): Promise<void>
   getTheme(): Promise<ThemePreference>
+  editText(action: "copy" | "cut" | "paste" | "delete"): Promise<AuthResult<null>>
   onThemeChanged(callback: (theme: ThemePreference) => void): () => void
   readonly windowControls: Omit<DesktopBridge["windowControls"], "quit">
   readonly accountData: Pick<

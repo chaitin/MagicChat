@@ -24,6 +24,7 @@ import {
   InputGroupTextarea,
 } from "@/components/ui/input-group"
 import { TaskAttachmentImage } from "./task-description-editor"
+import { TaskTextContextMenu } from "./task-text-context-menu"
 import { taskActivityChangeText } from "./task-activity-format"
 import { TaskSendDialog } from "./task-send-dialog"
 
@@ -81,7 +82,9 @@ export function ProjectTaskDetailView({
     <>
       {task.title.trim() && (
         <div className="col-span-1 row-start-1 flex min-w-0 items-center justify-between gap-3 border-b pb-2 md:col-span-2">
-          <h1 className="min-w-0 break-words text-xl font-semibold">{task.title}</h1>
+          <TaskTextContextMenu>
+            <h1 className="min-w-0 break-words text-xl font-semibold select-text">{task.title}</h1>
+          </TaskTextContextMenu>
           <div className="flex shrink-0 items-center gap-2">
             <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={onEdit}>
               修改
@@ -130,14 +133,16 @@ export function ProjectTaskDetailView({
           </div>
         )}
         {task.description.trim() ? (
-          <div className="min-w-0 text-sm" role="region" aria-label="详细说明内容">
-            <MessageMarkdown
-              content={task.description}
-              currentUserId=""
-              mentionLabelResolver={noMentionLabel}
-              renderAttachmentImage={renderAttachment}
-            />
-          </div>
+          <TaskTextContextMenu>
+            <div className="min-w-0 text-sm select-text" role="region" aria-label="详细说明内容">
+              <MessageMarkdown
+                content={task.description}
+                currentUserId=""
+                mentionLabelResolver={noMentionLabel}
+                renderAttachmentImage={renderAttachment}
+              />
+            </div>
+          </TaskTextContextMenu>
         ) : (
           <p className="text-sm text-muted-foreground">暂无详细说明</p>
         )}

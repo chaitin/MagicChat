@@ -34,6 +34,7 @@ import {
 import { cn } from "@/lib/utils"
 import { hasTaskImageUpload } from "../../../shared/task-image"
 import { TaskDescriptionEditor } from "./task-description-editor"
+import { TaskTextContextMenu } from "./task-text-context-menu"
 import { ProjectTaskDetailView } from "./project-task-detail-view"
 import {
   taskPropertyMutation,
@@ -299,14 +300,16 @@ export function ProjectTaskDialog({
               >
                 <div className="grid min-w-0 gap-3 md:col-start-1 md:row-start-1 md:grid-rows-[auto_auto_minmax(min-content,1fr)] md:self-stretch">
                   <Field label="标题">
-                    <Input
-                      autoFocus
-                      required
-                      maxLength={240}
-                      value={form.title}
-                      disabled={saving}
-                      onChange={(event) => change("title", event.target.value)}
-                    />
+                    <TaskTextContextMenu editable disabled={saving}>
+                      <Input
+                        autoFocus
+                        required
+                        maxLength={240}
+                        value={form.title}
+                        disabled={saving}
+                        onChange={(event) => change("title", event.target.value)}
+                      />
+                    </TaskTextContextMenu>
                   </Field>
                   <Field label="标签" interactive>
                     <TaskLabelInput

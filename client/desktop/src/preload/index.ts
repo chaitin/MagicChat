@@ -285,6 +285,7 @@ const taskWindowBridge: TaskWindowBridge = {
   initialize: () => ipcRenderer.invoke(TASK_WINDOW_CHANNELS.initialize),
   notifyChanged: () => ipcRenderer.invoke(TASK_WINDOW_CHANNELS.notifyChanged),
   getTheme: () => ipcRenderer.invoke(TASK_WINDOW_CHANNELS.getTheme),
+  editText: (action) => ipcRenderer.invoke(TASK_WINDOW_CHANNELS.editText, action),
   onThemeChanged: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, theme: Parameters<typeof callback>[0]) =>
       callback(theme)

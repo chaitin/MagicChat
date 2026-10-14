@@ -35,6 +35,7 @@ import {
 import { MessageMarkdown } from "@/components/message-markdown"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { TaskTextContextMenu } from "./task-text-context-menu"
 
 type ImageUpload = {
   id: string
@@ -322,37 +323,41 @@ export function TaskDescriptionEditor({
         </div>
       </div>
       {preview ? (
-        <div
-          role="region"
-          aria-label="详细说明预览"
-          className="min-h-24 flex-1 overflow-auto rounded-t-none rounded-b-md border border-input p-3"
-        >
-          {value ? (
-            <MessageMarkdown
-              content={value}
-              currentUserId=""
-              mentionLabelResolver={noMentionLabel}
-              renderAttachmentImage={renderAttachment}
-            />
-          ) : (
-            <p className="text-muted-foreground">暂无详细说明</p>
-          )}
-        </div>
+        <TaskTextContextMenu>
+          <div
+            role="region"
+            aria-label="详细说明预览"
+            className="min-h-24 flex-1 overflow-auto rounded-t-none rounded-b-md border border-input p-3 select-text"
+          >
+            {value ? (
+              <MessageMarkdown
+                content={value}
+                currentUserId=""
+                mentionLabelResolver={noMentionLabel}
+                renderAttachmentImage={renderAttachment}
+              />
+            ) : (
+              <p className="text-muted-foreground">暂无详细说明</p>
+            )}
+          </div>
+        </TaskTextContextMenu>
       ) : (
-        <Textarea
-          id={id}
-          ref={textarea}
-          className="min-h-24 flex-1 resize-none rounded-t-none field-sizing-fixed font-mono"
-          placeholder="支持 markdown 语法，可直接粘贴图片"
-          value={value}
-          maxLength={10000}
-          disabled={disabled}
-          onPaste={pasteImages}
-          onChange={(event) => {
-            const next = event.target.value
-            onChange(() => next)
-          }}
-        />
+        <TaskTextContextMenu editable disabled={disabled}>
+          <Textarea
+            id={id}
+            ref={textarea}
+            className="min-h-24 flex-1 resize-none rounded-t-none field-sizing-fixed font-mono"
+            placeholder="支持 markdown 语法，可直接粘贴图片"
+            value={value}
+            maxLength={10000}
+            disabled={disabled}
+            onPaste={pasteImages}
+            onChange={(event) => {
+              const next = event.target.value
+              onChange(() => next)
+            }}
+          />
+        </TaskTextContextMenu>
       )}
       {(error || uploads.length > 0) && (
         <div
