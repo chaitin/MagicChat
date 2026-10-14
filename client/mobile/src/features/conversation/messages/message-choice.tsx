@@ -267,7 +267,7 @@ function ChoiceSelectionControl({
       style={[
         styles.selectionControl,
         {
-          backgroundColor: selected ? colors.brand : colors.background0,
+          backgroundColor: selected ? colors.brand : colors.foreground3,
         },
       ]}
     >
