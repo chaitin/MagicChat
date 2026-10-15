@@ -143,6 +143,7 @@ export type ClientConversation = {
   announcement?: string
   avatar: string
   canSend: boolean
+  isBuiltinAssistant?: boolean
   createdAt: string
   id: string
   lastMessageAt: string | null

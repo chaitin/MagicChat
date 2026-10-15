@@ -269,6 +269,7 @@ export function ConversationScreen() {
     )
   }, [contacts.apps, conversation])
   const messagesQuery = useConversationMessages(session, conversationId, {
+    live: isFocused,
     fallbackPollingEnabled: !realtimeReady,
   })
   useEffect(() => {

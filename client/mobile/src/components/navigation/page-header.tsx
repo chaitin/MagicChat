@@ -8,6 +8,7 @@ import { Text } from "@/components/mi-sans-text"
 import { CompactIconButton } from "@/components/buttons/compact-icon-button"
 import { ThemedIcon } from "@/components/icons/themed-icon"
 import { HeaderButton } from "@/components/navigation/header-button"
+import { ConnectionTitle } from "@/components/navigation/connection-title"
 import { XGUIButton, useXGUITheme } from "@/xgui"
 
 export const PAGE_HEADER_HEIGHT = 56
@@ -85,27 +86,34 @@ export function PageHeader({
         </View>
 
         <View style={styles.titleRow}>
-          {titleLeading}
-          {compactTitle ? (
-            <Text
-              numberOfLines={1}
-              style={[
-                styles.title,
-                {
-                  color: titleColor ?? colors.textPrimary,
-                  fontSize: titleFontSize ?? 15,
-                  fontWeight: titleFontWeight,
-                  lineHeight: titleFontSize ? 24 : 23,
-                },
-              ]}
-            >
-              {title}
-            </Text>
-          ) : (
-            <Text accessibilityRole="header" numberOfLines={1} style={[styles.largeTitle, { color: titleColor ?? colors.textPrimary }]}>
-              {title}
-            </Text>
-          )}
+          <ConnectionTitle
+            color={titleColor ?? colors.textPrimary}
+            fontSize={compactTitle ? titleFontSize ?? 15 : styles.largeTitle.fontSize}
+            fontWeight={compactTitle ? titleFontWeight : styles.largeTitle.fontWeight}
+            lineHeight={compactTitle ? (titleFontSize ? 24 : 23) : styles.largeTitle.lineHeight}
+          >
+            {titleLeading}
+            {compactTitle ? (
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.title,
+                  {
+                    color: titleColor ?? colors.textPrimary,
+                    fontSize: titleFontSize ?? 15,
+                    fontWeight: titleFontWeight,
+                    lineHeight: titleFontSize ? 24 : 23,
+                  },
+                ]}
+              >
+                {title}
+              </Text>
+            ) : (
+              <Text accessibilityRole="header" numberOfLines={1} style={[styles.largeTitle, { color: titleColor ?? colors.textPrimary }]}>
+                {title}
+              </Text>
+            )}
+          </ConnectionTitle>
         </View>
 
         <View style={styles.actions}>

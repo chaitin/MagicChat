@@ -58,6 +58,7 @@ type ConversationResponse = {
   announcement?: string
   avatar?: string
   can_send?: boolean
+  is_builtin_assistant?: boolean
   created_at?: string
   id?: string
   last_message_at?: string | null
@@ -579,6 +580,7 @@ function normalizeConversation(
     announcement: conversation.announcement?.trim() ?? "",
     avatar: conversation.avatar ?? "",
     canSend: conversation.can_send !== false,
+    isBuiltinAssistant: conversation.is_builtin_assistant === true,
     createdAt: conversation.created_at,
     id: conversation.id,
     lastMessageAt: conversation.last_message_at ?? null,

@@ -18,6 +18,14 @@ type StartupPhase =
   | "bootstrap.local.failed"
   | "bootstrap.network.start"
   | "bootstrap.network.ready"
+  | "sync.conversations.ready"
+  | "sync.conversations.failed"
+  | "sync.messages.ready"
+  | "sync.messages.failed"
+  | "sync.current-state.ready"
+  | "sync.current-state.failed"
+  | "realtime.connect.start"
+  | "realtime.transport.ready"
 
 type StartupMetrics = Partial<Record<
   "elapsedMs" | "count" | "loaded" | "queueMs" | "executionMs" | "failures",

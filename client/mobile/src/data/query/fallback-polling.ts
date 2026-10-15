@@ -1,6 +1,6 @@
 export const FALLBACK_POLLING_INTERVAL_MS = 15_000
-export const PASSIVE_CONTACTS_POLLING_INTERVAL_MS = 60_000
-export const PASSIVE_PROJECTS_POLLING_INTERVAL_MS = 5 * 60_000
+export const PASSIVE_CONTACTS_POLLING_INTERVAL_MS = 15 * 60_000
+export const PASSIVE_PROJECTS_POLLING_INTERVAL_MS = 15 * 60_000
 
 export function getRealtimeAwarePollingInterval(
   realtimeReady: boolean,

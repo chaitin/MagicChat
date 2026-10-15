@@ -9,18 +9,21 @@ import { fetchCurrentUser } from "@/data/users/current-user-api"
 import { prepareMessageNotifications, showBackgroundMessageNotification } from "@/notifications/message-notifications"
 import { hasActiveRemotePushDelegation } from "@/notifications/push-runtime-state"
 import { useAuth } from "@/providers/auth-provider"
-import { applyRealtimeEvent, refreshClientDataOnForeground, synchronizeRealtimeData } from "@/realtime/realtime-cache"
+import { traceMobileStartup } from "@/diagnostics/mobile-startup"
+import { applyRealtimeEvent, createRealtimeSynchronization, refreshClientDataOnForeground } from "@/realtime/realtime-cache"
 import { buildRealtimeWebSocketUrl, RealtimeClient, type RealtimeSnapshot, type RealtimeSocketFactory } from "@/realtime/realtime-client"
 import { createRealtimeTargetKey, waitForClientReady, waitForRealtimeClient } from "@/realtime/realtime-connection"
 import { DISCONNECTED_REALTIME_SNAPSHOT, RealtimeContext } from "@/realtime/realtime-context"
 import { RealtimeDispatcher } from "@/realtime/realtime-dispatcher"
 import { realtimeEvents } from "@/realtime/realtime-protocol"
 import { RealtimeClientSlot } from "@/realtime/realtime-runtime"
+import { RealtimeRecovery } from "@/realtime/realtime-recovery"
 
 export function RealtimeProvider({ children }: React.PropsWithChildren) {
   const queryClient = useQueryClient()
   const { active, isPreparingSignIn, markReauthRequired } = useAuth()
   const [snapshot, setSnapshot] = useState<RealtimeSnapshot>(DISCONNECTED_REALTIME_SNAPSHOT)
+  const [recovery, setRecovery] = useState<{ key: string; recovering: boolean } | null>(null)
   const activeConversationIdRef = useRef("")
   const [dispatcher] = useState(() => new RealtimeDispatcher())
   const [runtimeSlot] = useState(() => new RealtimeClientSlot())
@@ -44,6 +47,23 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
 
   const server = active?.target ?? null
   const realtimeEnabled = server !== null && canConnectFromCurrentPlatform(server.url)
+  const recoveryKey = active ? JSON.stringify([active.accountId, active.generation]) : ""
+  const isRecovering = realtimeEnabled && (recovery?.key !== recoveryKey || recovery.recovering)
+
+  useEffect(() => {
+    if (realtimeEnabled || !server || !active || isPreparingSignIn) return
+    const identity = { accountId: active.accountId, generation: active.generation }
+    let current = true
+    const isCurrent = () => current && accountAuthRuntime.isCurrent(identity)
+    void createRealtimeSynchronization(queryClient, server, {
+      freshSnapshot: true,
+      getActiveConversationId: () => activeConversationIdRef.current,
+      isCurrent,
+    })().catch((error) => {
+      if (isUnauthorizedError(error) && isCurrent()) void markReauthRequired(identity.accountId)
+    })
+    return () => { current = false }
+  }, [active, isPreparingSignIn, markReauthRequired, queryClient, realtimeEnabled, server])
 
   useEffect(() => {
     if (!realtimeEnabled || !server || !active) {
@@ -74,21 +94,43 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
     runtimeSlot.replace(client, identity)
     clientRef.current = record
     const isCurrent = () => runtimeSlot.isCurrent(identity, client) && accountAuthRuntime.isCurrent(identity)
-    const dispatchTarget = dispatcher.activate((error) => {
+    const handleError = (error: unknown) => {
       if (isUnauthorizedError(error) && isCurrent()) void markReauthRequired(identity.accountId)
+    }
+    const dispatchTarget = dispatcher.activate(handleError)
+    let synchronization: ReturnType<typeof createRealtimeSynchronization> | undefined
+    let connectStartedAt = performance.now()
+    const connectionRecovery = new RealtimeRecovery({
+      enqueue: dispatchTarget.enqueue,
+      isCurrent,
+      onChange: (recovering) => {
+        if (!isActive || !isCurrent()) return
+        if (recovering) synchronization = undefined
+        setRecovery((current) => current?.key === recoveryKey && current.recovering === recovering
+          ? current : { key: recoveryKey, recovering })
+      },
+      onError: handleError,
+      shouldRetry: (error) => !isUnauthorizedError(error),
+      synchronize: () => {
+        synchronization ??= createRealtimeSynchronization(queryClient, activeServer, {
+          freshSnapshot: true,
+          getActiveConversationId: () => activeConversationIdRef.current,
+          isCurrent,
+        })
+        return synchronization()
+      },
     })
     const unsubscribeSnapshot = client.subscribe(() => {
-      if (isActive && isCurrent()) setSnapshot(client.getSnapshot())
+      if (!isActive || !isCurrent()) return
+      const next = client.getSnapshot()
+      if (next.status === "connecting") connectStartedAt = performance.now()
+      if (next.ready && connectionRecovery.isRecovering) traceMobileStartup("realtime.transport.ready", { elapsedMs: performance.now() - connectStartedAt })
+      setSnapshot(next)
+      connectionRecovery.setReady(next.ready && !isPreparingSignIn)
     })
     const unsubscribeEvents = client.subscribeEvent((event, payload) => {
       if (!isCurrent()) return
-      if (event === realtimeEvents.systemReady) {
-        if (!isPreparingSignIn) dispatchTarget.enqueue(() => {
-          if (!isCurrent()) return Promise.resolve()
-          return synchronizeRealtimeData(queryClient, activeServer, { activeConversationId: activeConversationIdRef.current })
-        })
-        return
-      }
+      if (event === realtimeEvents.systemReady) return
       dispatchTarget.enqueue(async () => {
         if (!isCurrent()) return
         const result = (await applyRealtimeEvent(queryClient, activeServer, event, payload, {
@@ -109,18 +151,22 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
       currentAppState = status
       if (status === "active" && !wasActive && isCurrent()) {
         client.connect()
+        connectionRecovery.retry()
         void prepareMessageNotifications().catch(() => undefined)
-        dispatchTarget.enqueue(() => {
-          if (!isCurrent()) return Promise.resolve()
-          return refreshClientDataOnForeground(queryClient, activeServer, { activeConversationId: activeConversationIdRef.current })
-        })
+        void refreshClientDataOnForeground(queryClient, activeServer, {
+          getActiveConversationId: () => activeConversationIdRef.current,
+          isCurrent,
+          messagesAlreadySynchronizing: connectionRecovery.isRecovering,
+        }).catch(handleError)
       }
     }
     const appStateSubscription = AppState.addEventListener("change", handleAppStateChange)
+    traceMobileStartup("realtime.connect.start")
     client.connect()
     if (currentAppState === "active") void prepareMessageNotifications().catch(() => undefined)
     return () => {
       isActive = false
+      connectionRecovery.dispose()
       dispatchTarget.dispose()
       runtimeSlot.clear(client)
       if (clientRef.current === record) clientRef.current = null
@@ -129,12 +175,12 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
       unsubscribeEvents()
       unsubscribeSnapshot()
     }
-  }, [active, dispatcher, isPreparingSignIn, markReauthRequired, queryClient, realtimeEnabled, runtimeSlot, server])
+  }, [active, dispatcher, isPreparingSignIn, markReauthRequired, queryClient, realtimeEnabled, recoveryKey, runtimeSlot, server])
 
   const value = useMemo(() => realtimeEnabled ? {
-    activateConversation, ready: snapshot.ready, status: snapshot.status, waitUntilReady,
+    activateConversation, isRecovering, ready: snapshot.ready, status: snapshot.status, waitUntilReady,
   } : { ...DISCONNECTED_REALTIME_SNAPSHOT, activateConversation, waitUntilReady },
-  [activateConversation, realtimeEnabled, snapshot.ready, snapshot.status, waitUntilReady])
+  [activateConversation, isRecovering, realtimeEnabled, snapshot.ready, snapshot.status, waitUntilReady])
   return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>
 }
 

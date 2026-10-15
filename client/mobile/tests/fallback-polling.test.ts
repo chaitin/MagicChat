@@ -21,20 +21,20 @@ test("uses a low-frequency fallback while realtime is unavailable", () => {
   assert.equal(FALLBACK_POLLING_INTERVAL_MS, 15_000)
 })
 
-test("keeps passive data fresh at a lower rate while realtime is ready", () => {
+test("实时连接正常时通讯录和项目每15分钟刷新一次", () => {
   assert.equal(
     getRealtimeAwarePollingInterval(
       true,
       PASSIVE_CONTACTS_POLLING_INTERVAL_MS
     ),
-    60_000
+    900_000
   )
   assert.equal(
     getRealtimeAwarePollingInterval(
       true,
       PASSIVE_PROJECTS_POLLING_INTERVAL_MS
     ),
-    300_000
+    900_000
   )
 })
 
@@ -45,8 +45,8 @@ test("maps realtime state to every client data polling policy", () => {
     projects: 15_000,
   })
   assert.deepEqual(getClientDataPollingIntervals(true), {
-    contacts: 60_000,
+    contacts: 900_000,
     conversations: false,
-    projects: 300_000,
+    projects: 900_000,
   })
 })

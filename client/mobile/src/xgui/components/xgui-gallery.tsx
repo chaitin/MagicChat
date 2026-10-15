@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/immutability -- Reanimated shared values are intentionally mutated by UI-thread gesture worklets. */
 import { Download } from "lucide-react-native"
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import {
   Image,
   Modal,
@@ -34,6 +34,7 @@ export type XGUIGallerySource = {
 
 export type XGUIGalleryProps = {
   accessibilityLabel: string
+  header?: ReactNode
   maxScale?: number
   onError?: () => void
   onLoad?: () => void
@@ -48,6 +49,7 @@ export type XGUIGalleryProps = {
 
 export function XGUIGallery({
   accessibilityLabel,
+  header,
   maxScale = 4,
   onError,
   onLoad,
@@ -170,6 +172,12 @@ export function XGUIGallery({
               <GalleryImage onError={onError} onLoad={onLoad} source={source} />
             </Animated.View>
           </GestureDetector>
+
+          {header ? (
+            <View pointerEvents="none" style={{ alignItems: "center", left: 72, position: "absolute", right: 72, top: Math.max(insets.top, 12) }}>
+              {header}
+            </View>
+          ) : null}
 
           <View
             pointerEvents="box-none"

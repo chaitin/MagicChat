@@ -5,6 +5,7 @@ import { Text } from "@/components/mi-sans-text"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { CompactIconButton } from "@/components/buttons/compact-icon-button"
+import { ConnectionTitle } from "@/components/navigation/connection-title"
 import { useXGUITheme } from "@/xgui"
 
 export const APP_HEADER_HEIGHT = 44
@@ -61,18 +62,22 @@ export function AppHeader({
           {onBackPress ? backAccessory : null}
         </View>
 
-        <Text
-          numberOfLines={1}
-          style={{
-            color: colors.textPrimary,
-            flex: 1,
-            fontSize: titleFontSize ?? 16,
-            lineHeight: Math.max(24, (titleFontSize ?? 16) + 4),
-            textAlign: "center",
-          }}
-        >
-          {title}
-        </Text>
+        <View style={styles.titleRow}>
+          <ConnectionTitle color={colors.textPrimary} fontSize={titleFontSize ?? 16}>
+            <Text
+              numberOfLines={1}
+              style={{
+                color: colors.textPrimary,
+                flex: 1,
+                fontSize: titleFontSize ?? 16,
+                lineHeight: Math.max(24, (titleFontSize ?? 16) + 4),
+                textAlign: "center",
+              }}
+            >
+              {title}
+            </Text>
+          </ConnectionTitle>
+        </View>
 
         <View style={styles.actions}>
           {actions.slice(0, 2).map((action) => (
@@ -106,6 +111,7 @@ const styles = StyleSheet.create({
     gap: 2,
     width: 72,
   },
+  titleRow: { alignItems: "center", flex: 1, flexDirection: "row", justifyContent: "center", minWidth: 0 },
   actions: {
     flexDirection: "row",
     gap: 2,

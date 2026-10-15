@@ -7,6 +7,7 @@ import type {
 } from "@/realtime/realtime-client"
 
 export type RealtimeContextValue = RealtimeSnapshot & {
+  isRecovering: boolean
   activateConversation: (conversationId: string) => () => void
   waitUntilReady: (
     target: AuthenticatedTarget,
@@ -29,6 +30,7 @@ export function useRealtime(): RealtimeContextValue {
 export const DISCONNECTED_REALTIME_SNAPSHOT: RealtimeContextValue = {
   activateConversation: () => () => undefined,
   ready: false,
+  isRecovering: false,
   status: "disconnected" satisfies RealtimeConnectionStatus,
   waitUntilReady: async () => {
     throw new Error("实时连接尚未初始化")

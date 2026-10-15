@@ -11,6 +11,7 @@ expo-env.d.ts
 
 # local build artifacts
 /builds/
+__pycache__/
 
 # Native
 .kotlin/

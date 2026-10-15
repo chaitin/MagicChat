@@ -11,7 +11,7 @@ import { applyRealtimeMessageReactionsEvent } from "./reaction-sync"
 import { realtimeEvents } from "./realtime-protocol"
 import { projectRealtimeTopicEvent } from "./topic-projector"
 
-export { refreshClientDataOnForeground, synchronizeRealtimeData } from "./realtime-sync"
+export { createRealtimeSynchronization, refreshClientDataOnForeground, synchronizeRealtimeData } from "./realtime-sync"
 
 /** Compatibility facade routing protocol events to domain projectors. */
 export async function applyRealtimeEvent(queryClient: QueryClient, server: AuthenticatedTarget, event: string, payload: unknown, options: { activeConversationId?: string; visible?: boolean; isCurrent?: () => boolean } = {}): Promise<{ message?: ClientMessage; notificationMuted?: boolean }> {

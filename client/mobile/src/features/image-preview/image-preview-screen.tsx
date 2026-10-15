@@ -3,8 +3,10 @@ import { Redirect, useLocalSearchParams, useRouter } from "expo-router"
 import { StatusBar } from "expo-status-bar"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { StyleSheet, View } from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { Text } from "@/components/mi-sans-text"
+import { ConnectionTitle } from "@/components/navigation/connection-title"
 
 import type { AuthenticatedTarget } from "@/core/server-target"
 import { useConversationMessages } from "@/data/messages/message-hooks"
@@ -208,6 +210,7 @@ function AuthenticatedImagePreview({
 }) {
   const router = useRouter()
   const toast = useXGUIToast()
+  const insets = useSafeAreaInsets()
   const [attempt, setAttempt] = useState(0)
   const [error, setError] = useState<Error | null>(() =>
     source ? null : new Error("图片信息不存在")
@@ -282,9 +285,16 @@ function AuthenticatedImagePreview({
         </View>
       ) : null}
 
+      {!resource ? (
+        <View pointerEvents="none" style={{ alignItems: "center", left: 72, position: "absolute", right: 72, top: Math.max(insets.top, 12) }}>
+          <ConnectionTitle color="#fff" />
+        </View>
+      ) : null}
+
       {resource ? (
         <XGUIGallery
           accessibilityLabel="图片预览"
+          header={<ConnectionTitle color="#fff" />}
           onError={() => {
             setResource(null)
             setError(new Error("图片无法显示，请重新加载"))

@@ -1,36 +1,14 @@
 import type { ClientConversation, ClientMessageList } from "@/core/models"
 import type { AuthenticatedTarget } from "@/core/server-target"
-import { flattenVisibleConversations } from "@/domain/conversations/conversation-order"
-import { AUTO_MESSAGE_PAGE_SIZE, catchUpMessagesTo, createMessageSyncBudget } from "@/features/bootstrap/message-sync-budget"
-import type { MessageSyncState } from "@/data/messages/message-cache-store"
 import { traceMobileStartup } from "@/diagnostics/mobile-startup"
 
-export const MESSAGE_BOOTSTRAP_CONVERSATION_LIMIT = 30
 export const MESSAGE_BOOTSTRAP_MESSAGE_LIMIT = 20
-export const MESSAGE_BOOTSTRAP_CONCURRENCY = 5
 export const MESSAGE_BOOTSTRAP_LOCAL_CONCURRENCY = 5
 export const MESSAGE_BOOTSTRAP_TIMEOUT_MS = 30_000
 
 export type MessageBootstrapDependencies = {
-  listLocalConversations: (
-    target: AuthenticatedTarget
-  ) => Promise<ClientConversation[]>
-  refreshConversations: (
-    target: AuthenticatedTarget
-  ) => Promise<ClientConversation[]>
-  synchronizeLatest: (
-    target: AuthenticatedTarget,
-    conversationId: string,
-    limit: number
-  ) => Promise<ClientMessageList>
-  readLatestPage: (
-    target: AuthenticatedTarget,
-    conversationId: string,
-    limit: number
-  ) => Promise<ClientMessageList>
-  listSyncStates: (target: AuthenticatedTarget) => Promise<MessageSyncState[]>
-  catchUpAfter: (target: AuthenticatedTarget, conversationId: string, afterSeq: number, limit: number) => Promise<{ committedSeq: number; result: ClientMessageList }>
-  isUnauthorizedError: (error: unknown) => boolean
+  listLocalConversations: (target: AuthenticatedTarget) => Promise<ClientConversation[]>
+  readLatestPage: (target: AuthenticatedTarget, id: string, limit: number) => Promise<ClientMessageList>
 }
 
 export function createMessageBootstrap(
@@ -39,17 +17,12 @@ export function createMessageBootstrap(
   completedFlightRetentionMs = 1_000
 ) {
   const flights = new Map<string, Promise<ReadonlyMap<string, ClientMessageList>>>()
-
-  return (
-    target: AuthenticatedTarget,
-    onPage?: (conversationId: string, page: ClientMessageList) => void
-  ) => {
+  return (target: AuthenticatedTarget, onPage?: (id: string, page: ClientMessageList) => void) => {
     const key = JSON.stringify([target.id, target.url, target.userId])
     const existing = flights.get(key)
     if (existing) return existing
-
     const results = new Map<string, ClientMessageList>()
-    const work = runBoundedBootstrap(target, dependencies, results, onPage)
+    const work = hydrateLocal(target, dependencies, results, onPage)
     const flight = withTimeout(work, results, timeoutMs)
     // Coalesce login -> Provider's immediate duplicate, but do not turn a
     // completed/timed-out bootstrap into a permanent target cache. Late work
@@ -65,115 +38,51 @@ export function createMessageBootstrap(
   }
 }
 
-async function runBoundedBootstrap(
+async function hydrateLocal(
   target: AuthenticatedTarget,
   dependencies: MessageBootstrapDependencies,
   results: Map<string, ClientMessageList>,
-  onPage?: (conversationId: string, page: ClientMessageList) => void
+  onPage?: (id: string, page: ClientMessageList) => void
 ) {
-  // Local hydration is independent of server availability and starts alongside refresh.
-  const localStartedAt = performance.now()
-  let localConversationCount = 0
-  let localMessageCount = 0
+  // Network catch-up belongs to the realtime provider; startup only hydrates local data.
+  const startedAt = performance.now()
+  let count = 0
+  let loaded = 0
   traceMobileStartup("bootstrap.local.start")
-  const hydrateLocal = dependencies
-    .listLocalConversations(target)
-    .then((conversations) => {
-      localConversationCount = conversations.length
-      if (process.env.EXPO_PUBLIC_MOBILE_PERF === "1" && process.env.EXPO_PUBLIC_MOBILE_SKIP_HISTORY_WARMUP === "1") {
-        traceMobileStartup("bootstrap.local.skipped", { count: localConversationCount })
-        return
+  try {
+    const conversations = await dependencies.listLocalConversations(target)
+    count = conversations.length
+    if (process.env.EXPO_PUBLIC_MOBILE_PERF === "1" && process.env.EXPO_PUBLIC_MOBILE_SKIP_HISTORY_WARMUP === "1") {
+      traceMobileStartup("bootstrap.local.skipped", { count })
+      return
+    }
+    let next = 0
+    await Promise.all(Array.from({ length: Math.min(MESSAGE_BOOTSTRAP_LOCAL_CONCURRENCY, count) }, async () => {
+      while (next < conversations.length) {
+        const conversation = conversations[next++]!
+        await dependencies.readLatestPage(target, conversation.id, MESSAGE_BOOTSTRAP_MESSAGE_LIMIT)
+          .then((page) => {
+            loaded += page.messages.length
+            if (page.messages.length > 0) {
+              results.set(conversation.id, page)
+              onPage?.(conversation.id, page)
+            }
+          })
+          .catch(() => undefined)
       }
-      return runWithConcurrency(
-        conversations,
-        MESSAGE_BOOTSTRAP_LOCAL_CONCURRENCY,
-        async (conversation) => {
-          await dependencies
-            .readLatestPage(
-              target,
-              conversation.id,
-              MESSAGE_BOOTSTRAP_MESSAGE_LIMIT
-            )
-            .then((page) => {
-              localMessageCount += page.messages.length
-              // A concurrent network result is authoritative and may contain a newer seq.
-              if (page.messages.length > 0 && !results.has(conversation.id)) {
-                results.set(conversation.id, page)
-                onPage?.(conversation.id, page)
-              }
-            })
-            .catch(() => undefined)
-        }
-      )
-    })
-    .then(() => traceMobileStartup("bootstrap.local.ready", { count: localConversationCount, loaded: localMessageCount, elapsedMs: performance.now() - localStartedAt }))
-    .catch(() => traceMobileStartup("bootstrap.local.failed", { elapsedMs: performance.now() - localStartedAt, failures: 1 }))
-
-  const networkStartedAt = performance.now()
-  traceMobileStartup("bootstrap.network.start")
-  const synchronizeNetwork = dependencies
-    .refreshConversations(target)
-    .then(async (conversations) => {
-      // Only the HTTP snapshot is authoritative; local-only conversations may be outside the server's top 30.
-      const states = await dependencies.listSyncStates(target)
-      const byId = new Map(states.map((state) => [state.conversationId, state]))
-      const budget = createMessageSyncBudget()
-      const selected = flattenVisibleConversations(conversations)
-        .slice(0, MESSAGE_BOOTSTRAP_CONVERSATION_LIMIT)
-        .sort((left, right) => Number(right.unreadCount > 0) - Number(left.unreadCount > 0))
-        .map((conversation) => ({ conversation, decision: budget.decide(conversation, byId.get(conversation.id)) }))
-        .filter(({ decision }) => decision.type !== "skip")
-      await runWithConcurrency(selected, MESSAGE_BOOTSTRAP_CONCURRENCY, async ({ conversation, decision }) => {
-        try {
-          const page = decision.type === "after"
-            ? await (async () => {
-                await catchUpMessagesTo(target, conversation.id, decision.afterSeq, decision.targetSeq, dependencies.catchUpAfter)
-                return dependencies.readLatestPage(target, conversation.id, MESSAGE_BOOTSTRAP_MESSAGE_LIMIT)
-              })()
-            : await dependencies.synchronizeLatest(target, conversation.id, AUTO_MESSAGE_PAGE_SIZE)
-          results.set(conversation.id, page)
-          onPage?.(conversation.id, page)
-        } catch (error) {
-          if (dependencies.isUnauthorizedError(error)) throw error
-        }
-      })
-      traceMobileStartup("bootstrap.network.ready", { count: selected.length, elapsedMs: performance.now() - networkStartedAt })
-    })
-    .catch((error: unknown) => {
-      // Offline refresh is non-fatal, but authentication failures must keep logging out.
-      if (dependencies.isUnauthorizedError(error)) throw error
-    })
-
-  await Promise.all([hydrateLocal, synchronizeNetwork])
-}
-
-async function runWithConcurrency<T>(
-  items: T[],
-  concurrency: number,
-  operation: (item: T) => Promise<void>
-) {
-  let next = 0
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-      while (next < items.length) {
-        await operation(items[next++]!)
-      }
-    })
-  )
+    }))
+    traceMobileStartup("bootstrap.local.ready", { count, loaded, elapsedMs: performance.now() - startedAt })
+  } catch {
+    traceMobileStartup("bootstrap.local.failed", { failures: 1, elapsedMs: performance.now() - startedAt })
+  }
 }
 
 function withTimeout<T>(work: Promise<void>, result: T, timeoutMs: number) {
   return new Promise<T>((resolve, reject) => {
     const timeout = setTimeout(() => resolve(result), timeoutMs)
     void work.then(
-      () => {
-        clearTimeout(timeout)
-        resolve(result)
-      },
-      (error) => {
-        clearTimeout(timeout)
-        reject(error)
-      }
+      () => { clearTimeout(timeout); resolve(result) },
+      (error) => { clearTimeout(timeout); reject(error) }
     )
   })
 }

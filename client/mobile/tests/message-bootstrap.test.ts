@@ -1,249 +1,85 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
-
-import type { ClientConversation } from "@/core/models"
+import type { ClientConversation, ClientMessageList } from "@/core/models"
 import { createMessageBootstrap } from "@/features/bootstrap/message-bootstrap"
-import { flattenVisibleConversations } from "@/domain/conversations/conversation-order"
 
 const target = { id: "server", url: "https://example.test", userId: "user" }
-const conversations = Array.from({ length: 40 }, (_, index) => ({
-  id: `c${index}`,
-  lastMessageSeq: 1,
-})) as ClientConversation[]
-const page = { messages: [], page: { hasMoreBefore: false, newestSeq: 0, oldestSeq: 0 } }
+const conversations = Array.from({ length: 55 }, (_, index) => ({ id: `c${index}` })) as ClientConversation[]
+const page = { messages: [{ id: "cached", seq: 1 }], page: { hasMoreBefore: false, newestSeq: 1, oldestSeq: 1 } } as ClientMessageList
 
-test("message bootstrap limits work, uses five workers, tolerates items, and deduplicates", async () => {
-  let active = 0
-  let maximum = 0
-  const synchronized: string[] = []
+test("startup hydrates all local caches with five workers, but performs no network synchronization", async () => {
+  let active = 0, maximum = 0, reads = 0
+  const published: string[] = []
   const run = createMessageBootstrap({
     listLocalConversations: async () => conversations,
-    refreshConversations: async () => conversations,
-    readLatestPage: async () => page,
-    isUnauthorizedError: () => false,
-    listSyncStates: async () => [],
-    catchUpAfter: async () => { throw new Error("unexpected catch-up") },
-    synchronizeLatest: async (_target, id, limit) => {
+    readLatestPage: async (_target, _id, limit) => {
       assert.equal(limit, 20)
-      active += 1
-      maximum = Math.max(maximum, active)
-      await new Promise((resolve) => setTimeout(resolve, 2))
-      active -= 1
-      synchronized.push(id)
-      if (id === "c3") throw new Error("unavailable")
+      reads++; active++; maximum = Math.max(maximum, active)
+      await new Promise((resolve) => setTimeout(resolve, 1))
+      active--
       return page
     },
   })
-
-  const first = run(target)
+  const first = run(target, (id) => published.push(id))
   assert.equal(run(target), first)
-  await first
+  const result = await first
+  assert.equal(reads, 55)
   assert.equal(maximum, 5)
-  assert.equal(synchronized.length, 30)
-  assert.equal((await first).size, 29)
-  assert.equal((await first).get("c0"), page)
+  assert.equal(result.size, 55)
+  assert.equal(result.get("c54"), page)
+  assert.equal(published.length, 55)
   assert.equal(run(target), first)
+  const production = readFileSync(new URL("../src/features/bootstrap/client-message-bootstrap.ts", import.meta.url), "utf8")
+  assert.doesNotMatch(production, /refreshSnapshot|synchronizeLatest|catchUpAfter|listSyncStates|createClientMessageSyncRound/)
 })
 
-test("network synchronization follows the visible UI order instead of raw storage order", async () => {
-  const raw = Array.from({ length: 31 }, (_, index) => ({
-    id: `raw-${index}`,
-    pinned: index === 30,
-    type: "direct",
-    lastMessageSeq: 1,
-  })) as ClientConversation[]
-  const synchronized: string[] = []
+test("failed local reads do not block other cached conversations", async () => {
   const run = createMessageBootstrap({
-    listLocalConversations: async () => [],
-    refreshConversations: async () => raw,
-    readLatestPage: async () => page,
-    synchronizeLatest: async (_target, id) => {
-      synchronized.push(id)
-      return page
-    },
-    isUnauthorizedError: () => false,
-    listSyncStates: async () => [],
-    catchUpAfter: async () => { throw new Error("unexpected catch-up") },
+    listLocalConversations: async () => conversations,
+    readLatestPage: async (_target, id) => { if (id === "c3") throw new Error("cache unavailable"); return page },
   })
-
-  await run({ ...target, id: "visible-order" })
-  assert.equal(synchronized.length, 30)
-  assert.ok(synchronized.includes("raw-30"))
-  assert.ok(!synchronized.includes("raw-9"))
+  const result = await run(target)
+  assert.equal(result.size, 54)
+  assert.equal(result.has("c3"), false)
 })
 
-test("cold start only catches up changed conversations and stops beyond 100", async () => {
-  const snapshot = [
-    { id: "same", lastMessageSeq: 80 },
-    { id: "updated", lastMessageSeq: 121 },
-    { id: "too-far", lastMessageSeq: 201 },
-  ] as ClientConversation[]
-  const fetched: string[] = []
-  const after: number[] = []
+test("unavailable local database is non-fatal", async () => {
   const run = createMessageBootstrap({
-    listLocalConversations: async () => snapshot,
-    refreshConversations: async () => snapshot,
+    listLocalConversations: async () => { throw new Error("database unavailable") },
     readLatestPage: async () => page,
-    listSyncStates: async () => [
-      { conversationId: "same", httpSyncedThroughSeq: 80 },
-      { conversationId: "updated", httpSyncedThroughSeq: 100 },
-      { conversationId: "too-far", httpSyncedThroughSeq: 100 },
-    ] as never,
-    catchUpAfter: async (_target, id, seq) => {
-      fetched.push(id)
-      after.push(seq)
-      return { committedSeq: seq + 20, result: { ...page, page: { ...page.page, hasMoreAfter: true } } }
-    },
-    synchronizeLatest: async (_target, id) => { fetched.push(id); return page },
-    isUnauthorizedError: () => false,
   })
-  await run(target)
-  assert.deepEqual(fetched, ["updated", "updated"])
-  assert.deepEqual(after, [100, 120])
+  assert.equal((await run(target)).size, 0)
 })
 
-test("message bootstrap has a bounded successful timeout", async () => {
-  const run = createMessageBootstrap(
-    {
-      listLocalConversations: async () => conversations.slice(0, 1),
-      refreshConversations: async () => conversations.slice(0, 1),
-      readLatestPage: async () => page,
-      synchronizeLatest: () => new Promise(() => undefined),
-      isUnauthorizedError: () => false,
-    listSyncStates: async () => [],
-    catchUpAfter: async () => { throw new Error("unexpected catch-up") },
-    },
-    5
-  )
-  await run(target)
-})
-
-test("timed-out bootstrap continues publishing late pages and can run again", async () => {
-  let resolveNetwork!: (value: typeof page) => void
-  let refreshes = 0
+test("a timed-out local warmup keeps publishing and can run again later", async () => {
+  let release!: (value: ClientMessageList) => void
+  let lists = 0
   const published: string[] = []
-  const run = createMessageBootstrap(
-    {
-      listLocalConversations: async () => [],
-      refreshConversations: async () => {
-        refreshes += 1
-        return conversations.slice(0, 1)
-      },
-      readLatestPage: async () => page,
-      synchronizeLatest: () => new Promise((resolve) => {
-        resolveNetwork = resolve
-      }),
-      isUnauthorizedError: () => false,
-    listSyncStates: async () => [],
-    catchUpAfter: async () => { throw new Error("unexpected catch-up") },
-    },
-    5,
-    5
-  )
-
-  await run(target, (id) => published.push(id))
-  assert.deepEqual(published, [])
-  resolveNetwork(page)
+  const run = createMessageBootstrap({
+    listLocalConversations: async () => { lists++; return conversations.slice(0, 1) },
+    readLatestPage: () => new Promise((resolve) => { release = resolve }),
+  }, 5, 5)
+  assert.equal((await run(target, (id) => published.push(id))).size, 0)
+  release(page)
   await new Promise((resolve) => setTimeout(resolve, 1))
   assert.deepEqual(published, ["c0"])
   await new Promise((resolve) => setTimeout(resolve, 10))
-  void run(target)
+  const next = run(target)
   await new Promise((resolve) => setTimeout(resolve, 1))
-  assert.equal(refreshes, 2)
+  assert.equal(lists, 2)
+  release(page)
+  await next
 })
 
-test("an unauthorized conversation refresh is propagated and can be retried", async () => {
-  let attempts = 0
-  const unauthorized = new Error("unauthorized")
+test("local warmup flights are isolated by immutable account and server target", async () => {
+  let lists = 0
   const run = createMessageBootstrap({
-    listLocalConversations: async () => [],
-    refreshConversations: async () => {
-      attempts += 1
-      if (attempts === 1) throw unauthorized
-      return []
-    },
+    listLocalConversations: async () => { lists++; return [] },
     readLatestPage: async () => page,
-    synchronizeLatest: async () => page,
-    isUnauthorizedError: (error) => error === unauthorized,
-    listSyncStates: async () => [],
-    catchUpAfter: async () => { throw new Error("unexpected catch-up") },
   })
-  await assert.rejects(run(target), unauthorized)
-  await run(target)
-  assert.equal(attempts, 2)
-})
-
-test("message bootstrap hydrates local messages beyond the network synchronization limit", async () => {
-  const synchronized: string[] = []
-  const locallyRead: string[] = []
-  const localPage = {
-    messages: [{ id: "m39", seq: 39 }],
-    page: {
-      hasMoreAfter: false,
-      hasMoreBefore: false,
-      limit: 20,
-      newestSeq: 39,
-      oldestSeq: 39,
-    },
-  } as never
-  const run = createMessageBootstrap({
-    listLocalConversations: async () => conversations,
-    refreshConversations: async () => conversations,
-    readLatestPage: async (_target, id, limit) => {
-      assert.equal(limit, 20)
-      locallyRead.push(id)
-      return id === "c39" ? localPage : page
-    },
-    synchronizeLatest: async (_target, id) => {
-      synchronized.push(id)
-      return page
-    },
-    isUnauthorizedError: () => false,
-    listSyncStates: async () => [],
-    catchUpAfter: async () => { throw new Error("unexpected catch-up") },
-  })
-
-  const results = await run({ ...target, id: "local-hydration" })
-  assert.equal(locallyRead.length, 40)
-  assert.equal(synchronized.length, 30)
-  assert.deepEqual(
-    synchronized.sort(),
-    flattenVisibleConversations(conversations)
-      .slice(0, 30)
-      .map(({ id }) => id)
-      .sort()
-  )
-  assert.equal(results.get("c39"), localPage)
-})
-
-test("offline refresh still hydrates all local conversations", async () => {
-  const localPage = {
-    messages: [{ id: "offline-m31", seq: 31 }],
-    page: {
-      hasMoreAfter: false,
-      hasMoreBefore: false,
-      limit: 20,
-      newestSeq: 31,
-      oldestSeq: 31,
-    },
-  } as never
-  let synchronized = 0
-  const run = createMessageBootstrap({
-    listLocalConversations: async () => conversations,
-    refreshConversations: async () => {
-      throw new Error("offline")
-    },
-    readLatestPage: async (_target, id) => id === "c31" ? localPage : page,
-    synchronizeLatest: async () => {
-      synchronized += 1
-      return page
-    },
-    isUnauthorizedError: () => false,
-    listSyncStates: async () => [],
-    catchUpAfter: async () => { throw new Error("unexpected catch-up") },
-  })
-
-  const results = await run({ ...target, id: "offline-local-hydration" })
-  assert.equal(results.get("c31"), localPage)
-  assert.equal(synchronized, 0)
+  await Promise.all([
+    run(target), run({ ...target, userId: "other" }), run({ ...target, id: "other" }), run({ ...target, url: "https://example.test/other" }),
+  ])
+  assert.equal(lists, 4)
 })

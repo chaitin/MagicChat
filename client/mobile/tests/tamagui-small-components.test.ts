@@ -168,7 +168,7 @@ test("编辑页保留安全区、居中宽度与输入焦点行为", async () =>
 test("会话列表未读提醒保留主题色和字体规格", async () => {
   const list = await source("features/messages/conversation-list.tsx")
   assert.match(list, /item\.unreadAlertLabel \? \([\s\S]*?<Text[\s\S]*?color: colors\.destructive/)
-  assert.match(list, /fontSize: 14/)
+  assert.match(list, /color: colors\.destructive,\s*fontSize: 12/)
   assert.match(list, /fontWeight: "600"/)
 })
 

@@ -1,7 +1,9 @@
 import type { ClientConversation } from "@/core/models"
 import type { AuthenticatedTarget } from "@/core/server-target"
-import type { MessageSyncState } from "@/data/messages/message-cache-store"
+import { flattenVisibleConversations } from "@/domain/conversations/conversation-order"
 
+export const MAX_AUTO_CONVERSATIONS_PER_ROUND = 30
+export const AUTO_MESSAGE_SYNC_CONCURRENCY = 3
 export const MAX_AUTO_MESSAGES_PER_CONVERSATION = 100
 export const MAX_AUTO_MESSAGES_PER_ROUND = 100
 export const AUTO_MESSAGE_PAGE_SIZE = 20
@@ -22,7 +24,7 @@ export async function catchUpMessagesTo(
   let afterSeq = initialAfterSeq
   let pages = 0
   while (afterSeq < targetSeq && pages < MAX_AUTO_MESSAGES_PER_CONVERSATION / AUTO_MESSAGE_PAGE_SIZE) {
-    const { committedSeq, result } = await fetchPage(target, conversationId, afterSeq, AUTO_MESSAGE_PAGE_SIZE)
+    const { committedSeq, result } = await fetchPage(target, conversationId, afterSeq, Math.min(AUTO_MESSAGE_PAGE_SIZE, targetSeq - afterSeq))
     if (committedSeq <= afterSeq) {
       if (!result.page.hasMoreAfter) return
       throw new Error("消息增量同步游标没有向前推进")
@@ -36,7 +38,7 @@ export async function catchUpMessagesTo(
 export function createMessageSyncBudget(limit = MAX_AUTO_MESSAGES_PER_ROUND) {
   let remaining = limit
   return {
-    decide(conversation: ClientConversation, state: Pick<MessageSyncState, "httpSyncedThroughSeq"> | undefined): MessageSyncDecision {
+    decide(conversation: ClientConversation, state: { httpSyncedThroughSeq: number } | undefined): MessageSyncDecision {
       const latest = conversation.lastMessageSeq
       if (!Number.isSafeInteger(latest) || latest <= 0) return { type: "skip" }
       const cursor = state?.httpSyncedThroughSeq ?? 0
@@ -53,4 +55,13 @@ export function createMessageSyncBudget(limit = MAX_AUTO_MESSAGES_PER_ROUND) {
       return { type: "after", afterSeq: cursor, targetSeq: latest }
     },
   }
+}
+
+export function selectAutomaticConversations(conversations: ClientConversation[], activeConversationId?: string) {
+  return flattenVisibleConversations(conversations, { activeConversationId })
+    .sort((left, right) =>
+      Number(right.id === activeConversationId) - Number(left.id === activeConversationId) ||
+      Number(right.unreadCount > 0) - Number(left.unreadCount > 0)
+    )
+    .slice(0, MAX_AUTO_CONVERSATIONS_PER_ROUND)
 }

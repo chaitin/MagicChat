@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import type { ClientConversation } from "@/core/models"
-import { catchUpMessagesTo, createMessageSyncBudget } from "@/features/bootstrap/message-sync-budget"
+import { catchUpMessagesTo, createMessageSyncBudget } from "@/domain/messages/message-sync-budget"
 
 const target = { id: "server", url: "https://example.test", userId: "user" }
 const conversation = (seq: number, id = "a") => ({ id, lastMessageSeq: seq }) as ClientConversation
@@ -24,7 +24,7 @@ test("catch-up pages until snapshot boundary without crossing the budget", async
   const calls: number[] = []
   await catchUpMessagesTo(target, "a", 4, 45, async (_target, _id, afterSeq, limit) => {
     calls.push(afterSeq)
-    assert.equal(limit, 20)
+    assert.equal(limit, Math.min(20, 45 - afterSeq))
     return { committedSeq: Math.min(afterSeq + 20, 45), result: { page: { hasMoreAfter: afterSeq + 20 < 45 } } }
   })
   assert.deepEqual(calls, [4, 24, 44])
