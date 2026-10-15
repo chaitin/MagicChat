@@ -495,7 +495,6 @@ export function MeScreen() {
                   icon={({ size, strokeWidth }) => <IconBell color={colors.brand} size={size} strokeWidth={strokeWidth} />}
                   separator
                   title="手机通知"
-                  description={pushStatus.label}
                   trailing={
                     <XGUISwitch
                       accessibilityLabel="手机通知"
