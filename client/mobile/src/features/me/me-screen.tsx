@@ -48,7 +48,6 @@ import {
   updatePushReminderState,
 } from "@/notifications/push-registration-store"
 import { presentPushSynchronizationState } from "@/notifications/push-status-presentation"
-import { PushSettings } from "@/notifications/push-settings"
 import {
   useAuth,
   useAuthenticatedSession,
@@ -511,9 +510,6 @@ export function MeScreen() {
                     />
                   }
                 />
-              ) : null}
-              {Platform.OS === "ios" || Platform.OS === "android" ? (
-                <PushSettings key={`${active?.accountId}:${active?.generation}`} />
               ) : null}
             </XGUIList>
 

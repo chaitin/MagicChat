@@ -177,6 +177,12 @@ test("上报器重建后旧请求不能覆盖新前台状态，实例之间共�
   }
 })
 
+test("设置页保留手机通知开关，不展示推送诊断和电脑联动入口", () => {
+  const text = readFileSync(new URL("../src/features/me/me-screen.tsx", import.meta.url), "utf8")
+  assert.match(text, /title="手机通知"/)
+  assert.doesNotMatch(text, /推送诊断|电脑活跃时暂停手机通知|<PushSettings\b|notifications\/push-settings/)
+})
+
 test("手机前后台即时更新且15秒续租，实时状态变化复用同一串行上报器", () => {
   const text = readFileSync(
     new URL("../src/providers/push-provider.tsx", import.meta.url),
