@@ -550,6 +550,11 @@ export const ConversationPanelHistory = React.memo(
                           : undefined
                       }
                       onReeditRevoked={onReeditRevokedMessage}
+                      onLocateReply={
+                        message.virtualType === "topic_source"
+                          ? undefined
+                          : navigation?.onLocateReplyMessage
+                      }
                       onReply={
                         message.virtualType === "topic_source"
                           ? undefined
@@ -630,6 +635,7 @@ export type ConversationHistoryNavigation = {
   focus: ClientConversationMessageFocus | null
   loadingAfter: boolean
   onFocusHandled: (requestKey: number) => void
+  onLocateReplyMessage?: (message: ConversationPanelMessage) => void
   onLoadAfterMessages: () => void
   onReturnToLatest: () => void
   pendingLatestMessageCount: number

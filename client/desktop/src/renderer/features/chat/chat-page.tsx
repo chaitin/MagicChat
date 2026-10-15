@@ -134,6 +134,7 @@ export function ChatPage({
   const [searchMessageTarget, setSearchMessageTarget] = useState<{
     conversationId: string
     messageId: string
+    beforeSeq?: number
   } | null>(null)
   const [draft, setDraft] = useState("")
   const [draftMentions, setDraftMentions] = useState<DraftMention[]>([])
@@ -263,11 +264,16 @@ export function ChatPage({
       )
     ) {
       const key = `${selectedId}\0${searchMessageTarget.messageId}`
+      let active = true
       if (locatingSearchRef.current !== key) {
         locatingSearchRef.current = key
-        void jumpToLocalMessage(searchMessageTarget.messageId)
+        void jumpToLocalMessage(
+          searchMessageTarget.messageId,
+          searchMessageTarget.beforeSeq,
+          () => active,
+        )
           .catch((error: unknown) => {
-            if (locatingSearchRef.current !== key) return
+            if (!active || locatingSearchRef.current !== key) return
             showToast({
               status: "error",
               title: error instanceof Error ? error.message : "无法定位消息",
@@ -283,7 +289,10 @@ export function ChatPage({
             if (locatingSearchRef.current === key) locatingSearchRef.current = null
           })
       }
-      return
+      return () => {
+        active = false
+        if (locatingSearchRef.current === key) locatingSearchRef.current = null
+      }
     }
     let clearHighlightTimer: number | undefined
     const frame = window.requestAnimationFrame(() => {
@@ -294,7 +303,10 @@ export function ChatPage({
       row.scrollIntoView({ block: "center" })
       clearHighlightTimer = window.setTimeout(() => {
         setSearchMessageTarget((current) =>
-          current?.messageId === searchMessageTarget.messageId ? null : current,
+          current?.conversationId === searchMessageTarget.conversationId &&
+          current.messageId === searchMessageTarget.messageId
+            ? null
+            : current,
         )
       }, 2000)
     })
@@ -395,6 +407,27 @@ export function ChatPage({
     onMessages: applySentMessages,
     onReplyConsumed: clearReplyTarget,
   })
+
+  const mediaMentionCandidates = useMemo(() => {
+    const candidatesFor = (conversationId: string | undefined) =>
+      createMentionCandidates(
+        selected?.id === conversationId
+          ? selected
+          : (conversations.find((conversation) => conversation.id === conversationId) ?? null),
+        conversations,
+        resolveMentionLabel,
+      )
+    return {
+      image: candidatesFor(pendingImage?.conversationId),
+      video: candidatesFor(pendingVideo?.conversationId),
+    }
+  }, [
+    selected,
+    conversations,
+    resolveMentionLabel,
+    pendingImage?.conversationId,
+    pendingVideo?.conversationId,
+  ])
 
   const sendDraft = useCallback(() => {
     const content = createDraftMentionTemplate(draft, draftMentions).trim()
@@ -505,6 +538,18 @@ export function ChatPage({
       focusComposer()
     },
     [focusComposer, resolveMentionLabel],
+  )
+
+  const locateReplyMessage = useCallback(
+    (message: DesktopMessage) => {
+      if (!message.replyTo || message.conversationId !== selectedId) return
+      setSearchMessageTarget({
+        conversationId: message.conversationId,
+        messageId: message.replyTo.id,
+        beforeSeq: message.seq,
+      })
+    },
+    [selectedId],
   )
 
   const replyToMessage = useCallback(
@@ -855,6 +900,7 @@ export function ChatPage({
                     onCreateTopic={setCreateTopicMessage}
                     onReeditRevokedMessage={reeditRevokedMessage}
                     onReplyMessage={replyToMessage}
+                    onLocateReplyMessage={locateReplyMessage}
                     onReplyCloseFocus={focusComposer}
                     selectionActive={selection.active}
                     selectedMessageIds={selection.selected}
@@ -1062,6 +1108,9 @@ export function ChatPage({
         </AlertDialogContent>
       </AlertDialog>
       <SendMediaMessageDialog
+        targetId={targetId}
+        resolvedTheme={resolvedTheme}
+        mentionCandidates={mediaMentionCandidates.image}
         category="image"
         caption={mediaCaption}
         conversationName={pendingImage?.conversationName ?? ""}
@@ -1075,6 +1124,9 @@ export function ChatPage({
         }}
       />
       <SendMediaMessageDialog
+        targetId={targetId}
+        resolvedTheme={resolvedTheme}
+        mentionCandidates={mediaMentionCandidates.video}
         category="video"
         caption={mediaCaption}
         conversationName={pendingVideo?.conversationName ?? ""}

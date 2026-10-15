@@ -2,7 +2,7 @@
 // eslint-disable-next-line import/no-unresolved
 import IconAlertCircleFilled from "@tabler/icons-react-native/IconAlertCircleFilled"
 import { memo, useRef } from "react"
-import { Pressable, View } from "react-native"
+import { Pressable, View, type GestureResponderEvent } from "react-native"
 import { Text } from "@/components/mi-sans-text"
 
 import { AppAvatar } from "@/components/avatar/app-avatar"
@@ -34,6 +34,7 @@ export const MessageBubble = memo(function MessageBubble({
   onImagePress,
   onMentionPress,
   onMessageLongPress,
+  onLocateReplyMessage,
   onOpenTopic,
   onResourceError,
   onRetryMessage,
@@ -61,6 +62,7 @@ export const MessageBubble = memo(function MessageBubble({
   onImagePress: (fileId: string, messageId: string) => void
   onMentionPress: (target: EntityReference) => void
   onMessageLongPress: (message: PresentedMessage) => void
+  onLocateReplyMessage?: (message: PresentedMessage) => void
   onOpenTopic: (conversationId: string) => void
   onRetryMessage?: (clientMessageId: string) => void
   optimisticClientMessageId?: string
@@ -81,6 +83,16 @@ export const MessageBubble = memo(function MessageBubble({
 }) {
   const { colors } = useXGUITheme()
   const didLongPressAvatarRef = useRef(false)
+  const didLongPressReplyRef = useRef(false)
+  function handleReplyReferencePress(event: GestureResponderEvent) {
+    event.stopPropagation()
+    if (didLongPressReplyRef.current || !messageActionsEnabled || !message.replyTo) return
+    onLocateReplyMessage?.(message)
+  }
+  function handleReplyReferenceLongPress() {
+    didLongPressReplyRef.current = true
+    if (messageActionsEnabled) onMessageLongPress(message)
+  }
 
   if (message.role === "system") {
     return (
@@ -226,14 +238,22 @@ export const MessageBubble = memo(function MessageBubble({
           ) : null}
           <View style={{ backgroundColor: fromMe ? colors.brand1 : colors.background2, borderBottomLeftRadius: 10, borderBottomRightRadius: 10, borderTopLeftRadius: fromMe ? 10 : 3, borderTopRightRadius: fromMe ? 3 : 10, maxWidth: "100%", overflow: "hidden", padding: flushImageBubble ? 0 : 13, width: structuredBubbleWidth ? "100%" : undefined }}>
             {message.replyTo ? (
-              <View style={{ borderColor: colors.separator, borderLeftWidth: 2, marginBottom: 7, paddingLeft: 7 }}>
-                <Text numberOfLines={1} selectable={allowsTextSelection} style={{ color: colors.textSecondary, fontSize: 14, fontWeight: "600", lineHeight: 21 }}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="定位被引用的原消息"
+                disabled={!onLocateReplyMessage || !messageActionsEnabled}
+                onPressIn={() => { didLongPressReplyRef.current = false }}
+                onPress={handleReplyReferencePress}
+                onLongPress={handleReplyReferenceLongPress}
+                style={{ borderColor: colors.separator, borderLeftWidth: 2, marginBottom: 7, paddingLeft: 7 }}
+              >
+                <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 14, fontWeight: "600", lineHeight: 21 }}>
                   {message.replyTo.author}
                 </Text>
-                <Text numberOfLines={2} selectable={allowsTextSelection} style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>
+                <Text numberOfLines={2} style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>
                   {message.replyTo.summary}
                 </Text>
-              </View>
+              </Pressable>
             ) : null}
             {message.body.type === "choice" ? (
               <MessageChoice

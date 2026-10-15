@@ -98,7 +98,7 @@ export function ConversationScreen() {
   const parentConversationId = Array.isArray(params.parentConversationId)
     ? (params.parentConversationId[0] ?? "")
     : (params.parentConversationId ?? "")
-  const targetMessageId = Array.isArray(params.messageId)
+  const routeTargetMessageId = Array.isArray(params.messageId)
     ? (params.messageId[0] ?? "")
     : (params.messageId ?? "")
   const router = useRouter()
@@ -112,6 +112,23 @@ export function ConversationScreen() {
   const { invalidateSession } = useAuth()
   const { activateConversation, ready: realtimeReady } = useRealtime()
   const session = useAuthenticatedSession()
+  const messageLocationScope = JSON.stringify([session.id, session.url, session.userId, conversationId, routeTargetMessageId])
+  const [replyLocation, setReplyLocation] = useState<{ scope: string; messageId: string; requestKey: number } | null>(null)
+  const activeReplyLocation = replyLocation?.scope === messageLocationScope ? replyLocation : null
+  const targetMessageId = activeReplyLocation?.messageId ?? routeTargetMessageId
+  const handleLocateReplyMessage = useCallback((message: PresentedMessage) => {
+    const reply = message.replyTo
+    if (!reply) return
+    Keyboard.dismiss()
+    setReplyLocation((current) => ({
+      scope: messageLocationScope,
+      messageId: reply.id,
+      requestKey: (current?.requestKey ?? 0) + 1,
+    }))
+  }, [messageLocationScope])
+  const handleUnavailableReply = useCallback(() => {
+    if (activeReplyLocation) Alert.alert("无法定位消息", "原消息不存在或已不可见")
+  }, [activeReplyLocation])
   const composerRef = useRef<MessageComposerHandle>(null)
   const [forwardMessageState, setForwardMessage] =
     useState<ScopedMessageActionTarget | null>(null)
@@ -265,7 +282,10 @@ export function ConversationScreen() {
     isFetchingOlder: messagesQuery.isFetchingOlder,
     isLoading: messagesQuery.isLoading,
     messages: messagesQuery.messages,
-    targetMessageId,
+    targetMessageId: isFocused ? targetMessageId : "",
+    scopeKey: messageLocationScope,
+    requestKey: activeReplyLocation?.requestKey ?? 0,
+    onUnavailable: handleUnavailableReply,
   })
   const { mutateAsync: markRead } = useMarkConversationRead(
     session,
@@ -602,7 +622,9 @@ export function ConversationScreen() {
               error={messagesQuery.error}
               hasOlder={messagesQuery.hasOlder}
               isFetchingOlder={messagesQuery.isFetchingOlder}
+              key={messageLocationScope}
               initialMessageId={targetMessageId || undefined}
+              focusRequestKey={activeReplyLocation?.requestKey ?? 0}
               isLoading={messagesQuery.isLoading}
               messages={presentedMessages}
               optimisticMessages={messageActions.optimisticMessages}
@@ -620,6 +642,7 @@ export function ConversationScreen() {
               onImagePress={handleImagePress}
               onLoadOlder={handleLoadOlder}
               onMessageLongPress={handleMessageLongPress}
+              onLocateReplyMessage={handleLocateReplyMessage}
               onRetry={handleRetryMessages}
               onResourceError={(fileId) =>
                 void resources.reload(fileId).catch(() => undefined)

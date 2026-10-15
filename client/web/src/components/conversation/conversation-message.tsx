@@ -100,6 +100,7 @@ type MessageBubbleProps = {
   onMultiSelect?: (message: ConversationPanelMessage) => void
   onReeditRevoked?: (message: ConversationPanelMessage) => void
   onReply?: (message: ConversationPanelMessage) => void
+  onLocateReply?: (message: ConversationPanelMessage) => void
   onOpenTopic?: (conversationId: string) => void
   onRevoke?: (message: ConversationPanelMessage) => void
   onSetReaction?: (
@@ -129,6 +130,7 @@ export const MessageBubble = React.memo(function MessageBubble({
   onMultiSelect,
   onReeditRevoked,
   onReply,
+  onLocateReply,
   onOpenTopic,
   onRevoke,
   onSetReaction,
@@ -256,7 +258,13 @@ export const MessageBubble = React.memo(function MessageBubble({
       }
       ref={bubbleRef}
     >
-      {message.replyTo && <MessageReplyReference replyTo={message.replyTo} />}
+      {message.replyTo && (
+        <MessageReplyReference
+          replyTo={message.replyTo}
+          disabled={selectionMode || !onLocateReply}
+          onLocate={() => onLocateReply?.(message)}
+        />
+      )}
       {message.body.type === "choice" ? (
         <MessageChoiceBody
           align={fromMe ? "end" : "start"}
@@ -490,6 +498,7 @@ function areMessageBubblePropsEqual(
     previous.onMultiSelect === next.onMultiSelect &&
     previous.onReeditRevoked === next.onReeditRevoked &&
     previous.onReply === next.onReply &&
+    previous.onLocateReply === next.onLocateReply &&
     previous.canReply === next.canReply &&
     previous.onOpenTopic === next.onOpenTopic &&
     previous.onRevoke === next.onRevoke &&
@@ -730,18 +739,32 @@ async function writeClipboardText(text: string) {
 
 function MessageReplyReference({
   replyTo,
+  disabled,
+  onLocate,
 }: {
   replyTo: ConversationPanelReplyTarget
+  disabled: boolean
+  onLocate: () => void
 }) {
   return (
-    <div className="mb-2 border-l-2 border-foreground/20 pl-2 text-xs">
-      <div className="truncate font-medium text-foreground/80">
+    <button
+      type="button"
+      disabled={disabled}
+      aria-label="定位被引用的原消息"
+      title="点击定位原消息"
+      onClick={(event) => {
+        event.stopPropagation()
+        if (!disabled) onLocate()
+      }}
+      className="mb-2 block w-full min-w-0 cursor-pointer border-l-2 border-foreground/20 pl-2 text-left text-xs hover:border-teal-500 hover:bg-foreground/5 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none"
+    >
+      <span className="block truncate font-medium text-foreground/80">
         {replyTo.author}
-      </div>
-      <div className="line-clamp-2 text-muted-foreground">
+      </span>
+      <span className="line-clamp-2 text-muted-foreground">
         {replyTo.summary}
-      </div>
-    </div>
+      </span>
+    </button>
   )
 }
 
@@ -1325,10 +1348,17 @@ function ForwardBundleMessage({
           className="flex w-80 max-w-full cursor-pointer items-center gap-3 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
           type="button"
         >
-          <MessageContentIcon kind="forward" className="size-7 shrink-0 text-foreground" strokeWidth={1.5} />
+          <MessageContentIcon
+            kind="forward"
+            className="size-7 shrink-0 text-foreground"
+            strokeWidth={1.5}
+          />
           <span className="min-w-0 flex-1">
             <span className="block truncate leading-6">聊天记录</span>
-            <span className="block max-w-full truncate text-xs text-muted-foreground" title={summary}>
+            <span
+              className="block max-w-full truncate text-xs text-muted-foreground"
+              title={summary}
+            >
               {summary.replace(/^\[聊天记录\]\s*/, "")}
             </span>
           </span>
@@ -1384,14 +1414,23 @@ function ForwardBundleItemBody({
       onCopy={() => {
         const selected = selectedTextRef.current
         selectedTextRef.current = ""
-        void copyMessageToClipboard({ body }, selected, elementRef.current, mentionLabelResolver)
+        void copyMessageToClipboard(
+          { body },
+          selected,
+          elementRef.current,
+          mentionLabelResolver
+        )
       }}
     >
       <div
         ref={elementRef}
         className="w-fit max-w-full rounded-md bg-muted p-3 hover:bg-foreground/5 data-[state=open]:bg-foreground/5"
         data-forward-bundle-item-body
-        onContextMenu={() => { selectedTextRef.current = getSelectedTextWithinElement(elementRef.current) }}
+        onContextMenu={() => {
+          selectedTextRef.current = getSelectedTextWithinElement(
+            elementRef.current
+          )
+        }}
       >
         <MessageBodyRenderer
           body={body}

@@ -80,6 +80,7 @@ function TopicDrawerContent({
     contactApps,
     contacts,
     ensureConversationMessages,
+    focusConversationMessage,
     getConversation,
     getConversationMessageState,
     loadAfterConversationMessages,
@@ -173,11 +174,26 @@ function TopicDrawerContent({
     ? getConversationMessageState(conversation.id)
     : undefined
   const clientMessages = messageState?.messages ?? emptyMessages
+  const locateReplyMessage = React.useCallback(
+    (message: ConversationPanelMessage) => {
+      if (!message.replyTo) return
+      const source = getConversationMessageState(conversationId).messages.find(
+        (item) => item.id === message.id
+      )
+      void focusConversationMessage(conversationId, {
+        messageId: message.replyTo.id,
+        seq: source?.replyTo?.seq,
+        beforeSeq: source && source.seq > 0 ? source.seq : undefined,
+      })
+    },
+    [conversationId, focusConversationMessage, getConversationMessageState]
+  )
   const historyNavigation = React.useMemo(
     () =>
       conversation && messageState
         ? {
             focus: messageState.focus,
+            onLocateReplyMessage: locateReplyMessage,
             loadingAfter: messageState.loadingAfter,
             hasMoreAfter: messageState.page?.hasMoreAfter,
             onFocusHandled: (requestKey: number) =>
@@ -193,6 +209,7 @@ function TopicDrawerContent({
     [
       conversation,
       consumeConversationMessageFocus,
+      locateReplyMessage,
       loadAfterConversationMessages,
       messageState,
       returnToLatestConversationMessages,

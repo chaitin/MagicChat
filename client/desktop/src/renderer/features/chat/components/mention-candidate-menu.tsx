@@ -13,6 +13,7 @@ export function MentionCandidateMenu({
   targetId,
   theme,
   onSelect,
+  className,
 }: {
   id: string
   candidates: MentionCandidate[]
@@ -20,6 +21,7 @@ export function MentionCandidateMenu({
   targetId: string
   theme: "light" | "dark"
   onSelect: (candidate: MentionCandidate) => void
+  className?: string
 }) {
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([])
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -39,7 +41,10 @@ export function MentionCandidateMenu({
       id={id}
       role="listbox"
       aria-label="选择要提及的成员"
-      className="absolute bottom-full left-4 z-20 mb-2 w-72 rounded-md border bg-popover text-popover-foreground shadow-md"
+      className={cn(
+        "absolute bottom-full left-4 z-20 mb-2 w-72 rounded-md border bg-popover text-popover-foreground shadow-md",
+        className,
+      )}
     >
       <ScrollArea
         type="hover"

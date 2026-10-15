@@ -226,100 +226,104 @@ export function useAttachmentSender({
     ],
   )
 
-  const sendPendingImage = useCallback(async () => {
-    if (!window.desktop || !pendingImage || sendingMedia) return
-    setSendingMedia("image")
-    try {
-      const contentType = pendingImage.prepared.blob.type
-      if (contentType !== "image/webp" && contentType !== "image/png") {
-        throw new Error("图片内容格式不正确")
-      }
-      const result = await window.desktop.accountData.sendImageMessage({
-        targetId,
-        conversationId: pendingImage.conversationId,
-        selectionToken: pendingImage.selected.token,
-        bytes: await pendingImage.prepared.blob.arrayBuffer(),
-        name: pendingImage.prepared.name,
-        contentType,
-        width: pendingImage.prepared.width,
-        height: pendingImage.prepared.height,
-        caption: mediaCaption,
-        replyToMessageId,
-      })
-      if (!result.ok) {
+  const sendPendingImage = useCallback(
+    async (caption: string) => {
+      if (!window.desktop || !pendingImage || sendingMedia) return
+      setSendingMedia("image")
+      try {
+        const contentType = pendingImage.prepared.blob.type
+        if (contentType !== "image/webp" && contentType !== "image/png") {
+          throw new Error("图片内容格式不正确")
+        }
+        const result = await window.desktop.accountData.sendImageMessage({
+          targetId,
+          conversationId: pendingImage.conversationId,
+          selectionToken: pendingImage.selected.token,
+          bytes: await pendingImage.prepared.blob.arrayBuffer(),
+          name: pendingImage.prepared.name,
+          contentType,
+          width: pendingImage.prepared.width,
+          height: pendingImage.prepared.height,
+          caption,
+          replyToMessageId,
+        })
+        if (!result.ok) {
+          showToast({
+            status: "error",
+            title: "发送图片失败",
+            description: result.error.message,
+          })
+          return
+        }
+        onMessages(pendingImage.conversationId, result.data)
+        onReplyConsumed()
+        clearPendingImage()
+        focusComposer()
+      } catch (error) {
         showToast({
           status: "error",
           title: "发送图片失败",
-          description: result.error.message,
+          description: error instanceof Error ? error.message : undefined,
         })
-        return
+      } finally {
+        setSendingMedia(null)
       }
-      onMessages(pendingImage.conversationId, result.data)
-      onReplyConsumed()
-      clearPendingImage()
-      focusComposer()
-    } catch (error) {
-      showToast({
-        status: "error",
-        title: "发送图片失败",
-        description: error instanceof Error ? error.message : undefined,
-      })
-    } finally {
-      setSendingMedia(null)
-    }
-  }, [
-    clearPendingImage,
-    focusComposer,
-    mediaCaption,
-    onMessages,
-    onReplyConsumed,
-    pendingImage,
-    replyToMessageId,
-    sendingMedia,
-    showToast,
-    targetId,
-  ])
+    },
+    [
+      clearPendingImage,
+      focusComposer,
+      onMessages,
+      onReplyConsumed,
+      pendingImage,
+      replyToMessageId,
+      sendingMedia,
+      showToast,
+      targetId,
+    ],
+  )
 
-  const sendPendingVideo = useCallback(async () => {
-    if (!window.desktop || !pendingVideo || sendingMedia) return
-    setSendingMedia("video")
-    try {
-      const result = await window.desktop.accountData.sendVideoMessage({
-        targetId,
-        conversationId: pendingVideo.conversationId,
-        selectionToken: pendingVideo.selected.token,
-        caption: mediaCaption,
-        replyToMessageId,
-      })
-      if (!result.ok) {
-        showToast({
-          status: "error",
-          title: "发送视频失败",
-          description: result.error.message,
+  const sendPendingVideo = useCallback(
+    async (caption: string) => {
+      if (!window.desktop || !pendingVideo || sendingMedia) return
+      setSendingMedia("video")
+      try {
+        const result = await window.desktop.accountData.sendVideoMessage({
+          targetId,
+          conversationId: pendingVideo.conversationId,
+          selectionToken: pendingVideo.selected.token,
+          caption,
+          replyToMessageId,
         })
-        return
+        if (!result.ok) {
+          showToast({
+            status: "error",
+            title: "发送视频失败",
+            description: result.error.message,
+          })
+          return
+        }
+        onMessages(pendingVideo.conversationId, result.data)
+        onReplyConsumed()
+        setPendingVideo(null)
+        setMediaCaption("")
+        focusComposer()
+      } catch {
+        showToast({ status: "error", title: "发送视频失败" })
+      } finally {
+        setSendingMedia(null)
       }
-      onMessages(pendingVideo.conversationId, result.data)
-      onReplyConsumed()
-      setPendingVideo(null)
-      setMediaCaption("")
-      focusComposer()
-    } catch {
-      showToast({ status: "error", title: "发送视频失败" })
-    } finally {
-      setSendingMedia(null)
-    }
-  }, [
-    focusComposer,
-    mediaCaption,
-    onMessages,
-    onReplyConsumed,
-    pendingVideo,
-    replyToMessageId,
-    sendingMedia,
-    showToast,
-    targetId,
-  ])
+    },
+    [
+      focusComposer,
+      onMessages,
+      onReplyConsumed,
+      pendingVideo,
+      replyToMessageId,
+      sendingMedia,
+      showToast,
+      targetId,
+    ],
+  )
 
   useEffect(() => {
     const resourceUrl = pendingImage?.prepared.resourceUrl

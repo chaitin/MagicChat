@@ -379,9 +379,32 @@ export function useConversationMessageWindow({
   const focusConversationMessage = useCallback(
     async (
       conversationId: string,
-      target: { messageId: string; seq: number }
+      target: { messageId: string; seq?: number; beforeSeq?: number }
     ) => {
-      if (!conversationId || !target.messageId || target.seq < 1) {
+      if (!conversationId || !target.messageId) return
+      if (
+        target.seq !== undefined &&
+        (!Number.isSafeInteger(target.seq) || target.seq < 1)
+      )
+        return
+      const cached = conversationMessageStatesRef.current[
+        conversationId
+      ]?.messages.find((message) => message.id === target.messageId)
+      if (cached) {
+        const mode =
+          conversationMessageStatesRef.current[conversationId]?.viewMode ??
+          "latest"
+        coordinator.beginWindowRequest(conversationId, mode)
+        const requestKey = ++focusRequestKeyRef.current
+        updateConversationMessageState(conversationId, (state) => ({
+          ...state,
+          error: null,
+          focus: { messageId: target.messageId, requestKey },
+          loaded: true,
+          loading: false,
+          loadingAfter: false,
+          loadingBefore: false,
+        }))
         return
       }
 
@@ -397,7 +420,7 @@ export function useConversationMessageWindow({
         loadingBefore: false,
         latestKnownSeq: Math.max(
           currentState.latestKnownSeq,
-          target.seq,
+          target.seq ?? 0,
           getConversationLatestSeq(conversationId)
         ),
         messages: [],
@@ -407,13 +430,41 @@ export function useConversationMessageWindow({
       }))
 
       try {
+        let seq = target.seq
+        if (seq === undefined) {
+          let cursor =
+            target.beforeSeq ?? getConversationLatestSeq(conversationId) + 1
+          while (seq === undefined) {
+            if (!coordinator.requestIsCurrent(conversationId, version)) return
+            if (!Number.isSafeInteger(cursor) || cursor <= 1) {
+              throw new Error("原消息不存在或已不可见")
+            }
+            const page = await listConversationMessages(conversationId, {
+              beforeSeq: cursor,
+              limit: messagePageLimit,
+            })
+            if (!coordinator.requestIsCurrent(conversationId, version)) return
+            seq = page.messages.find(
+              (message) => message.id === target.messageId
+            )?.seq
+            if (seq !== undefined) break
+            if (
+              !page.page.hasMoreBefore ||
+              page.page.oldestSeq <= 0 ||
+              page.page.oldestSeq >= cursor
+            ) {
+              throw new Error("原消息不存在或已不可见")
+            }
+            cursor = page.page.oldestSeq
+          }
+        }
         const [before, after] = await Promise.all([
           listConversationMessages(conversationId, {
-            beforeSeq: target.seq + 1,
+            beforeSeq: seq + 1,
             limit: messagePageLimit,
           }),
           listConversationMessages(conversationId, {
-            afterSeq: target.seq,
+            afterSeq: seq,
             limit: messagePageLimit,
           }),
         ])
@@ -425,7 +476,7 @@ export function useConversationMessageWindow({
           after.messages
         )
         if (!messages.some((message) => message.id === target.messageId)) {
-          throw new Error("target message is no longer available")
+          throw new Error("原消息不存在或已不可见")
         }
         const resultPage = createFocusedMessagePage(before, after, messages)
         updateConversationMessageState(conversationId, (currentState) => {
@@ -471,6 +522,7 @@ export function useConversationMessageWindow({
       }
     },
     [
+      conversationMessageStatesRef,
       coordinator,
       getConversationLatestSeq,
       replaceWithLatestMessages,

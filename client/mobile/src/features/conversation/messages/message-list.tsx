@@ -37,6 +37,7 @@ export function MessageList({
   error,
   hasOlder,
   initialMessageId,
+  focusRequestKey = 0,
   isFetchingOlder,
   isLoading,
   messages,
@@ -46,6 +47,7 @@ export function MessageList({
   onImagePress,
   onLoadOlder,
   onMessageLongPress,
+  onLocateReplyMessage,
   onRetry,
   onRetryMessage,
   optimisticMessages,
@@ -69,6 +71,7 @@ export function MessageList({
   error: Error | null
   hasOlder: boolean
   initialMessageId?: string
+  focusRequestKey?: number
   isFetchingOlder: boolean
   isLoading: boolean
   messages: PresentedMessage[]
@@ -79,6 +82,7 @@ export function MessageList({
   onImagePress: (fileId: string, messageId: string) => void
   onLoadOlder: () => void
   onMessageLongPress: (message: PresentedMessage) => void
+  onLocateReplyMessage?: (message: PresentedMessage) => void
   onRetry: () => void
   onRetryMessage: (clientMessageId: string) => void
   onResourceError: (fileId: string) => void
@@ -123,30 +127,30 @@ export function MessageList({
   const focusedMessageIdRef = useRef("")
   const pendingFocusedMessageIdRef = useRef("")
   const targetScrollRetriesRef = useRef(0)
+  const requestedTargetIndexRef = useRef(-1)
+  const scrollRetryTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const visibleMessageIdsRef = useRef(new Set<string>())
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [viewabilityConfig] = useState(() => ({ itemVisiblePercentThreshold: 50 }))
   const [highlightedMessageId, setHighlightedMessageId] = useState("")
+  const completeMessageFocus = useCallback((messageId: string) => {
+    pendingFocusedMessageIdRef.current = ""
+    focusedMessageIdRef.current = messageId
+    setHighlightedMessageId(messageId)
+    clearTimeout(highlightTimerRef.current)
+    highlightTimerRef.current = setTimeout(() => setHighlightedMessageId(""), 2_000)
+  }, [])
   const handleViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken<MessageListItem>[] }) => {
+      const visible = new Set<string>()
+      for (const token of viewableItems) {
+        if (token.isViewable && token.item.type === "message") visible.add(token.item.message.id)
+      }
+      visibleMessageIdsRef.current = visible
       const pendingMessageId = pendingFocusedMessageIdRef.current
-      if (!pendingMessageId) return
-      const targetIsVisible = viewableItems.some(
-        (token) =>
-          token.isViewable &&
-          token.item.type === "message" &&
-          token.item.message.id === pendingMessageId
-      )
-      if (!targetIsVisible) return
-      pendingFocusedMessageIdRef.current = ""
-      focusedMessageIdRef.current = pendingMessageId
-      setHighlightedMessageId(pendingMessageId)
-      clearTimeout(highlightTimerRef.current)
-      highlightTimerRef.current = setTimeout(
-        () => setHighlightedMessageId(""),
-        2_000
-      )
+      if (pendingMessageId && visible.has(pendingMessageId)) completeMessageFocus(pendingMessageId)
     },
-    []
+    [completeMessageFocus]
   )
   const [pendingNewMessageCount, setPendingNewMessageCount] = useState(0)
 
@@ -204,6 +208,18 @@ export function MessageList({
   }, [conversationId, initialMessageId, isLoading, messages])
 
   useEffect(() => {
+    focusedMessageIdRef.current = ""
+    pendingFocusedMessageIdRef.current = ""
+    requestedTargetIndexRef.current = -1
+    clearTimeout(scrollRetryTimerRef.current)
+    clearTimeout(highlightTimerRef.current)
+    if (initialMessageId) {
+      nearBottomRef.current = false
+      pendingScrollRef.current = null
+    }
+  }, [initialMessageId, focusRequestKey])
+
+  useEffect(() => {
     if (!initialMessageId || focusedMessageIdRef.current === initialMessageId) {
       return
     }
@@ -212,19 +228,24 @@ export function MessageList({
     )
     if (targetIndex < 0) return
     pendingFocusedMessageIdRef.current = initialMessageId
+    requestedTargetIndexRef.current = targetIndex
     targetScrollRetriesRef.current = 0
-    requestAnimationFrame(() => {
+    const frame = requestAnimationFrame(() => {
+      if (pendingFocusedMessageIdRef.current !== initialMessageId) return
       listRef.current?.scrollToIndex({
         animated: false,
         index: targetIndex,
         viewPosition: 0.5,
       })
+      if (visibleMessageIdsRef.current.has(initialMessageId)) completeMessageFocus(initialMessageId)
     })
-  }, [initialMessageId, listItems])
+    return () => cancelAnimationFrame(frame)
+  }, [completeMessageFocus, focusRequestKey, initialMessageId, listItems])
 
   useEffect(
     () => () => {
       clearTimeout(highlightTimerRef.current)
+      clearTimeout(scrollRetryTimerRef.current)
     },
     []
   )
@@ -251,13 +272,16 @@ export function MessageList({
     averageItemLength: number
     index: number
   }) => {
-    if (targetScrollRetriesRef.current >= 2) return
+    if (!pendingFocusedMessageIdRef.current || info.index !== requestedTargetIndexRef.current || targetScrollRetriesRef.current >= 2) return
     targetScrollRetriesRef.current += 1
     listRef.current?.scrollToOffset({
       animated: false,
       offset: info.averageItemLength * info.index,
     })
-    setTimeout(() => {
+    clearTimeout(scrollRetryTimerRef.current)
+    const messageId = pendingFocusedMessageIdRef.current
+    scrollRetryTimerRef.current = setTimeout(() => {
+      if (pendingFocusedMessageIdRef.current !== messageId || requestedTargetIndexRef.current !== info.index) return
       listRef.current?.scrollToIndex({
         animated: false,
         index: info.index,
@@ -338,7 +362,7 @@ export function MessageList({
                 canRespondToChoice && item.message.virtualType !== "topic_source"
               }
               currentUserId={currentUserId}
-              highlighted={item.message.id === highlightedMessageId}
+              highlighted={item.message.id === highlightedMessageId && highlightedMessageId === initialMessageId}
               message={item.message}
               messageActionsEnabled={item.message.virtualType !== "topic_source"}
               optimisticClientMessageId={
@@ -355,6 +379,7 @@ export function MessageList({
                   ? () => undefined
                   : onMessageLongPress
               }
+              onLocateReplyMessage={item.message.virtualType === "topic_source" ? undefined : onLocateReplyMessage}
               onOpenTopic={onOpenTopic}
               onResourceError={onResourceError}
               onResourcePress={onResourcePress}

@@ -6,6 +6,7 @@ import {
   useRef,
   type ComponentPropsWithoutRef,
   type ReactNode,
+  type MouseEvent,
   type RefObject,
 } from "react"
 import {
@@ -75,6 +76,7 @@ export const MessageList = memo(function MessageList({
   onCreateTopic,
   onReeditRevokedMessage,
   onReplyMessage,
+  onLocateReplyMessage,
   onReplyCloseFocus,
   onForwardMessage,
   onStartMessageSelection,
@@ -118,6 +120,7 @@ export const MessageList = memo(function MessageList({
   onCreateTopic: (message: DesktopMessage) => void
   onReeditRevokedMessage: (message: DesktopMessage) => void
   onReplyMessage: (message: DesktopMessage) => void
+  onLocateReplyMessage: (message: DesktopMessage) => void
   onReplyCloseFocus: () => void
   onForwardMessage: (message: DesktopMessage) => void
   onStartMessageSelection: (message: DesktopMessage) => void
@@ -268,6 +271,7 @@ export const MessageList = memo(function MessageList({
                       onCreateTopic={onCreateTopic}
                       onReeditRevokedMessage={onReeditRevokedMessage}
                       onReplyMessage={onReplyMessage}
+                      onLocateReplyMessage={onLocateReplyMessage}
                       onReplyCloseFocus={onReplyCloseFocus}
                       onForwardMessage={onForwardMessage}
                       onStartMessageSelection={onStartMessageSelection}
@@ -325,6 +329,7 @@ function MessageRow({
   onCreateTopic,
   onReeditRevokedMessage,
   onReplyMessage,
+  onLocateReplyMessage,
   onReplyCloseFocus,
   onForwardMessage,
   onStartMessageSelection,
@@ -358,6 +363,7 @@ function MessageRow({
   onCreateTopic: (message: DesktopMessage) => void
   onReeditRevokedMessage: (message: DesktopMessage) => void
   onReplyMessage: (message: DesktopMessage) => void
+  onLocateReplyMessage: (message: DesktopMessage) => void
   onReplyCloseFocus: () => void
   onForwardMessage: (message: DesktopMessage) => void
   onStartMessageSelection: (message: DesktopMessage) => void
@@ -397,6 +403,12 @@ function MessageRow({
     userName,
     conversationName,
   )
+  function locateReplyMessage(event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation()
+    if (selectionActive || !message.replyTo) return
+    onLocateReplyMessage(message)
+  }
+
   const replyAction =
     !message.deliveryStatus &&
     !message.virtualType &&
@@ -512,14 +524,21 @@ function MessageRow({
             )}
           >
             {message.replyTo && (
-              <div className="mb-2 border-l-2 border-foreground/20 pl-2 text-xs">
-                <div className="truncate font-medium text-foreground/80">
+              <button
+                type="button"
+                disabled={selectionActive}
+                aria-label="定位被引用的原消息"
+                title="点击定位原消息"
+                onClick={locateReplyMessage}
+                className="mb-2 block w-full min-w-0 cursor-pointer border-l-2 border-foreground/20 pl-2 text-left text-xs hover:border-xgui-brand hover:bg-foreground/5 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none"
+              >
+                <span className="block truncate font-medium text-foreground/80">
                   {getDesktopMessageReplyAuthor(message.replyTo, mentionLabelResolver)}
-                </div>
-                <div className="line-clamp-2 text-muted-foreground">
+                </span>
+                <span className="line-clamp-2 text-muted-foreground">
                   {formatMentionText(message.replyTo.summary, mentionLabelResolver)}
-                </div>
-              </div>
+                </span>
+              </button>
             )}
             <MessageBodyRenderer
               body={message.body}

@@ -51,6 +51,7 @@ export type PresentedMessage = {
   id: string
   reactions: ClientMessageReaction[]
   replyTo?: {
+    id: string
     author: string
     summary: string
   }
@@ -145,6 +146,7 @@ export function buildPresentedMessages({
       })),
       replyTo: message.replyTo
         ? {
+            id: message.replyTo.id,
             author: getReplyAuthor(
               message.replyTo.sender,
               conversation,
@@ -159,6 +161,7 @@ export function buildPresentedMessages({
           }
         : replyMessage
           ? {
+              id: replyMessage.id,
               author: getMessageAuthor(
                 replyMessage,
                 conversation,
@@ -285,6 +288,7 @@ export function buildPresentedTopicSourceMessage({
     reactions: [],
     replyTo: sourceMessage.replyTo
       ? {
+          id: sourceMessage.replyTo.id,
           author: replyAuthor,
           summary: formatMentionTemplateText(
             sourceMessage.replyTo.summary,

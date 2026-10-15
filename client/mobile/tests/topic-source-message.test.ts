@@ -191,6 +191,7 @@ test("presents a topic source message without revoke capability", () => {
   assert.equal(presented.canRevoke, false)
   assert.deepEqual(presented.body, sourceMessage.body)
   assert.deepEqual(presented.replyTo, {
+    id: "quoted-message",
     author: "Alice",
     summary: "被引用的消息",
   })

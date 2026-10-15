@@ -11,6 +11,7 @@ import type { MentionTarget } from "@/lib/message-mentions"
 import { shouldReloadConversationListForSelection } from "@/features/chat/conversation-list-order"
 import { createCoalescedConversationListLoader } from "@/features/chat/conversation-list-loader"
 import { builtinAssistantAppId } from "../conversation-mentions"
+import { loadMessageLocationContext } from "../message-location"
 import {
   boundMessageWindow,
   MAX_VISIBLE_MESSAGES,
@@ -686,30 +687,29 @@ export function useChatData({
   }, [])
 
   const jumpToLocalMessage = useCallback(
-    async (messageId: string) => {
+    async (messageId: string, beforeSeq?: number, isCurrent?: () => boolean) => {
       const conversationId = selectedIdRef.current
       if (!window.desktop || !conversationId) throw new Error("会话不可用")
       const revision = ++messageWindowRevisionRef.current
       locatingWindowRef.current = revision
+      const isActive = () =>
+        selectedIdRef.current === conversationId &&
+        messageWindowRevisionRef.current === revision &&
+        (isCurrent?.() ?? true)
       try {
-        const [result, latest] = await Promise.all([
-          window.desktop.accountData.getLocalMessageContext({
+        const [context, latest] = await Promise.all([
+          loadMessageLocationContext({
+            accountData: window.desktop.accountData,
             targetId,
             conversationId,
             messageId,
+            beforeSeq,
+            isCurrent: isActive,
           }),
           window.desktop.accountData.listMessages({ targetId, conversationId, latestLimit: 50 }),
         ])
-        if (
-          selectedIdRef.current !== conversationId ||
-          messageWindowRevisionRef.current !== revision
-        )
-          return false
-        if (!result.ok) throw new Error(result.error.message)
+        if (!isActive() || !context) return false
         if (!latest.ok) throw new Error(latest.error.message)
-        if (!result.data.messages.some((message) => message.id === messageId)) {
-          throw new Error("本地消息不存在")
-        }
         const visible = messagesRef.current.filter(
           (message) => message.conversationId === conversationId,
         )
@@ -718,17 +718,17 @@ export function useChatData({
           visible.length && !browsingOlderWindowRef.current && !currentAndLatest.gap
             ? currentAndLatest.messages
             : latest.data
-        const { messages: merged, gap } = mergeLocalMessageWindows(result.data.messages, recent)
+        const { messages: merged, gap } = mergeLocalMessageWindows(context.messages, recent)
         const bounded = boundMessageWindow(merged, "older")
-        browsingOlderWindowRef.current = result.data.hasMoreAfter || bounded.removedAfter
+        browsingOlderWindowRef.current = context.hasMoreAfter || bounded.removedAfter
         scrollToBottomRef.current = false
         isAtBottomRef.current = false
         scrollSnapshotRef.current = null
         setNewMessageCount(0)
         setMessages(bounded.messages)
         setMessageGap(visibleMessageGap(gap, bounded.messages))
-        setHasMoreBeforeMessages(result.data.hasMoreBefore)
-        setHasMoreAfterMessages(result.data.hasMoreAfter || bounded.removedAfter)
+        setHasMoreBeforeMessages(context.hasMoreBefore)
+        setHasMoreAfterMessages(context.hasMoreAfter || bounded.removedAfter)
         return true
       } finally {
         if (locatingWindowRef.current === revision) locatingWindowRef.current = null

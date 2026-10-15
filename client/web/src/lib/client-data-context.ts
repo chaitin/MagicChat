@@ -109,7 +109,7 @@ export type ClientDataContextValue = {
   ensureConversationMessages: (conversationId: string) => void
   focusConversationMessage: (
     conversationId: string,
-    target: { messageId: string; seq: number }
+    target: { messageId: string; seq?: number; beforeSeq?: number }
   ) => Promise<void>
   consumeConversationMessageFocus: (
     conversationId: string,

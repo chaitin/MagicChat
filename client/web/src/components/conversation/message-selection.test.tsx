@@ -10,12 +10,55 @@ import {
   type ConversationPanelMessage,
 } from "@/components/conversation-panel"
 import type { ClientConversation } from "@/lib/client-data-api"
+import { MessageBubble } from "@/components/conversation/conversation-message"
 import {
   ClientDataContext,
   type ClientDataContextValue,
 } from "@/lib/client-data-context"
 
 describe("conversation message selection", () => {
+  it("locates a quoted message by click or keyboard without bubbling, and disables it in selection mode", async () => {
+    const user = userEvent.setup()
+    const message = {
+      ...createMessage("reply", "回复正文"),
+      replyTo: { id: "original", author: "Alice", summary: "原消息" },
+    }
+    const onLocate = vi.fn()
+    const nextLocate = vi.fn()
+    const onParentClick = vi.fn()
+    const bubble = (onLocateReply: typeof onLocate, selectionMode = false) => (
+      <MemoryRouter>
+        <ClientDataContext.Provider value={createClientDataValue()}>
+          <div onClick={onParentClick}>
+            <MessageBubble
+              message={message}
+              conversation={createConversation()}
+              currentUserId="user-1"
+              mentionLabelResolver={() => undefined}
+              onInsertMention={vi.fn()}
+              onLocateReply={onLocateReply}
+              selectionMode={selectionMode}
+            />
+          </div>
+        </ClientDataContext.Provider>
+      </MemoryRouter>
+    )
+    const view = render(bubble(onLocate))
+    await user.click(screen.getByRole("button", { name: "定位被引用的原消息" }))
+    expect(onLocate).toHaveBeenCalledWith(message)
+    expect(onParentClick).not.toHaveBeenCalled()
+    view.rerender(bubble(nextLocate))
+    screen.getByRole("button", { name: "定位被引用的原消息" }).focus()
+    await user.keyboard("{Enter}")
+    expect(nextLocate).toHaveBeenCalledWith(message)
+    view.rerender(bubble(nextLocate, true))
+    expect(
+      screen.getByRole("button", { name: "定位被引用的原消息" })
+    ).toBeDisabled()
+    await user.click(screen.getByRole("button", { name: "定位被引用的原消息" }))
+    expect(nextLocate).toHaveBeenCalledTimes(1)
+  })
+
   it("opens the message actions from the hover more button", async () => {
     const user = userEvent.setup()
     const onForwardSelected = vi.fn()
@@ -152,9 +195,13 @@ describe("conversation message selection", () => {
     expect(dialog).not.toHaveTextContent("[聊天记录] 2 条 - 第一条")
     expect(dialog).toHaveTextContent("Alice")
     expect(dialog).toHaveTextContent("Bob")
-    const item = within(dialog).getByText("第一条").closest<HTMLElement>("[data-forward-bundle-item-body]")!
+    const item = within(dialog)
+      .getByText("第一条")
+      .closest<HTMLElement>("[data-forward-bundle-item-body]")!
     expect(item).toHaveClass("w-fit", "max-w-full", "bg-muted")
-    const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue()
+    const writeText = vi
+      .spyOn(navigator.clipboard, "writeText")
+      .mockResolvedValue()
     vi.stubGlobal("isSecureContext", true)
     try {
       await user.pointer({ keys: "[MouseRight]", target: item })

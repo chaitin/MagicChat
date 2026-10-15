@@ -24,6 +24,98 @@ describe("useConversationMessageWindow", () => {
     mocks.listConversationMessages.mockReset()
   })
 
+  it("focuses a cached quoted message without refetching the window", async () => {
+    const { result } = renderHook(useMessageWindowHarness)
+    const cached = createPage(181, 200, true, false)
+    act(() =>
+      result.current.updateState((state) => ({
+        ...state,
+        loaded: true,
+        messages: cached.messages,
+        page: cached.page,
+      }))
+    )
+    await act(() =>
+      result.current.actions.focusConversationMessage("conversation-1", {
+        messageId: "message-190",
+        beforeSeq: 200,
+      })
+    )
+    expect(mocks.listConversationMessages).not.toHaveBeenCalled()
+    expect(result.current.state.focus?.messageId).toBe("message-190")
+    expect(result.current.state.messages).toEqual(cached.messages)
+    await act(() =>
+      result.current.actions.focusConversationMessage("conversation-1", {
+        messageId: "message-190",
+        seq: 190,
+      })
+    )
+    expect(mocks.listConversationMessages).not.toHaveBeenCalled()
+    expect(result.current.state.focus?.requestKey).toBe(2)
+  })
+
+  it("finds an uncached quoted message by paging backwards then loads its focused window", async () => {
+    mocks.listConversationMessages.mockImplementation(
+      (_id: string, options: { beforeSeq?: number; afterSeq?: number }) => {
+        if (options.beforeSeq === 81)
+          return Promise.resolve(createPage(61, 80, true, true))
+        if (options.beforeSeq === 61)
+          return Promise.resolve(createPage(41, 60, true, true))
+        if (options.beforeSeq === 51)
+          return Promise.resolve(createPage(31, 50, true, true))
+        if (options.afterSeq === 50)
+          return Promise.resolve(createPage(51, 70, true, true))
+        throw new Error("unexpected page")
+      }
+    )
+    const { result } = renderHook(useMessageWindowHarness)
+    await act(() =>
+      result.current.actions.focusConversationMessage("conversation-1", {
+        messageId: "message-50",
+        beforeSeq: 81,
+      })
+    )
+    expect(result.current.state.messages.map((message) => message.seq)).toEqual(
+      createPage(31, 70, true, true).messages.map((message) => message.seq)
+    )
+    expect(result.current.state.focus?.messageId).toBe("message-50")
+    expect(
+      mocks.listConversationMessages.mock.calls.map(
+        ([, options]) => options.beforeSeq ?? `after:${options.afterSeq}`
+      )
+    ).toEqual([81, 61, 51, "after:50"])
+  })
+
+  it("stops an obsolete quoted-message search after returning to latest", async () => {
+    const old = createDeferred<ClientMessageList>()
+    mocks.listConversationMessages.mockImplementation(
+      (_id: string, options: { beforeSeq?: number }) =>
+        options.beforeSeq
+          ? old.promise
+          : Promise.resolve(createPage(181, 200, true, false))
+    )
+    const { result } = renderHook(useMessageWindowHarness)
+    let pending!: Promise<void>
+    act(() => {
+      pending = result.current.actions.focusConversationMessage(
+        "conversation-1",
+        { messageId: "message-50", beforeSeq: 81 }
+      )
+    })
+    act(() =>
+      result.current.actions.returnToLatestConversationMessages(
+        "conversation-1"
+      )
+    )
+    await act(async () => {
+      old.resolve(createPage(41, 60, true, true))
+      await pending
+    })
+    expect(result.current.state.viewMode).toBe("latest")
+    expect(result.current.state.focus).toBeNull()
+    expect(mocks.listConversationMessages).toHaveBeenCalledTimes(2)
+  })
+
   it("opens a focused history window and pages in both directions", async () => {
     mocks.listConversationMessages.mockImplementation(
       (

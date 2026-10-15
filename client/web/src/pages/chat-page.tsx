@@ -281,11 +281,30 @@ export function ChatPage() {
     !activeMessageState.loaded &&
     !activeMessageState.error
   )
+  const locateReplyMessage = React.useCallback(
+    (message: ConversationPanelMessage) => {
+      if (!message.replyTo) return
+      const source = getConversationMessageState(
+        activeConversationId
+      ).messages.find((item) => item.id === message.id)
+      void focusConversationMessage(activeConversationId, {
+        messageId: message.replyTo.id,
+        seq: source?.replyTo?.seq,
+        beforeSeq: source && source.seq > 0 ? source.seq : undefined,
+      })
+    },
+    [
+      activeConversationId,
+      focusConversationMessage,
+      getConversationMessageState,
+    ]
+  )
   const activeHistoryNavigation = React.useMemo(
     () =>
       activeMessageState
         ? {
             focus: activeMessageState.focus,
+            onLocateReplyMessage: locateReplyMessage,
             loadingAfter: activeMessageState.loadingAfter,
             hasMoreAfter: activeMessageState.page?.hasMoreAfter,
             onFocusHandled: (requestKey: number) =>
@@ -303,6 +322,7 @@ export function ChatPage() {
       activeConversationId,
       activeMessageState,
       consumeConversationMessageFocus,
+      locateReplyMessage,
       loadAfterConversationMessages,
       returnToLatestConversationMessages,
     ]
