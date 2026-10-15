@@ -44,7 +44,7 @@ export function EntityDetailAction({
         minHeight={60}
         onPress={onPress}
         title={title}
-        titleFontSize={18}
+        titleFontSize={16}
       />
     </XGUIList>
   )

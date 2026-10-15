@@ -19,6 +19,7 @@ export type ResourceReference =
   | AvatarResourceReference
 
 export type ResolvedResource = {
+  checkedAt?: number
   identity: string
   mimeType?: string
   sizeBytes: number

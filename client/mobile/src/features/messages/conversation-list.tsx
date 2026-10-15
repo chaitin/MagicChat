@@ -274,7 +274,7 @@ function ConversationListItem({
               <Text
                 style={{
                   color: colors.destructive,
-                  fontSize: 14,
+                  fontSize: 12,
                   fontWeight: "600",
                   lineHeight: 20,
                 }}

@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
   },
   reasonValue: {
     flex: 1,
-    fontSize: 17,
+    fontSize: 16,
     lineHeight: 24,
     marginRight: 16,
   },

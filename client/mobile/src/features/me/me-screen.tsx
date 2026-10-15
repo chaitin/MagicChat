@@ -460,7 +460,7 @@ export function MeScreen() {
               <View style={{ alignItems: "center", flexDirection: "row", gap: 18, minHeight: 116, paddingHorizontal: 18, paddingVertical: 18 }}>
                 <AppAvatar accessibilityLabel={currentUserName} avatar={currentUser?.avatar} server={session} size="$7" type="user" />
                 <View style={{ flex: 1, gap: 7, justifyContent: "center" }}>
-                  <Text numberOfLines={1} style={{ color: colors.textPrimary, fontSize: 18, fontWeight: "600", lineHeight: 27 }}>
+                  <Text numberOfLines={1} style={{ color: colors.textPrimary, fontSize: 16, fontWeight: "600", lineHeight: 27 }}>
                     {currentUserName}
                   </Text>
                   <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>

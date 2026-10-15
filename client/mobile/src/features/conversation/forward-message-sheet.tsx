@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
   },
   sourceAuthor: {
     flex: 1,
-    fontSize: 17,
+    fontSize: 16,
     lineHeight: 24,
   },
   sourceBody: {

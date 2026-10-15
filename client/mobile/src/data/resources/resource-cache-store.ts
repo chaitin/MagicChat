@@ -101,7 +101,7 @@ export async function getCachedResource(
 
   entry.lastAccessedAt = Date.now()
   void queueIndexWrite(index)
-  return createResolvedResource(identity, file, entry.sizeBytes, "cache")
+  return createResolvedResource(identity, file, entry.sizeBytes, "cache", entry.checkedAt)
 }
 
 export async function createResourceCacheTarget(
@@ -164,7 +164,8 @@ export async function commitResourceCacheTarget(
     target.identity,
     target.finalFile,
     sizeBytes,
-    "network"
+    "network",
+    now
   )
 }
 
@@ -349,9 +350,11 @@ function createResolvedResource(
   identity: string,
   file: File,
   sizeBytes: number,
-  source: ResolvedResource["source"]
+  source: ResolvedResource["source"],
+  checkedAt?: number
 ): ResolvedResource {
   return {
+    checkedAt,
     identity,
     sizeBytes,
     source,

@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  getAvatarFormatHint,
   isSvgContent,
   isSvgUrl,
   normalizeAvatarSvgContent,
@@ -11,6 +12,13 @@ test("detects SVG URLs and data URIs", () => {
   assert.equal(isSvgUrl("https://example.com/avatar.svg?version=1"), true)
   assert.equal(isSvgUrl("data:image/svg+xml,%3Csvg%3E"), true)
   assert.equal(isSvgUrl("https://example.com/avatar"), false)
+})
+
+test("recognizes cached raster formats without reading binary files as text", () => {
+  assert.equal(getAvatarFormatHint("https://example.test/avatar", "file:///cache/avatar.webp"), false)
+  assert.equal(getAvatarFormatHint("https://example.test/avatar.PNG?version=1", "file:///cache/avatar.image"), false)
+  assert.equal(getAvatarFormatHint("https://example.test/avatar.svg", "file:///cache/avatar.image"), true)
+  assert.equal(getAvatarFormatHint("https://example.test/avatar", "file:///cache/avatar.image"), undefined)
 })
 
 test("detects SVG from extensionless cached content", () => {

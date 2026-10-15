@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
     height: ITEM_HEIGHT,
     paddingHorizontal: 16,
   },
-  label: { flex: 1, fontSize: 18, lineHeight: 24 },
+  label: { flex: 1, fontSize: 16, lineHeight: 24 },
   menu: {
     borderRadius: 4,
     elevation: 8,

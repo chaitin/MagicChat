@@ -9,6 +9,15 @@ export function isSvgUrl(value: string) {
   }
 }
 
+export function getAvatarFormatHint(sourceUrl: string, uri: string): boolean | undefined {
+  if (isSvgUrl(sourceUrl) || isSvgUrl(uri)) return true
+  for (const value of [uri, sourceUrl]) {
+    const pathname = value.split(/[?#]/, 1)[0] ?? ""
+    if (/\.(?:png|jpe?g|webp|gif|bmp|avif|heic)$/i.test(pathname)) return false
+  }
+  return undefined
+}
+
 export function isSvgContent(value: string) {
   return /<svg(?:\s|>)/i.test(value.replace(/^\uFEFF/, "").slice(0, 8192))
 }

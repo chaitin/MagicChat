@@ -7,15 +7,14 @@ public final class FontFallbackModule: Module {
   public func definition() -> ModuleDefinition {
     Name("MagicChatFontFallback")
 
-    Function("register") { (familyName: String, primaryUri: String, emojiUri: String) -> Bool in
-      guard familyName.hasPrefix("MiSansEmojiFallback-"),
-        let primaryURL = URL(string: primaryUri), primaryURL.isFileURL,
+    Function("registerSystem") { (familyName: String, emojiUri: String, weight: Int) -> Bool in
+      guard familyName == "SystemEmojiFallback-\(weight)",
+        (100...900).contains(weight), weight % 100 == 0,
         let emojiURL = URL(string: emojiUri), emojiURL.isFileURL,
-        let primaryName = registeredFontName(primaryURL),
         let emojiName = registeredFontName(emojiURL) else {
         return false
       }
-      return InputFontCascade.register(familyName, primary: primaryName, emoji: emojiName)
+      return InputFontCascade.register(familyName, weight: weight, emoji: emojiName)
     }
   }
 }
@@ -38,14 +37,13 @@ private func registeredFontName(_ url: URL) -> String? {
 
 private enum InputFontCascade {
   private static let lock = NSRecursiveLock()
-  private static var aliases: [String: (primary: String, emoji: String)] = [:]
+  private static var aliases: [String: (weight: Int, emoji: String)] = [:]
   private static var installed = false
 
-  static func register(_ alias: String, primary: String, emoji: String) -> Bool {
+  static func register(_ alias: String, weight: Int, emoji: String) -> Bool {
     lock.lock()
     defer { lock.unlock() }
-    guard UIFont(name: primary, size: 16) != nil,
-      UIFont(name: emoji, size: 16) != nil else { return false }
+    guard UIFont(name: emoji, size: 16) != nil else { return false }
     if !installed {
       guard let names = class_getClassMethod(UIFont.self, NSSelectorFromString("fontNamesForFamilyName:")),
         let customNames = class_getClassMethod(UIFont.self, #selector(UIFont.jiying_fontNames(forFamilyName:))),
@@ -59,11 +57,11 @@ private enum InputFontCascade {
       method_exchangeImplementations(font, customFont)
       installed = true
     }
-    aliases[alias] = (primary, emoji)
+    aliases[alias] = (weight, emoji)
     return true
   }
 
-  static func definition(_ alias: String) -> (primary: String, emoji: String)? {
+  static func definition(_ alias: String) -> (weight: Int, emoji: String)? {
     lock.lock()
     defer { lock.unlock() }
     return aliases[alias]
@@ -80,9 +78,18 @@ private extension UIFont {
     guard let definition = InputFontCascade.definition(name) else {
       return jiying_font(withName: name, size: size)
     }
-    guard let primary = jiying_font(withName: definition.primary, size: size) else { return nil }
-    let emojiDescriptor = UIFontDescriptor(name: definition.emoji, size: size)
-    let descriptor = primary.fontDescriptor.addingAttributes([.cascadeList: [emojiDescriptor]])
-    return UIFont(descriptor: descriptor, size: size)
+    let weights: [Int: UIFont.Weight] = [
+      100: .ultraLight, 200: .thin, 300: .light, 400: .regular, 500: .medium,
+      600: .semibold, 700: .bold, 800: .heavy, 900: .black,
+    ]
+    let primary = UIFont.systemFont(ofSize: size, weight: weights[definition.weight] ?? .regular)
+    let emojiDescriptor = CTFontDescriptorCreateWithNameAndSize(definition.emoji as CFString, size)
+    // Preserve the system's language fallback (including CJK), after our emoji font.
+    let systemCascade = CTFontCopyDefaultCascadeListForLanguages(primary as CTFont, nil) as? [CTFontDescriptor] ?? []
+    let descriptor = CTFontDescriptorCreateCopyWithAttributes(
+      CTFontCopyFontDescriptor(primary as CTFont),
+      [kCTFontCascadeListAttribute: [emojiDescriptor] + systemCascade] as CFDictionary
+    )
+    return CTFontCreateWithFontDescriptor(descriptor, size, nil) as UIFont
   }
 }

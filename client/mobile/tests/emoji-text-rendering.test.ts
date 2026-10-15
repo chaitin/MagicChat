@@ -57,7 +57,7 @@ const theme = { useXGUITheme: () => ({ colors: { textPrimary: "black", textSecon
 const textModule = loadComponent("components/mi-sans-text.tsx", {
   "react-native": native,
   "./emoji-text-runs": { splitEmojiText },
-  "@/native/android-emoji-font-fallback": { getInputFontFamily: (_weight: unknown, family: string) => family },
+  "@/native/android-emoji-font-fallback": { getInputFontFamily: () => undefined, attachInputEmojiFallback: () => undefined },
 })
 const mentions = loadComponent("features/conversation/messages/message-mention-text.tsx", {
   "react-native": native,
@@ -80,7 +80,32 @@ function assertEmojiFonts(html: string, values: string[]) {
   for (const value of values) assert.ok(html.includes(`data-font="JiyingEmoji" data-weight="normal">${value}</span>`), `Emoji ${value} missed its font: ${html}`)
 }
 
-test("共享输入框恢复MiSans字重并保留原生值、选区和输入回调", () => {
+test("共享文字及嵌套表情禁用系统字体缩放，保持指定字号", () => {
+  const received: Record<string, unknown>[] = []
+  const module = loadComponent("components/mi-sans-text.tsx", {
+    "react-native": { ...native, Text: (props: Record<string, unknown>) => {
+      received.push(props)
+      return React.createElement("span", null, props.children as React.ReactNode)
+    } },
+    "./emoji-text-runs": { splitEmojiText },
+    "@/native/android-emoji-font-fallback": { getInputFontFamily: () => undefined, attachInputEmojiFallback: () => undefined },
+  })
+  for (const allowFontScaling of [undefined, true]) {
+    received.length = 0
+    renderToStaticMarkup(React.createElement(module.Text, { allowFontScaling, style: { fontSize: 15, lineHeight: 23 } },
+      "正文🙂", React.createElement(module.Text, { style: { fontSize: 12 } }, "引用")))
+    assert.equal(received.length, 3)
+    assert.ok(received.every(props => props.allowFontScaling === false))
+    assert.equal(flatten(received[0].style).fontFamily, undefined)
+    assert.equal(flatten(received[2].style).fontFamily, undefined)
+    assert.equal(flatten(received[0].style).fontSize, 15)
+    assert.equal(flatten(received[0].style).lineHeight, 23)
+    assert.equal(flatten(received[1].style).fontFamily, "JiyingEmoji")
+    assert.equal(flatten(received[2].style).fontSize, 12)
+  }
+})
+
+test("共享输入框使用系统字体并保留字重、原生值、选区和输入回调", () => {
   const received: Record<string, unknown>[] = []
   const inputModule = loadComponent("components/mi-sans-text.tsx", {
     "react-native": {
@@ -91,9 +116,9 @@ test("共享输入框恢复MiSans字重并保留原生值、选区和输入回�
       },
     },
     "./emoji-text-runs": { splitEmojiText },
-    "@/native/android-emoji-font-fallback": { getInputFontFamily: (_weight: unknown, family: string) => family },
+    "@/native/android-emoji-font-fallback": { getInputFontFamily: () => undefined, attachInputEmojiFallback: () => undefined },
   })
-  for (const [weight, family] of [["400", "MiSans-Regular"], ["500", "MiSans-Medium"], ["600", "MiSans-Demibold"]]) {
+  for (const weight of ["400", "500", "600", "700"]) {
     const onChangeText = () => {}
     const onSelectionChange = () => {}
     const selection = { start: 2, end: 4 }
@@ -103,20 +128,68 @@ test("共享输入框恢复MiSans字重并保留原生值、选区和输入回�
       onChangeText,
       onSelectionChange,
       secureTextEntry: true,
-      style: [{ color: "black" }, { fontWeight: weight }],
+      allowFontScaling: true,
+      style: [{ color: "black", fontSize: 15 }, { fontWeight: weight }],
     }))
     const props = received.at(-1)!
-    assert.equal(flatten(props.style).fontFamily, family)
+    assert.equal(flatten(props.style).fontFamily, undefined)
+    assert.equal(flatten(props.style).fontWeight, weight)
     assert.equal(flatten(props.style).color, "black")
     assert.equal(props.value, "中文 abc 123🙂")
     assert.equal(props.selection, selection)
     assert.equal(props.onChangeText, onChangeText)
     assert.equal(props.onSelectionChange, onSelectionChange)
     assert.equal(props.secureTextEntry, true)
+    assert.equal(props.allowFontScaling, false)
+    assert.equal(flatten(props.style).fontSize, 15)
     assert.equal(props.children, undefined)
   }
   renderToStaticMarkup(React.createElement(inputModule.TextInput, { style: { fontFamily: "CustomFont" } }))
   assert.equal(flatten(received.at(-1)!.style).fontFamily, "CustomFont")
+})
+
+test("普通文字保留系统字重和显式等宽样式，只为表情指定字体", () => {
+  const html = renderToStaticMarkup(React.createElement(textModule.Text, { style: { fontWeight: "700" } },
+    "加粗中文 123🙂", React.createElement(textModule.Text, { style: { fontFamily: "monospace" } }, "代码 abc")))
+  assert.ok(html.startsWith('<span data-weight="700">'))
+  assert.ok(html.includes('data-font="monospace"'))
+  assert.ok(!html.includes("MiSans"))
+  assertEmojiFonts(html, ["🙂"])
+})
+
+test("输入框保留系统字体级联和布局回调，仅替换原生实例时释放旧绑定", () => {
+  let received: Record<string, unknown> = {}
+  let attached: unknown, layouts = 0, detached = 0
+  const module = loadComponent("components/mi-sans-text.tsx", {
+    "react-native": { ...native, TextInput: (props: Record<string, unknown>) => { received = props; return null } },
+    "./emoji-text-runs": { splitEmojiText },
+    "@/native/android-emoji-font-fallback": {
+      getInputFontFamily: (weight: string) => `SystemEmojiFallback-${weight}`,
+      attachInputEmojiFallback: (input: unknown) => { attached = input; return () => { detached++ } },
+    },
+  })
+  const event = { nativeEvent: { layout: { height: 40 } } }
+  renderToStaticMarkup(React.createElement(module.TextInput, {
+    style: { fontWeight: "700" },
+    onLayout: (value: unknown) => { assert.equal(value, event); layouts++ },
+  }))
+  assert.equal(flatten(received.style).fontFamily, "SystemEmojiFallback-700")
+  assert.equal(flatten(received.style).fontWeight, "700")
+  const input = { focus() {} }
+  const inputRef = received.ref as { current: unknown }
+  inputRef.current = input
+  const onLayout = received.onLayout as (value: unknown) => void
+  onLayout(event)
+  onLayout(event)
+  assert.equal(attached, input)
+  assert.equal(layouts, 2)
+  assert.equal(detached, 0)
+  const replacement = { focus() {} }
+  inputRef.current = replacement
+  onLayout(event)
+  assert.equal(attached, replacement)
+  assert.equal(layouts, 3)
+  assert.equal(detached, 1)
 })
 
 test("普通消息的组件/Fragment纯文本路径使用同源emoji字体", () => {

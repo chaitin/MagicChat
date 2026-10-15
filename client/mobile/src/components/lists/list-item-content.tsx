@@ -30,7 +30,7 @@ export function ListItemContent({
             styles.title,
             {
               color: compact ? colors.textSecondary : colors.textPrimary,
-              fontSize: compact ? 12 : 18,
+              fontSize: compact ? 12 : 16,
               lineHeight: compact ? 17 : 24,
             },
           ]}
@@ -52,7 +52,7 @@ export function ListItemContent({
             styles.subtitle,
             {
               color: colors.textPlaceholder,
-              fontSize: compact ? 12 : 14,
+              fontSize: 12,
               lineHeight: compact ? 17 : 20,
             },
           ]}

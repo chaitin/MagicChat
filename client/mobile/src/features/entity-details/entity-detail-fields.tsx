@@ -18,7 +18,7 @@ export function EntityDetailFields({ profile }: { profile: EntityProfile }) {
           minHeight={60}
           separator={index > 0}
           title={field.label}
-          titleFontSize={18}
+          titleFontSize={16}
           value={field.value.trim() || "未设置"}
         />
       ))}

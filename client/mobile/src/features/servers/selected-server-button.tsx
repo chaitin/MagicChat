@@ -56,14 +56,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
   label: {
-    fontSize: 17,
+    fontSize: 16,
     lineHeight: 24,
     paddingRight: 16,
     width: 105,
   },
   value: {
     flex: 1,
-    fontSize: 17,
+    fontSize: 16,
     lineHeight: 24,
   },
 })

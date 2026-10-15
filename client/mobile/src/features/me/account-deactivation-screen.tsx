@@ -82,7 +82,7 @@ export function AccountDeactivationScreen() {
 
   return (
     <View style={{ backgroundColor: colors.background0, flex: 1 }}>
-      <PageHeader backIcon={ChevronLeft} backIconColor={colors.textPrimary} background={colors.background0} compactIconButtons onBackPress={() => router.back()} title="注销账号" titleColor={colors.textPrimary} titleFontSize={17} titleFontWeight="600" />
+      <PageHeader backIcon={ChevronLeft} backIconColor={colors.textPrimary} background={colors.background0} compactIconButtons onBackPress={() => router.back()} title="注销账号" titleColor={colors.textPrimary} titleFontSize={16} titleFontWeight="600" />
       <KeyboardAwareScreen contentBackground={colors.background0} contentStyle={{ paddingHorizontal: 18, paddingTop: 18 }} edges={["left", "right", "bottom"]}>
         <View style={{ alignSelf: "center", gap: 18, maxWidth: 440, width: "100%" }}>
           <Text style={{ color: colors.textSecondary, fontSize: 15, lineHeight: 23 }}>验证码将发送至当前账号邮箱：{activeAccount?.email?.trim() || "邮箱不可用"}</Text>

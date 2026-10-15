@@ -470,7 +470,7 @@ const styles = StyleSheet.create({
     zIndex: 100000,
   },
   title: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "600",
     lineHeight: 24,
     textAlign: "center",

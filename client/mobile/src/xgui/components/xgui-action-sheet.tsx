@@ -524,7 +524,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   actionText: {
-    fontSize: 17,
+    fontSize: 16,
     lineHeight: 24,
     textAlign: "center",
   },

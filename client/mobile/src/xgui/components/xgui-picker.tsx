@@ -318,9 +318,9 @@ const styles = StyleSheet.create({
   headerButtonText: { fontSize: 16, lineHeight: 22 },
   item: { alignItems: "center", height: ITEM_HEIGHT, justifyContent: "center", paddingHorizontal: 8 },
   itemContent: { alignItems: "center", flexDirection: "row", gap: 8 },
-  itemText: { fontSize: 17, lineHeight: 24, textAlign: "center" },
+  itemText: { fontSize: 16, lineHeight: 24, textAlign: "center" },
   selection: { borderBottomWidth: StyleSheet.hairlineWidth, borderTopWidth: StyleSheet.hairlineWidth, height: ITEM_HEIGHT, left: 8, position: "absolute", right: 8, top: ITEM_HEIGHT * 2 },
-  title: { flex: 1, fontSize: 17, fontWeight: "600", lineHeight: 24, textAlign: "center" },
+  title: { flex: 1, fontSize: 16, fontWeight: "600", lineHeight: 24, textAlign: "center" },
   wheel: { flex: 1, height: WHEEL_HEIGHT },
   wheelContent: { paddingVertical: ITEM_HEIGHT * 2 },
 })

@@ -145,7 +145,7 @@ function WeUIClearIcon({ color }: { color: string }) {
 
 const styles = StyleSheet.create({
   cancel: {
-    fontSize: 17,
+    fontSize: 16,
     lineHeight: 24,
   },
   clearButton: {
@@ -174,14 +174,14 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    fontSize: 17,
+    fontSize: 16,
     height: 36,
     includeFontPadding: false,
     paddingHorizontal: 4,
     paddingVertical: 0,
   },
   label: {
-    fontSize: 17,
+    fontSize: 16,
     lineHeight: 24,
     marginLeft: 4,
   },

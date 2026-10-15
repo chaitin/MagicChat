@@ -29,7 +29,7 @@ export function MessageVoiceGestureOverlay({
           <Text style={{ color: "rgba(255,255,255,0.72)", fontSize: 14, lineHeight: 21, marginBottom: 18 }}>
             {formatRecordingDuration(elapsedMS)}
           </Text>
-          <Text numberOfLines={8} style={{ color: "white", fontSize: 18, fontWeight: "600", lineHeight: 33, maxWidth: 560, textAlign: "center" }}>
+          <Text numberOfLines={8} style={{ color: "white", fontSize: 16, fontWeight: "600", lineHeight: 33, maxWidth: 560, textAlign: "center" }}>
             {getTranscriptText(status, transcript)}
           </Text>
         </View>

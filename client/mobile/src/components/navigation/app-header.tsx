@@ -66,8 +66,8 @@ export function AppHeader({
           style={{
             color: colors.textPrimary,
             flex: 1,
-            fontSize: titleFontSize ?? 18,
-            lineHeight: Math.max(24, (titleFontSize ?? 18) + 4),
+            fontSize: titleFontSize ?? 16,
+            lineHeight: Math.max(24, (titleFontSize ?? 16) + 4),
             textAlign: "center",
           }}
         >

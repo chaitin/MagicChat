@@ -7,6 +7,7 @@ import {
   ensureAttachmentResource,
   ensureAvatarResource,
   getCachedAttachmentResource,
+  isAvatarResourceFresh,
   invalidateAttachmentResource,
   resolveAvatarResourceUrl,
 } from "@/data/resources/resource-repository"
@@ -23,10 +24,25 @@ export function useCachedAvatar(server: ServerTarget, avatar: string) {
   const query = useQuery({
     enabled: sourceUrl.length > 0,
     queryFn: ({ signal }) =>
-      ensureAvatarResource(server, { type: "avatar", url: sourceUrl }, { signal }),
+      ensureAvatarResource(server, { type: "avatar", url: sourceUrl }, { cacheFirst: true, signal }),
     queryKey: queryKeys.avatarResource(server, sourceUrl),
-    staleTime: 24 * 60 * 60 * 1_000,
+    staleTime: ({ state }) => state.data?.source === "cache" && !isAvatarResourceFresh(state.data)
+      ? 0
+      : 24 * 60 * 60 * 1_000,
   })
+  useEffect(() => {
+    const cached = query.data
+    if (!cached || cached.source !== "cache" || isAvatarResourceFresh(cached)) return
+    const queryKey = queryKeys.avatarResource(server, sourceUrl)
+    // Keep the shared query current even if this view unmounts: refresh replaces the old file URI.
+    void ensureAvatarResource(server, { type: "avatar", url: sourceUrl }).then((updated) => {
+      if (!updated || (updated.uri === cached.uri && updated.checkedAt === cached.checkedAt)) return
+      queryClient.setQueryData<ResolvedResource | null>(queryKey, (current) =>
+        current?.uri === cached.uri && current.checkedAt === cached.checkedAt ? updated : current
+      )
+    }).catch(() => undefined)
+  }, [query.data, query.dataUpdatedAt, queryClient, server, sourceUrl])
+
   const refetch = useCallback(async () => {
     const queryKey = queryKeys.avatarResource(server, sourceUrl)
     await queryClient.cancelQueries({ queryKey })

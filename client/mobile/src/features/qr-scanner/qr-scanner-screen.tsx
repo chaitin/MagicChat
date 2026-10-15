@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
   hint: { color: "#FFFFFF", fontSize: 15, marginTop: 24, textAlign: "center" },
   messageBody: { fontSize: 15, lineHeight: 22, marginTop: 8, textAlign: "center" },
   messagePanel: { alignItems: "center", paddingHorizontal: 32 },
-  messageTitle: { fontSize: 20, fontWeight: "600" },
+  messageTitle: { fontSize: 18, fontWeight: "600" },
   overlay: { alignItems: "center", bottom: 0, justifyContent: "center", left: 0, position: "absolute", right: 0, top: 0 },
   scanFrame: { borderColor: "#FFFFFF", borderRadius: 8, borderWidth: 2, height: 240, width: 240 },
   screen: { flex: 1 },

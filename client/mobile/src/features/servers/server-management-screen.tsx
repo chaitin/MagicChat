@@ -185,6 +185,7 @@ export function ServerManagementScreen() {
                 <XGUIButton
                   accessibilityLabel="添加服务器"
                   onPress={() => handleOpenEditor()}
+                  textStyle={{ fontSize: 16 }}
                   variant="secondary"
                 >
                   添加服务器
@@ -313,7 +314,7 @@ const styles = StyleSheet.create({
   addButtonArea: { paddingTop: 18 },
   footer: { alignItems: "center", marginTop: "auto", paddingBottom: 18, paddingTop: 46 },
   pageTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "500",
     lineHeight: 30,
     marginTop: 56,

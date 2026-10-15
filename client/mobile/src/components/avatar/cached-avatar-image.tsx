@@ -4,8 +4,8 @@ import { Image as NativeImage, Platform, StyleSheet, View } from "react-native"
 import { SvgXml } from "react-native-svg"
 
 import {
+  getAvatarFormatHint,
   isSvgContent,
-  isSvgUrl,
   normalizeAvatarSvgContent,
 } from "@/components/avatar/avatar-resource-format"
 import {
@@ -25,10 +25,7 @@ export function CachedAvatarImage({
   avatar: string
   server: ServerTarget
 }) {
-  const { error, isLoading, refetch, sourceUrl, uri } = useCachedAvatar(
-    server,
-    avatar
-  )
+  const { refetch, sourceUrl, uri } = useCachedAvatar(server, avatar)
 
   return uri ? (
     <CachedAvatarResource
@@ -37,8 +34,6 @@ export function CachedAvatarImage({
       sourceUrl={sourceUrl}
       uri={uri}
     />
-  ) : isLoading && !error ? (
-    <AvatarImageSurface />
   ) : null
 }
 
@@ -51,7 +46,7 @@ export function CachedAvatarTileImage({
   onReady?: () => void
   server: ServerTarget
 }) {
-  const { error, isLoading, refetch, sourceUrl, uri } = useCachedAvatar(
+  const { isLoading, refetch, sourceUrl, uri } = useCachedAvatar(
     server,
     avatar
   )
@@ -68,8 +63,6 @@ export function CachedAvatarTileImage({
       tile
       uri={uri}
     />
-  ) : isLoading && !error ? (
-    <AvatarImageSurface transparentBackground />
   ) : null
 }
 
@@ -86,9 +79,17 @@ function CachedAvatarResource({
   tile?: boolean
   uri: string
 }) {
-  const svg = useSvgResourceDetection(sourceUrl, uri)
+  const [verifyRasterHint, setVerifyRasterHint] = useState(false)
+  const svg = useSvgResourceDetection(sourceUrl, uri, verifyRasterHint)
+  const retryRaster = useCallback(async () => {
+    if (!verifyRasterHint && getAvatarFormatHint(sourceUrl, uri) === false && getCachedAvatarFormat(uri) === undefined) {
+      setVerifyRasterHint(true)
+      return
+    }
+    await refetch()
+  }, [refetch, sourceUrl, uri, verifyRasterHint])
 
-  if (svg === null) return <AvatarImageSurface transparentBackground={tile} />
+  if (svg === null) return null
   if (svg) return (
     <RetryableSvgImage
       onReady={onReady}
@@ -98,22 +99,18 @@ function CachedAvatarResource({
     />
   )
   return tile ? (
-    <RetryableTileImage onReady={onReady} refetch={refetch} uri={uri} />
+    <RetryableTileImage onReady={onReady} refetch={retryRaster} uri={uri} />
   ) : (
-    <RetryableAvatarImage refetch={refetch} uri={uri} />
+    <RetryableAvatarImage refetch={retryRaster} uri={uri} />
   )
 }
 
-function useSvgResourceDetection(sourceUrl: string, uri: string) {
-  const hintedSvg = isSvgUrl(sourceUrl) || isSvgUrl(uri)
-  const [detectedSvg, setDetectedSvg] = useState<boolean | null>(() =>
-    hintedSvg || Platform.OS === "web"
-      ? hintedSvg
-      : (getCachedAvatarFormat(uri) ?? null)
-  )
+function useSvgResourceDetection(sourceUrl: string, uri: string, verifyHint: boolean) {
+  const hintedFormat = verifyHint ? undefined : getAvatarFormatHint(sourceUrl, uri)
+  const [detectedSvg, setDetectedSvg] = useState<boolean | null>(() => getCachedAvatarFormat(uri) ?? null)
 
   useEffect(() => {
-    if (hintedSvg || Platform.OS === "web") return
+    if (hintedFormat !== undefined || Platform.OS === "web" || detectedSvg !== null) return
     let active = true
     FileSystem.readAsStringAsync(uri, {
       encoding: FileSystem.EncodingType.UTF8,
@@ -137,9 +134,9 @@ function useSvgResourceDetection(sourceUrl: string, uri: string) {
     return () => {
       active = false
     }
-  }, [hintedSvg, uri])
+  }, [detectedSvg, hintedFormat, uri])
 
-  return hintedSvg ? true : detectedSvg
+  return detectedSvg ?? hintedFormat ?? (Platform.OS === "web" ? false : null)
 }
 
 function RetryableSvgImage({
@@ -193,9 +190,7 @@ function RetryableSvgImage({
     />
   ) : null
 
-  if (!image) {
-    return <AvatarImageSurface transparentBackground={transparentBackground} />
-  }
+  if (!image) return null
 
   return (
     <View
@@ -210,26 +205,6 @@ function RetryableSvgImage({
     >
       {image}
     </View>
-  )
-}
-
-function AvatarImageSurface({
-  transparentBackground = false,
-}: {
-  transparentBackground?: boolean
-}) {
-  const { colors } = useXGUITheme()
-  return (
-    <View
-      style={[
-        StyleSheet.absoluteFill,
-        {
-          backgroundColor: transparentBackground
-            ? "transparent"
-            : colors.background1,
-        },
-      ]}
-    />
   )
 }
 
@@ -252,24 +227,21 @@ function RetryableAvatarImage({
 }) {
   const { failed, handleError, revision } = useRetryableImage(refetch)
   const { colors } = useXGUITheme()
+  const [loadedRevision, setLoadedRevision] = useState(-1)
 
   return failed ? null : (
-    <>
-      <View
-        style={[
-          StyleSheet.absoluteFill,
-          { backgroundColor: colors.background1 },
-        ]}
-      />
-      <NativeImage
-        fadeDuration={0}
-        key={revision}
-        onError={() => void handleError()}
-        resizeMode="cover"
-        source={{ uri }}
-        style={StyleSheet.absoluteFill}
-      />
-    </>
+    <NativeImage
+      fadeDuration={0}
+      key={revision}
+      onError={() => void handleError()}
+      onLoad={() => setLoadedRevision(revision)}
+      resizeMode="cover"
+      source={{ uri }}
+      style={[
+        StyleSheet.absoluteFill,
+        loadedRevision === revision ? { backgroundColor: colors.background1 } : undefined,
+      ]}
+    />
   )
 }
 

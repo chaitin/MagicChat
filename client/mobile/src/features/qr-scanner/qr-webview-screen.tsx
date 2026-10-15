@@ -126,7 +126,7 @@ export function QrWebViewScreen() {
 const styles = StyleSheet.create({
   errorBody: { fontSize: 15, lineHeight: 22, marginTop: 8, textAlign: "center" },
   errorPanel: { alignItems: "center", flex: 1, justifyContent: "center", paddingHorizontal: 32 },
-  errorTitle: { fontSize: 20, fontWeight: "600" },
+  errorTitle: { fontSize: 18, fontWeight: "600" },
   loading: { alignItems: "center", bottom: 0, justifyContent: "center", left: 0, position: "absolute", right: 0, top: 0 },
   screen: { flex: 1 },
   webContainer: { flex: 1 },

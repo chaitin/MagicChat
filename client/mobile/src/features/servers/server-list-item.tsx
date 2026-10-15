@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
   },
   swipeActionText: {
     color: "#FFFFFF",
-    fontSize: 17,
+    fontSize: 16,
     lineHeight: 24,
   },
 })

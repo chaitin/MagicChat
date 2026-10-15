@@ -104,7 +104,7 @@ export function ContactMultiSelectScreen({
         subtleButtonPress={false}
         title={title}
         titleColor={colors.textPrimary}
-        titleFontSize={17}
+        titleFontSize={16}
         titleFontWeight="600"
       />
 

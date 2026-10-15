@@ -188,7 +188,7 @@ export function AccountManagementScreen() {
             <ContentState message="本机还没有账号" />
           )}
           <View style={{ padding: 18 }}>
-            <XGUIButton accessibilityLabel="添加账号" disabled={globallyBusy || busyAccountId !== null} onPress={() => router.push(addAccountServerHref() as Href)} variant="secondary">
+            <XGUIButton accessibilityLabel="添加账号" disabled={globallyBusy || busyAccountId !== null} onPress={() => router.push(addAccountServerHref() as Href)} textStyle={{ fontSize: 16 }} variant="secondary">
               添加账号
             </XGUIButton>
           </View>

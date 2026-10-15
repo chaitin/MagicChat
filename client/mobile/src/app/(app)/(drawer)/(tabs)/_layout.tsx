@@ -98,7 +98,7 @@ export default function AppTabsLayout() {
         name="messages"
         options={{
           header: () => (
-            <AppTabHeader title={messageTitle} titleFontSize={18} />
+            <AppTabHeader title={messageTitle} titleFontSize={16} />
           ),
           title: "消息",
         }}

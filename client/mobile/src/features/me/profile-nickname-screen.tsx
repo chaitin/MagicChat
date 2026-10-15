@@ -68,7 +68,7 @@ export function ProfileNicknameScreen() {
         subtleButtonPress={false}
         title="修改昵称"
         titleColor={colors.textPrimary}
-        titleFontSize={17}
+        titleFontSize={16}
         titleFontWeight="600"
       />
       <KeyboardAwareScreen

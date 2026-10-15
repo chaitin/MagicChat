@@ -161,14 +161,14 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    fontSize: 17,
+    fontSize: 16,
     lineHeight: 24,
     minHeight: 56,
     paddingHorizontal: 0,
     paddingVertical: 0,
   },
   label: {
-    fontSize: 17,
+    fontSize: 16,
     lineHeight: 24,
     paddingRight: 12,
     width: 80,

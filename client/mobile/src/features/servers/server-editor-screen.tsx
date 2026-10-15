@@ -117,7 +117,7 @@ function ServerEditorForm({ server }: { server: ServerConfig | null }) {
         subtleButtonPress={false}
         title={isEditing ? "修改服务器" : "添加服务器"}
         titleColor={colors.textPrimary}
-        titleFontSize={17}
+        titleFontSize={16}
         titleFontWeight="600"
       />
       <KeyboardAwareScreen

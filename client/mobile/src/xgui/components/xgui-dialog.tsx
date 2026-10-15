@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
   actionText: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "500",
     lineHeight: 24,
     textAlign: "center",
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   title: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "600",
     lineHeight: 24,
     textAlign: "center",

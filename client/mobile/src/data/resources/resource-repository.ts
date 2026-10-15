@@ -138,10 +138,16 @@ export function resolveAvatarResourceUrl(
   }
 }
 
+export function isAvatarResourceFresh(resource: ResolvedResource) {
+  return typeof resource.checkedAt === "number" &&
+    Number.isFinite(resource.checkedAt) &&
+    Date.now() - resource.checkedAt < AVATAR_MAX_AGE_MS
+}
+
 export async function ensureAvatarResource(
   server: ServerTarget,
   reference: AvatarResourceReference,
-  options: { force?: boolean; signal?: AbortSignal } = {}
+  options: { cacheFirst?: boolean; force?: boolean; signal?: AbortSignal } = {}
 ): Promise<ResolvedResource | null> {
   const sourceUrl = resolveAvatarResourceUrl(server, reference.url)
   if (!sourceUrl) return null
@@ -150,10 +156,7 @@ export async function ensureAvatarResource(
     await Promise.allSettled(downloadTasks.listByPrefix(`${createDownloadTaskPrefix(server)}${identity}`))
   }
   const cached = await getCachedResource(server, identity)
-  const fresh = await getCachedResource(server, identity, {
-    maxAgeMs: AVATAR_MAX_AGE_MS,
-  })
-  if (fresh && !options.force) return fresh
+  if (cached && !options.force && (options.cacheFirst || isAvatarResourceFresh(cached))) return cached
 
   if (Platform.OS === "web") {
     return createRemoteResource(identity, sourceUrl, 0)
@@ -163,10 +166,8 @@ export async function ensureAvatarResource(
     server,
     identity,
     async () => {
-      const rechecked = await getCachedResource(server, identity, {
-        maxAgeMs: AVATAR_MAX_AGE_MS,
-      })
-      if (rechecked && !options.force) return rechecked
+      const rechecked = await getCachedResource(server, identity)
+      if (rechecked && !options.force && isAvatarResourceFresh(rechecked)) return rechecked
 
       try {
         return await downloadToCache({

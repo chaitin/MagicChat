@@ -14,9 +14,6 @@ void SplashScreen.preventAutoHideAsync().catch(() => undefined)
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
-    "MiSans-Regular": require("../../assets/fonts/misans/MiSans-Regular.ttf"),
-    "MiSans-Medium": require("../../assets/fonts/misans/MiSans-Medium.ttf"),
-    "MiSans-Demibold": require("../../assets/fonts/misans/MiSans-Demibold.ttf"),
     JiyingEmoji: require("../../assets/fonts/emoji/JiyingEmoji.ttf"),
   })
   const [inputFontsInitialized, setInputFontsInitialized] = useState(false)

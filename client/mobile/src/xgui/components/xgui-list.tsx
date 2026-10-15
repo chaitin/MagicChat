@@ -309,17 +309,17 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   itemTitle: {
-    fontSize: 17,
+    fontSize: 16,
     lineHeight: 24,
   },
   largeItem: {
     minHeight: 60,
   },
   largeItemTitle: {
-    fontSize: 18,
+    fontSize: 16,
   },
   largeValue: {
-    fontSize: 18,
+    fontSize: 16,
   },
   leading: {
     marginRight: 16,
@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
   },
   value: {
     flexShrink: 1,
-    fontSize: 17,
+    fontSize: 16,
     lineHeight: 24,
     marginLeft: 16,
     maxWidth: "60%",

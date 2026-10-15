@@ -245,7 +245,7 @@ function EntityProfileContent({
             }
             minHeight={60}
             title={profile.displayName}
-            titleFontSize={20}
+            titleFontSize={18}
             titleNumberOfLines={2}
           />
         </XGUIList>

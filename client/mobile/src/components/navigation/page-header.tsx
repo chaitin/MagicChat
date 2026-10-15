@@ -159,6 +159,6 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   title: { flex: 1, textAlign: "center" },
-  largeTitle: { flex: 1, fontSize: 20, fontWeight: "600", lineHeight: 26, textAlign: "center" },
+  largeTitle: { flex: 1, fontSize: 18, fontWeight: "600", lineHeight: 26, textAlign: "center" },
   actions: { flexDirection: "row", justifyContent: "flex-end", width: 72 },
 })

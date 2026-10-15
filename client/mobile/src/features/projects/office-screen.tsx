@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
   },
   label: {
     flex: 1,
-    fontSize: 18,
+    fontSize: 16,
     lineHeight: 24,
   },
   row: {

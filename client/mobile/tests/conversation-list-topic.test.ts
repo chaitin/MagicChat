@@ -28,7 +28,7 @@ test("话题和普通对话共用64px行高、正文样式与未读提示字号"
   assert.doesNotMatch(list, /NESTED_ROW_HEIGHT|PARENT_ROW_HEIGHT|nestedRow|parentRow/)
   const content = list.split("<ListItemContent")[1].split("</Pressable>")[0]
   assert.doesNotMatch(content, /compact=|item\.nested \? (12|17)/)
-  assert.match(content, /fontSize: 14,[\s\S]*?lineHeight: 20/)
+  assert.match(content, /fontSize: 12,[\s\S]*?lineHeight: 20/)
   assert.match(content, /title=\{conversation\.name\}/)
   assert.match(content, /meta=\{item\.lastMessageTime\}/)
 })

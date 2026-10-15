@@ -153,7 +153,7 @@ export function StorageManagementScreen() {
                 minHeight={60}
                 onPress={() => confirm(["media"], "媒体与文件")}
                 title="清理媒体与文件"
-                titleFontSize={18}
+                titleFontSize={16}
               />
               <XGUIListItem
                 destructive
@@ -169,7 +169,7 @@ export function StorageManagementScreen() {
                 onPress={() => confirm(["messages"], "离线消息")}
                 separator
                 title="清理离线消息"
-                titleFontSize={18}
+                titleFontSize={16}
               />
               <XGUIListItem
                 destructive
@@ -185,7 +185,7 @@ export function StorageManagementScreen() {
                 onPress={() => confirm(["media", "messages"], "全部内容")}
                 separator
                 title="清理全部"
-                titleFontSize={18}
+                titleFontSize={16}
               />
             </XGUIList>
 
@@ -252,7 +252,7 @@ function StorageRow({
       minHeight={60}
       separator={separator}
       title={label}
-      titleFontSize={18}
+      titleFontSize={16}
       value={value}
     />
   )
