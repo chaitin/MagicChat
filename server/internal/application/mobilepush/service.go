@@ -14,12 +14,14 @@ import (
 )
 
 const (
-	pushJobTTL       = 5 * time.Minute
-	pushRouteTTL     = 7 * 24 * time.Hour
-	maxSendToken     = 512
-	minSendToken     = 32
-	maxGrantLease    = 365 * 24 * time.Hour
-	maxGrantsPerUser = 10
+	pushJobTTL        = 5 * time.Minute
+	pushDeliveryDelay = 5 * time.Second
+	pushPresenceTTL   = 45 * time.Second
+	pushRouteTTL      = 7 * 24 * time.Hour
+	maxSendToken      = 512
+	minSendToken      = 32
+	maxGrantLease     = 365 * 24 * time.Hour
+	maxGrantsPerUser  = 10
 )
 
 type Dependencies struct {

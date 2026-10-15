@@ -336,7 +336,7 @@ func (s *Service) createPushJob(
 		ID: jobID, GrantID: grant.ID, UserID: grant.UserID,
 		ConversationID: message.ConversationID, MessageID: message.ID,
 		RouteTokenCiphertext: routeCiphertext, Status: JobStatusQueued,
-		NextAttemptAt: now, ExpiresAt: expiresAt,
+		NextAttemptAt: now.Add(pushDeliveryDelay), ExpiresAt: expiresAt,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	result := tx.Clauses(clause.OnConflict{

@@ -5,10 +5,15 @@ import test from "node:test"
 import type { ApiFetch } from "@/data/api-client"
 import {
   createActivePushGrant,
+  getGatewayDeliveryStatus,
   registerPushInstallation,
   renewPushGrant,
 } from "@/notifications/push-gateway-api"
 import {
+  getPushDeliveryStatus,
+  getPushPreferences,
+  reportPushPresence,
+  setPushPreferences,
   registerPrivatePushGrant,
   resolvePrivatePushRoute,
 } from "@/notifications/push-private-server-api"
@@ -206,6 +211,44 @@ test("uses the fixed public gateway and installation authorization", async () =>
     "Installation management-token"
   )
   assert.equal(renewed.expiresAt, "2026-10-27T00:00:00Z")
+})
+
+test("push policy uses the current authenticated server without client-supplied user/session IDs", async () => {
+  const requests: Array<{ init?: RequestInit; url: string }> = []
+  const target = { id: "policy-server", url: "https://private.example", userId: "policy-user" }
+  installTestAccountRuntime(target)
+  const fetcher: ApiFetch = async (url, init) => {
+    requests.push({ url, init })
+    const data = url.endsWith("/presence") ? { foreground: true }
+      : url.endsWith("/status") ? { enabled: true, registered: true, foreground: true, desktop_active: false, delay_seconds: 5, last_job: null }
+      : { pause_when_desktop_active: init?.method === "PUT" }
+    return Response.json({ success: true, data })
+  }
+  await reportPushPresence(target, "ios", true, { fetcher })
+  assert.deepEqual(JSON.parse(String(requests[0].init?.body)), { platform: "ios", foreground: true })
+  assert.equal((await getPushPreferences(target, { fetcher })).pause_when_desktop_active, false)
+  assert.equal((await setPushPreferences(target, { pause_when_desktop_active: true }, { fetcher })).pause_when_desktop_active, true)
+  assert.equal((await getPushDeliveryStatus(target, { fetcher })).delay_seconds, 5)
+  assert.ok(requests.every((request) => request.url.startsWith("https://private.example/api/client/push/")))
+  assert.ok(requests.every((request) => !String(request.init?.body).includes("user_id") && !String(request.init?.body).includes("session_id")))
+})
+
+test("gateway delivery diagnostics use installation management credentials, never account bearer credentials", async () => {
+  let authorization = "", requestUrl = ""
+  const result = await getGatewayDeliveryStatus("grant-1", "management-token", { fetcher: async (url, init) => {
+    requestUrl = url
+    authorization = new Headers(init?.headers).get("authorization") ?? ""
+    return Response.json({ success: true, data: { grant_status: "active", installation_status: "active", provider: "apns", environment: "production", last_job: { status: "accepted", reason: "", updated_at: "2026-10-14T00:00:00Z" } } })
+  } })
+  assert.equal(requestUrl, "https://push.jiying.chat/api/v1/grants/grant-1/status")
+  assert.equal(authorization, "Installation management-token")
+  assert.equal(result.last_job?.status, "accepted")
+})
+
+test("malformed gateway diagnostics fail safely instead of crashing the settings screen", async () => {
+  await assert.rejects(getGatewayDeliveryStatus("grant-1", "management-token", {
+    fetcher: async () => Response.json({ success: true, data: { provider: 123 } }),
+  }), /推送状态响应格式不正确/)
 })
 
 test("registers grants and resolves routes only through the mapped private server", async () => {

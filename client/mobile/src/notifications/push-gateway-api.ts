@@ -25,6 +25,24 @@ export class PushGatewayRequestError extends Error {
   }
 }
 
+export type GatewayDeliveryStatus = {
+  grant_status: string
+  installation_status: string
+  provider: string
+  environment: string
+  last_job: { status: string; reason: string; updated_at: string } | null
+}
+
+export async function getGatewayDeliveryStatus(grantId: string, managementToken: string, options: { fetcher?: ApiFetch } = {}) {
+  const value = await gatewayRequest<GatewayDeliveryStatus>(`/api/v1/grants/${encodeURIComponent(grantId)}/status`, {
+    authorization: `Installation ${managementToken}`, fetcher: options.fetcher, method: "GET",
+  })
+  if (!isRecord(value) || typeof value.provider !== "string" || typeof value.environment !== "string" || typeof value.grant_status !== "string" || typeof value.installation_status !== "string" || (value.last_job !== null && (!isRecord(value.last_job) || typeof value.last_job.status !== "string" || typeof value.last_job.reason !== "string" || typeof value.last_job.updated_at !== "string"))) {
+    throw new PushGatewayRequestError("推送状态响应格式不正确")
+  }
+  return value
+}
+
 export async function registerPushInstallation(
   input: {
     appVersion: string

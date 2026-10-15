@@ -89,6 +89,7 @@ export class AuthController {
       onConversationPresenceChanged: (event: ConversationPresenceEvent) => void
       onIncomingMessage: (event: IncomingMessageNotification) => void
       onMediaProgress: (event: MediaDownloadProgress) => void
+      isDesktopActive?: () => boolean
     } = {
       onSyncStateChange: () => undefined,
       onDataChanged: () => undefined,
@@ -937,6 +938,10 @@ export class AuthController {
     return (await task).token
   }
 
+  refreshPushPresence() {
+    this.accountRuntime?.refreshPushPresence()
+  }
+
   private createAccountRuntime(active: ActiveConnection) {
     if (!active.user || !active.credential) {
       throw new AuthFailure("not_authenticated", "请重新登录账号")
@@ -956,6 +961,7 @@ export class AuthController {
       onConversationPresenceChanged: this.accountEvents.onConversationPresenceChanged,
       onIncomingMessage: this.accountEvents.onIncomingMessage,
       onMediaProgress: this.accountEvents.onMediaProgress,
+      isDesktopActive: this.accountEvents.isDesktopActive,
     })
   }
 

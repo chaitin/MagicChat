@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
+import {
+  createPushPresenceReporter,
+  PUSH_PRESENCE_HEARTBEAT_MS,
+} from "../../../../shared/push-presence.ts"
 import type { Session } from "electron"
 import type {
   AvatarRequest,
@@ -67,6 +71,9 @@ export class AccountRuntime {
   private revision = 0
   private initialized = false
   private closed = false
+  private realtimeReady = false
+  private pushPresence?: ReturnType<typeof createPushPresenceReporter>
+  private pushPresenceTimer?: ReturnType<typeof setInterval>
 
   constructor(
     private readonly input: {
@@ -83,6 +90,7 @@ export class AccountRuntime {
       onConversationPresenceChanged: (event: ConversationPresenceEvent) => void
       onIncomingMessage: (event: IncomingMessageNotification) => void
       onMediaProgress: (event: MediaDownloadProgress) => void
+      isDesktopActive?: () => boolean
     },
   ) {}
 
@@ -697,8 +705,17 @@ export class AccountRuntime {
     return this.avatarManager!.getResourceFilePath(resourceKey)
   }
 
+  refreshPushPresence() {
+    this.pushPresence?.report(
+      this.initialized && this.realtimeReady && (this.input.isDesktopActive?.() ?? false),
+    )
+  }
+
   close() {
     if (this.closed) return
+    clearInterval(this.pushPresenceTimer)
+    this.pushPresence?.stop()
+    this.pushPresence = undefined
     this.closed = true
     this.initialized = false
     this.realtimeManager?.close()
@@ -780,12 +797,26 @@ export class AccountRuntime {
             : (previousToken) => credential(previousToken),
         synchronize: () => this.synchronize(),
         applyEvent: (event) => this.applyRealtimeEvent(event),
-        onStateChange: (state) =>
-          this.input.onSyncStateChange({ targetId: this.input.targetId, state }),
+        onStateChange: (state) => {
+          this.realtimeReady = state === "ready"
+          this.refreshPushPresence()
+          this.input.onSyncStateChange({ targetId: this.input.targetId, state })
+        },
       })
       await this.realtimeManager.start()
       if (this.closed) throw new AuthFailure("account_closed", "账号数据已关闭")
       this.initialized = true
+      if (this.input.isDesktopActive) {
+        this.pushPresence = createPushPresenceReporter((foreground) =>
+          client.put("/api/client/push/presence", { platform: "desktop", foreground }),
+        )
+        this.refreshPushPresence()
+        this.pushPresenceTimer = setInterval(
+          () => this.refreshPushPresence(),
+          PUSH_PRESENCE_HEARTBEAT_MS,
+        )
+        this.pushPresenceTimer.unref()
+      }
     } catch (error) {
       this.close()
       if (error instanceof AuthFailure) throw error

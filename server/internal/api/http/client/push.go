@@ -33,6 +33,34 @@ type pushRouteResponse struct {
 	MessageID      string `json:"message_id"`
 }
 
+type pushPresenceRequest struct {
+	Platform   string `json:"platform" enums:"ios,android,desktop" binding:"required"`
+	Foreground *bool  `json:"foreground" binding:"required"`
+}
+
+type pushPreferencesRequest struct {
+	PauseWhenDesktopActive *bool `json:"pause_when_desktop_active" binding:"required"`
+}
+
+type pushPreferencesResponse struct {
+	PauseWhenDesktopActive bool `json:"pause_when_desktop_active"`
+}
+
+type pushJobStatusResponse struct {
+	Status    string    `json:"status"`
+	Reason    string    `json:"reason"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type pushStatusResponse struct {
+	Enabled       bool                   `json:"enabled"`
+	Registered    bool                   `json:"registered"`
+	Foreground    bool                   `json:"foreground"`
+	DesktopActive bool                   `json:"desktop_active"`
+	DelaySeconds  int                    `json:"delay_seconds"`
+	LastJob       *pushJobStatusResponse `json:"last_job"`
+}
+
 type revokePushGrantRequest struct {
 	GrantID string `json:"grant_id"`
 }
@@ -49,6 +77,107 @@ func (a *PushAPI) RegisterRoutes(group *echo.Group) {
 	group.PUT("/push/grants", a.registerGrant)
 	group.POST("/push/grants/:installation_id/revoke", a.revokeGrant)
 	group.POST("/push/routes/resolve", a.resolveRoute)
+	group.PUT("/push/presence", a.reportPresence)
+	group.GET("/push/preferences", a.getPreferences)
+	group.PUT("/push/preferences", a.setPreferences)
+	group.GET("/push/status", a.pushStatus)
+}
+
+// reportPresence godoc
+// @Summary 更新当前登录设备的前台活跃租约
+// @Tags 客户端推送
+// @Accept json
+// @Produce json
+// @Param request body pushPresenceRequest true "设备前台状态，不接受客户端指定用户或Session"
+// @Success 200 {object} successEnvelope
+// @Failure 400 {object} errorEnvelope
+// @Failure 401 {object} errorEnvelope
+// @Router /api/client/push/presence [put]
+func (a *PushAPI) reportPresence(c echo.Context) error {
+	current, ok := CurrentAccount(c)
+	session, sessionOK := CurrentAccountSession(c)
+	if !ok || !sessionOK {
+		return writeFailure(c, http.StatusUnauthorized, "unauthorized", "未登录")
+	}
+	var input pushPresenceRequest
+	if err := decodeStrictJSON(c, &input); err != nil || input.Foreground == nil {
+		return writeFailure(c, http.StatusBadRequest, "invalid_request", "请求格式错误")
+	}
+	if err := a.push.ReportPresence(c.Request().Context(), mobilepush.PresenceCommand{
+		UserID: current.ID, SessionID: session.ID, Platform: input.Platform, Foreground: *input.Foreground,
+	}); err != nil {
+		return writePushError(c, err)
+	}
+	return writeSuccess(c, http.StatusOK, map[string]bool{"foreground": *input.Foreground})
+}
+
+// getPreferences godoc
+// @Summary 读取当前账号的手机推送策略
+// @Tags 客户端推送
+// @Produce json
+// @Success 200 {object} successEnvelope{data=pushPreferencesResponse}
+// @Failure 401 {object} errorEnvelope
+// @Router /api/client/push/preferences [get]
+func (a *PushAPI) getPreferences(c echo.Context) error {
+	current, ok := CurrentAccount(c)
+	if !ok {
+		return writeFailure(c, http.StatusUnauthorized, "unauthorized", "未登录")
+	}
+	value, err := a.push.GetPreferences(c.Request().Context(), current.ID)
+	if err != nil {
+		return writePushError(c, err)
+	}
+	return writeSuccess(c, http.StatusOK, pushPreferencesResponse{PauseWhenDesktopActive: value.PauseWhenDesktopActive})
+}
+
+// setPreferences godoc
+// @Summary 设置电脑活跃时是否暂停手机推送，默认关闭
+// @Tags 客户端推送
+// @Accept json
+// @Produce json
+// @Param request body pushPreferencesRequest true "推送策略"
+// @Success 200 {object} successEnvelope{data=pushPreferencesResponse}
+// @Failure 400 {object} errorEnvelope
+// @Failure 401 {object} errorEnvelope
+// @Router /api/client/push/preferences [put]
+func (a *PushAPI) setPreferences(c echo.Context) error {
+	current, ok := CurrentAccount(c)
+	if !ok {
+		return writeFailure(c, http.StatusUnauthorized, "unauthorized", "未登录")
+	}
+	var input pushPreferencesRequest
+	if err := decodeStrictJSON(c, &input); err != nil || input.PauseWhenDesktopActive == nil {
+		return writeFailure(c, http.StatusBadRequest, "invalid_request", "请求格式错误")
+	}
+	value, err := a.push.SetPreferences(c.Request().Context(), current.ID, mobilepush.PushPreferences{PauseWhenDesktopActive: *input.PauseWhenDesktopActive})
+	if err != nil {
+		return writePushError(c, err)
+	}
+	return writeSuccess(c, http.StatusOK, pushPreferencesResponse{PauseWhenDesktopActive: value.PauseWhenDesktopActive})
+}
+
+// pushStatus godoc
+// @Summary 查询当前登录设备的推送授权和最近任务状态，不代表手机送达回执
+// @Tags 客户端推送
+// @Produce json
+// @Success 200 {object} successEnvelope{data=pushStatusResponse}
+// @Failure 401 {object} errorEnvelope
+// @Router /api/client/push/status [get]
+func (a *PushAPI) pushStatus(c echo.Context) error {
+	current, ok := CurrentAccount(c)
+	session, sessionOK := CurrentAccountSession(c)
+	if !ok || !sessionOK {
+		return writeFailure(c, http.StatusUnauthorized, "unauthorized", "未登录")
+	}
+	value, err := a.push.GetStatus(c.Request().Context(), current.ID, session.ID)
+	if err != nil {
+		return writePushError(c, err)
+	}
+	response := pushStatusResponse{Enabled: value.Enabled, Registered: value.Registered, Foreground: value.Foreground, DesktopActive: value.DesktopActive, DelaySeconds: value.DelaySeconds}
+	if value.LastJob != nil {
+		response.LastJob = &pushJobStatusResponse{Status: value.LastJob.Status, Reason: value.LastJob.Reason, UpdatedAt: value.LastJob.UpdatedAt}
+	}
+	return writeSuccess(c, http.StatusOK, response)
 }
 
 // registerGrant godoc

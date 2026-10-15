@@ -65,6 +65,7 @@ func New(db *gorm.DB, service *gateway.Service, options ...Options) *echo.Echo {
 	v1.PUT("/installations/:installation_id/provider-token", server.updateProviderToken)
 	v1.POST("/installations/:installation_id/active-grant", server.createActiveGrant)
 	v1.POST("/grants/:grant_id/renew", server.renewGrant)
+	v1.GET("/grants/:grant_id/status", server.deliveryStatus)
 	v1.DELETE("/grants/:grant_id", server.revokeGrant)
 	v1.POST("/grants/:grant_id/notifications", server.enqueueNotification)
 	server.registerAdminRoutes(router)
@@ -122,6 +123,14 @@ func (s *Server) createActiveGrant(c echo.Context) error {
 		return err
 	}
 	return writeSuccess(c, http.StatusCreated, credential)
+}
+
+func (s *Server) deliveryStatus(c echo.Context) error {
+	value, err := s.gateway.GetDeliveryStatus(c.Request().Context(), c.Param("grant_id"), installationToken(c))
+	if err != nil {
+		return err
+	}
+	return writeSuccess(c, http.StatusOK, value)
 }
 
 func (s *Server) renewGrant(c echo.Context) error {

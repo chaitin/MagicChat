@@ -97,6 +97,8 @@ func migrateTestSchema(db *gorm.DB) error {
 		&store.AdminSession{},
 		&store.UserSession{},
 		&store.UserPushGrant{},
+		&store.UserPushPresence{},
+		&store.UserPushPreference{},
 		&store.MobilePushRoute{},
 		&store.MobilePushEvent{},
 		&store.MobilePushJob{},

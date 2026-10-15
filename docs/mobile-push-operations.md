@@ -61,6 +61,27 @@ Prometheus 默认只监听宿主机 `127.0.0.1:19090`，可通过 `PROMETHEUS_PO
 
 `retry` 数量和最老待处理年龄同时持续上升时，应一起检查私有 Server 与公共 Push Gateway 日志。失败指标持续告警时，应先按匿名错误类别定位配置问题，禁止在排查日志中输出 provider token、grant capability 或 route token。
 
+## 通知策略与设备活跃状态
+
+- 消息仍逐条创建独立任务，不新增短时间消息聚合。每条私有推送任务入队后等待 5 秒，发送前重新检查消息是否已读、免打扰、成员权限与设备状态。
+- 免打扰仍不推送，被 @ 也不例外。已读进度使用会话自己的游标；话题使用话题参与者游标，不以父会话的已读状态代替。
+- 手机仅在前台、实时连接就绪且本地消息初始化完成后上报活跃；只抑制绑定该登录 Session 的手机，不影响同账号其他手机。
+- 电脑联动设置默认关闭，可在 Mobile「我的」中开启「电脑活跃时暂停手机通知」。Desktop 必须主窗口聚焦、实时连接就绪、系统最近 120 秒有交互，且未锁屏/休眠，才算活跃；仅有 WebSocket 连接不算。
+- 活跃设备每 15 秒续约一次，前后台或锁屏/休眠切换立即上报。租约 45 秒后自动失效；后台状态不重复发送心跳。状态上报按客户端串行处理，避免较慢的前台请求覆盖其后的后台请求。
+- 迁移 45 新增账号通知偏好与 Session 活跃租约表，不删除已有推送授权。先升级 Server 和 Push Gateway，再发布新版 Desktop/Mobile；未升级客户端继续走既有推送，不会被误判前台。
+
+## 手机推送诊断
+
+Mobile「我的 → 推送诊断」区分系统权限、系统 Token、网关注册/授权、私有服务器绑定，并显示本机前台租约、电脑活跃状态、私有任务跳过原因及网关最近任务。
+
+- 私有任务 `suppressed` 可记录 `already_read`、`mobile_foreground`、`desktop_active`；既有权限或免打扰变化仍记录 `policy_changed`。
+- 私有任务 `sent` 只代表网关已接收；网关 `accepted` 只代表 APNs/JPush 已受理，均不是手机实际展示或送达回执。
+- 获取原生设备 Token 最多等待 15 秒，超时显示 `push_device_token_timeout` 并由现有同步重试机制恢复，不永久停留在「开启中」。
+- `/api/client/push/preferences`、`/api/client/push/presence`、`/api/client/push/status` 均要求当前账号登录；设备与用户身份由服务端认证上下文确定，客户端不能代报其他 Session。
+- Gateway `GET /api/v1/grants/{grant_id}/status` 必须使用对应安装的 `Installation` 管理凭据，发送用的 Bearer capability 无权读取。响应仅包含通道、环境、状态、匿名错误类别和时间，不返回 Token、消息正文或路由。
+
+公开聚合 `/metrics` 仅用于监控，不参与上述策略或送达确认；生产环境仍建议通过反向代理限制指标采集来源。
+
 ## Session 绑定迁移
 
 迁移 37 会删除无法安全映射到具体登录 Session 的旧私有 Grant，再增加 `session_id` 外键。新版移动端会检测私有注册版本并在首次同步时立即重新注册；迁移过程中不会删除公共 Gateway 安装，通知能力会在客户端重新注册后恢复。

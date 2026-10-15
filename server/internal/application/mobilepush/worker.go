@@ -166,7 +166,7 @@ func (s *Service) claimJobs(ctx context.Context, limit int) ([]store.MobilePushJ
 		}
 		if err := tx.Where(
 			"status IN ? AND updated_at < ?",
-			[]string{JobStatusSent, JobStatusFailed, JobStatusExpired}, now.Add(-terminalRetention),
+			[]string{JobStatusSent, JobStatusFailed, JobStatusExpired, JobStatusSuppressed}, now.Add(-terminalRetention),
 		).Delete(&store.MobilePushJob{}).Error; err != nil {
 			return err
 		}
@@ -236,6 +236,13 @@ func (s *Service) dispatchJob(ctx context.Context, job store.MobilePushJob) erro
 	}
 	if !eligible {
 		return s.finishJob(ctx, job, JobStatusExpired, "policy_changed")
+	}
+	reason, err := s.pushActivitySuppressionReason(ctx, job, now)
+	if err != nil {
+		return err
+	}
+	if reason != "" {
+		return s.finishJob(ctx, job, JobStatusSuppressed, reason)
 	}
 	sendToken, err := s.cipher.Decrypt(job.Grant.SendTokenCiphertext, []byte(job.Grant.ID))
 	if err != nil {

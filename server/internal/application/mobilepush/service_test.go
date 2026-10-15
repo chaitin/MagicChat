@@ -777,8 +777,9 @@ func enqueueTestMessage(service *Service, delivery MessageDelivery) error {
 			return err
 		}
 		message := store.Message{ID: delivery.MessageID, ConversationID: delivery.ConversationID}
+		// Delivery tests use already-due jobs; push_policy_test covers the initial wait.
 		for _, grant := range grants {
-			if err := service.createPushJob(tx, grant, message, now.Add(pushJobTTL), now); err != nil {
+			if err := service.createPushJob(tx, grant, message, now.Add(pushJobTTL), now.Add(-pushDeliveryDelay)); err != nil {
 				return err
 			}
 		}
@@ -795,7 +796,7 @@ func newPushTestService(t *testing.T) (*Service, *gorm.DB, *fakeGateway, time.Ti
 	if err := db.AutoMigrate(
 		&store.User{}, &store.Conversation{}, &store.ConversationMember{},
 		&store.Message{}, &store.MessageRegistry{}, &store.ConversationUserPreference{}, &store.ConversationTopic{}, &store.ConversationTopicParticipant{},
-		&store.UserSession{}, &store.UserPushGrant{}, &store.MobilePushRoute{}, &store.MobilePushEvent{}, &store.MobilePushJob{},
+		&store.UserSession{}, &store.UserPushGrant{}, &store.UserPushPresence{}, &store.UserPushPreference{}, &store.MobilePushRoute{}, &store.MobilePushEvent{}, &store.MobilePushJob{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

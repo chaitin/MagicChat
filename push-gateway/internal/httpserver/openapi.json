@@ -8,6 +8,7 @@
   "components": {
     "securitySchemes": {
       "grantToken": {"type": "http", "scheme": "bearer"},
+      "installationToken": {"type": "apiKey", "in": "header", "name": "Authorization", "description": "Installation <management_token>; the send capability cannot read diagnostics"},
       "serverKey": {"type": "apiKey", "in": "header", "name": "X-MagicChat-Server-Key"},
       "adminSession": {"type": "apiKey", "in": "cookie", "name": "push_gateway_admin_session"},
       "adminCSRF": {"type": "apiKey", "in": "header", "name": "X-CSRF-Token"}
@@ -42,6 +43,7 @@
     "/api/v1/installations": {"post": {"summary": "Register an app installation", "responses": {"201": {"description": "Registered"}}}},
     "/api/v1/installations/{installation_id}/provider-token": {"put": {"summary": "Rotate a provider token", "responses": {"204": {"description": "Updated"}}}},
     "/api/v1/installations/{installation_id}/active-grant": {"post": {"summary": "Replace the active grant", "responses": {"201": {"description": "Created"}}}},
+    "/api/v1/grants/{grant_id}/status": {"get": {"summary": "Read installation-scoped delivery diagnostics without tokens or message content", "security": [{"installationToken": []}], "parameters": [{"name": "grant_id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}], "responses": {"200": {"description": "Grant, installation, provider/environment and latest job status; accepted is not a handset delivery receipt"}, "401": {"description": "Installation management authentication required"}, "404": {"description": "Grant not found"}}}},
     "/api/v1/grants/{grant_id}/renew": {"post": {"summary": "Renew an active grant", "responses": {"200": {"description": "Renewed"}}}},
     "/api/v1/grants/{grant_id}": {"delete": {"summary": "Revoke a grant", "responses": {"204": {"description": "Revoked"}}}},
     "/api/v1/grants/{grant_id}/notifications": {"post": {"summary": "Enqueue a quota-charged notification", "security": [{"grantToken": [], "serverKey": []}], "responses": {"202": {"description": "Accepted"}, "401": {"description": "Grant or server authentication failed"}, "403": {"description": "Server disabled"}, "429": {"description": "Rate or daily quota exceeded"}}}},

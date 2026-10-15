@@ -30,7 +30,8 @@ import {
   savePushDelegation,
   savePushInstallation,
 } from "@/notifications/push-registration-store"
-import { setActiveRemotePushTarget } from "@/notifications/push-runtime-state"
+import { isCurrentPushIdentity, setActiveRemotePushTarget } from "@/notifications/push-runtime-state"
+import { getPushRegistrationDiagnostic, updatePushRegistrationDiagnostic, waitForPushDevice, type PushRegistrationStage } from "@/notifications/push-diagnostics"
 import {
   shouldRefreshPrivateRegistration,
   shouldRenewPushGrant,
@@ -46,11 +47,27 @@ import {
 
 const PRIVATE_PUSH_REGISTRATION_VERSION = 2
 
-export function synchronizePushDelegation(
+function reportRegistrationStage(identity: PushAccountIdentity, stage: PushRegistrationStage) {
+  if (isCurrentPushIdentity(identity)) updatePushRegistrationDiagnostic(identity, stage)
+}
+
+export async function synchronizePushDelegation(
   identity: PushAccountIdentity,
   options: { deviceToken?: string } = {}
 ) {
-  return synchronizeRemotePush(identity, options)
+  reportRegistrationStage(identity, "permission")
+  try {
+    const registered = await synchronizeRemotePush(identity, options)
+    if (isCurrentPushIdentity(identity)) updatePushRegistrationDiagnostic(identity, registered ? "private_server" : "permission", registered ? "registered" : "failed", registered ? null : "permission_denied")
+    return registered
+  } catch (error) {
+    if (isCurrentPushIdentity(identity)) {
+      const rawCode = error && typeof error === "object" && "code" in error ? error.code : null
+      const code = typeof rawCode === "string" && /^[a-z0-9_.-]{1,120}$/.test(rawCode) ? rawCode : "push_registration_failed"
+      updatePushRegistrationDiagnostic(identity, getPushRegistrationDiagnostic().stage, "failed", code)
+    }
+    throw error
+  }
 }
 
 export async function getPushInstallationID(identity: PushAccountIdentity) {
@@ -146,7 +163,8 @@ async function synchronizeRemotePush(
     return false
   }
 
-  const device = await readRemotePushDevice(options.deviceToken)
+  reportRegistrationStage(identity, "device_token")
+  const device = await waitForPushDevice(readRemotePushDevice(options.deviceToken))
   if (!device) {
     throw new PushLifecycleError(
       "push_environment_unavailable",
@@ -155,6 +173,7 @@ async function synchronizeRemotePush(
   }
   const appVersion = Application.nativeApplicationVersion ?? "unknown"
 
+  reportRegistrationStage(identity, "gateway")
   let installation = await loadPushInstallation()
   if (
     !installation ||
@@ -258,6 +277,7 @@ async function synchronizeRemotePush(
     await savePushDelegation(delegation)
   }
 
+  reportRegistrationStage(identity, "private_server")
   if (
     delegation.status !== "registered" ||
     delegation.privateRegistrationVersion !== PRIVATE_PUSH_REGISTRATION_VERSION ||

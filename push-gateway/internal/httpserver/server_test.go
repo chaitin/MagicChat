@@ -81,6 +81,22 @@ func TestAPIRoutesInstallationGrantAndNotification(t *testing.T) {
 	if duplicate.Code != http.StatusAccepted || !second.Duplicate || second.JobID != first.JobID {
 		t.Fatalf("duplicate status/body = %d/%s", duplicate.Code, duplicate.Body.String())
 	}
+	statusPath := "/api/v1/grants/" + grant.GrantID + "/status"
+	for _, authorization := range []string{"", "Bearer " + grant.SendToken, "Installation wrong-token"} {
+		response := requestJSON(t, router, http.MethodGet, statusPath, nil, map[string]string{"Authorization": authorization})
+		if response.Code != http.StatusUnauthorized {
+			t.Fatalf("unauthenticated diagnostics accepted: %d", response.Code)
+		}
+	}
+	statusResponse := requestJSON(t, router, http.MethodGet, statusPath, nil, map[string]string{"Authorization": "Installation " + installation.ManagementToken})
+	if statusResponse.Code != http.StatusOK || !strings.Contains(statusResponse.Body.String(), `"status":"queued"`) || statusResponse.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("delivery status = %d %s", statusResponse.Code, statusResponse.Body.String())
+	}
+	for _, secret := range []string{installation.ManagementToken, grant.SendToken, "provider-token-http", "route-token-http"} {
+		if strings.Contains(statusResponse.Body.String(), secret) {
+			t.Fatal("diagnostics exposed a credential or route token")
+		}
+	}
 	metrics := requestJSON(t, router, http.MethodGet, "/api/metrics", nil, nil)
 	for _, expected := range []string{
 		`push_gateway_jobs{status="queued"} 1`,

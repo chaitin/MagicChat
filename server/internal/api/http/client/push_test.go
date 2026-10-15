@@ -16,6 +16,10 @@ import (
 
 type fakePushService struct {
 	register             mobilepush.RegisterGrantCommand
+	presence             mobilepush.PresenceCommand
+	preferencesUser      string
+	statusUser           string
+	statusSession        string
 	revokeUserID         string
 	revokeInstallationID string
 	revokeGrantID        string
@@ -46,6 +50,52 @@ func (s *fakePushService) ResolveRoute(_ context.Context, userID, token string) 
 		return mobilepush.Route{}, s.err
 	}
 	return mobilepush.Route{ConversationID: "conversation-1", MessageID: "message-1"}, nil
+}
+
+func (s *fakePushService) ReportPresence(_ context.Context, cmd mobilepush.PresenceCommand) error {
+	s.presence = cmd
+	return s.err
+}
+func (s *fakePushService) GetPreferences(_ context.Context, userID string) (mobilepush.PushPreferences, error) {
+	s.preferencesUser = userID
+	return mobilepush.PushPreferences{}, s.err
+}
+func (s *fakePushService) SetPreferences(_ context.Context, userID string, value mobilepush.PushPreferences) (mobilepush.PushPreferences, error) {
+	s.preferencesUser = userID
+	return value, s.err
+}
+func (s *fakePushService) GetStatus(_ context.Context, userID, sessionID string) (mobilepush.PushStatus, error) {
+	s.statusUser, s.statusSession = userID, sessionID
+	return mobilepush.PushStatus{DelaySeconds: 5}, s.err
+}
+
+func TestPushPolicyAPIBindsAuthenticatedSessionAndRejectsSpoofedFields(t *testing.T) {
+	service := &fakePushService{}
+	router := pushTestRouter(service)
+	response := servePushRequest(router, http.MethodPut, "/api/client/push/presence", `{"platform":"ios","foreground":true}`)
+	if response.Code != http.StatusOK || service.presence.UserID != "user-1" || service.presence.SessionID != "00000000-0000-0000-0000-000000000010" || !service.presence.Foreground {
+		t.Fatalf("presence=%#v response=%d", service.presence, response.Code)
+	}
+	for _, body := range []string{`{}`, `{"platform":"ios"}`, `{"platform":"ios","foreground":true,"session_id":"other"}`, `{"platform":"desktop","foreground":true,"user_id":"other"}`} {
+		if result := servePushRequest(router, http.MethodPut, "/api/client/push/presence", body); result.Code != http.StatusBadRequest {
+			t.Fatalf("accepted spoofed/incomplete body: %s", body)
+		}
+	}
+	response = servePushRequest(router, http.MethodPut, "/api/client/push/preferences", `{"pause_when_desktop_active":true}`)
+	if response.Code != http.StatusOK || service.preferencesUser != "user-1" || !strings.Contains(response.Body.String(), `"pause_when_desktop_active":true`) {
+		t.Fatalf("preferences=%d %s", response.Code, response.Body.String())
+	}
+	response = servePushRequest(router, http.MethodGet, "/api/client/push/status", "")
+	if response.Code != http.StatusOK || service.statusUser != "user-1" || service.statusSession != "00000000-0000-0000-0000-000000000010" || !strings.Contains(response.Body.String(), `"delay_seconds":5`) {
+		t.Fatalf("status=%d %s", response.Code, response.Body.String())
+	}
+	unauthenticated := echo.New()
+	NewPushAPI(service).RegisterRoutes(unauthenticated.Group("/api/client"))
+	for _, path := range []string{"/api/client/push/status", "/api/client/push/preferences"} {
+		if result := servePushRequest(unauthenticated, http.MethodGet, path, ""); result.Code != http.StatusUnauthorized {
+			t.Fatalf("unauthenticated read accepted: %s", path)
+		}
+	}
 }
 
 func TestPushAPIRoutesAuthenticatedUser(t *testing.T) {

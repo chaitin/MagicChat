@@ -1870,12 +1870,62 @@ definitions:
       platform:
         type: string
     type: object
+  client.pushJobStatusResponse:
+    properties:
+      reason:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  client.pushPreferencesRequest:
+    properties:
+      pause_when_desktop_active:
+        type: boolean
+    required:
+    - pause_when_desktop_active
+    type: object
+  client.pushPreferencesResponse:
+    properties:
+      pause_when_desktop_active:
+        type: boolean
+    type: object
+  client.pushPresenceRequest:
+    properties:
+      foreground:
+        type: boolean
+      platform:
+        enum:
+        - ios
+        - android
+        - desktop
+        type: string
+    required:
+    - foreground
+    - platform
+    type: object
   client.pushRouteResponse:
     properties:
       conversation_id:
         type: string
       message_id:
         type: string
+    type: object
+  client.pushStatusResponse:
+    properties:
+      delay_seconds:
+        type: integer
+      desktop_active:
+        type: boolean
+      enabled:
+        type: boolean
+      foreground:
+        type: boolean
+      last_job:
+        $ref: '#/definitions/client.pushJobStatusResponse'
+      registered:
+        type: boolean
     type: object
   client.readTemporaryFileURLsRequest:
     properties:
@@ -8125,6 +8175,89 @@ paths:
       summary: 删除当前手机的本地推送授权
       tags:
       - 客户端推送
+  /api/client/push/preferences:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/client.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.pushPreferencesResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+      summary: 读取当前账号的手机推送策略
+      tags:
+      - 客户端推送
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 推送策略
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/client.pushPreferencesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/client.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.pushPreferencesResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+      summary: 设置电脑活跃时是否暂停手机推送，默认关闭
+      tags:
+      - 客户端推送
+  /api/client/push/presence:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 设备前台状态，不接受客户端指定用户或Session
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/client.pushPresenceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/client.successEnvelope'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+      summary: 更新当前登录设备的前台活跃租约
+      tags:
+      - 客户端推送
   /api/client/push/routes/resolve:
     post:
       consumes:
@@ -8159,6 +8292,27 @@ paths:
           schema:
             $ref: '#/definitions/client.errorEnvelope'
       summary: 解析通知点击路由
+      tags:
+      - 客户端推送
+  /api/client/push/status:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/client.successEnvelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/client.pushStatusResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/client.errorEnvelope'
+      summary: 查询当前登录设备的推送授权和最近任务状态，不代表手机送达回执
       tags:
       - 客户端推送
   /api/client/search/messages:

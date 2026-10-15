@@ -200,6 +200,23 @@ type UserPushGrant struct {
 
 func (UserPushGrant) TableName() string { return "user_push_grants" }
 
+type UserPushPreference struct {
+	UserID                 string    `gorm:"type:uuid;primaryKey"`
+	User                   User      `gorm:"constraint:OnDelete:CASCADE;"`
+	PauseWhenDesktopActive bool      `gorm:"not null;default:false"`
+	UpdatedAt              time.Time `gorm:"not null"`
+}
+
+type UserPushPresence struct {
+	SessionID  string      `gorm:"type:uuid;primaryKey"`
+	Session    UserSession `gorm:"constraint:OnDelete:CASCADE;"`
+	UserID     string      `gorm:"type:uuid;not null;index:user_push_presences_user_active_index,priority:1"`
+	Platform   string      `gorm:"size:16;not null;index:user_push_presences_user_active_index,priority:2"`
+	Foreground bool        `gorm:"not null"`
+	ExpiresAt  time.Time   `gorm:"not null;index:user_push_presences_user_active_index,priority:3"`
+	UpdatedAt  time.Time   `gorm:"not null"`
+}
+
 type MobilePushRoute struct {
 	TokenHash      []byte       `gorm:"primaryKey"`
 	UserID         string       `gorm:"type:uuid;not null;index"`

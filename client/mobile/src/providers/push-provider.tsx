@@ -2,6 +2,8 @@ import * as Notifications from "expo-notifications"
 import { useRouter, type Href } from "expo-router"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { AppState, Platform } from "react-native"
+import { createPushPresenceReporter, PUSH_PRESENCE_HEARTBEAT_MS } from "../../../shared/push-presence"
+import { reportPushPresence } from "@/notifications/push-private-server-api"
 
 import { ApiRequestError } from "@/data/api-client"
 import {
@@ -49,19 +51,42 @@ export function PushProvider({ children }: React.PropsWithChildren) {
         resolveRoute: resolvePrivatePushRoute,
       })
   )
+  const accountId = active?.accountId
+  const generation = active?.generation
+  const target = active?.target
   const identity = useMemo(
-    () =>
-      active
-        ? {
-            accountId: active.accountId,
-            generation: active.generation,
-            target: active.target,
-          }
-        : null,
-    [active]
+    () => accountId && generation !== undefined && target ? { accountId, generation, target } : null,
+    [accountId, generation, target]
   )
   const routeRetryCountRef = useRef(0)
+  const presenceReadyRef = useRef(false)
+  presenceReadyRef.current = realtimeReady && isMessageBootstrapComplete
+  const presenceReporterRef = useRef<ReturnType<typeof createPushPresenceReporter> | null>(null)
+  const presenceRequestQueueRef = useRef(Promise.resolve())
   const [routeAttempt, setRouteAttempt] = useState(0)
+
+  useEffect(() => {
+    const platform = Platform.OS
+    if ((platform !== "ios" && platform !== "android") || !identity || !isAuthenticated || isSigningOut) return
+    const reporter: ReturnType<typeof createPushPresenceReporter> = createPushPresenceReporter((foreground) => {
+      const request = presenceRequestQueueRef.current.then(async () => {
+        if (presenceReporterRef.current !== reporter) return
+        await reportPushPresence(identity.target, platform, foreground)
+      })
+      presenceRequestQueueRef.current = request.catch(() => undefined)
+      return request
+    })
+    presenceReporterRef.current = reporter
+    const refresh = () => reporter.report(AppState.currentState === "active" && presenceReadyRef.current)
+    refresh()
+    const subscription = AppState.addEventListener("change", (state) => reporter.report(state === "active" && presenceReadyRef.current))
+    const timer = setInterval(refresh, PUSH_PRESENCE_HEARTBEAT_MS)
+    return () => { clearInterval(timer); subscription.remove(); reporter.stop(); if (presenceReporterRef.current === reporter) presenceReporterRef.current = null }
+  }, [identity, isAuthenticated, isSigningOut])
+
+  useEffect(() => {
+    presenceReporterRef.current?.report(AppState.currentState === "active" && realtimeReady && isMessageBootstrapComplete)
+  }, [realtimeReady, isMessageBootstrapComplete])
 
   useEffect(() => {
     if (Platform.OS === "web") return

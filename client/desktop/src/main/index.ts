@@ -7,6 +7,7 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  powerMonitor,
   Notification as SystemNotification,
   session,
   screen,
@@ -366,7 +367,18 @@ void app.whenReady().then(async () => {
       console.warn("无法显示桌面通知", error)
     }
   }
+  let desktopUnavailable = false
   const auth = new AuthController(app.getPath("userData"), {
+    isDesktopActive: () => {
+      if (desktopUnavailable || !mainWindow || mainWindow.isDestroyed() || !mainWindow.isFocused())
+        return false
+      try {
+        return powerMonitor.getSystemIdleState(120) === "active"
+      } catch {
+        // 系统状态不可用时保留手机通知，不影响账号初始化。
+        return false
+      }
+    },
     onSyncStateChange: (event) =>
       mainWindow?.webContents.send(ACCOUNT_DATA_CHANNELS.syncStateChanged, event),
     onDataChanged: (event) => mainWindow?.webContents.send(ACCOUNT_DATA_CHANNELS.changed, event),
@@ -376,6 +388,20 @@ void app.whenReady().then(async () => {
     onMediaProgress: (event) =>
       mainWindow?.webContents.send(MEDIA_CHANNELS.downloadProgress, event),
   })
+  app.on("browser-window-focus", () => auth.refreshPushPresence())
+  app.on("browser-window-blur", () => auth.refreshPushPresence())
+  const suspendPresence = () => {
+    desktopUnavailable = true
+    auth.refreshPushPresence()
+  }
+  const resumePresence = () => {
+    desktopUnavailable = false
+    auth.refreshPushPresence()
+  }
+  powerMonitor.on("lock-screen", suspendPresence)
+  powerMonitor.on("suspend", suspendPresence)
+  powerMonitor.on("unlock-screen", resumePresence)
+  powerMonitor.on("resume", resumePresence)
   const mediaPreview = new MediaPreviewWindow(
     path.join(__dirname, "../preload/mediaPreview.cjs"),
     path.join(__dirname, "../renderer/index.html"),

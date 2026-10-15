@@ -9398,6 +9398,143 @@
                 }
             }
         },
+        "/api/client/push/preferences": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端推送"
+                ],
+                "summary": "读取当前账号的手机推送策略",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/client.successEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/client.pushPreferencesResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端推送"
+                ],
+                "summary": "设置电脑活跃时是否暂停手机推送，默认关闭",
+                "parameters": [
+                    {
+                        "description": "推送策略",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/client.pushPreferencesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/client.successEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/client.pushPreferencesResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/client/push/presence": {
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端推送"
+                ],
+                "summary": "更新当前登录设备的前台活跃租约",
+                "parameters": [
+                    {
+                        "description": "设备前台状态，不接受客户端指定用户或Session",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/client.pushPresenceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/client.successEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
         "/api/client/push/routes/resolve": {
             "post": {
                 "consumes": [
@@ -9451,6 +9588,43 @@
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/client.errorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/client/push/status": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "客户端推送"
+                ],
+                "summary": "查询当前登录设备的推送授权和最近任务状态，不代表手机送达回执",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/client.successEnvelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/client.pushStatusResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/client.errorEnvelope"
                         }
@@ -12632,6 +12806,59 @@
                 }
             }
         },
+        "client.pushJobStatusResponse": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "client.pushPreferencesRequest": {
+            "type": "object",
+            "required": [
+                "pause_when_desktop_active"
+            ],
+            "properties": {
+                "pause_when_desktop_active": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "client.pushPreferencesResponse": {
+            "type": "object",
+            "properties": {
+                "pause_when_desktop_active": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "client.pushPresenceRequest": {
+            "type": "object",
+            "required": [
+                "foreground",
+                "platform"
+            ],
+            "properties": {
+                "foreground": {
+                    "type": "boolean"
+                },
+                "platform": {
+                    "type": "string",
+                    "enum": [
+                        "ios",
+                        "android",
+                        "desktop"
+                    ]
+                }
+            }
+        },
         "client.pushRouteResponse": {
             "type": "object",
             "properties": {
@@ -12640,6 +12867,29 @@
                 },
                 "message_id": {
                     "type": "string"
+                }
+            }
+        },
+        "client.pushStatusResponse": {
+            "type": "object",
+            "properties": {
+                "delay_seconds": {
+                    "type": "integer"
+                },
+                "desktop_active": {
+                    "type": "boolean"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "foreground": {
+                    "type": "boolean"
+                },
+                "last_job": {
+                    "$ref": "#/definitions/client.pushJobStatusResponse"
+                },
+                "registered": {
+                    "type": "boolean"
                 }
             }
         },
