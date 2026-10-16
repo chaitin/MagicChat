@@ -21,6 +21,7 @@ import (
 	documentapp "app/internal/application/document"
 	"app/internal/application/emailauth"
 	entitycardapp "app/internal/application/entitycard"
+	"app/internal/application/entitysync"
 	externalauthapp "app/internal/application/externalauth"
 	fileapp "app/internal/application/file"
 	"app/internal/application/identityprovider"
@@ -94,6 +95,7 @@ type Server struct {
 	documents           *documentapp.Service
 	clientDocuments     *clientapi.DocumentAPI
 	entityCards         entitycardapp.Resolver
+	entitySync          *entitysync.Service
 	tasks               *taskapp.Service
 	clientTasks         *clientapi.TaskAPI
 	appConnections      *appconnection.Manager
@@ -135,6 +137,9 @@ func NewRouterWithTaskReminderWorker(ctx context.Context, db *gorm.DB, cfg confi
 
 func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options, workerContext context.Context) (*echo.Echo, *account.Service) {
 	if err := store.InstallUserNicknamePolicy(db); err != nil {
+		panic(err)
+	}
+	if err := store.InstallClientEntityChanges(db); err != nil {
 		panic(err)
 	}
 	server := &Server{
@@ -245,6 +250,7 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 		Settings: server.settings, NicknamePolicy: server.settings, Notifications: server, FriendshipMessages: server,
 	})
 	server.clientContacts = clientapi.NewContactAPI(server.contacts)
+	server.entitySync = entitysync.NewService(db)
 	server.messageContents = messagecontentapp.NewService(messagecontentapp.Dependencies{
 		EntityCards: server.entityCards,
 		FetchLinkTitle: func(ctx context.Context, linkURL string) (string, error) {
@@ -327,6 +333,7 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 	server.clientReports.RegisterRoutes(client)
 	server.clientUserBlocks.RegisterRoutes(client)
 	server.clientContacts.RegisterRoutes(client)
+	clientapi.NewEntitySyncAPI(server.entitySync).RegisterRoutes(client)
 	server.clientMessages.RegisterRoutes(client)
 	server.clientPush.RegisterRoutes(client)
 	server.clientSearch.RegisterRoutes(client)
@@ -343,6 +350,7 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 	server.adminReports.RegisterRoutes(admin)
 	server.adminProviders.RegisterRoutes(admin)
 	if workerContext != nil {
+		go server.runEntityChangeWorker(workerContext)
 		go server.tasks.RunReminderWorker(workerContext)
 		go server.mobilePush.RunWorker(workerContext)
 	}

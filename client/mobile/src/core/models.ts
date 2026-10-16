@@ -26,6 +26,7 @@ export type ClientUser = {
 }
 
 export type ContactUser = {
+  entityRevision?: number
   avatar: string
   email: string
   id: string
@@ -42,6 +43,7 @@ export type ResolvedClientUser = ContactUser & {
 }
 
 export type ContactApp = {
+  entityRevision?: number
   avatar: string
   creatorUserId: string | null
   description: string
@@ -61,6 +63,7 @@ export type ContactGroupAvatarMember = {
 }
 
 export type ContactGroup = {
+  entityRevision?: number
   avatar: string
   avatarMembers: ContactGroupAvatarMember[]
   id: string
@@ -140,6 +143,7 @@ export type ClientConversationLastMessageSender = {
 }
 
 export type ClientConversation = {
+  entityRevision?: number
   announcement?: string
   avatar: string
   canSend: boolean

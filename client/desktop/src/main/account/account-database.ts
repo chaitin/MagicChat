@@ -222,6 +222,24 @@ export class AccountDatabase {
     this.contacts.replace(input)
   }
 
+  mergeContacts(...args: Parameters<ContactRepository["merge"]>) {
+    this.contacts.merge(...args)
+  }
+
+  applyConversationEntity(...args: Parameters<ConversationRepository["applyEntity"]>) {
+    this.conversations.applyEntity(...args)
+  }
+
+  relatedConversationIds(id: string) {
+    return this.conversations.relatedIds(id)
+  }
+
+  removeConversationTree(id: string) {
+    const ids = this.conversations.relatedIds(id)
+    for (const child of ids) this.conversations.removeCurrent(child)
+    return ids
+  }
+
   setContactUserPresence(userId: string, online: boolean) {
     return this.contacts.setUserPresence(userId, online)
   }

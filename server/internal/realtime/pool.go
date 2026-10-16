@@ -204,6 +204,16 @@ func (p *ConnectionPool) IsOnline(userID string) bool {
 	return p.Count(userID) > 0
 }
 
+func (p *ConnectionPool) OnlineUserIDs() []string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	ids := make([]string, 0, len(p.connsByUser))
+	for id := range p.connsByUser {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 func (p *ConnectionPool) OnlineStatus(userIDs []string) map[string]bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()

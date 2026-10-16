@@ -12,6 +12,114 @@ describe("ClientDataProvider", () => {
     vi.useRealTimers()
   })
 
+  it("目录刷新被资料事件打断后重新读取，仍能发现新用户和应用", async () => {
+    vi.useFakeTimers()
+    let requests = 0
+    let finish!: (value: Response) => void
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === "/api/client/me") return Promise.resolve(jsonResponse(createCurrentUserResponse()))
+      if (url === "/api/client/conversations") return Promise.resolve(jsonResponse(createConversationsResponse([])))
+      if (url === "/api/client/projects?limit=100") return Promise.resolve(jsonResponse(createProjectsResponse()))
+      if (url === "/api/client/contacts") {
+        if (++requests === 2) return new Promise<Response>((resolve) => { finish = resolve })
+        return Promise.resolve(jsonResponse(createDiscoveryContactsResponse(requests > 2)))
+      }
+      if (url === "/api/client/users/resolve") return Promise.resolve(jsonResponse(createDiscoveryUsersResponse(init)))
+      return Promise.reject(new Error(`unexpected request: ${url}`))
+    }))
+    render(<MemoryRouter initialEntries={["/chat"]}><ClientDataProvider><DirectoryDiscoveryProbe /></ClientDataProvider></MemoryRouter>)
+    await act(async () => vi.advanceTimersByTimeAsync(1_000))
+    fireEvent.click(screen.getByRole("button", { name: "refresh directory" }))
+    fireEvent.click(screen.getByRole("button", { name: "change directory metadata" }))
+    await act(async () => { finish(jsonResponse(createDiscoveryContactsResponse(false))); await vi.advanceTimersByTimeAsync(0) })
+    expect(requests).toBe(3)
+    expect(screen.getByTestId("directory-users")).toHaveTextContent("user-2:New user")
+    expect(screen.getByTestId("directory-apps")).toHaveTextContent("new-app")
+  })
+
+  it("较旧目录请求晚返回时不能移除已经发现的新条目", async () => {
+    vi.useFakeTimers()
+    let requests = 0
+    let finish!: (value: Response) => void
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === "/api/client/me") return Promise.resolve(jsonResponse(createCurrentUserResponse()))
+      if (url === "/api/client/conversations") return Promise.resolve(jsonResponse(createConversationsResponse([])))
+      if (url === "/api/client/projects?limit=100") return Promise.resolve(jsonResponse(createProjectsResponse()))
+      if (url === "/api/client/contacts") {
+        if (++requests === 2) return new Promise<Response>((resolve) => { finish = resolve })
+        return Promise.resolve(jsonResponse(createDiscoveryContactsResponse(requests > 2)))
+      }
+      if (url === "/api/client/users/resolve") return Promise.resolve(jsonResponse(createDiscoveryUsersResponse(init)))
+      return Promise.reject(new Error(`unexpected request: ${url}`))
+    }))
+    render(<MemoryRouter initialEntries={["/chat"]}><ClientDataProvider><DirectoryDiscoveryProbe /></ClientDataProvider></MemoryRouter>)
+    await act(async () => vi.advanceTimersByTimeAsync(1_000))
+    fireEvent.click(screen.getByRole("button", { name: "refresh directory" }))
+    fireEvent.click(screen.getByRole("button", { name: "refresh directory" }))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    expect(screen.getByTestId("directory-apps")).toHaveTextContent("new-app")
+    await act(async () => { finish(jsonResponse(createDiscoveryContactsResponse(false))); await vi.advanceTimersByTimeAsync(0) })
+    expect(requests).toBe(3)
+    expect(screen.getByTestId("directory-users")).toHaveTextContent("user-2:New user")
+    expect(screen.getByTestId("directory-apps")).toHaveTextContent("new-app")
+  })
+
+  it.each(["cached", "pending"])("用户激活后立即绕过%s的负资料缓存", async (mode) => {
+    vi.useFakeTimers()
+    let active = false
+    let lookups = 0
+    let finish!: (value: Response) => void
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === "/api/client/me") return Promise.resolve(jsonResponse(createCurrentUserResponse()))
+      if (url === "/api/client/conversations") return Promise.resolve(jsonResponse(createConversationsResponse([])))
+      if (url === "/api/client/projects?limit=100") return Promise.resolve(jsonResponse(createProjectsResponse()))
+      if (url === "/api/client/contacts") return Promise.resolve(jsonResponse(createDiscoveryContactsResponse(active)))
+      if (url === "/api/client/users/resolve") {
+        lookups++
+        if (!active && mode === "pending") return new Promise<Response>((resolve) => { finish = resolve })
+        return Promise.resolve(jsonResponse(active ? createDiscoveryUsersResponse(init) : { success: true, data: { users: [] } }))
+      }
+      return Promise.reject(new Error(`unexpected request: ${url}`))
+    }))
+    render(<MemoryRouter initialEntries={["/chat"]}><ClientDataProvider><DirectoryDiscoveryProbe /></ClientDataProvider></MemoryRouter>)
+    await act(async () => vi.advanceTimersByTimeAsync(1_000))
+    fireEvent.click(screen.getByRole("button", { name: "lookup inactive user" }))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    expect(lookups).toBe(1)
+    active = true
+    fireEvent.click(screen.getByRole("button", { name: "refresh directory" }))
+    await act(async () => {
+      if (mode === "pending") finish(jsonResponse({ success: true, data: { users: [] } }))
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(lookups).toBe(2)
+    expect(screen.getByTestId("directory-users")).toHaveTextContent("user-2:New user")
+  })
+
+  it("实体权限和头像快照立即更新，不覆盖期间的新消息与置顶", async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === "/api/client/me") return Promise.resolve(jsonResponse(createCurrentUserResponse()))
+      if (url === "/api/client/contacts") return Promise.resolve(jsonResponse(createContactsResponse()))
+      if (url === "/api/client/conversations") return Promise.resolve(jsonResponse(createConversationsResponse([
+        { ...createConversationResponse("group-1"), type: "group" },
+      ])))
+      if (url === "/api/client/projects?limit=100") return Promise.resolve(jsonResponse(createProjectsResponse()))
+      return Promise.reject(new Error(`unexpected request: ${url}`))
+    }))
+    render(<MemoryRouter initialEntries={["/chat"]}><ClientDataProvider><EntitySnapshotProbe /></ClientDataProvider></MemoryRouter>)
+    await act(async () => vi.advanceTimersByTimeAsync(1_000))
+    fireEvent.click(screen.getByRole("button", { name: "prepare local state" }))
+    fireEvent.click(screen.getByRole("button", { name: "apply entity permissions" }))
+    expect(screen.getByTestId("entity-state")).toHaveTextContent("admin:new.webp:8:true")
+    fireEvent.click(screen.getByRole("button", { name: "apply old entity permissions" }))
+    expect(screen.getByTestId("entity-state")).toHaveTextContent("admin:new.webp:8:true")
+  })
+
   it("starts with conversation summaries without preloading 30 message pages", async () => {
     vi.useFakeTimers()
     const conversations = Array.from({ length: 31 }, (_, index) =>
@@ -986,6 +1094,47 @@ function RestoreProbe() {
       </button>
     </>
   )
+}
+
+function createDiscoveryContactsResponse(visible: boolean) {
+  const base = createContactsResponse()
+  return { ...base, data: { ...base.data, user_ids: visible ? ["user-2"] : [], apps: visible ? [{ id: "new-app", type: "app", name: "New app", description: "", avatar: "", creator_user_id: null, online: false }] : [] } }
+}
+
+function createDiscoveryUsersResponse(init?: RequestInit) {
+  const body = JSON.parse(String(init?.body)) as { user_ids: string[] }
+  return { success: true, data: { users: body.user_ids.map((id) => ({ id, type: "user", name: "New user", nickname: "", email: `${id}@example.com`, phone: "", avatar: "", online: false, last_online_at: null, updated_at: "2026-10-14T00:00:00Z" })) } }
+}
+
+function DirectoryDiscoveryProbe() {
+  const { applyEntitySnapshot, contacts, contactApps, ensureUsers, refreshContacts } = useClientData()
+  return <>
+    <button onClick={() => void refreshContacts()}>refresh directory</button>
+    <button onClick={() => void ensureUsers(["user-2"])}>lookup inactive user</button>
+    <button onClick={() => applyEntitySnapshot({ users: [], apps: [], groups: [], conversations: [], removed: [], versions: {} }, [{ type: "user", id: "user-1" }], () => true)}>change directory metadata</button>
+    <output data-testid="directory-users">{contacts.map(({ id, name }) => `${id}:${name}`).join(",")}</output>
+    <output data-testid="directory-apps">{contactApps.map(({ id }) => id).join(",")}</output>
+  </>
+}
+
+function EntitySnapshotProbe() {
+  const { applyEntitySnapshot, getConversation, updateConversationLastReadSeq, updateConversationPinned } = useClientData()
+  const conversation = getConversation("group-1")
+  function apply(revision: number) {
+    if (!conversation) return
+    applyEntitySnapshot({
+      users: [], apps: [], groups: [], removed: [], versions: { "group:group-1": revision },
+      conversations: [{ ...conversation, entityRevision: revision, avatar: revision === 3 ? "new.webp" : "old.webp",
+        members: [{ id: "user-1", type: "user", avatar: "", email: "", name: "User", nickname: "", phone: "", role: revision === 3 ? "admin" : "member" }],
+        lastMessageSeq: 1, lastReadSeq: 0, pinned: false }],
+    }, [{ type: "group", id: "group-1" }], () => true)
+  }
+  return <>
+    <button onClick={() => { updateConversationLastReadSeq("group-1", 8); updateConversationPinned("group-1", true) }}>prepare local state</button>
+    <button onClick={() => apply(3)}>apply entity permissions</button>
+    <button onClick={() => apply(2)}>apply old entity permissions</button>
+    <div data-testid="entity-state">{conversation?.members?.[0]?.role}:{conversation?.avatar}:{conversation?.lastReadSeq}:{String(conversation?.pinned)}</div>
+  </>
 }
 
 function ConversationCount() {

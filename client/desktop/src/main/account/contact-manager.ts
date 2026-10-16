@@ -14,6 +14,7 @@ import { AuthenticatedClient } from "./authenticated-client"
 import { retryNetworkAction } from "./retry"
 import { coalesceRefresh } from "./coalesced-refresh"
 import type { AvatarDescriptor, AvatarMemberDescriptor } from "./avatar-types"
+import { entityKey, readEntitySnapshot, type EntityReference, type EntityWireSnapshot } from "../../../../shared/entity-sync.ts"
 
 type ContactSnapshot = {
   mode: "organization" | "friends"
@@ -24,6 +25,7 @@ type ContactSnapshot = {
 
 export class ContactManager {
   private readonly refreshedAvatars = new Map<string, AvatarDescriptor>()
+  private entityGeneration = 0
   private readonly refreshCoalesced = coalesceRefresh(() => this.refreshDirectory())
 
   constructor(
@@ -40,6 +42,7 @@ export class ContactManager {
   }
 
   private async refreshDirectory() {
+    const generation = this.entityGeneration
     const snapshot = await retryNetworkAction(() => this.fetchDirectory())
     const batches = chunk(snapshot.userIds, 100)
     const users = (
@@ -47,11 +50,21 @@ export class ContactManager {
         retryNetworkAction(() => this.resolveUsers(userIds)),
       )
     ).flat()
+    if (generation !== this.entityGeneration) {
+      void this.refresh().catch(() => undefined)
+      return
+    }
+    this.refreshedAvatars.clear()
+    const retainRevision = <T extends { id: string; payload: unknown }>(type: EntityReference["type"], rows: T[]) => rows.map((row) => {
+      const previous = this.database.getContactPayload(type, row.id)
+      return isRecord(previous) && isRecord(row.payload) && typeof previous.entity_revision === "number"
+        ? { ...row, payload: { ...row.payload, entity_revision: previous.entity_revision } } : row
+    })
     this.database.replaceContacts({
       mode: snapshot.mode,
-      users,
-      groups: snapshot.groups,
-      apps: snapshot.apps,
+      users: retainRevision("user", users),
+      groups: retainRevision("group", snapshot.groups),
+      apps: retainRevision("app", snapshot.apps),
     })
   }
 
@@ -167,10 +180,43 @@ export class ContactManager {
     type: "user" | "group" | "app",
     entityId: string,
   ): AvatarDescriptor | undefined {
-    return (
-      this.refreshedAvatars.get(`${type}:${entityId}`) ??
+    const descriptor = this.refreshedAvatars.get(`${type}:${entityId}`) ??
       avatarDescriptor(type, entityId, this.database.getContactPayload(type, entityId))
-    )
+    return descriptor ? this.hydrateAvatarDescriptor(descriptor) : undefined
+  }
+
+  hydrateAvatarDescriptor(descriptor: AvatarDescriptor): AvatarDescriptor {
+    if (descriptor.type !== "group") return descriptor
+    return { ...descriptor, members: descriptor.members?.map((member) => {
+      const current = this.getAvatarDescriptor(member.type, member.id)
+      return current ? { ...member, avatarUrl: current.avatarUrl, name: current.name } : member
+    }) }
+  }
+
+  groupsUsingAvatar(type: "user" | "app", id: string) {
+    return this.getDirectory().groups.flatMap((group) => {
+      const descriptor = this.getAvatarDescriptor("group", group.id)
+      return descriptor && !descriptor.avatarUrl && descriptor.members?.some((member) => member.type === type && member.id === id) ? [group.id] : []
+    })
+  }
+
+  async resolveEntities(entities: EntityReference[]) {
+    return readEntitySnapshot(await this.client.post("/api/client/entities/resolve", { entities }))
+  }
+
+  applyEntities(snapshot: EntityWireSnapshot, entities: EntityReference[]) {
+    this.entityGeneration += 1
+    const wanted = new Set(entities.map(entityKey))
+    const rows = (type: EntityReference["type"], values: Record<string, unknown>[]) =>
+      values.filter((value) => typeof value.id === "string" && wanted.has(`${type}:${value.id}`)).map((value) => ({
+        ...value, entity_revision: snapshot.versions[`${type}:${value.id}`] ?? 0,
+      }))
+    this.database.mergeContacts({
+      users: rows("user", snapshot.users).map(parseUser),
+      apps: rows("app", snapshot.apps).map(parseApp),
+      groups: rows("group", snapshot.groups).map(parseGroup),
+    }, snapshot.removed.filter((entity) => wanted.has(entityKey(entity))))
+    for (const entity of entities) this.refreshedAvatars.delete(entityKey(entity))
   }
 
   updateGroupAvatarDescriptor(entityId: string, avatarUrl: string) {
@@ -185,18 +231,10 @@ export class ContactManager {
     entityId: string,
   ): Promise<AvatarDescriptor | undefined> {
     return retryNetworkAction(async () => {
-      let descriptor: AvatarDescriptor | undefined
-      if (type === "user") {
-        const user = (await this.resolveUsers([entityId]))[0]
-        descriptor = avatarDescriptor(type, entityId, user.payload)
-      } else {
-        const directory = await this.fetchDirectory()
-        const entry =
-          type === "group"
-            ? directory.groups.find((group) => group.id === entityId)
-            : directory.apps.find((app) => app.id === entityId)
-        descriptor = entry ? avatarDescriptor(type, entityId, entry.payload) : undefined
-      }
+      const entity = { type, id: entityId }
+      const snapshot = await this.resolveEntities([entity])
+      this.applyEntities(snapshot, [entity])
+      const descriptor = this.getAvatarDescriptor(type, entityId)
       if (descriptor) this.refreshedAvatars.set(`${type}:${entityId}`, descriptor)
       return descriptor
     })

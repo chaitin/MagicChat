@@ -126,6 +126,7 @@ function createClientDataContextValue(
     projectsLoadingMore: false,
     projectsNextCursor: null,
     projectsRefreshing: false,
+    applyEntitySnapshot: vi.fn(),
     acceptFriendRequest: vi.fn(),
     addGroupConversationMembers: vi.fn(),
     cancelFriendRequest: vi.fn(),

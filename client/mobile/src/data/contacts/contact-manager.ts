@@ -1,10 +1,12 @@
-import type { ClientContactDirectory, ContactGroup, ContactUser } from "@/core/models"
+import type { ClientContactDirectory, ContactGroup, ContactUser, ResolvedClientUser } from "@/core/models"
 import type { AuthenticatedTarget } from "@/core/server-target"
 import { fetchContacts } from "@/data/contacts/contacts-api"
 import { applyContactProfileBatch } from "@/data/contacts/contact-profile-snapshot"
 import { mergeUserProfiles, readContactDirectory, readUserProfiles, replaceContactDirectory } from "@/data/contacts/contact-cache-store"
 import { createServerKey } from "@/data/server-key"
 import { resolveClientUsers } from "@/data/users/user-profiles-api"
+import type { resolveClientEntities } from "@/data/contacts/entity-sync-api"
+import { preserveEntityMetadata, type EntityReference } from "../../../../shared/entity-sync"
 
 const PROFILE_TTL = 5 * 60_000
 const MISSING_TTL = 30_000
@@ -47,16 +49,23 @@ class ContactManager {
     if (!task) {
       task = (async () => {
         await this.getSnapshot(target)
-        const revision = this.mutationRevisions.get(key) ?? 0
-        const directory = await fetchContacts(target)
-        return this.enqueueWrite(key, async () => {
-          if ((this.mutationRevisions.get(key) ?? 0) !== revision) {
-            return this.getSnapshot(target)
-          }
-          await replaceContactDirectory(target, directory)
-          const current = await this.getSnapshot(target)
-          return this.commit(target, { ...current, directory })
-        })
+        for (;;) {
+          const revision = this.mutationRevisions.get(key) ?? 0
+          const directory = await fetchContacts(target)
+          const result = await this.enqueueWrite(key, async () => {
+            if ((this.mutationRevisions.get(key) ?? 0) !== revision) return null
+            const current = await this.getSnapshot(target)
+            const retain = <T extends { id: string; entityRevision?: number }>(fresh: T[], old: T[]) => fresh.map((item) => ({
+              ...item, entityRevision: old.find((value) => value.id === item.id)?.entityRevision,
+            }))
+            const next = { ...directory, apps: retain(directory.apps, current.directory.apps), groups: retain(directory.groups, current.directory.groups) }
+            await replaceContactDirectory(target, next)
+            return this.commit(target, { ...current, directory: next })
+          })
+          // A profile event can invalidate metadata without discovering new IDs.
+          // Retry discovery instead of silently treating the old directory as fresh.
+          if (result) return result
+        }
       })().finally(() => this.refreshes.delete(key))
       this.refreshes.set(key, task)
     }
@@ -69,6 +78,41 @@ class ContactManager {
 
   async refreshUsers(target: AuthenticatedTarget, rawIds: string[]) {
     return this.queueUsers(target, rawIds, true)
+  }
+
+  async applyEntities(
+    target: AuthenticatedTarget,
+    incoming: Awaited<ReturnType<typeof resolveClientEntities>>,
+    entities: EntityReference[],
+    isCurrent: (entity: EntityReference) => boolean,
+  ) {
+    const key = targetKey(target)
+    this.mutationRevisions.set(key, (this.mutationRevisions.get(key) ?? 0) + 1)
+    return this.enqueueWrite(key, async () => {
+      const current = await this.getSnapshot(target)
+      const wanted = (type: EntityReference["type"], id: string) =>
+        entities.some((entity) => entity.type === type && entity.id === id && isCurrent(entity))
+      const profiles: ResolvedClientUser[] = incoming.users.filter((user) => wanted("user", user.id))
+      const missing = incoming.removed.filter((entity) => entity.type === "user" && wanted("user", entity.id)).map((entity) => entity.id)
+      await mergeUserProfiles(target, profiles, missing, Date.now() + MISSING_TTL, true)
+      const ids = [...profiles.map((profile) => profile.id), ...missing]
+      const rows = await readUserProfiles(target, ids)
+      const replace = <T extends { id: string; entityRevision?: number }>(type: EntityReference["type"], old: T[], fresh: T[]) => [
+        ...old.filter((item) => !wanted(type, item.id)),
+        ...fresh.filter((item) => wanted(type, item.id)).map((item) => preserveEntityMetadata(old.find((value) => value.id === item.id), item)),
+      ]
+      const directory = {
+        ...current.directory,
+        apps: replace("app", current.directory.apps, incoming.apps),
+        groups: replace("group", current.directory.groups, incoming.groups),
+      }
+      await replaceContactDirectory(target, directory)
+      const latest = await this.getSnapshot(target)
+      return this.commit(target, {
+        ...applyContactProfileBatch(latest, ids, rows, Date.now()),
+        directory,
+      })
+    })
   }
 
   private queueUsers(target: AuthenticatedTarget, rawIds: string[], force: boolean) {
@@ -106,10 +150,10 @@ class ContactManager {
   }
 
   async upsertGroup(target: AuthenticatedTarget, group: ContactGroup) {
-    return this.changeGroups(target, (groups) => [...groups.filter((item) => item.id !== group.id), group])
+    return this.changeGroups(target, (groups) => [...groups.filter((item) => item.id !== group.id), preserveEntityMetadata(groups.find((item) => item.id === group.id), group)])
   }
   async patchGroup(target: AuthenticatedTarget, id: string, patch: Partial<ContactGroup>) {
-    return this.changeGroups(target, (groups) => groups.map((group) => group.id === id ? { ...group, ...patch, id, type: "group" } : group))
+    return this.changeGroups(target, (groups) => groups.map((group) => group.id === id ? preserveEntityMetadata(group, { ...group, ...patch, id, type: "group", entityRevision: patch.entityRevision }) : group))
   }
   async removeGroup(target: AuthenticatedTarget, id: string) {
     return this.changeGroups(target, (groups) => groups.filter((group) => group.id !== id))

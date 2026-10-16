@@ -58,6 +58,23 @@ function repository() {
   return { database, contacts }
 }
 
+test("定向资料合并保留无关联系人，拒绝低版本并支持撤销可见性", () => {
+  const { database, contacts } = repository()
+  const id = "00000000-0000-0000-0000-000000000011"
+  const value = {
+    ...contacts.getDirectory().users[0]!, id, name: "新姓名", nickname: "新昵称", avatar: "new.webp",
+    updatedAt: "2026-01-02T00:00:00Z", payload: { avatar: "new.webp", entity_revision: 3 },
+  }
+  contacts.merge({ users: [value], apps: [], groups: [] }, [])
+  contacts.merge({ users: [{ ...value, nickname: "旧昵称", payload: { entity_revision: 2 } }], apps: [], groups: [] }, [])
+  assert.equal(contacts.getDirectory().users.length, 2)
+  assert.equal(contacts.resolveDisplayName("user", id), "新昵称")
+  assert.equal(contacts.getDirectory().apps.length, 1)
+  contacts.merge({ users: [], apps: [], groups: [] }, [{ type: "user", id }])
+  assert.equal(contacts.getDirectory().users.length, 1)
+  database.close()
+})
+
 test("按通讯录现查发送者名字", () => {
   const { database, contacts } = repository()
   assert.equal(contacts.resolveDisplayName("user", "00000000-0000-0000-0000-000000000011"), "小张")

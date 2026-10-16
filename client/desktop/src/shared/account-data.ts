@@ -92,7 +92,8 @@ export type AccountDataChangedEvent = {
   revision: number
   domains: AccountDataDomain[]
   conversationIds: string[]
-  avatarChange?: { type: "user" | "group"; id: string }
+  avatarChange?: { type: "user" | "group" | "app"; id: string }
+  avatarChanges?: { type: "user" | "group" | "app"; id: string }[]
 }
 
 export type ConversationPresenceSender = {

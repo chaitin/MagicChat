@@ -177,8 +177,11 @@ func (s *Service) listUsers(db *gorm.DB, keyword string, userIDs []string) ([]Us
 	return result, nil
 }
 
-func (s *Service) listApps(db *gorm.DB, identity Identity, keyword string) ([]App, error) {
+func (s *Service) listApps(db *gorm.DB, identity Identity, keyword string, requestedIDs ...[]string) ([]App, error) {
 	query := db.Model(&store.App{})
+	if len(requestedIDs) > 0 {
+		query = query.Where("apps.id IN ?", requestedIDs[0])
+	}
 	if identity.Type == IdentityTypeApp {
 		query = appapp.ApplyUsableScope(query).
 			Where("visibility = ? OR id = ?", store.AppVisibilityPublic, identity.ID)
@@ -204,7 +207,7 @@ func (s *Service) listApps(db *gorm.DB, identity Identity, keyword string) ([]Ap
 	return result, nil
 }
 
-func (s *Service) listGroups(db *gorm.DB, identity Identity, keyword string) ([]Group, error) {
+func (s *Service) listGroups(db *gorm.DB, identity Identity, keyword string, requestedIDs ...[]string) ([]Group, error) {
 	memberType := store.ConversationMemberTypeUser
 	if identity.Type == IdentityTypeApp {
 		memberType = store.ConversationMemberTypeApp
@@ -213,6 +216,9 @@ func (s *Service) listGroups(db *gorm.DB, identity Identity, keyword string) ([]
 	query := db.Model(&store.Conversation{}).
 		Where("kind = ? AND status = ?", store.ConversationKindGroup, store.ConversationStatusActive).
 		Where("(visibility = ? OR "+memberExistsSQL+")", store.ConversationVisibilityPublic, memberType, identity.ID)
+	if len(requestedIDs) > 0 {
+		query = query.Where("conversations.id IN ?", requestedIDs[0])
+	}
 	if keyword != "" {
 		query = query.Where("LOWER(name) LIKE ?", "%"+keyword+"%")
 	}

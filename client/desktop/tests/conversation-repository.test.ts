@@ -25,6 +25,32 @@ function conversation(id: string, overrides: Record<string, unknown> = {}) {
   }
 }
 
+test("群权限实体更新不改已读或置顶，并传播到已打开话题", () => {
+  const database = new DatabaseSync(":memory:")
+  initializeAccountSchema(database)
+  const repository = new ConversationRepository(database)
+  repository.upsertCurrent([
+    conversation("group-1", { pinned: true, lastMessageSeq: 8, lastReadSeq: 3, unreadCount: 5,
+      payload: { id: "group-1", type: "group", name: "Old", members: [] } }),
+    conversation("topic-1", { type: "topic", payload: { topic: { parent_conversation_id: "group-1", archived: false }, members: [] } }),
+  ])
+  const members = [{ id: "user-1", type: "user", role: "admin" }]
+  repository.applyEntity(conversation("group-1", { name: "New", avatar: "new.webp", payload: {
+    id: "group-1", type: "group", name: "New", avatar: "new.webp", members, can_send: true,
+  } }), 3)
+  const row = repository.list().find((item) => item.id === "group-1")!
+  assert.equal(row.name, "New")
+  assert.equal(row.pinned, true)
+  assert.equal(row.unreadCount, 5)
+  assert.deepEqual((repository.getPayload("group-1") as { members: unknown }).members, members)
+  const child = repository.getPayload("topic-1") as Record<string, unknown>
+  assert.deepEqual(child.members, members)
+  repository.upsertCurrent([conversation("group-1", { payload: { id: "group-1", name: "Old", members: [] } })])
+  assert.deepEqual((repository.getPayload("group-1") as { members: unknown }).members, members)
+  assert.deepEqual(repository.relatedIds("group-1").sort(), ["group-1", "topic-1"])
+  database.close()
+})
+
 test("只查看话题不算参与，加入后才进入当前会话", () => {
   const database = new DatabaseSync(":memory:")
   initializeAccountSchema(database)

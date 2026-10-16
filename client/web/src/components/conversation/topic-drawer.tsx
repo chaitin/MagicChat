@@ -103,7 +103,7 @@ function TopicDrawerContent({
     updateMessageTopic,
     usersById,
   } = useClientData()
-  const [detail, setDetail] = React.useState<ClientTopicDetail | null>(null)
+  const [detail, setDetail] = React.useState<(ClientTopicDetail & { permissionsRevision?: number }) | null>(null)
   const [error, setError] = React.useState("")
   const [loading, setLoading] = React.useState(Boolean(open && conversationId))
   const [mutating, setMutating] = React.useState(false)
@@ -115,6 +115,7 @@ function TopicDrawerContent({
   const [replyTarget, setReplyTarget] =
     React.useState<ConversationDraftReplyTarget | null>(null)
   const [richTextMode, setRichTextMode] = React.useState(false)
+  const parentRevision = detail ? getConversation(detail.parentConversation.id)?.entityRevision : undefined
   React.useEffect(() => {
     if (!open || !conversationId) {
       return
@@ -123,7 +124,7 @@ function TopicDrawerContent({
     void getConversationTopic(conversationId)
       .then((value) => {
         if (!active) return
-        setDetail(value)
+        setDetail({ ...value, permissionsRevision: parentRevision })
         ensureConversationMessages(value.conversation.id)
       })
       .catch((requestError) => {
@@ -137,7 +138,7 @@ function TopicDrawerContent({
     return () => {
       active = false
     }
-  }, [conversationId, ensureConversationMessages, open])
+  }, [conversationId, ensureConversationMessages, open, parentRevision])
 
   const detailConversation = detail?.conversation ?? null
   const listedConversation = detailConversation
@@ -451,7 +452,7 @@ function TopicDrawerContent({
             draftMentions={draftMentions}
             headerActions={
               <>
-                {detail?.canArchive &&
+                {detail?.canArchive && detail.permissionsRevision === parentRevision &&
                   conversation.canSend !== false &&
                   !conversation.topic?.archived && (
                     <TopicArchiveMenu
@@ -508,7 +509,7 @@ function TopicDrawerContent({
             onSendVideo={sendVideo}
             onSendVoice={sendVoice}
             readOnlyFooter={
-              detail?.canParticipate &&
+              detail?.canParticipate && detail.permissionsRevision === parentRevision &&
               conversation.canSend !== false &&
               !conversation.topic?.participating &&
               !conversation.topic?.archived ? (
@@ -594,23 +595,24 @@ export function TopicArchiveAction({
 }) {
   const { getConversation, refreshConversations, updateMessageTopic } =
     useClientData()
-  const [detail, setDetail] = React.useState<ClientTopicDetail | null>(null)
+  const [detail, setDetail] = React.useState<(ClientTopicDetail & { permissionsRevision?: number }) | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [confirmOpen, setConfirmOpen] = React.useState(false)
+  const parentRevision = detail ? getConversation(detail.parentConversation.id)?.entityRevision : undefined
 
   React.useEffect(() => {
     let active = true
     void getConversationTopic(conversationId)
       .then((value) => {
-        if (active) setDetail(value)
+        if (active) setDetail({ ...value, permissionsRevision: parentRevision })
       })
       .catch(() => undefined)
     return () => {
       active = false
     }
-  }, [conversationId])
+  }, [conversationId, parentRevision])
 
-  if (!detail?.canArchive || getConversation(conversationId)?.topic?.archived) {
+  if (!detail?.canArchive || detail.permissionsRevision !== parentRevision || getConversation(conversationId)?.topic?.archived) {
     return null
   }
 

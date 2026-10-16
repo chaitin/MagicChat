@@ -43,6 +43,8 @@ import { isValidAvatarUpload } from "../message-files/selection-policy"
 import { ClientAppManager } from "./client-app-manager"
 import { ContactManager } from "./contact-manager"
 import { ConversationManager } from "./conversation-manager"
+import { conversationIdFromEvent } from "./conversation-parser"
+import { createDesktopEntitySync } from "./entity-sync"
 import { parseConversationMembers } from "./conversation-members"
 import { parseConversationPresenceEvent } from "./conversation-presence"
 import { parseConversationTopic } from "./conversation-topic"
@@ -67,6 +69,7 @@ export class AccountRuntime {
   private mediaManager?: MediaManager
   private searchManager?: SearchManager
   private realtimeManager?: RealtimeManager
+  private entitySync?: ReturnType<typeof createDesktopEntitySync>
   private initialization?: Promise<void>
   private revision = 0
   private initialized = false
@@ -720,6 +723,8 @@ export class AccountRuntime {
     this.initialized = false
     this.realtimeManager?.close()
     this.realtimeManager = undefined
+    this.entitySync?.dispose()
+    this.entitySync = undefined
     this.mediaManager?.close()
     this.mediaManager = undefined
     this.searchManager = undefined
@@ -788,6 +793,16 @@ export class AccountRuntime {
         this.projectManager,
         currentUserAvatar,
       )
+      this.entitySync = createDesktopEntitySync({
+        database: this.database,
+        contacts: this.contactManager,
+        conversations: this.conversationManager,
+        avatars: this.avatarManager,
+        currentUser: currentUserAvatar,
+        isCurrent: () => !this.closed,
+        onChanged: (ids, avatars) => this.notifyChanged(["contacts", "conversations", "messages"], ids, avatars),
+        onError: (error) => { if (!this.closed) console.warn("同步实体资料失败", error) },
+      })
       const credential = this.input.token
       this.realtimeManager = new RealtimeManager({
         serverUrl: this.input.serverUrl,
@@ -827,7 +842,7 @@ export class AccountRuntime {
   private async synchronize() {
     const results = await Promise.allSettled([
       this.conversationManager!.refresh(),
-      this.contactManager!.refresh(),
+      this.entitySync!.reconcile(),
     ])
     const failure = results.find((result) => result.status === "rejected")
     if (failure?.status === "rejected") throw failure.reason
@@ -836,6 +851,8 @@ export class AccountRuntime {
   }
 
   private async applyRealtimeEvent(event: RealtimeEvent) {
+    if (this.entitySync?.notify(event.name, event.payload)) return
+    if (event.name === "conversation.removed") this.entitySync?.forget(conversationIdFromEvent(event.payload))
     const presenceEvent = parseConversationPresenceEvent(
       this.input.targetId,
       event.name,
@@ -910,7 +927,7 @@ export class AccountRuntime {
   private notifyChanged(
     domains: AccountDataDomain[],
     conversationIds: string[],
-    avatarChange?: AccountDataChangedEvent["avatarChange"],
+    avatarChange?: AccountDataChangedEvent["avatarChange"] | AccountDataChangedEvent["avatarChanges"],
   ) {
     this.revision += 1
     this.input.onDataChanged({
@@ -918,7 +935,9 @@ export class AccountRuntime {
       revision: this.revision,
       domains,
       conversationIds,
-      ...(avatarChange ? { avatarChange } : {}),
+      ...(Array.isArray(avatarChange)
+        ? { avatarChanges: avatarChange, ...(avatarChange.length === 1 ? { avatarChange: avatarChange[0] } : {}) }
+        : avatarChange ? { avatarChange } : {}),
     })
   }
 

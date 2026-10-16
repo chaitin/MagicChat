@@ -28,6 +28,8 @@ export class AvatarManager {
   private readonly avatarDirectory: string
   private readonly inFlight = new Map<string, Promise<AvatarResult>>()
   private readonly resourceInFlight = new Map<string, Promise<AvatarCacheRecord | undefined>>()
+  private readonly generations = new Map<string, number>()
+  private readonly compositeInputs = new Map<string, string>()
 
   constructor(
     accountDirectory: string,
@@ -45,12 +47,15 @@ export class AvatarManager {
   async getAvatar(request: Omit<AvatarRequest, "targetId">): Promise<AvatarResult> {
     validateReference(request.type, request.id)
     if (request.cacheOnly === true) return this.resolveCachedAvatar(request)
-    const key = `${request.type}:${request.id}:${request.theme}`
+    const resolved = request.type === "topic" ? await this.resolveDescriptor(request.type, request.id) : undefined
+    const identity = resolved ?? request
+    const generation = this.generations.get(`${identity.type}:${identity.id}`) ?? 0
+    const key = `${request.type}:${request.id}:${request.theme}:${generation}`
     if (request.refresh === true) await this.inFlight.get(key)?.catch(() => undefined)
     const operationKey = request.refresh === true ? `${key}:refresh` : key
     const existing = this.inFlight.get(operationKey)
     if (existing) return existing
-    const operation = this.resolveAvatar(request).finally(() => this.inFlight.delete(operationKey))
+    const operation = this.resolveAvatar(request, generation).finally(() => this.inFlight.delete(operationKey))
     this.inFlight.set(operationKey, operation)
     return operation
   }
@@ -60,6 +65,7 @@ export class AvatarManager {
     const descriptor = type === "project" ? undefined : await this.resolveDescriptor(type, entityId)
     const resolvedType = descriptor?.type ?? fallbackTypeFor(type)
     const resolvedId = descriptor?.id ?? entityId
+    this.markChanged(resolvedType, resolvedId)
     const cacheTypes =
       resolvedType === "group"
         ? [
@@ -72,6 +78,15 @@ export class AvatarManager {
         : [resolvedType]
     const records = this.database.deleteAvatarCaches(cacheTypes, resolvedId)
     await Promise.all(records.map((record) => removeFile(this.localPath(record.localFile))))
+  }
+
+  markChanged(type: AvatarType, id: string) {
+    const key = `${type}:${id}`
+    this.generations.set(key, (this.generations.get(key) ?? 0) + 1)
+    if (type === "group") {
+      this.compositeInputs.delete(`group-composite-v${compositeStyleVersion}-light:${id}`)
+      this.compositeInputs.delete(`group-composite-v${compositeStyleVersion}-dark:${id}`)
+    }
   }
 
   async readResource(resourceKey: string): Promise<AvatarResource> {
@@ -117,7 +132,7 @@ export class AvatarManager {
     return { status: "fallback", type }
   }
 
-  private async resolveAvatar(request: Omit<AvatarRequest, "targetId">): Promise<AvatarResult> {
+  private async resolveAvatar(request: Omit<AvatarRequest, "targetId">, generation: number): Promise<AvatarResult> {
     const projectCache =
       request.type === "project" ? this.database.getAvatarCache("project", request.id) : undefined
     const projectCacheAvailable = projectCache
@@ -143,6 +158,8 @@ export class AvatarManager {
         ? { status: "ready", type: "project", resourceUrl: resourceUrl(projectCache) }
         : { status: "fallback", type: fallbackTypeFor(request.type) }
     }
+    const reference = descriptor ?? request
+    if ((this.generations.get(`${reference.type}:${reference.id}`) ?? 0) !== generation) return this.getAvatar(request)
     const fallbackType = descriptor?.type ?? fallbackTypeFor(request.type)
     if (!descriptor) return { status: "fallback", type: fallbackType }
     if (descriptor.type === "group" && !descriptor.avatarUrl) {
@@ -164,13 +181,15 @@ export class AvatarManager {
     entityId: string,
   ): Promise<AvatarDescriptor | undefined> {
     if (type === "group") {
-      return (
-        this.contacts.getAvatarDescriptor("group", entityId) ??
-        this.conversations.getAvatarDescriptor("group", entityId)
-      )
+      const descriptor = this.contacts.getAvatarDescriptor("group", entityId) ?? this.conversations.getAvatarDescriptor("group", entityId)
+      return descriptor ? this.contacts.hydrateAvatarDescriptor(descriptor) : undefined
     }
     if (type === "topic") {
-      return this.conversations.getAvatarDescriptor("topic", entityId)
+      const descriptor = this.conversations.getAvatarDescriptor("topic", entityId)
+      if (descriptor?.type === "group") {
+        return this.contacts.getAvatarDescriptor("group", descriptor.id) ?? this.contacts.hydrateAvatarDescriptor(descriptor)
+      }
+      return descriptor
     }
     if (type === "user" || type === "app") {
       if (type === "user" && entityId === this.currentUser.id) return this.currentUser
@@ -183,7 +202,8 @@ export class AvatarManager {
     descriptor: AvatarDescriptor | AvatarMemberDescriptor,
     refresh = false,
   ): Promise<AvatarCacheRecord | undefined> {
-    const key = `${descriptor.type}:${descriptor.id}`
+    const generation = this.generations.get(`${descriptor.type}:${descriptor.id}`) ?? 0
+    const key = `${descriptor.type}:${descriptor.id}:${generation}`
     const existing = this.resourceInFlight.get(key)
     if (existing && !refresh) return existing
     if (existing) await existing.catch(() => undefined)
@@ -198,15 +218,18 @@ export class AvatarManager {
     descriptor: AvatarDescriptor | AvatarMemberDescriptor,
     refresh = false,
   ): Promise<AvatarCacheRecord | undefined> {
+    const reference = `${descriptor.type}:${descriptor.id}`
+    const generation = this.generations.get(reference) ?? 0
     const cached = this.database.getAvatarCache(descriptor.type, descriptor.id)
     const cachedAvailable = cached ? await fileExists(this.localPath(cached.localFile)) : false
     const now = Date.now()
 
-    if (!refresh && cached && cachedAvailable && now - cached.checkedAt < AVATAR_MAX_AGE_MS) return cached
+    const descriptorSource = normalizeSourceUrl(this.serverUrl, descriptor.avatarUrl)
+    if (!refresh && cached && cachedAvailable && cached.sourceUrl === descriptorSource && now - cached.checkedAt < AVATAR_MAX_AGE_MS) return cached
     let currentDescriptor = descriptor
     if (
       (descriptor.type === "user" || descriptor.type === "group" || descriptor.type === "app") &&
-      (refresh || !descriptor.avatarUrl || (cached && cachedAvailable))
+      (refresh || (cached && cachedAvailable && cached.sourceUrl === descriptorSource))
     ) {
       try {
         const refreshed = await this.contacts.refreshAvatarDescriptor(
@@ -220,6 +243,7 @@ export class AvatarManager {
       }
     }
     const sourceUrl = normalizeSourceUrl(this.serverUrl, currentDescriptor.avatarUrl)
+    if ((this.generations.get(reference) ?? 0) !== generation) return this.database.getAvatarCache(descriptor.type, descriptor.id)
     if (!refresh && cached && cachedAvailable && cached.sourceUrl === sourceUrl) {
       this.database.touchAvatarCache(cached.type, cached.entityId, now)
       return { ...cached, checkedAt: now }
@@ -248,6 +272,11 @@ export class AvatarManager {
         downloadedAt: now,
         checkedAt: now,
       }
+      if ((this.generations.get(reference) ?? 0) !== generation) {
+        const current = this.database.getAvatarCache(descriptor.type, descriptor.id)
+        if (current?.localFile !== localFile) await removeFile(this.localPath(localFile))
+        return current
+      }
       this.database.upsertAvatarCache(record)
       if (cached && cached.localFile !== localFile)
         await removeFile(this.localPath(cached.localFile))
@@ -263,17 +292,20 @@ export class AvatarManager {
     refresh = false,
   ): Promise<AvatarResult> {
     const cacheType = `group-composite-v${compositeStyleVersion}-${theme}`
+    const inputKey = `${cacheType}:${descriptor.id}`
+    const generation = this.generations.get(`group:${descriptor.id}`) ?? 0
+    let inputSignature = compositeSignature(selectGroupMembers(descriptor.members ?? []))
     const legacy = this.database.deleteAvatarCache(`group-composite-${theme}`, descriptor.id)
     if (legacy) await removeFile(this.localPath(legacy.localFile))
     const cached = this.database.getAvatarCache(cacheType, descriptor.id)
     const cachedAvailable = cached ? await fileExists(this.localPath(cached.localFile)) : false
-    if (!refresh && cached && cachedAvailable && Date.now() - cached.checkedAt < AVATAR_MAX_AGE_MS) {
+    if (!refresh && cached && cachedAvailable && this.compositeInputs.get(inputKey) === inputSignature && Date.now() - cached.checkedAt < AVATAR_MAX_AGE_MS) {
       return { status: "ready", type: "group", resourceUrl: resourceUrl(cached) }
     }
 
     let currentDescriptor = descriptor
     let validatedAt: number | undefined
-    if (refresh || (cached && cachedAvailable)) {
+    if (refresh || (cached && cachedAvailable && Date.now() - cached.checkedAt >= AVATAR_MAX_AGE_MS)) {
       try {
         const refreshed = await this.contacts.refreshAvatarDescriptor("group", descriptor.id)
         if (!refreshed) {
@@ -297,6 +329,7 @@ export class AvatarManager {
     }
 
     const members = selectGroupMembers(currentDescriptor.members ?? [])
+    inputSignature = compositeSignature(members)
     if (members.length === 0) return { status: "fallback", type: "group" }
     const grid = members.length <= 4 ? 2 : 3
     const tiles = await Promise.all(
@@ -305,6 +338,9 @@ export class AvatarManager {
         record: await this.ensureOrdinaryAvatar(member, refresh),
       })),
     )
+    if ((this.generations.get(`group:${descriptor.id}`) ?? 0) !== generation) {
+      return cached && cachedAvailable ? { status: "ready", type: "group", resourceUrl: resourceUrl(cached) } : { status: "fallback", type: "group" }
+    }
     const signature = compositeSignature({
       version: compositeStyleVersion,
       groupId: descriptor.id,
@@ -317,6 +353,7 @@ export class AvatarManager {
       })),
     })
     if (cached && cachedAvailable && cached.sourceUrl === `composite:${signature}`) {
+      this.compositeInputs.set(inputKey, inputSignature)
       if (validatedAt) this.database.touchAvatarCache(cacheType, descriptor.id, validatedAt)
       return { status: "ready", type: "group", resourceUrl: resourceUrl(cached) }
     }
@@ -340,7 +377,13 @@ export class AvatarManager {
       downloadedAt: now,
       checkedAt: now,
     }
+    if ((this.generations.get(`group:${descriptor.id}`) ?? 0) !== generation) {
+      const current = this.database.getAvatarCache(cacheType, descriptor.id)
+      if (current?.localFile !== localFile) await removeFile(this.localPath(localFile))
+      return current ? { status: "ready", type: "group", resourceUrl: resourceUrl(current) } : { status: "fallback", type: "group" }
+    }
     this.database.upsertAvatarCache(record)
+    this.compositeInputs.set(inputKey, inputSignature)
     if (cached && cached.localFile !== localFile) await removeFile(this.localPath(cached.localFile))
     return { status: "ready", type: "group", resourceUrl: resourceUrl(record) }
   }

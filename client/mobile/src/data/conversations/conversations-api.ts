@@ -569,7 +569,7 @@ function normalizeConversationAction(
   return normalizeConversation(data.conversation)
 }
 
-function normalizeConversation(
+export function normalizeConversation(
   conversation: ConversationResponse
 ): ClientConversation {
   if (!conversation.created_at || !conversation.id || !conversation.name) {

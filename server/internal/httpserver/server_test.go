@@ -93,6 +93,7 @@ func newTestDatabaseLogger(t *testing.T) gormlogger.Interface {
 
 func migrateTestSchema(db *gorm.DB) error {
 	return db.AutoMigrate(
+		&store.ClientEntityChange{},
 		&store.User{},
 		&store.AdminSession{},
 		&store.UserSession{},

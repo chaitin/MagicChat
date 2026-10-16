@@ -46,7 +46,7 @@ export async function readUserProfiles(target: AuthenticatedTarget, profileIds?:
   return result
 }
 
-export async function mergeUserProfiles(target: AuthenticatedTarget, profiles: ResolvedClientUser[], missingIds: string[], missingUntil: number) {
+export async function mergeUserProfiles(target: AuthenticatedTarget, profiles: ResolvedClientUser[], missingIds: string[], missingUntil: number, authoritativeMissing = false) {
   const key = createServerKey(target)
   const now = Date.now()
   await databaseService.transaction("contacts.profiles.merge", async (transaction) => {
@@ -55,15 +55,20 @@ export async function mergeUserProfiles(target: AuthenticatedTarget, profiles: R
         `INSERT INTO cached_user_profiles (server_key,user_id,profile_user_id,payload_json,version,cached_at,missing_until)
          VALUES (?,?,?,?,?,?,NULL) ON CONFLICT(server_key,user_id,profile_user_id) DO UPDATE SET
          payload_json=excluded.payload_json,version=excluded.version,cached_at=excluded.cached_at,missing_until=NULL
-         WHERE cached_user_profiles.version IS NULL OR cached_user_profiles.version <= excluded.version`,
+         WHERE COALESCE(json_extract(excluded.payload_json, '$.entityRevision'), 0)
+           >= COALESCE(json_extract(cached_user_profiles.payload_json, '$.entityRevision'), 0)
+         AND (COALESCE(json_extract(excluded.payload_json, '$.entityRevision'), 0)
+           > COALESCE(json_extract(cached_user_profiles.payload_json, '$.entityRevision'), 0)
+           OR cached_user_profiles.version IS NULL OR cached_user_profiles.version <= excluded.version)`,
         [key, target.userId, profile.id, JSON.stringify(profile), profile.updatedAt, now]
       )
     }
     for (const id of missingIds) await transaction.run(
       `INSERT INTO cached_user_profiles (server_key,user_id,profile_user_id,payload_json,version,cached_at,missing_until)
        VALUES (?,?,?,NULL,NULL,?,?) ON CONFLICT(server_key,user_id,profile_user_id) DO UPDATE SET
-       payload_json=NULL,version=NULL,cached_at=excluded.cached_at,missing_until=excluded.missing_until`,
-      [key, target.userId, id, now, missingUntil]
+       payload_json=NULL,version=NULL,cached_at=excluded.cached_at,missing_until=excluded.missing_until
+       WHERE ? OR COALESCE(json_extract(cached_user_profiles.payload_json, '$.entityRevision'), 0) = 0`,
+      [key, target.userId, id, now, missingUntil, authoritativeMissing ? 1 : 0]
     )
   })
 }

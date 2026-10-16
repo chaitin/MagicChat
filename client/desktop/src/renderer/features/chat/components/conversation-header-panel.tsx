@@ -406,6 +406,13 @@ function useInfo(targetId: string, conversationId: string) {
       cancelled = true
     }
   }, [targetId, conversationId, revision])
+  useEffect(() => window.desktop?.accountData.onChanged((event) => {
+    if (event.targetId === targetId && event.domains.includes("conversations") && event.conversationIds.includes(conversationId)) {
+      // Revoke controls immediately, before an asynchronous topic permission read.
+      setInfo(null)
+      setRevision((value) => value + 1)
+    }
+  }), [targetId, conversationId])
   return { info, error, reload: () => setRevision((value) => value + 1) }
 }
 

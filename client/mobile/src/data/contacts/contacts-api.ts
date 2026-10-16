@@ -71,7 +71,7 @@ export async function fetchContacts(
   } satisfies ClientContactDirectory
 }
 
-function normalizeContactApp(app: ContactAppResponse): ContactApp {
+export function normalizeContactApp(app: ContactAppResponse): ContactApp {
   if (
     !app.id ||
     !app.name ||
@@ -91,7 +91,7 @@ function normalizeContactApp(app: ContactAppResponse): ContactApp {
   }
 }
 
-function normalizeContactGroup(group: ContactGroupResponse): ContactGroup {
+export function normalizeContactGroup(group: ContactGroupResponse): ContactGroup {
   if (!group.id || !group.name) {
     throw new ApiRequestError("通讯录响应格式不正确")
   }

@@ -3,6 +3,11 @@ import type { DesktopConversation } from "../../../shared/account-data"
 import { parseConversationTopic } from "../conversation-topic.ts"
 import { parseConversationMembers } from "../conversation-members.ts"
 
+const entityFields = ["announcement", "avatar", "can_send", "member_count", "members", "name", "visibility"] as const
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+}
+
 export type StoredConversation = DesktopConversation & { avatar: string; payload: unknown }
 
 export class ConversationRepository {
@@ -49,7 +54,15 @@ export class ConversationRepository {
         current = MAX(conversations.current, excluded.current),
         payload_json = excluded.payload_json
     `)
-    for (const conversation of conversations) {
+    for (const incoming of conversations) {
+      let conversation = incoming
+      const existing = this.getPayload(incoming.id)
+      if (record(existing) && record(incoming.payload) &&
+        Number(existing.entity_revision ?? 0) > Number(incoming.payload.entity_revision ?? 0)) {
+        const payload: Record<string, unknown> = { ...incoming.payload, entity_revision: existing.entity_revision }
+        for (const field of entityFields) if (field in existing) payload[field] = existing[field]
+        conversation = { ...incoming, name: String(payload.name), avatar: String(payload.avatar ?? ""), memberCount: Number(payload.member_count ?? incoming.memberCount), payload }
+      }
       statement.run(
         conversation.id,
         conversation.type,
@@ -72,6 +85,41 @@ export class ConversationRepository {
         JSON.stringify(conversation.payload),
       )
     }
+  }
+
+  applyEntity(conversation: StoredConversation, revision: number) {
+    if (!record(conversation.payload)) return
+    const existing = this.getPayload(conversation.id)
+    if (!record(existing)) {
+      this.upsertCurrent([{ ...conversation, payload: { ...conversation.payload, entity_revision: revision } }])
+      return
+    }
+    if (Number(existing.entity_revision ?? 0) > revision) return
+    const payload: Record<string, unknown> = { ...existing, entity_revision: revision }
+    for (const field of entityFields) if (field in conversation.payload) payload[field] = conversation.payload[field]
+    this.database.prepare(`UPDATE conversations SET name = ?, avatar = ?, member_count = ?,
+      payload_json = ?, current = 1 WHERE id = ?`).run(
+      conversation.name, conversation.avatar, conversation.memberCount, JSON.stringify(payload), conversation.id,
+    )
+    for (const id of this.relatedIds(conversation.id)) {
+      if (id === conversation.id) continue
+      const child = this.getPayload(id)
+      if (!record(child) || !record(child.topic)) continue
+      const next = { ...child, avatar: payload.avatar, members: payload.members,
+        can_send: child.topic.archived !== true && payload.can_send !== false,
+        entity_revision: revision, topic: { ...child.topic, parent_conversation_name: conversation.name } }
+      this.database.prepare("UPDATE conversations SET avatar = ?, payload_json = ? WHERE id = ?").run(
+        conversation.avatar, JSON.stringify(next), id,
+      )
+    }
+  }
+
+  relatedIds(id: string): string[] {
+    const rows = this.database.prepare(`WITH RECURSIVE tree(id) AS (
+      SELECT ? UNION SELECT child.id FROM conversations child JOIN tree
+      ON json_valid(child.payload_json) AND json_extract(child.payload_json, '$.topic.parent_conversation_id') = tree.id
+    ) SELECT id FROM tree`).all(id) as { id: string }[]
+    return rows.map((row) => row.id)
   }
 
   hasCurrent(conversationId: string) {

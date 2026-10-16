@@ -10,6 +10,8 @@ import {
 } from "@/lib/client-data-api"
 import type { ClientConversationMessageState } from "@/lib/client-data-context"
 
+import { preserveEntityMetadata } from "../../../shared/entity-sync"
+
 export const messagePageLimit = 20
 export const conversationMessageRetentionLimit = 300
 
@@ -508,9 +510,10 @@ export function mergeConversationSnapshot(
       .filter((conversation) => !removedConversationIds.has(conversation.id))
       .map((conversation) => [conversation.id, conversation])
   )
-  for (const conversation of snapshot) {
-    if (removedConversationIds.has(conversation.id)) continue
-    const previous = byId.get(conversation.id)
+  for (const incoming of snapshot) {
+    if (removedConversationIds.has(incoming.id)) continue
+    const previous = byId.get(incoming.id)
+    const conversation = preserveEntityMetadata(previous, incoming)
     if (!previous || (previous.lastMessageSeq <= conversation.lastMessageSeq && previous.lastReadSeq <= conversation.lastReadSeq)) {
       byId.set(conversation.id, conversation)
       continue

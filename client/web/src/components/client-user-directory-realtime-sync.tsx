@@ -29,6 +29,7 @@ export function ClientUserDirectoryRealtimeSync() {
     const unsubscribe = subscribeRealtimeEvent(
       "user.profile.updated",
       (payload) => {
+        if (payload && typeof payload === "object" && "revision" in payload && typeof payload.revision === "number") return
         const update = readProfileUpdate(payload)
         if (!update) return
         invalidateUsers([update.userId], update.updatedAt)

@@ -63,6 +63,42 @@ function setup(fetch: () => Promise<ClientConversation[]> = async () => []) {
   return { manager, store, notifications: () => notifications }
 }
 
+test("实体快照更新管理员和头像，不覆盖请求期间的新消息与本地偏好", async () => {
+  const { manager } = setup()
+  await manager.upsert(target, conversation("c-1", { lastMessageSeq: 5, lastReadSeq: 2, unreadCount: 3 }))
+  const startedAt = manager.beginOperation(target)
+  await manager.patch(target, "c-1", { lastMessageSeq: 6, unreadCount: 4, pinned: true })
+  await manager.applyEntity(target, conversation("c-1", {
+    avatar: "new.webp",
+    members: [{ avatar: "", email: "", id: target.userId, name: "User", nickname: "", phone: "", type: "user", role: "admin" }],
+    lastMessageSeq: 5,
+    lastReadSeq: 2,
+    unreadCount: 3,
+  }), 3, startedAt, () => true)
+  const current = await manager.get(target, "c-1")
+  assert.equal(current?.members?.[0]?.role, "admin")
+  assert.equal(current?.avatar, "new.webp")
+  assert.equal(current?.lastMessageSeq, 6)
+  assert.equal(current?.unreadCount, 4)
+  assert.equal(current?.pinned, true)
+  assert.equal(current?.entityRevision, 3)
+  await manager.applyEntity(target, conversation("c-1", { avatar: "old.webp" }), 2, startedAt, () => true)
+  assert.equal((await manager.get(target, "c-1"))?.avatar, "new.webp")
+})
+
+test("离群后的旧实体快照不能复活群聊及其话题", async () => {
+  const { manager } = setup()
+  await manager.upsert(target, [conversation("c-1"), conversation("t-1", {
+    type: "topic", topic: { archived: false, parentConversationId: "c-1", parentConversationName: "Group", parentConversationType: "group", participating: true, sourceMessageId: "m-1", sourceMessageSeq: 1, sourceSender: { id: "u-1", name: "", avatar: "", type: "user" } },
+  })])
+  const startedAt = manager.beginOperation(target)
+  const removed = await manager.removeTree(target, "c-1")
+  await manager.applyEntity(target, conversation("c-1"), 2, startedAt, () => true)
+  assert.deepEqual(removed.sort(), ["c-1", "t-1"])
+  assert.equal(await manager.get(target, "c-1"), null)
+  assert.equal(await manager.get(target, "t-1"), null)
+})
+
 test("a delayed conversation snapshot cannot restore unread after a newer read cursor", async () => {
   const { manager } = setup(async () => [conversation("c-1", { lastMessageSeq: 5, lastReadSeq: 2, unreadCount: 3 })])
   await manager.upsert(target, conversation("c-1", { lastMessageSeq: 5, lastReadSeq: 2, unreadCount: 3 }))

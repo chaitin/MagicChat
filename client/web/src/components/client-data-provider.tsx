@@ -76,6 +76,8 @@ import {
 } from "@/lib/project-data-api"
 import { Button } from "@/components/ui/button"
 import { ClientLoadingPage } from "@/components/client-loading-page"
+import { entityKey, preserveEntityMetadata, type EntityReference } from "../../../shared/entity-sync"
+import type { resolveClientEntities } from "@/lib/client-api/entity-sync"
 import { useConversationActions } from "@/hooks/use-conversation-actions"
 import { useConversationMessageRetention } from "@/hooks/use-conversation-message-retention"
 import { useConversationMessageWindow } from "@/hooks/use-conversation-message-window"
@@ -214,6 +216,8 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     new Map()
   )
   const conversationSnapshotSequenceRef = useRef(0)
+  const entitySnapshotGenerationRef = useRef(0)
+  const contactSnapshotSequenceRef = useRef(0)
   const conversationAccountIdRef = useRef<string | null>(null)
   const conversationAccountGenerationRef = useRef(0)
   const mountedRef = useRef(true)
@@ -290,6 +294,8 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
       let changed = false
       for (const profile of profiles) {
         const current = userCacheRef.current.get(profile.id)
+        if ((current?.profile.entityRevision ?? 0) > (profile.entityRevision ?? 0) &&
+          (!updatedAt || compareUserVersions(current?.updatedAt ?? "", updatedAt) >= 0)) continue
         if (
           current &&
           updatedAt &&
@@ -307,7 +313,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
         }
         userCacheRef.current.set(profile.id, {
           fetchedAt: now,
-          profile,
+          profile: { ...profile, entityRevision: profile.entityRevision ?? current?.profile.entityRevision },
           updatedAt: updatedAt || current?.updatedAt || "",
         })
         unavailableUsersRef.current.delete(profile.id)
@@ -488,7 +494,76 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     if (userIds.length > 0) void ensureUsers(userIds).catch(() => undefined)
   }, [conversationMessageStates, ensureUsers])
 
+  const applyEntitySnapshot = useCallback((
+    snapshot: Awaited<ReturnType<typeof resolveClientEntities>>,
+    entities: EntityReference[],
+    isCurrent: (entity: EntityReference) => boolean,
+  ) => {
+    entitySnapshotGenerationRef.current += 1
+    const generation = conversationAccountGenerationRef.current
+    const valid = (entity: EntityReference) => mountedRef.current &&
+      generation === conversationAccountGenerationRef.current && isCurrent(entity)
+    const wanted = new Set(entities.filter(valid).map(entityKey))
+    for (const user of snapshot.users) {
+      if (!wanted.has(`user:${user.id}`)) continue
+      const current = userCacheRef.current.get(user.id)
+      if ((current?.profile.entityRevision ?? 0) > user.entityRevision) continue
+      cacheUserProfiles([user], user.updatedAt)
+      setMe((me) => me?.id === user.id && valid({ type: "user", id: user.id })
+        ? { ...me, avatar: user.avatar, email: user.email, name: user.name, nickname: user.nickname, phone: user.phone } : me)
+    }
+    for (const entity of snapshot.removed) {
+      if (entity.type !== "user" || !wanted.has(entityKey(entity))) continue
+      userCacheRef.current.delete(entity.id)
+      unavailableUsersRef.current.set(entity.id, Date.now() + unavailableUserCacheTtlMs)
+      setUsersById((current) => { const next = { ...current }; delete next[entity.id]; return next })
+    }
+    const replace = <T extends { id: string; entityRevision?: number }>(type: EntityReference["type"], old: T[], fresh: T[]) => {
+      const accepted = (id: string) => wanted.has(`${type}:${id}`) && valid({ type, id })
+      return [...old.filter((item) => !accepted(item.id)), ...fresh.filter((item) => accepted(item.id))
+        .map((item) => preserveEntityMetadata(old.find((value) => value.id === item.id), item))]
+    }
+    setContactApps((current) => replace("app", current, snapshot.apps))
+    setContactGroups((current) => replace("group", current, snapshot.groups))
+    const removedIds = new Set(entities.filter((entity) => entity.type === "group" && valid(entity) &&
+      !snapshot.conversations.some((item) => item.id === entity.id)).map((entity) => entity.id))
+    for (const item of conversationsRef.current) if (item.topic && removedIds.has(item.topic.parentConversationId)) removedIds.add(item.id)
+    if (removedIds.size) setConversationMessageStates((current) => Object.fromEntries(
+      Object.entries(current).filter(([id]) => !removedIds.has(id))))
+    ++conversationSnapshotSequenceRef.current
+    setConversations((current) => {
+      let next = current
+      for (const entity of entities) {
+        if (entity.type !== "group" || !valid(entity)) continue
+        const incoming = snapshot.conversations.find((item) => item.id === entity.id)
+        if (!incoming) {
+          const removed = new Set([entity.id])
+          for (const item of next) if (item.topic && removed.has(item.topic.parentConversationId)) removed.add(item.id)
+          for (const id of removed) removedConversationIdsRef.current.add(id)
+          next = next.filter((item) => !removed.has(item.id))
+          continue
+        }
+        removedConversationIdsRef.current.delete(entity.id)
+        const existing = next.find((item) => item.id === entity.id)
+        const value = existing ? {
+          ...existing, entityRevision: incoming.entityRevision, announcement: incoming.announcement,
+          avatar: incoming.avatar, canSend: incoming.canSend, memberCount: incoming.memberCount,
+          members: incoming.members, name: incoming.name, visibility: incoming.visibility,
+        } : incoming
+        next = mergeConversationSnapshot(next, [value], removedConversationIdsRef.current).map((item) =>
+          item.topic?.parentConversationId === entity.id ? {
+            ...item, avatar: value.avatar, members: value.members, entityRevision: value.entityRevision,
+            canSend: !item.topic.archived && value.canSend !== false,
+            topic: { ...item.topic, parentConversationName: value.name },
+          } : item)
+      }
+      return next
+    })
+  }, [cacheUserProfiles])
+
   const refreshMe = useCallback(async () => {
+    const entityGeneration = entitySnapshotGenerationRef.current
+    const accountId = conversationAccountIdRef.current
     const isInitialLoad = me === null
     setMeError(null)
     setMeLoading(isInitialLoad)
@@ -496,6 +571,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
 
     try {
       const user = await getCurrentClientUser()
+      if (entityGeneration !== entitySnapshotGenerationRef.current || accountId !== conversationAccountIdRef.current) return
       setMe(user)
       cacheUserProfiles([
         {
@@ -544,6 +620,12 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
   }, [ensureUsers, handleError])
 
   const refreshContacts = useCallback(async () => {
+    let entityGeneration = entitySnapshotGenerationRef.current
+    const accountGeneration = conversationAccountGenerationRef.current
+    const sequence = ++contactSnapshotSequenceRef.current
+    const isCurrent = () => mountedRef.current &&
+      accountGeneration === conversationAccountGenerationRef.current &&
+      sequence === contactSnapshotSequenceRef.current
     const isInitialLoad =
       contacts.length === 0 &&
       contactApps.length === 0 &&
@@ -553,12 +635,26 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     setContactsRefreshing(!isInitialLoad)
 
     try {
-      const nextContacts = await listClientContacts()
-      setContactApps(nextContacts.apps)
+      let nextContacts = await listClientContacts()
+      while (isCurrent() && entityGeneration !== entitySnapshotGenerationRef.current) {
+        entityGeneration = entitySnapshotGenerationRef.current
+        nextContacts = await listClientContacts()
+      }
+      if (!isCurrent()) return
+      setContactApps((current) => nextContacts.apps.map((item) => ({ ...item, entityRevision: current.find((value) => value.id === item.id)?.entityRevision })))
       setContactDirectoryMode(nextContacts.directoryMode)
-      setContactGroups(nextContacts.groups)
+      setContactGroups((current) => nextContacts.groups.map((item) => ({ ...item, entityRevision: current.find((value) => value.id === item.id)?.entityRevision })))
       setContactUserIds(nextContacts.userIds)
+      for (const id of nextContacts.userIds) unavailableUsersRef.current.delete(id)
       await ensureUsers(nextContacts.userIds)
+      if (!isCurrent()) return
+      // Finish any pre-activation lookup first, then bypass its negative cache.
+      const missing = nextContacts.userIds.filter((id) => !userCacheRef.current.has(id))
+      if (missing.length) {
+        for (const id of missing) unavailableUsersRef.current.delete(id)
+        await ensureUsers(missing)
+      }
+      if (!isCurrent()) return
       if (nextContacts.directoryMode === "friends") {
         await refreshFriendRequests()
       } else {
@@ -566,12 +662,15 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
         setOutgoingFriendRequests([])
       }
     } catch (error) {
+      if (!isCurrent()) return
       const requestError = handleError(error, "加载通讯录失败")
       setContactsError(requestError)
       throw requestError
     } finally {
-      setContactsLoading(false)
-      setContactsRefreshing(false)
+      if (isCurrent()) {
+        setContactsLoading(false)
+        setContactsRefreshing(false)
+      }
     }
   }, [
     contactApps.length,
@@ -1738,6 +1837,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
   )
 
   const bootstrap = useCallback(async () => {
+    const entityGeneration = entitySnapshotGenerationRef.current
     const conversationSnapshotSequence =
       ++conversationSnapshotSequenceRef.current
     const generation = ++bootstrapGenerationRef.current
@@ -1764,7 +1864,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
       }
       await minimumLoading
       if (!isCurrent()) return
-      setMe(nextMe)
+      if (entityGeneration === entitySnapshotGenerationRef.current) setMe(nextMe)
       cacheUserProfiles([
         {
           avatar: nextMe.avatar,
@@ -1778,10 +1878,12 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
           type: "user",
         },
       ])
-      setContactApps(nextContacts.apps)
-      setContactDirectoryMode(nextContacts.directoryMode)
-      setContactGroups(nextContacts.groups)
-      setContactUserIds(nextContacts.userIds)
+      if (entityGeneration === entitySnapshotGenerationRef.current) {
+        setContactApps((current) => nextContacts.apps.map((item) => ({ ...item, entityRevision: current.find((value) => value.id === item.id)?.entityRevision })))
+        setContactDirectoryMode(nextContacts.directoryMode)
+        setContactGroups((current) => nextContacts.groups.map((item) => ({ ...item, entityRevision: current.find((value) => value.id === item.id)?.entityRevision })))
+        setContactUserIds(nextContacts.userIds)
+      }
       const accountChanged = shouldReplaceConversationSnapshot(
         conversationAccountIdRef.current,
         nextMe.id
@@ -1981,6 +2083,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
   }
 
   const value: ClientDataContextValue = {
+    applyEntitySnapshot,
     acceptFriendRequest,
     addGroupConversationMembers,
     cancelFriendRequest,

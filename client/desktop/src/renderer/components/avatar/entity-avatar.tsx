@@ -56,9 +56,9 @@ export function EntityAvatar({
       setResult({ status: "fallback", type: defaultFallbackType })
       return
     }
-    function reload(force = false) {
+    function reload(force = false, reset = false) {
       const current = ++generation
-      setResult(null)
+      if (reset) setResult(null)
       void window
         .desktop!.accountData.getAvatar({
           targetId,
@@ -78,14 +78,15 @@ export function EntityAvatar({
           }
         })
     }
-    reload(refresh)
+    reload(refresh, true)
     const unsubscribe =
-      (type === "user" || type === "group") && !cacheOnly
+      (type === "user" || type === "group" || type === "app" || type === "topic") && !cacheOnly
         ? window.desktop.accountData.onChanged((event) => {
             if (
               event.targetId === targetId &&
               ((event.avatarChange?.type === type && event.avatarChange.id === id) ||
-                (type === "group" &&
+                event.avatarChanges?.some((change) => change.type === type && change.id === id) ||
+                ((type === "group" || type === "topic") &&
                   event.domains.includes("contacts") &&
                   event.conversationIds.includes(id)))
             ) {

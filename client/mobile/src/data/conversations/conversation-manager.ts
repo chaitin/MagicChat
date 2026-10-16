@@ -139,6 +139,41 @@ export function createConversationManager(dependencies: Dependencies) {
       return changed
     },
 
+    async applyEntity(
+      target: AuthenticatedTarget,
+      value: ClientConversation,
+      revision: number,
+      startedAt: number,
+      isCurrent: () => boolean,
+    ): Promise<void> {
+      if (!isCurrent()) return
+      const updated = await this.patch(target, value.id, (current) =>
+        !isCurrent() || (current.entityRevision ?? 0) > revision ? {} : {
+          entityRevision: revision,
+          announcement: value.announcement,
+          avatar: value.avatar,
+          canSend: value.canSend,
+          memberCount: value.memberCount,
+          members: value.members,
+          name: value.name,
+          visibility: value.visibility,
+        })
+      if (!updated && isCurrent()) {
+        await this.upsert(target, { ...value, entityRevision: revision }, { source: "http", startedAt })
+      }
+      const topics = await this.list(target)
+      for (const topic of topics) {
+        if (topic.topic?.parentConversationId !== value.id || !isCurrent()) continue
+        await this.patch(target, topic.id, (current) => !isCurrent() ? {} : {
+          avatar: value.avatar,
+          members: value.members,
+          entityRevision: revision,
+          canSend: !current.topic?.archived && value.canSend !== false,
+          topic: current.topic ? { ...current.topic, parentConversationName: value.name } : undefined,
+        })
+      }
+    },
+
     async remove(
       target: AuthenticatedTarget,
       conversationId: string,
@@ -164,6 +199,7 @@ export function createConversationManager(dependencies: Dependencies) {
         nextObservedAt(target, observedAt)
       )
       dependencies.notify(target)
+      return ids
     },
   }
 }

@@ -44,6 +44,7 @@ export class ConversationManager {
   private readonly latestOnOpen = new Map<string, Promise<void>>()
   private readonly checkedLatestAt = new Map<string, number>()
   private refreshGeneration = 0
+  private entityGeneration = 0
 
   constructor(
     private readonly database: AccountDatabase,
@@ -66,8 +67,10 @@ export class ConversationManager {
     return this.refresh()
   }
 
-  async refresh() {
+  async refresh(): Promise<void> {
+    const generation = this.entityGeneration
     const conversations = await retryNetworkAction(() => this.fetchConversations())
+    if (generation !== this.entityGeneration) return this.refresh()
     this.refreshGeneration += 1
     this.database.upsertCurrentConversations(conversations)
     const currentConversationIds = new Set(conversations.map((conversation) => conversation.id))
@@ -242,9 +245,8 @@ export class ConversationManager {
     }
     if (name === "conversation.removed") {
       const conversationId = conversationIdFromEvent(payload)
-      this.database.removeCurrentConversation(conversationId)
-      this.virtualMessages.delete(conversationId)
-      return { conversationIds: [conversationId], messages: false }
+      const ids = this.removeEntity(conversationId)
+      return { conversationIds: ids, messages: false }
     }
     if (
       name === "message.reactions_updated" ||
@@ -804,6 +806,21 @@ export class ConversationManager {
     const conversation = parseConversation(data.conversation, this.currentUserId)
     this.database.upsertCurrentConversations([conversation])
     return this.database.listConversations().find((item) => item.id === conversation.id)!
+  }
+
+  applyEntity(payload: unknown, revision: number) {
+    this.entityGeneration += 1
+    this.database.applyConversationEntity(parseConversation(payload, this.currentUserId), revision)
+  }
+
+  removeEntity(id: string) {
+    this.entityGeneration += 1
+    const ids = this.database.removeConversationTree(id)
+    for (const child of ids) {
+      this.virtualMessages.delete(child)
+      this.viewedTopics.delete(child)
+    }
+    return ids
   }
 
   getAvatarDescriptor(type: "group" | "topic", entityId: string): AvatarDescriptor | undefined {

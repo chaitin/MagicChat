@@ -50,7 +50,7 @@ export async function resolveClientUsers(
   })
 }
 
-function normalizeContactUser(user: ContactUserResponse): ContactUser {
+export function normalizeContactUser(user: ContactUserResponse): ContactUser {
   if (!user.email || !user.id || !user.name) {
     throw new ApiRequestError("用户资料响应格式不正确")
   }

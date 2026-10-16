@@ -18,6 +18,8 @@ import { RealtimeDispatcher } from "@/realtime/realtime-dispatcher"
 import { realtimeEvents } from "@/realtime/realtime-protocol"
 import { RealtimeClientSlot } from "@/realtime/realtime-runtime"
 import { RealtimeRecovery } from "@/realtime/realtime-recovery"
+import { createMobileEntitySync } from "@/realtime/entity-sync"
+import { normalizeConversationRemovedPayload } from "@/realtime/realtime-payload"
 
 export function RealtimeProvider({ children }: React.PropsWithChildren) {
   const queryClient = useQueryClient()
@@ -97,6 +99,7 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
     const handleError = (error: unknown) => {
       if (isUnauthorizedError(error) && isCurrent()) void markReauthRequired(identity.accountId)
     }
+    const entitySync = createMobileEntitySync(queryClient, activeServer, { isCurrent, onError: handleError })
     const dispatchTarget = dispatcher.activate(handleError)
     let synchronization: ReturnType<typeof createRealtimeSynchronization> | undefined
     let connectStartedAt = performance.now()
@@ -117,7 +120,7 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
           getActiveConversationId: () => activeConversationIdRef.current,
           isCurrent,
         })
-        return synchronization()
+        return Promise.all([synchronization(), entitySync.reconcile()]).then(() => undefined)
       },
     })
     const unsubscribeSnapshot = client.subscribe(() => {
@@ -131,6 +134,11 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
     const unsubscribeEvents = client.subscribeEvent((event, payload) => {
       if (!isCurrent()) return
       if (event === realtimeEvents.systemReady) return
+      if (entitySync.notify(event, payload)) return
+      if (event === realtimeEvents.conversationRemoved) {
+        try { entitySync.forget(normalizeConversationRemovedPayload(payload)) }
+        catch { return }
+      }
       dispatchTarget.enqueue(async () => {
         if (!isCurrent()) return
         const result = (await applyRealtimeEvent(queryClient, activeServer, event, payload, {
@@ -152,6 +160,7 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
       if (status === "active" && !wasActive && isCurrent()) {
         client.connect()
         connectionRecovery.retry()
+        void entitySync.reconcile().catch(handleError)
         void prepareMessageNotifications().catch(() => undefined)
         void refreshClientDataOnForeground(queryClient, activeServer, {
           getActiveConversationId: () => activeConversationIdRef.current,
@@ -167,6 +176,7 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
     return () => {
       isActive = false
       connectionRecovery.dispose()
+      entitySync.dispose()
       dispatchTarget.dispose()
       runtimeSlot.clear(client)
       if (clientRef.current === record) clientRef.current = null

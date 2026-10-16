@@ -841,7 +841,7 @@ export async function uploadGroupConversationAvatar(
   }
 }
 
-function normalizeConversation(
+export function normalizeConversation(
   conversation: ConversationResponse | undefined
 ): ClientConversation {
   if (!conversation?.created_at || !conversation.id || !conversation.name) {

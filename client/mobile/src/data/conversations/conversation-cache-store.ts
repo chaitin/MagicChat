@@ -2,6 +2,7 @@ import type { ClientConversation } from "@/core/models"
 import type { AuthenticatedTarget } from "@/core/server-target"
 import type { DatabaseService } from "@/data/database/database-service"
 import { createServerKey } from "@/data/server-key"
+import { preserveEntityMetadata } from "../../../../shared/entity-sync"
 
 type UpsertOptions = {
   observedAt: number
@@ -73,6 +74,7 @@ function mergeConversation(
   fromSnapshot = false
 ): ClientConversation {
   if (!current) return incoming
+  incoming = preserveEntityMetadata(current, incoming)
 
   const definedIncoming = Object.fromEntries(
     Object.entries(incoming).filter(([, value]) => value !== undefined)
@@ -179,7 +181,11 @@ export function createMemoryConversationCacheStore(): ConversationCacheStore {
         ...existing.conversation,
         ...resolvePatch(existing.conversation, patch),
       }
-      await this.upsertBatch(target, [incoming], options)
+      records(target).set(conversationId, {
+        conversation: mergeConversation(existing.conversation, incoming),
+        observedAt: Math.max(existing.observedAt, options.observedAt),
+        tombstoneAt: null,
+      })
       return true
     },
 
@@ -319,7 +325,7 @@ export function createSQLiteConversationCacheStore(injectedService?: DatabaseSer
           `UPDATE cached_conversations SET
              parent_conversation_id = ?, conversation_type = ?,
              last_activity_at = ?, pinned = ?, muted = ?, unread_count = ?,
-             tombstone_at = NULL, observed_at = ?, cached_at = ?, payload_json = ?
+             tombstone_at = NULL, observed_at = MAX(observed_at, ?), cached_at = ?, payload_json = ?
            WHERE server_key = ? AND user_id = ? AND conversation_id = ?
              AND tombstone_at IS NULL`,
           [merged.topic?.parentConversationId || null, merged.type, merged.lastMessageAt,

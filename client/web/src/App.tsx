@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router"
 
 import { AppLayout } from "@/components/app-layout"
 import { ClientConversationRealtimeSync } from "@/components/client-conversation-realtime-sync"
+import { ClientEntityRealtimeSync } from "@/components/client-entity-realtime-sync"
 import { ClientBrandMetadata } from "@/components/client-brand-metadata"
 import { ClientDataProvider } from "@/components/client-data-provider"
 import { ClientDocumentTitle } from "@/components/client-document-title"
@@ -68,6 +69,7 @@ export function App() {
                   <ClientConversationRealtimeSync />
                   <ClientMessageNotificationSync />
                   <ClientUserDirectoryRealtimeSync />
+                  <ClientEntityRealtimeSync />
                   <AppLayout />
                 </ClientRealtimeProvider>
               </ClientDataProvider>
@@ -134,6 +136,7 @@ function DocumentWorkspaceRoute() {
     <ClientDataProvider>
       <ClientRealtimeProvider>
         <ClientUserDirectoryRealtimeSync />
+                  <ClientEntityRealtimeSync />
         <DocumentPage />
       </ClientRealtimeProvider>
     </ClientDataProvider>
@@ -145,6 +148,7 @@ function TaskWorkspaceRoute() {
     <ClientDataProvider>
       <ClientRealtimeProvider>
         <ClientUserDirectoryRealtimeSync />
+                  <ClientEntityRealtimeSync />
         <ClientDocumentTitle title="任务" />
         <TaskWorkspacePage />
       </ClientRealtimeProvider>

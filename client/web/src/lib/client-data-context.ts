@@ -1,4 +1,6 @@
 import { createContext, useContext, useEffect, useMemo } from "react"
+import type { EntityReference } from "../../../shared/entity-sync"
+import type { resolveClientEntities } from "@/lib/client-api/entity-sync"
 
 import {
   type ClientConversation,
@@ -60,6 +62,7 @@ export type SendConversationVideoOptions = SendConversationMessageOptions & {
 }
 
 export type ClientDataContextValue = {
+  applyEntitySnapshot: (snapshot: Awaited<ReturnType<typeof resolveClientEntities>>, entities: EntityReference[], isCurrent: (entity: EntityReference) => boolean) => void
   contactApps: ContactApp[]
   contactGroups: ContactGroup[]
   conversations: ClientConversation[]

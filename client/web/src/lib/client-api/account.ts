@@ -314,7 +314,7 @@ function normalizeClientUser(user: ClientUserResponse | undefined): ClientUser {
   }
 }
 
-function normalizeContactUser(
+export function normalizeContactUser(
   contact: ContactUserResponse | undefined
 ): ContactUser {
   if (!contact?.email || !contact.id || !contact.name) {
@@ -334,7 +334,7 @@ function normalizeContactUser(
   }
 }
 
-function normalizeContactApp(app: ContactAppResponse | undefined): ContactApp {
+export function normalizeContactApp(app: ContactAppResponse | undefined): ContactApp {
   if (
     !app?.id ||
     !app.name ||
@@ -354,7 +354,7 @@ function normalizeContactApp(app: ContactAppResponse | undefined): ContactApp {
   }
 }
 
-function normalizeContactGroup(
+export function normalizeContactGroup(
   group: ContactGroupResponse | undefined
 ): ContactGroup {
   if (!group?.id || !group.name) {

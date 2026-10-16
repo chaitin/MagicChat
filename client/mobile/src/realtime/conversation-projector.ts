@@ -9,9 +9,12 @@ import { normalizeConversationChoiceReceivedPayload, normalizeConversationMentio
 export async function projectRealtimeConversationEvent(queryClient: QueryClient, server: AuthenticatedTarget, event: string, payload: unknown) {
   if (event === realtimeEvents.conversationRemoved) {
     const id = normalizeConversationRemovedPayload(payload)
-    await conversationManager.remove(server, id)
-    queryClient.removeQueries({ exact: true, queryKey: queryKeys.conversationMessages(server, id) })
-    await messageManager.clearConversation(server, id)
+    const ids = await conversationManager.removeTree(server, id)
+    for (const removedId of ids) {
+      queryClient.removeQueries({ exact: true, queryKey: queryKeys.conversationMessages(server, removedId) })
+      queryClient.removeQueries({ exact: true, queryKey: queryKeys.conversationTopic(server, removedId) })
+      await messageManager.clearConversation(server, removedId)
+    }
     return true
   }
   let id: string

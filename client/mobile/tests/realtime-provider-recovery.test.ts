@@ -29,6 +29,8 @@ function fixture(options: { webOrigin?: string } = {}) {
   let synchronizationFactories = 0
   const foregroundOptions: { messagesAlreadySynchronizing: boolean }[] = []
   const appliedEvents: { event: string; payload: unknown }[] = []
+  const entityEvents: { event: string; payload: unknown }[] = []
+  const forgottenEntities: string[] = []
   const queryClient = {}
   const markReauthRequired = () => undefined
   class MockSocket {
@@ -101,6 +103,17 @@ function fixture(options: { webOrigin?: string } = {}) {
     "@/realtime/realtime-protocol": { realtimeEvents },
     "@/realtime/realtime-runtime": { RealtimeClientSlot },
     "@/realtime/realtime-recovery": { RealtimeRecovery },
+    "@/realtime/entity-sync": { createMobileEntitySync: () => ({
+      reconcile: async () => undefined,
+      dispose: () => undefined,
+      forget: (id: string) => forgottenEntities.push(id),
+      notify: (event: string, payload: unknown) => {
+        if (!["user.profile.updated", "app.profile.updated", "conversation.updated", "conversation.members.updated"].includes(event)) return false
+        entityEvents.push({ event, payload })
+        return true
+      },
+    }) },
+    "@/realtime/realtime-payload": { normalizeConversationRemovedPayload: (payload: { conversation_id: string }) => payload.conversation_id },
   }
   const source = readFileSync(new URL("../src/providers/realtime-provider.tsx", import.meta.url), "utf8")
   const code = ts.transpileModule(source, {
@@ -125,7 +138,7 @@ function fixture(options: { webOrigin?: string } = {}) {
     }
   }
   return {
-    render, runEffects, sockets, synchronizations, foregroundOptions, appliedEvents,
+    render, runEffects, sockets, synchronizations, foregroundOptions, appliedEvents, entityEvents, forgottenEntities,
     synchronizationFactories: () => synchronizationFactories,
     foregroundRequests: () => foregroundRequests,
     switchAccount: (next: ReturnType<typeof account> | null) => { active = next },
@@ -133,6 +146,23 @@ function fixture(options: { webOrigin?: string } = {}) {
     dispose: () => { for (const effect of effects) effect.cleanup?.() },
   }
 }
+
+test("实体事件走独立同步器，离群立即废弃进行中的实体请求", async (t) => {
+  const f = fixture()
+  t.after(f.dispose)
+  f.render(); f.runEffects()
+  await flush()
+  f.sockets[0]!.open(); f.sockets[0]!.ready()
+  await flush()
+  f.synchronizations[0]!.resolve()
+  await flush()
+  f.sockets[0]!.event("conversation.members.updated", { conversation_id: "group-1", revision: 2 })
+  f.sockets[0]!.event("conversation.removed", { conversation_id: "group-1" })
+  await flush()
+  assert.equal(f.entityEvents[0]?.event, "conversation.members.updated")
+  assert.deepEqual(f.forgottenEntities, ["group-1"])
+  assert.equal(f.appliedEvents.some((item) => item.event === "conversation.members.updated"), false)
+})
 
 test("Provider在首个effect之前就展示连接态，Socket握手不能提前恢复标题", async (t) => {
   const f = fixture()

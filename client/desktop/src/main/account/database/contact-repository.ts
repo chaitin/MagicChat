@@ -27,20 +27,53 @@ export class ContactRepository {
     groups: StoredContactGroup[]
     apps: StoredContactApp[]
   }) {
+    this.write(input, true)
+  }
+
+  merge(input: {
+    users: StoredContactUser[]
+    groups: StoredContactGroup[]
+    apps: StoredContactApp[]
+  }, removed: { type: "user" | "group" | "app"; id: string }[]) {
+    this.write(input, false, removed)
+  }
+
+  private write(input: {
+    mode?: "organization" | "friends"
+    users: StoredContactUser[]
+    groups: StoredContactGroup[]
+    apps: StoredContactApp[]
+  }, replace: boolean, removed: { type: "user" | "group" | "app"; id: string }[] = []) {
     const userStatement = this.database.prepare(`
       INSERT INTO contact_users (
         id, name, nickname, avatar, email, phone, online, last_online_at, updated_at, payload_json
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET name=excluded.name, nickname=excluded.nickname,
+        avatar=excluded.avatar, email=excluded.email, phone=excluded.phone,
+        online=excluded.online, last_online_at=excluded.last_online_at,
+        updated_at=excluded.updated_at, payload_json=excluded.payload_json
+      WHERE COALESCE(json_extract(contact_users.payload_json, '$.entity_revision'), 0)
+        <= COALESCE(json_extract(excluded.payload_json, '$.entity_revision'), 0)
     `)
     const groupStatement = this.database.prepare(`
       INSERT INTO contact_groups (
         id, name, avatar, joined, member_count, visibility, payload_json
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET name=excluded.name, avatar=excluded.avatar,
+        joined=excluded.joined, member_count=excluded.member_count,
+        visibility=excluded.visibility, payload_json=excluded.payload_json
+      WHERE COALESCE(json_extract(contact_groups.payload_json, '$.entity_revision'), 0)
+        <= COALESCE(json_extract(excluded.payload_json, '$.entity_revision'), 0)
     `)
     const appStatement = this.database.prepare(`
       INSERT INTO contact_apps (
         id, name, avatar, description, online, creator_user_id, payload_json
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET name=excluded.name, avatar=excluded.avatar,
+        description=excluded.description, online=excluded.online,
+        creator_user_id=excluded.creator_user_id, payload_json=excluded.payload_json
+      WHERE COALESCE(json_extract(contact_apps.payload_json, '$.entity_revision'), 0)
+        <= COALESCE(json_extract(excluded.payload_json, '$.entity_revision'), 0)
     `)
     const metadataStatement = this.database.prepare(`
       INSERT INTO metadata(key, value) VALUES ('contact_directory_mode', ?)
@@ -48,10 +81,14 @@ export class ContactRepository {
     `)
 
     this.transaction(() => {
-      this.database.exec(
-        "DELETE FROM contact_users; DELETE FROM contact_groups; DELETE FROM contact_apps;",
-      )
-      metadataStatement.run(input.mode)
+      if (replace) {
+        this.database.exec("DELETE FROM contact_users; DELETE FROM contact_groups; DELETE FROM contact_apps;")
+      }
+      if (input.mode) metadataStatement.run(input.mode)
+      for (const entity of removed) {
+        const table = entity.type === "user" ? "contact_users" : entity.type === "group" ? "contact_groups" : "contact_apps"
+        this.database.prepare(`DELETE FROM ${table} WHERE id = ?`).run(entity.id)
+      }
       for (const user of input.users) {
         userStatement.run(
           user.id,
