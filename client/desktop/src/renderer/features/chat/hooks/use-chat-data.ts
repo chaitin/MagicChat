@@ -14,6 +14,8 @@ import { builtinAssistantAppId } from "../conversation-mentions"
 import { loadMessageLocationContext } from "../message-location"
 import {
   boundMessageWindow,
+  hasEarlierMessages,
+  mergeRefreshedMessages,
   MAX_VISIBLE_MESSAGES,
   visibleMessageGap,
 } from "../bounded-message-window"
@@ -44,6 +46,7 @@ export function useChatData({
   const [loadingConversations, setLoadingConversations] = useState(true)
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [loadingBeforeMessages, setLoadingBeforeMessages] = useState(false)
+  const [beforeMessagesError, setBeforeMessagesError] = useState(false)
   const [hasMoreBeforeMessages, setHasMoreBeforeMessages] = useState(false)
   const [hasMoreAfterMessages, setHasMoreAfterMessages] = useState(false)
   const [messageGap, setMessageGap] = useState<MessageGap | null>(null)
@@ -75,6 +78,7 @@ export function useChatData({
     typeof createCoalescedConversationListLoader
   > | null>(null)
   const loadingBeforeRef = useRef(false)
+  const pendingHistoryRefreshRef = useRef(false)
   const loadingAfterRef = useRef(false)
   const messageWindowRevisionRef = useRef(0)
   const locatingWindowRef = useRef<number | null>(null)
@@ -294,7 +298,11 @@ export function useChatData({
       }
       for (const reaction of message.reactions) {
         for (const user of reaction.users) {
-          if (user.type !== "app" && user.id && !requestedUserNameIds.current.ids.has(user.id.toLowerCase())) {
+          if (
+            user.type !== "app" &&
+            user.id &&
+            !requestedUserNameIds.current.ids.has(user.id.toLowerCase())
+          ) {
             ids.add(user.id.toLowerCase())
           }
         }
@@ -603,6 +611,7 @@ export function useChatData({
     loadedConversationIdRef.current = selectedId
     if (switchingConversation) {
       browsingOlderWindowRef.current = false
+      pendingHistoryRefreshRef.current = false
       messageWindowRevisionRef.current++
       locatingWindowRef.current = null
       scrollToBottomRef.current = true
@@ -610,10 +619,14 @@ export function useChatData({
       setNewMessageCount(0)
       scrollSnapshotRef.current = null
       setHasMoreBeforeMessages(false)
+      setBeforeMessagesError(false)
       setHasMoreAfterMessages(false)
       setMessageGap(null)
       setLoadingMessages(true)
     } else if (browsingOlderWindowRef.current) {
+      return
+    } else if (loadingBeforeRef.current) {
+      pendingHistoryRefreshRef.current = true
       return
     }
     const revision = messageWindowRevisionRef.current
@@ -647,11 +660,14 @@ export function useChatData({
               else setNewMessageCount((count) => count + receivedCount)
             }
           }
-          const bounded = boundMessageWindow(result.data, "newer")
+          const bounded = switchingConversation
+            ? boundMessageWindow(result.data, "newer")
+            : mergeRefreshedMessages(messagesRef.current, result.data, isAtBottomRef.current)
+          if (bounded.removedAfter) browsingOlderWindowRef.current = true
           setMessages(bounded.messages)
           const oldestMessage = bounded.messages.find((message) => !message.virtualType)
           setHasMoreBeforeMessages(Boolean(oldestMessage && oldestMessage.seq > 1))
-          setHasMoreAfterMessages(false)
+          setHasMoreAfterMessages(bounded.removedAfter)
           setMessageGap(null)
         } else {
           setMessages([])
@@ -915,11 +931,14 @@ export function useChatData({
   }, [loadingMessages, messages, selected])
 
   const loadBeforeMessages = useCallback(async () => {
-    const oldestMessage = messages.find((message) => !message.virtualType && message.seq > 0)
+    const currentMessages = messagesRef.current
+    const oldestMessage = currentMessages.find((message) => !message.virtualType && message.seq > 0)
     if (
       !window.desktop ||
       !selectedId ||
+      loadingMessages ||
       !oldestMessage ||
+      oldestMessage.conversationId !== selectedId ||
       !hasMoreBeforeMessages ||
       locatingWindowRef.current !== null ||
       loadingBeforeRef.current
@@ -929,20 +948,22 @@ export function useChatData({
     const viewport = historyRef.current
     if (!viewport) return
     const conversationId = selectedId
-    const revision = messageWindowRevisionRef.current
+    // Invalidate refreshes that started before this history request.
+    const revision = ++messageWindowRevisionRef.current
     loadingBeforeRef.current = true
     setLoadingBeforeMessages(true)
-    scrollSnapshotRef.current = captureMessageScroll(viewport)
+    setBeforeMessagesError(false)
     try {
       const result = await window.desktop.accountData.loadBeforeMessages({
         targetId,
         conversationId,
         beforeSeq: oldestMessage.seq,
-        loadedCount: messages.filter((message) => !message.virtualType).length,
+        loadedCount: currentMessages.filter((message) => !message.virtualType).length,
       })
       if (selectedIdRef.current !== conversationId || messageWindowRevisionRef.current !== revision)
         return
       if (!result.ok) {
+        setBeforeMessagesError(true)
         scrollSnapshotRef.current = null
         showToast({
           status: "error",
@@ -953,11 +974,13 @@ export function useChatData({
       }
       const merged = mergeLocalMessageWindows(result.data.messages, messagesRef.current).messages
       const bounded = boundMessageWindow(merged, "older")
-      if (bounded.messages[0]?.id === messagesRef.current[0]?.id) {
+      if (!hasEarlierMessages(messagesRef.current, bounded.messages)) {
         scrollSnapshotRef.current = null
-        setHasMoreBeforeMessages(false)
+        setHasMoreBeforeMessages(result.data.hasMoreBefore)
+        setBeforeMessagesError(result.data.hasMoreBefore)
         return
       }
+      scrollSnapshotRef.current = captureMessageScroll(viewport)
       setMessages(bounded.messages)
       setMessageGap((gap) => visibleMessageGap(gap, bounded.messages))
       setHasMoreBeforeMessages(result.data.hasMoreBefore || bounded.removedBefore)
@@ -971,13 +994,20 @@ export function useChatData({
         messageWindowRevisionRef.current === revision
       ) {
         scrollSnapshotRef.current = null
+        setBeforeMessagesError(true)
         showToast({ status: "error", title: "无法加载更早消息" })
       }
     } finally {
       loadingBeforeRef.current = false
-      if (selectedIdRef.current === conversationId) setLoadingBeforeMessages(false)
+      if (selectedIdRef.current === conversationId) {
+        setLoadingBeforeMessages(false)
+        if (pendingHistoryRefreshRef.current) {
+          pendingHistoryRefreshRef.current = false
+          setMessageRevision((value) => value + 1)
+        }
+      }
     }
-  }, [hasMoreBeforeMessages, messages, selectedId, showToast, targetId])
+  }, [hasMoreBeforeMessages, loadingMessages, messages, selectedId, showToast, targetId])
 
   return {
     conversations,
@@ -987,6 +1017,7 @@ export function useChatData({
     loadingConversations,
     loadingMessages,
     loadingBeforeMessages,
+    beforeMessagesError,
     pendingReactionKeys,
     revokingMessageIds,
     newMessageCount,

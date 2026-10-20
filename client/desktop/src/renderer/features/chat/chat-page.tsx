@@ -161,6 +161,7 @@ export function ChatPage({
     loadingConversations,
     loadingMessages,
     loadingBeforeMessages,
+    beforeMessagesError,
     pendingReactionKeys,
     revokingMessageIds,
     newMessageCount,
@@ -859,6 +860,7 @@ export function ChatPage({
                     messages={messages}
                     loading={loadingMessages}
                     loadingBefore={loadingBeforeMessages}
+                    beforeMessagesError={beforeMessagesError}
                     historyRef={historyRef}
                     targetId={targetId}
                     userId={userId}

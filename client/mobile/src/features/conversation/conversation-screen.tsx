@@ -484,7 +484,7 @@ export function ConversationScreen() {
 
   function handleLoadOlder() {
     if (!messagesQuery.hasOlder || messagesQuery.isFetchingOlder) return
-    void messagesQuery.fetchOlder()
+    void messagesQuery.fetchOlder({ cancelRefetch: false })
   }
 
   function handleAvatarPress(sender: EntityReference) {
@@ -622,6 +622,8 @@ export function ConversationScreen() {
               currentUserId={currentUser.id}
               error={messagesQuery.error}
               hasOlder={messagesQuery.hasOlder}
+              olderCursor={messagesQuery.olderCursor}
+              olderError={messagesQuery.olderError}
               isFetchingOlder={messagesQuery.isFetchingOlder}
               key={messageLocationScope}
               initialMessageId={targetMessageId || undefined}

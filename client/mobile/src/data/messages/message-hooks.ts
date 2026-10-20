@@ -158,6 +158,8 @@ export function useConversationMessages(
   return {
     error: synchronizationError ?? query.error,
     fetchOlder: query.fetchNextPage,
+    olderError: query.isFetchNextPageError ? query.error : null,
+    olderCursor: query.data?.pages.at(-1)?.page.oldestSeq,
     hasOlder: query.hasNextPage,
     isFetchingOlder: query.isFetchingNextPage,
     isLoading: query.isLoading,

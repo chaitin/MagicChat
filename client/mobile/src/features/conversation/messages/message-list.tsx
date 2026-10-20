@@ -15,6 +15,7 @@ import { measureMobilePerf, recordMobilePerf } from "@/diagnostics/mobile-perf"
 import { ContentState } from "@/components/feedback/content-state"
 import { AppButton } from "@/components/forms/app-button"
 import { MessageBubble } from "@/features/conversation/messages/message-bubble"
+import { useMessageHistoryPagination } from "./use-message-history-pagination"
 import type { EntityReference } from "@/domain/entities/entity-profile"
 import type {
   MessageMentionLabelResolver,
@@ -36,6 +37,8 @@ export function MessageList({
   currentUserId,
   error,
   hasOlder,
+  olderCursor,
+  olderError,
   initialMessageId,
   focusRequestKey = 0,
   isFetchingOlder,
@@ -70,6 +73,8 @@ export function MessageList({
   currentUserId: string
   error: Error | null
   hasOlder: boolean
+  olderCursor: number | undefined
+  olderError: Error | null
   initialMessageId?: string
   focusRequestKey?: number
   isFetchingOlder: boolean
@@ -250,8 +255,23 @@ export function MessageList({
     []
   )
 
+  const { updateMetrics, onReachOlder, onRetryOlder } = useMessageHistoryPagination({
+    conversationId,
+    cursor: olderCursor,
+    hasOlder,
+    isLoading,
+    isFetchingOlder,
+    error: olderError,
+    onLoadOlder,
+  })
+
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      updateMetrics({
+        contentHeight: event.nativeEvent.contentSize.height,
+        viewportHeight: event.nativeEvent.layoutMeasurement.height,
+        offset: event.nativeEvent.contentOffset.y,
+      })
       const nearBottom = event.nativeEvent.contentOffset.y <= 80
       nearBottomRef.current = nearBottom
 
@@ -261,12 +281,13 @@ export function MessageList({
         )
       }
     },
-    []
+    [updateMetrics]
   )
 
-  const handleContentSizeChange = useCallback(() => {
+  const handleContentSizeChange = useCallback((_width: number, height: number) => {
     performPendingScroll(listRef, pendingScrollRef)
-  }, [])
+    updateMetrics({ contentHeight: height })
+  }, [updateMetrics])
 
   const handleScrollToIndexFailed = useCallback((info: {
     averageItemLength: number
@@ -333,12 +354,31 @@ export function MessageList({
           <>
             {isFetchingOlder ? (
               <XGUILoadmore accessibilityLabel="正在加载更早的消息" />
+            ) : hasOlder ? (
+              <View style={{ alignItems: "center", paddingVertical: 12 }}>
+                {olderError ? (
+                  <Text style={{ color: colors.textPlaceholder, marginBottom: 8 }}>
+                    加载更早消息失败
+                  </Text>
+                ) : null}
+                <AppButton
+                  accessibilityLabel={olderError ? "重试加载更早消息" : "加载更早消息"}
+                  onPress={onRetryOlder}
+                  theme="gray"
+                  variant="outlined"
+                >
+                  {olderError ? "点击重试" : "加载更早消息"}
+                </AppButton>
+              </View>
             ) : null}
           </>
         }
         maintainVisibleContentPosition={maintainVisibleContentPosition}
         onContentSizeChange={handleContentSizeChange}
-        onEndReached={hasOlder && !isFetchingOlder ? onLoadOlder : undefined}
+        onEndReached={onReachOlder}
+        onLayout={(event) => updateMetrics({
+          viewportHeight: event.nativeEvent.layout.height,
+        })}
         onEndReachedThreshold={0.2}
         onScroll={handleScroll}
         onScrollToIndexFailed={handleScrollToIndexFailed}

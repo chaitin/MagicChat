@@ -2,6 +2,7 @@ import {
   Fragment,
   forwardRef,
   memo,
+  useEffect,
   useMemo,
   useRef,
   type ComponentPropsWithoutRef,
@@ -45,6 +46,7 @@ export const MessageList = memo(function MessageList({
   messages,
   loading,
   loadingBefore,
+  beforeMessagesError,
   historyRef,
   targetId,
   userId,
@@ -89,6 +91,7 @@ export const MessageList = memo(function MessageList({
   messages: DesktopMessage[]
   loading: boolean
   loadingBefore: boolean
+  beforeMessagesError: boolean
   historyRef: RefObject<HTMLDivElement | null>
   targetId: string
   userId: string
@@ -133,6 +136,15 @@ export const MessageList = memo(function MessageList({
   const gapRef = useRef<HTMLDivElement>(null)
   const gapAutoArmedRef = useRef(true)
   const expandedMessageIdsRef = useRef({ conversationId: "", ids: new Set<string>() })
+  useEffect(() => {
+    if (loading || loadingBefore || beforeMessagesError || messages.length === 0) return
+    const frame = window.requestAnimationFrame(() => {
+      const viewport = historyRef.current
+      if (viewport && viewport.scrollTop <= 80) onReachTop()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [loading, loadingBefore, beforeMessagesError, messages, historyRef, onReachTop])
+
   const conversationId = messages[0]?.conversationId
   if (conversationId && expandedMessageIdsRef.current.conversationId !== conversationId) {
     expandedMessageIdsRef.current = { conversationId, ids: new Set() }
@@ -168,7 +180,7 @@ export const MessageList = memo(function MessageList({
             gapAutoArmedRef.current = false
             onReachGap()
           }
-          if (event.currentTarget.scrollTop <= 80) onReachTop()
+          if (!beforeMessagesError && event.currentTarget.scrollTop <= 80) onReachTop()
           if (
             hasMoreAfterMessages &&
             event.currentTarget.scrollHeight -
@@ -196,6 +208,17 @@ export const MessageList = memo(function MessageList({
             </div>
           ) : (
             <>
+              {beforeMessagesError && !loadingBefore && (
+                <div className="flex justify-center pb-4">
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    onClick={onReachTop}
+                  >
+                    加载更早消息未完成，点击重试
+                  </button>
+                </div>
+              )}
               {loadingBefore && (
                 <div className="flex justify-center pb-4 text-muted-foreground">
                   <HugeiconsIcon
