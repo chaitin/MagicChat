@@ -10,6 +10,7 @@ import { MarkdownCodeBlock } from "@/components/markdown-code-block"
 import { ContactProfilePopover } from "@/components/avatar/contact-profile-popover"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
 import { Checkbox } from "@/components/ui/checkbox"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   createRemarkMentionPlugin,
   mentionClassName,
@@ -201,9 +202,14 @@ function createComponents(
       return <MarkdownCodeBlock code={code} language={codeLanguage(element?.props.className)} />
     },
     table: ({ children }) => (
-      <div className="max-w-full overflow-x-auto">
+      <ScrollArea
+        type="hover"
+        scrollHideDelay={200}
+        scrollbarOrientation="horizontal"
+        className="max-w-full overflow-hidden"
+      >
         <table className="w-max min-w-full border-collapse text-sm">{children}</table>
-      </div>
+      </ScrollArea>
     ),
     td: ({ children, style }) => (
       <td className="border border-border px-2 py-3 align-top" style={style}>
