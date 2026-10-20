@@ -1,4 +1,5 @@
 import { act, render, waitFor } from "@testing-library/react"
+import { useState } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ClientEntityRealtimeSync } from "@/components/client-entity-realtime-sync"
 
@@ -23,6 +24,31 @@ describe("实体实时同步", () => {
     mocks.realtime.ready = false
   })
   afterEach(() => vi.restoreAllMocks())
+
+  it("实体有效性检查可在延迟到渲染阶段的状态更新器中执行，切账号后仍失效", async () => {
+    let check: ((entity: { type: "user"; id: string }) => boolean) | undefined
+    function StateUpdateProbe() {
+      const [revision, setRevision] = useState(0)
+      const [name, setName] = useState("Initial")
+      mocks.apply.mockImplementation((_snapshot, _entities, isCurrent) => {
+        check = isCurrent
+        // Another queued update makes React defer this updater until rendering.
+        setRevision((value) => value + 1)
+        setName((value) => isCurrent({ type: "user", id: "me" }) ? "Updated" : value)
+      })
+      return <><span data-testid="name">{name}:{revision}</span><ClientEntityRealtimeSync /></>
+    }
+    mocks.resolve.mockResolvedValue({ versions: { "user:me": 1 }, removed: [] })
+    const view = render(<StateUpdateProbe />)
+    act(() => mocks.handlers.get("user.profile.updated")?.({ user_id: "me", revision: 1 }))
+    await waitFor(() => expect(view.getByTestId("name").textContent).toBe("Updated:1"))
+    expect(check?.({ type: "user", id: "me" })).toBe(true)
+    mocks.data.me = { id: "other" }
+    view.rerender(<StateUpdateProbe />)
+    expect(check?.({ type: "user", id: "me" })).toBe(false)
+    view.unmount()
+    expect(check?.({ type: "user", id: "me" })).toBe(false)
+  })
 
   it("合并群资料和成员事件，并追到请求期间到达的最新权限版本", async () => {
     let finish!: (value: unknown) => void

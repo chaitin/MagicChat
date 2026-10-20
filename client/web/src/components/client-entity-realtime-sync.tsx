@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef } from "react"
+import { useEffect, useEffectEvent, useLayoutEffect, useRef } from "react"
 import { DirectorySynchronizer, directoryUpdatedEvent } from "../../../shared/directory-sync"
 import { EntitySynchronizer, entityChangeEvents, entityKey, parseEntityChange, type EntityReference } from "../../../shared/entity-sync"
 import { resolveClientEntities } from "@/lib/client-api/entity-sync"
@@ -11,7 +11,11 @@ export function ClientEntityRealtimeSync() {
   const syncRef = useRef<EntitySynchronizer<Awaited<ReturnType<typeof resolveClientEntities>>> | null>(null)
   const directoryRef = useRef<DirectorySynchronizer | null>(null)
   const accountId = me?.id
-  const currentAccount = useEffectEvent(() => accountId)
+  // Snapshot guards also run inside state updaters, where Effect Events are forbidden.
+  const currentAccountRef = useRef(accountId)
+  useLayoutEffect(() => {
+    currentAccountRef.current = accountId
+  }, [accountId])
   const apply = useEffectEvent(applyEntitySnapshot)
   const refreshDirectory = useEffectEvent(refreshContacts)
   const loaded = useEffectEvent((entity: EntityReference) => entity.type !== "user" || entity.id === me?.id || Boolean(usersById[entity.id]))
@@ -36,12 +40,12 @@ export function ClientEntityRealtimeSync() {
       resolve: resolveClientEntities,
       version: (snapshot, entity) => snapshot.versions[entityKey(entity)] ?? null,
       apply: async (snapshot, entities, isCurrent) => apply(snapshot, entities, isCurrent),
-      isCurrent: () => active && currentAccount() === accountId,
+      isCurrent: () => active && currentAccountRef.current === accountId,
       onError: (error) => console.warn("同步实体资料失败", error),
     })
     const directory = new DirectorySynchronizer({
       refresh: () => refreshDirectory(),
-      isCurrent: () => active && currentAccount() === accountId,
+      isCurrent: () => active && currentAccountRef.current === accountId,
       onError: (error) => console.warn("同步通讯录失败", error),
     })
     syncRef.current = sync
