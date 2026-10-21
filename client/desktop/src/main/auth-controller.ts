@@ -509,6 +509,10 @@ export class AuthController {
     return this.accountData.resolveUserNames(...args)
   }
 
+  resolveContact(...args: Parameters<AccountDataFacade["resolveContact"]>) {
+    return this.accountData.resolveContact(...args)
+  }
+
   getContacts(...args: Parameters<AccountDataFacade["getContacts"]>) {
     return this.accountData.getContacts(...args)
   }

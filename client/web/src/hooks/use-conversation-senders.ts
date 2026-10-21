@@ -206,7 +206,7 @@ export function useConversationSenders({
         return null
       }
 
-      const clientMessageId = createClientMessageId()
+      const clientMessageId = options.clientMessageId ?? createClientMessageId()
       const accountGeneration = getConversationAccountGeneration()
       updateConversationMessageState(conversationId, (currentState) => ({
         ...currentState,

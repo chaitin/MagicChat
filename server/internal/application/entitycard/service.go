@@ -92,7 +92,7 @@ func (s *Service) resolveUser(ctx context.Context, entityID string) (Card, error
 			Detail{Label: "昵称", Value: user.Nickname},
 			Detail{Label: "邮箱", Value: user.Email},
 		),
-		"/contacts/user/"+user.ID,
+		"jiying://contact/"+user.ID,
 	), nil
 }
 
@@ -106,7 +106,7 @@ func (s *Service) resolveApp(ctx context.Context, accountID, entityID string) (C
 	return newCard(
 		Title("应用", app.Name),
 		s.plainTextExcerpt(app.Description, plainTextExcerptSize),
-		"/contacts/app/"+app.ID,
+		"jiying://app/"+app.ID,
 	), nil
 }
 
@@ -129,7 +129,7 @@ func (s *Service) resolveGroup(ctx context.Context, accountID, entityID string) 
 	return newCard(
 		Title("群聊", group.Name),
 		fmt.Sprintf("%d 位成员", memberCount),
-		"/contacts/group/"+group.ID,
+		"jiying://group/"+group.ID,
 	), nil
 }
 

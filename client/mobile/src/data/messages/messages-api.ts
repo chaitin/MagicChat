@@ -287,6 +287,26 @@ export async function fetchConversationMessageReactionSnapshots(
   return snapshots
 }
 
+export async function sendConversationEntityCardMessage(
+  target: AuthenticatedTarget,
+  conversationId: string,
+  input: { clientMessageId: string; entityType: "user" | "app" | "group"; entityId: string },
+  options: ApiOptions = {}
+) {
+  const data = await createProtectedApiClient(target, options.fetcher).request<{ message?: unknown }>(
+    `/api/client/conversations/${encodeURIComponent(conversationId)}/messages`, {
+      body: JSON.stringify({ client_message_id: input.clientMessageId, body: {
+        type: "entity_card", entity_type: input.entityType, entity_id: input.entityId,
+      } }),
+      errorMessage: "发送名片失败",
+      headers: { "Content-Type": "application/json" },
+      method: "POST", signal: options.signal,
+    }
+  )
+  if (!data?.message) throw new ApiRequestError("发送名片响应格式不正确")
+  return normalizeClientMessage(data.message)
+}
+
 export async function sendConversationTextMessage(
   target: AuthenticatedTarget,
   conversationId: string,

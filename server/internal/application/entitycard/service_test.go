@@ -88,10 +88,10 @@ func TestServiceResolvesAllEntityCardTemplates(t *testing.T) {
 		wantTitle       string
 		wantURL         string
 	}{
-		{owner.ID, TypeUser, "姓名: 项目负责人\n昵称: 老板\n邮箱: owner@example.com", "联系人 - 老板", "/contacts/user/" + owner.ID},
-		{app.ID, TypeApp, "智能 设计应用", "应用 - 设计助手", "/contacts/app/" + app.ID},
-		{restrictedApp.ID, TypeApp, "仅限授权用户", "应用 - 授权助手", "/contacts/app/" + restrictedApp.ID},
-		{group.ID, TypeGroup, "2 位成员", "群聊 - 设计群", "/contacts/group/" + group.ID},
+		{owner.ID, TypeUser, "姓名: 项目负责人\n昵称: 老板\n邮箱: owner@example.com", "联系人 - 老板", "jiying://contact/" + owner.ID},
+		{app.ID, TypeApp, "智能 设计应用", "应用 - 设计助手", "jiying://app/" + app.ID},
+		{restrictedApp.ID, TypeApp, "仅限授权用户", "应用 - 授权助手", "jiying://app/" + restrictedApp.ID},
+		{group.ID, TypeGroup, "2 位成员", "群聊 - 设计群", "jiying://group/" + group.ID},
 		{projectID, TypeProject, "官网 改版项目", "项目 - 官网项目", "/projects/" + projectID},
 		{task.ID, TypeTask, "状态: 进行中\n负责人: 张三\n截止日期: 2026-07-20", "任务 - 完成首页改版", "/projects/" + projectID + "?taskId=" + task.ID},
 	} {

@@ -424,6 +424,11 @@ export class AccountDataFacade {
     return this.requireRuntime().resolveUserNames(input.userIds)
   }
 
+  async resolveContact(input: { targetId: string; type: "user" | "app" | "group"; id: string }) {
+    await this.ready(input?.targetId)
+    return this.requireRuntime().resolveContact(input)
+  }
+
   async getContacts(targetId: string) {
     await this.ready(targetId)
     return this.requireRuntime().getContacts()

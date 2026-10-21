@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react"
 import { Copy01Icon } from "@hugeicons/core-free-icons"
+import { SendNamecardButton } from "@/components/send-namecard-button"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { Button as BeButton } from "@/components/motion/button/base"
@@ -365,6 +366,7 @@ function ActiveContactProfilePopover({
               ))}
             </div>
           )}
+          <div className="grid gap-2">
           {(canMessage || canRequest || isSelf) && (
             <BeButton
               type="button"
@@ -375,6 +377,8 @@ function ActiveContactProfilePopover({
               {busy ? "处理中…" : actionLabel}
             </BeButton>
           )}
+          <SendNamecardButton targetId={targetId} target={{ type, id }} />
+          </div>
         </div>
       </PopoverContent>
     </Popover>

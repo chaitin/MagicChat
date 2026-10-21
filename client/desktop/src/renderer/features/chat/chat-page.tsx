@@ -31,6 +31,8 @@ import { ProjectCreateDialog } from "../projects/project-create-dialog"
 import { ChatHeader } from "./components/chat-header"
 import { ConversationSidebar } from "./components/conversation-sidebar"
 import { CreateGroupConversationDialog } from "./components/create-group-conversation-dialog"
+import { NamecardDialogHost } from "@/components/send-namecard-button"
+import type { ContactLinkTarget } from "../../../../../shared/contact-links"
 import { ForwardMessageDialog } from "./components/forward-message-dialog"
 import { MessageComposer } from "./components/message-composer"
 import { MessageList } from "./components/message-list"
@@ -121,6 +123,10 @@ export function ChatPage({
 }) {
   const { showToast } = useAnimatedToast()
   const [activeSection, setActiveSection] = useState<AppSection>("chat")
+  const [contactSelection, setContactSelection] = useState<{
+    targetId: string
+    target: ContactLinkTarget
+  } | null>(null)
   const [actionDialog, setActionDialog] = useState<"group" | "app" | null>(null)
   const [actionDirectory, setActionDirectory] = useState<DesktopContactDirectory | null>(null)
   const [createProjectTarget, setCreateProjectTarget] = useState<string | null>(null)
@@ -990,6 +996,9 @@ export function ChatPage({
         </div>
       ) : activeSection === "contacts" ? (
         <ContactsPage
+          requestedSelection={
+            contactSelection?.targetId === targetId ? contactSelection.target : null
+          }
           targetId={targetId}
           serverUrl={serverUrl}
           userId={userId}
@@ -1068,6 +1077,16 @@ export function ChatPage({
           onAvatarChanged={() => undefined}
         />
       )}
+      <NamecardDialogHost
+        key={targetId}
+        targetId={targetId}
+        theme={resolvedTheme}
+        conversations={conversations}
+        onOpenContact={(target) => {
+          setContactSelection({ targetId, target })
+          setActiveSection("contacts")
+        }}
+      />
       {forwardOperation && (
         <ForwardMessageDialog
           conversations={conversations}

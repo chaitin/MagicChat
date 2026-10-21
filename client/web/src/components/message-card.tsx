@@ -1,4 +1,5 @@
 import { Link } from "react-router"
+import { parseContactLink } from "../../../shared/contact-links"
 
 import type { ClientCardMessageBody } from "@/lib/client-data-api"
 
@@ -54,7 +55,7 @@ function CardContent({ card }: { card: ClientCardMessageBody }) {
     <>
       <div className="truncate text-sm">{card.title}</div>
       {card.description.trim() && (
-        <div className="line-clamp-3 break-all text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
+        <div className="line-clamp-3 text-xs leading-relaxed break-all whitespace-pre-wrap text-muted-foreground">
           {card.description}
         </div>
       )}
@@ -64,6 +65,12 @@ function CardContent({ card }: { card: ClientCardMessageBody }) {
 
 function getCardTarget(url: string) {
   const value = url.trim()
+  const contact = parseContactLink(value)
+  if (contact)
+    return {
+      href: `/contacts/${contact.type}/${contact.id}`,
+      type: "internal" as const,
+    }
   if (value.includes("\\") || /\s/.test(value)) {
     return null
   }

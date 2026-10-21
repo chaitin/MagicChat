@@ -45,6 +45,7 @@ export function ForwardMessageDialog({
   onForward,
   onOpenChange,
   open,
+  purpose = "forward",
 }: {
   conversations: ClientConversation[]
   messageCount: number
@@ -54,7 +55,9 @@ export function ForwardMessageDialog({
   ) => Promise<ForwardConversationMessagesResult>
   onOpenChange: (open: boolean) => void
   open: boolean
+  purpose?: "forward" | "namecard"
 }) {
+  const verb = purpose === "namecard" ? "发送" : "转发"
   const [failedByConversationId, setFailedByConversationId] = React.useState<
     Map<string, string>
   >(() => new Map())
@@ -69,7 +72,8 @@ export function ForwardMessageDialog({
 
   const visibleConversations = React.useMemo(() => {
     const sendableConversations = conversations.filter(
-      (conversation) => !conversation.topic?.archived
+      (conversation) =>
+        !conversation.topic?.archived && conversation.canSend !== false
     )
     const normalizedKeyword = normalizePinyinSearchQuery(keyword)
     if (!normalizedKeyword) {
@@ -92,6 +96,7 @@ export function ForwardMessageDialog({
           toast.warning(`一次最多选择 ${maxForwardTargets} 个会话`)
           return current
         }
+        if (purpose === "namecard") next.clear()
         next.add(conversationId)
       } else {
         next.delete(conversationId)
@@ -130,7 +135,10 @@ export function ForwardMessageDialog({
         if (target.status === "sent") {
           sent.add(target.conversationId)
         } else {
-          failed.set(target.conversationId, target.error?.message ?? "转发失败")
+          failed.set(
+            target.conversationId,
+            target.error?.message ?? `${verb}失败`
+          )
         }
       }
 
@@ -139,18 +147,18 @@ export function ForwardMessageDialog({
       setSelectedConversationIds(new Set(failed.keys()))
 
       if (result.failedCount === 0) {
-        toast.success(`已转发到 ${result.sentCount} 个会话`)
+        toast.success(`已${verb}到 ${result.sentCount} 个会话`)
         onComplete()
         onOpenChange(false)
       } else if (result.sentCount > 0) {
         toast.warning(
-          `已转发到 ${result.sentCount} 个会话，${result.failedCount} 个失败`
+          `已${verb}到 ${result.sentCount} 个会话，${result.failedCount} 个失败`
         )
       } else {
-        toast.error("转发失败，请检查目标会话后重试")
+        toast.error(`${verb}失败，请检查目标会话后重试`)
       }
     } catch (error) {
-      toast.error(getClientDataErrorMessage(error, "转发消息失败"))
+      toast.error(getClientDataErrorMessage(error, `${verb}消息失败`))
     } finally {
       setSubmitting(false)
     }
@@ -165,7 +173,11 @@ export function ForwardMessageDialog({
       >
         <DialogHeader>
           <DialogTitle className="text-base">
-            {messageCount > 1 ? `转发 ${messageCount} 条消息` : "转发消息"}
+            {purpose === "namecard"
+              ? "发送名片"
+              : messageCount > 1
+                ? `转发 ${messageCount} 条消息`
+                : "转发消息"}
           </DialogTitle>
         </DialogHeader>
 
@@ -268,7 +280,7 @@ export function ForwardMessageDialog({
                 {submitting && (
                   <Loader2Icon aria-hidden="true" className="animate-spin" />
                 )}
-                转发
+                {verb}
                 {selectedConversationIds.size > 0
                   ? `（${selectedConversationIds.size}）`
                   : ""}

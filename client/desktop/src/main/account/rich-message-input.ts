@@ -12,13 +12,15 @@ export function normalizeOutgoingRichMessageBody(value: unknown): Record<string,
 
 function normalizeEntityCard(value: Record<string, unknown>) {
   if (
-    value.entityType !== "task" ||
+    !["task", "user", "app", "group"].includes(String(value.entityType)) ||
     typeof value.entityId !== "string" ||
-    !/^[A-Za-z0-9_-]{1,128}$/.test(value.entityId)
+    !/^[A-Za-z0-9_-]{1,128}$/.test(value.entityId) ||
+    (value.entityType !== "task" &&
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.entityId))
   ) {
     throw new AuthFailure("invalid_rich_message", "对象卡片格式不正确")
   }
-  return { type: "entity_card", entity_type: "task", entity_id: value.entityId }
+  return { type: "entity_card", entity_type: value.entityType, entity_id: value.entityId }
 }
 
 function normalizeChoice(value: Record<string, unknown>) {

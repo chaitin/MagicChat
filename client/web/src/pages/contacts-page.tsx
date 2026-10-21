@@ -33,6 +33,7 @@ import {
   type ClientAppCredentials,
   type ClientOwnedApp,
 } from "@/lib/client-api/apps"
+import { useContactProfile } from "@/components/contacts/use-contact-profile"
 import { useAppInfo } from "@/lib/app-info-context"
 import { useClientData, useClientUser } from "@/lib/client-data-context"
 import { formatContactPhone } from "@/lib/contact-format"
@@ -75,6 +76,20 @@ export function ContactsPage() {
   const routedUser = useClientUser(
     activeSelection?.type === "user" ? activeSelection.id : ""
   )
+  const cachedItem =
+    activeSelection?.type === "user" && routedUser
+      ? ({ contact: routedUser, type: "user" } as const)
+      : resolveActiveDirectoryItem(
+          activeSelection,
+          contactApps,
+          contacts,
+          contactGroups
+        )
+  const activeItem = useContactProfile({
+    selection: activeSelection,
+    cached: cachedItem,
+    accountId: me.id,
+  })
   const [openingDirectoryItemKey, setOpeningDirectoryItemKey] =
     React.useState("")
   const [friendManagementOpen, setFriendManagementOpen] = React.useState(false)
@@ -143,15 +158,6 @@ export function ContactsPage() {
       group.name.toLowerCase().includes(normalizedGroupKeyword)
     )
   }, [contactGroups, normalizedGroupKeyword])
-  const activeItem =
-    activeSelection?.type === "user" && routedUser
-      ? ({ contact: routedUser, type: "user" } as const)
-      : resolveActiveDirectoryItem(
-          activeSelection,
-          contactApps,
-          contacts,
-          contactGroups
-        )
   const activeUserIsFriend =
     activeItem?.type === "user" &&
     contacts.some((contact) => contact.id === activeItem.contact.id)
@@ -301,8 +307,9 @@ export function ContactsPage() {
         currentUserId={me.id}
         groups={filteredGroups}
         pendingFriendRequestCount={
-          incomingFriendRequests.filter((request) => request.status === "pending")
-            .length
+          incomingFriendRequests.filter(
+            (request) => request.status === "pending"
+          ).length
         }
         organizationName={
           contactDirectoryMode === "friends" ? "我的好友" : organizationName

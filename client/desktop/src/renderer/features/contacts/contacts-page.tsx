@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { ArrowRight01Icon, FlashIcon } from "@hugeicons/core-free-icons"
+import { SendNamecardButton } from "@/components/send-namecard-button"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { Button as BeButton } from "@/components/motion/button/base"
@@ -55,6 +56,7 @@ export function ContactsPage({
   onSelectSearchResult,
   onSearchResultCloseAutoFocus,
   mentionLabelResolver,
+  requestedSelection,
 }: {
   targetId: string
   serverUrl: string
@@ -69,6 +71,7 @@ export function ContactsPage({
   onSelectSearchResult: (result: LocalSearchResult) => void
   onSearchResultCloseAutoFocus: () => void
   mentionLabelResolver: MentionLabelResolver
+  requestedSelection?: Selection | null
 }) {
   const { showToast } = useAnimatedToast()
   const [directory, setDirectory] = useState<DesktopContactDirectory | null>(null)
@@ -83,6 +86,37 @@ export function ContactsPage({
   const [appDialog, setAppDialog] = useState<"edit" | "credentials" | null>(null)
   const [credentials, setCredentials] = useState<DesktopClientAppCredentials | null>(null)
   const [avatarRevision, setAvatarRevision] = useState(0)
+  const [detailProfile, setDetailProfile] = useState<{
+    targetId: string
+    entity: DesktopContactUser | DesktopContactApp | DesktopContactGroup
+  } | null>(null)
+  const detailProfileRef = useRef(detailProfile)
+  useLayoutEffect(() => {
+    detailProfileRef.current = detailProfile
+  }, [detailProfile])
+  useEffect(() => {
+    if (!requestedSelection || loading || !window.desktop) return
+    let active = true
+    setSelection(null)
+    void window.desktop.accountData
+      .resolveContact({ targetId, ...requestedSelection })
+      .then((result) => {
+        if (!active) return
+        if (!result.ok) throw new Error(result.error.message)
+        setDetailProfile({ targetId, entity: result.data })
+        setSelection(requestedSelection)
+      })
+      .catch((error) => {
+        if (active)
+          showToast({
+            status: "error",
+            title: error instanceof Error ? error.message : "无法加载资料",
+          })
+      })
+    return () => {
+      active = false
+    }
+  }, [requestedSelection, targetId, showToast, loading])
 
   async function load(refresh = false, background = false) {
     if (!window.desktop) return
@@ -93,7 +127,13 @@ export function ContactsPage({
     if (activeTargetRef.current !== targetId) return
     if (result.ok) {
       setDirectory(result.data)
-      setSelection((current) => (current && entityFor(result.data, current) ? current : null))
+      setSelection((current) =>
+        current &&
+        (entityFor(result.data, current) ||
+          detailEntityFor(detailProfileRef.current, targetId, current))
+          ? current
+          : null,
+      )
     } else showToast({ title: result.error.message, status: "error" })
     if (!background) setLoading(false)
   }
@@ -117,7 +157,11 @@ export function ContactsPage({
             if (result.ok) {
               setDirectory(result.data)
               setSelection((current) =>
-                current && entityFor(result.data, current) ? current : null,
+                current &&
+                (entityFor(result.data, current) ||
+                  detailEntityFor(detailProfileRef.current, targetId, current))
+                  ? current
+                  : null,
               )
             } else showToast({ title: result.error.message, status: "error" })
             setLoading(false)
@@ -228,7 +272,13 @@ export function ContactsPage({
     viewport.height,
   )
 
-  const active = directory && selection ? entityFor(directory, selection) : null
+  const active = selection
+    ? (directory && entityFor(directory, selection)) ||
+      detailEntityFor(detailProfile, targetId, selection)
+    : null
+  const activeIsFriend = Boolean(
+    active?.avatarType === "user" && directory?.users.some((item) => item.id === active.id),
+  )
   const isOwnedApp =
     selection?.type === "app" &&
     (active as DesktopContactApp | null)?.creatorUserId?.toLowerCase() === userId.toLowerCase()
@@ -412,7 +462,10 @@ export function ContactsPage({
               )
             }
             onDeleteFriend={
-              selection!.type === "user" && directory?.mode === "friends" && active.id !== userId
+              selection!.type === "user" &&
+              directory?.mode === "friends" &&
+              activeIsFriend &&
+              active.id !== userId
                 ? async () => {
                     if (!confirm(`确认删除好友“${active.name}”？`)) return
                     const result = await window.desktop!.accountData.deleteFriend({
@@ -425,6 +478,31 @@ export function ContactsPage({
                     }
                     setSelection(null)
                     void load(true)
+                  }
+                : undefined
+            }
+            onAddFriend={
+              selection!.type === "user" &&
+              directory?.mode === "friends" &&
+              !activeIsFriend &&
+              active.id !== userId
+                ? async () => {
+                    setBusyKey(`user:${active.id}`)
+                    try {
+                      const result = await window.desktop!.accountData.createFriendRequest({
+                        targetId,
+                        id: active.id,
+                      })
+                      if (!result.ok) throw new Error(result.error.message)
+                      showToast({ title: "已发送好友申请", status: "success" })
+                    } catch (error) {
+                      showToast({
+                        title: error instanceof Error ? error.message : "发送好友申请失败",
+                        status: "error",
+                      })
+                    } finally {
+                      setBusyKey("")
+                    }
                   }
                 : undefined
             }
@@ -493,6 +571,7 @@ function ContactDetails({
   onManageApp,
   onDeleteApp,
   onDeleteFriend,
+  onAddFriend,
 }: {
   entity: DesktopContactUser | DesktopContactApp | DesktopContactGroup
   targetId: string
@@ -503,6 +582,7 @@ function ContactDetails({
   onManageApp?: (mode: "edit" | "credentials") => void
   onDeleteApp?: () => Promise<boolean>
   onDeleteFriend?: () => void
+  onAddFriend?: () => void
 }) {
   const { showToast } = useAnimatedToast()
   const deleteConfirmationId = useId()
@@ -564,43 +644,47 @@ function ContactDetails({
           </>
         )}
       </div>
-      {(!isUser || entity.id !== userId || onDeleteFriend || onManageApp || onDeleteApp) && (
-        <div className="grid w-full gap-2">
-          {(!isUser || entity.id !== userId) && (
-            <BeButton
-              className="w-full bg-xgui-brand text-background hover:bg-xgui-brand-4 hover:text-background active:bg-xgui-brand-5"
-              disabled={busy}
-              onClick={onMessage}
-            >
-              {busy
-                ? "处理中…"
+      <div className="grid w-full gap-2">
+        {(!isUser || entity.id !== userId) && (
+          <BeButton
+            className="w-full bg-xgui-brand text-background hover:bg-xgui-brand-4 hover:text-background active:bg-xgui-brand-5"
+            disabled={busy}
+            onClick={onAddFriend ?? onMessage}
+          >
+            {busy
+              ? "处理中…"
+              : onAddFriend
+                ? "加好友"
                 : isGroup && !(entity as DesktopContactGroup).joined
                   ? "加入群聊"
                   : "发消息"}
+          </BeButton>
+        )}
+        <SendNamecardButton
+          targetId={targetId}
+          target={{ type: entity.avatarType, id: entity.id }}
+        />
+        {onDeleteFriend && (
+          <BeButton variant="destructive" onClick={onDeleteFriend}>
+            删除好友
+          </BeButton>
+        )}
+        {onManageApp && (
+          <>
+            <BeButton variant="secondary" onClick={() => onManageApp("edit")}>
+              修改资料
             </BeButton>
-          )}
-          {onDeleteFriend && (
-            <BeButton variant="destructive" onClick={onDeleteFriend}>
-              删除好友
+            <BeButton variant="secondary" onClick={() => onManageApp("credentials")}>
+              开发指南
             </BeButton>
-          )}
-          {onManageApp && (
-            <>
-              <BeButton variant="secondary" onClick={() => onManageApp("edit")}>
-                修改资料
-              </BeButton>
-              <BeButton variant="secondary" onClick={() => onManageApp("credentials")}>
-                开发指南
-              </BeButton>
-            </>
-          )}
-          {onDeleteApp && (
-            <BeButton variant="destructive" disabled={deleting} onClick={() => setDeleteOpen(true)}>
-              删除应用
-            </BeButton>
-          )}
-        </div>
-      )}
+          </>
+        )}
+        {onDeleteApp && (
+          <BeButton variant="destructive" disabled={deleting} onClick={() => setDeleteOpen(true)}>
+            删除应用
+          </BeButton>
+        )}
+      </div>
       {onDeleteApp && (
         <AlertDialog
           open={deleteOpen}
@@ -663,6 +747,21 @@ function entrySummary(entry: DesktopContactUser | DesktopContactApp | DesktopCon
     return entry.nickname || entry.email || (entry.online ? "在线" : "离线")
   if (entry.avatarType === "app") return entry.description || (entry.online ? "在线" : "离线")
   return `${entry.memberCount} 人 · ${entry.joined ? "已加入" : "公开群组"}`
+}
+
+function detailEntityFor(
+  detail: {
+    targetId: string
+    entity: DesktopContactUser | DesktopContactApp | DesktopContactGroup
+  } | null,
+  targetId: string,
+  selection: Selection,
+) {
+  return detail?.targetId === targetId &&
+    detail.entity.avatarType === selection.type &&
+    detail.entity.id === selection.id
+    ? detail.entity
+    : null
 }
 
 function entityFor(directory: DesktopContactDirectory, selection: Selection) {

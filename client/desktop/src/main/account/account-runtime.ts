@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { contactLink, parseContactLink } from "../../../../shared/contact-links.ts"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import {
@@ -591,6 +592,14 @@ export class AccountRuntime {
   resolveUserNames(userIds: string[]) {
     this.assertInitialized()
     return this.contactManager!.resolveUserNames(userIds)
+  }
+
+  async resolveContact(input: { type: "user" | "app" | "group"; id: string }) {
+    this.assertInitialized()
+    let entity
+    try { entity = parseContactLink(contactLink(input)) } catch { /* Validated below. */ }
+    if (!entity) throw new AuthFailure("invalid_contact", "名片目标格式不正确")
+    return this.contactManager!.resolveProfile(entity)
   }
 
   getContacts(): DesktopContactDirectory {

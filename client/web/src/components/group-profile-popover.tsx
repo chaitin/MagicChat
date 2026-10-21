@@ -1,4 +1,5 @@
 import * as React from "react"
+import { SendNamecardButton } from "@/components/send-namecard-button"
 import { UserRound, UsersRound } from "lucide-react"
 
 import type { ClientConversation } from "@/lib/client-data-api"
@@ -92,6 +93,7 @@ export function GroupProfilePopover({
                 value={`${memberCount} 人群聊`}
               />
             </div>
+            <SendNamecardButton target={{ type: "group", id: conversation.id }} />
           </div>
         </PopoverContent>
       </Popover>

@@ -1,4 +1,5 @@
 import * as React from "react"
+import { SendNamecardButton } from "@/components/send-namecard-button"
 import { useNavigate } from "react-router"
 import { Bot, Loader2Icon, UserRound } from "lucide-react"
 import { toast } from "sonner"
@@ -219,17 +220,22 @@ function AppProfilePopoverContent({
               />
             </div>
 
-            <Button
-              className="w-full"
-              disabled={openingConversation}
-              onClick={() => void handleStartConversation()}
-              type="button"
-            >
-              {openingConversation && (
-                <Loader2Icon aria-hidden="true" className="animate-spin" />
-              )}
-              发消息
-            </Button>
+            <div className="grid gap-2">
+              <Button
+                className="w-full"
+                disabled={openingConversation}
+                onClick={() => void handleStartConversation()}
+                type="button"
+              >
+                {openingConversation && (
+                  <Loader2Icon aria-hidden="true" className="animate-spin" />
+                )}
+                发消息
+              </Button>
+              <SendNamecardButton
+                target={{ type: "app", id: currentProfile.id }}
+              />
+            </div>
           </div>
         </PopoverContent>
       </Popover>

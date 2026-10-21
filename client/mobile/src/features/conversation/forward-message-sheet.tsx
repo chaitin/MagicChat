@@ -27,6 +27,7 @@ export function ForwardMessageSheet({
   open,
   server,
   source,
+  purpose = "forward",
 }: {
   conversations: ClientConversation[]
   onAnimationComplete: (open: boolean) => void
@@ -35,7 +36,9 @@ export function ForwardMessageSheet({
   open: boolean
   server: ServerTarget
   source: ForwardMessageSource | null
+  purpose?: "forward" | "namecard"
 }) {
+  const verb = purpose === "namecard" ? "发送" : "转发"
   const queryClient = useQueryClient()
   const { colors } = useXGUITheme()
   const [keyword, setKeyword] = useState("")
@@ -46,7 +49,7 @@ export function ForwardMessageSheet({
   const visibleConversations = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLocaleLowerCase()
     return orderConversations(
-      conversations.filter((conversation) => !conversation.topic?.archived)
+      conversations.filter((conversation) => !conversation.topic?.archived && conversation.canSend !== false)
     ).filter(
       (conversation) =>
         !normalizedKeyword ||
@@ -89,7 +92,10 @@ export function ForwardMessageSheet({
     setSelectedConversationIds((current) => {
       const next = new Set(current)
       if (next.has(conversationId)) next.delete(conversationId)
-      else next.add(conversationId)
+      else {
+        if (purpose === "namecard") next.clear()
+        next.add(conversationId)
+      }
       return next
     })
   }
@@ -101,7 +107,7 @@ export function ForwardMessageSheet({
         dismissible={!submitting}
         headerAction={
           <XGUIButton
-            accessibilityLabel="确认转发"
+            accessibilityLabel={`确认${verb}`}
             disabled={selectedConversationIds.size === 0 || submitting}
             loading={submitting}
             onPress={() => void handleForward()}
@@ -110,8 +116,8 @@ export function ForwardMessageSheet({
             textStyle={styles.primaryButtonText}
           >
             {selectedConversationIds.size > 0
-              ? `转发(${selectedConversationIds.size})`
-              : "转发"}
+              ? `${verb}(${selectedConversationIds.size})`
+              : verb}
           </XGUIButton>
         }
         onAnimationComplete={handleAnimationComplete}
@@ -119,7 +125,7 @@ export function ForwardMessageSheet({
           if (!nextOpen) requestClose()
         }}
         open={open}
-        title="转发消息"
+        title={purpose === "namecard" ? "发送名片" : "转发消息"}
       >
         {source ? (
           <View style={styles.sourcePreview}>

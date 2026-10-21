@@ -215,6 +215,7 @@ const bridge: DesktopBridge = {
     listMessageReactionUsers: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listMessageReactionUsers, input),
     resolveUserNames: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.resolveUserNames, input),
+    resolveContact: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.resolveContact, input),
     getContacts: (targetId) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getContacts, targetId),
     refreshContacts: (targetId) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.refreshContacts, targetId),

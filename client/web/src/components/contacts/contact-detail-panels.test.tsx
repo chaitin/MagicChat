@@ -128,6 +128,17 @@ describe("AppDetailPanel", () => {
       name: "开发指南",
     })
     const editProfileButton = screen.getByRole("button", { name: "修改资料" })
+    const sendNamecardButton = screen.getByRole("button", { name: "推荐给好友" })
+    const messageButton = screen.getByRole("button", { name: "发消息" })
+    expect(sendNamecardButton.className).toBe(editProfileButton.className)
+    expect(
+      messageButton.compareDocumentPosition(sendNamecardButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(
+      sendNamecardButton.compareDocumentPosition(editProfileButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
     const deleteButton = screen.getByRole("button", { name: "删除应用" })
     expect(accessInfoButton).toBeInTheDocument()
     expect(editProfileButton).toBeInTheDocument()

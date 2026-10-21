@@ -45,6 +45,7 @@ export function ForwardMessageDialog({
   onForward,
   onComplete,
   onClose,
+  purpose = "forward",
 }: {
   conversations: DesktopConversation[]
   targetId: string
@@ -53,7 +54,9 @@ export function ForwardMessageDialog({
   onForward: (conversationIds: string[]) => Promise<ForwardMessagesResult>
   onComplete: () => void
   onClose: () => void
+  purpose?: "forward" | "namecard"
 }) {
+  const verb = purpose === "namecard" ? "发送" : "转发"
   const { showToast } = useAnimatedToast()
   const id = useId()
   const [query, setQuery] = useState("")
@@ -109,7 +112,10 @@ export function ForwardMessageDialog({
       if (!current.has(conversationId) && current.size >= 20) return current
       const next = new Set(current)
       if (next.has(conversationId)) next.delete(conversationId)
-      else next.add(conversationId)
+      else {
+        if (purpose === "namecard") next.clear()
+        next.add(conversationId)
+      }
       return next
     })
     setFailures((current) => {
@@ -141,21 +147,21 @@ export function ForwardMessageDialog({
       setFailures(failed)
       setSelected(new Set(retryIds))
       if (!failed.size) {
-        showToast({ status: "success", title: `已转发到 ${result.sentCount} 个会话` })
+        showToast({ status: "success", title: `已${verb}到 ${result.sentCount} 个会话` })
         onComplete()
         onClose()
       } else {
         showToast({
           status: "warning",
           title: result.sentCount
-            ? `已转发到 ${result.sentCount} 个会话，${result.failedCount} 个失败`
-            : "转发失败，请检查目标会话后重试",
+            ? `已${verb}到 ${result.sentCount} 个会话，${result.failedCount} 个失败`
+            : `${verb}失败，请检查目标会话后重试`,
         })
       }
     } catch (error) {
       showToast({
         status: "error",
-        title: "转发消息失败",
+        title: `${verb}消息失败`,
         description: error instanceof Error ? error.message : undefined,
       })
     } finally {
@@ -173,8 +179,16 @@ export function ForwardMessageDialog({
     >
       <DialogContent className="sm:max-w-lg" showCloseButton={!submitting}>
         <DialogHeader>
-          <DialogTitle>{messageCount > 1 ? `转发 ${messageCount} 条消息` : "转发消息"}</DialogTitle>
-          <DialogDescription>选择要转发到的会话，最多 20 个。</DialogDescription>
+          <DialogTitle>
+            {purpose === "namecard"
+              ? "发送名片"
+              : messageCount > 1
+                ? `转发 ${messageCount} 条消息`
+                : "转发消息"}
+          </DialogTitle>
+          <DialogDescription>
+            {purpose === "namecard" ? "选择一个会话发送名片。" : "选择要转发到的会话，最多 20 个。"}
+          </DialogDescription>
         </DialogHeader>
         <form className="grid min-w-0 gap-4" onSubmit={(event) => void submit(event)}>
           <Input
@@ -216,14 +230,14 @@ export function ForwardMessageDialog({
                       )}
                     </ItemContent>
                     {isSent ? (
-                      <span className="text-xs text-muted-foreground">已转发</span>
+                      <span className="text-xs text-muted-foreground">已{verb}</span>
                     ) : (
                       <Checkbox
                         id={checkboxId}
                         checked={selected.has(candidate.key)}
                         disabled={submitting}
                         onCheckedChange={() => toggle(candidate.key)}
-                        aria-label={`转发到${name}`}
+                        aria-label={`${verb}到${name}`}
                       />
                     )}
                   </Label>
@@ -254,7 +268,7 @@ export function ForwardMessageDialog({
                 取消
               </Button>
               <Button type="submit" disabled={submitting || loadingContacts || !selected.size}>
-                {submitting ? "正在转发" : `转发（${selected.size}）`}
+                {submitting ? `正在${verb}` : `${verb}（${selected.size}）`}
               </Button>
             </div>
           </DialogFooter>

@@ -53,6 +53,11 @@ declare module "@hugeicons/core-free-icons/dist/esm/PlayCircle02Icon" {
   const icon: HugeiconsMessageIconData
   export default icon
 }
+declare module "@hugeicons/core-free-icons/dist/esm/StudentCardIcon" {
+  const icon: HugeiconsMessageIconData
+  export default icon
+}
+
 declare module "@hugeicons/core-free-icons/dist/esm/PauseCircleIcon" {
   const icon: HugeiconsMessageIconData
   export default icon

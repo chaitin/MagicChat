@@ -6,7 +6,8 @@ import { ContentState } from "@/components/feedback/content-state"
 import { isSvgUrl } from "@/components/avatar/cached-avatar-image"
 import { AppHeader } from "@/components/navigation/app-header"
 import { ApiRequestError } from "@/data/api-client"
-import { contactManager } from "@/data/contacts/contact-manager"
+import { AppButton } from "@/components/forms/app-button"
+import { useEntityProfileLookup } from "./use-entity-profile-lookup"
 import { useOpenEntityConversation } from "@/data/conversations/conversation-hooks"
 import type { ServerTarget } from "@/core/server-target"
 import {
@@ -54,20 +55,12 @@ export function EntityDetailScreen() {
   const entityId = getFirstParam(params.entityId)
   const entityTypeParam = getFirstParam(params.entityType)
   const entityType = isEntityType(entityTypeParam) ? entityTypeParam : null
-  useFocusEffect(useCallback(() => {
-    if (!entityId || !entityType) return
-    const refresh = entityType === "user"
-      ? contactManager.refreshUsers(session, [entityId])
-      : contactManager.refresh(session)
-    void refresh.catch(() => undefined)
-  }, [entityId, entityType, session]))
+  const reference = useMemo(() => entityId && entityType ? { type: entityType, id: entityId } : null, [entityId, entityType])
   const profileContacts = useMemo(
     () => ({ ...contacts, users: Object.values(usersById) }),
     [contacts, usersById]
   )
-  const isResolvingUserProfile =
-    entityType === "user" && Boolean(entityId) && !usersById[entityId]
-  const profile = useMemo(
+  const cachedProfile = useMemo(
     () =>
       entityType && entityId
         ? resolveEntityProfile({
@@ -79,6 +72,12 @@ export function EntityDetailScreen() {
         : null,
     [conversations, currentUser, entityId, entityType, profileContacts]
   )
+  const cachedRecord = entityType === "user" ? profileContacts.users.find((item) => item.id === entityId)
+    : entityType === "app" ? profileContacts.apps.find((item) => item.id === entityId)
+    : profileContacts.groups.find((item) => item.id === entityId)
+  const cachedRevision = cachedRecord?.entityRevision ?? conversations.find((item) => item.id === entityId)?.entityRevision ?? 0
+  const lookup = useEntityProfileLookup({ target: session, reference, cached: cachedProfile, revision: cachedRevision })
+  const profile = lookup.profile
 
   async function handlePrimaryAction() {
     if (!profile || openConversationMutation.isPending) return
@@ -126,18 +125,29 @@ export function EntityDetailScreen() {
         title={getPageTitle(entityType)}
       />
 
-      {(!isReady || isResolvingUserProfile) && entityType ? (
+      {!isReady && entityType ? (
         <ContentState loading message="正在加载资料" />
       ) : profile ? (
-        <EntityProfileContent
-          currentUserId={currentUser?.id ?? null}
-          isActionPending={openConversationMutation.isPending}
-          onActionPress={() => void handlePrimaryAction()}
-          profile={profile}
-          server={session}
-        />
+        <>
+          {lookup.error && <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
+            <AppButton accessibilityLabel="重试加载资料" onPress={lookup.retry} theme="gray" variant="outlined">
+              刷新失败，正在显示缓存资料，点击重试
+            </AppButton>
+          </View>}
+          <EntityProfileContent
+            currentUserId={currentUser?.id ?? null}
+            isActionPending={openConversationMutation.isPending}
+            onActionPress={() => void handlePrimaryAction()}
+            profile={profile}
+            server={session}
+          />
+        </>
+      ) : lookup.loading ? (
+        <ContentState loading message="正在加载资料" />
       ) : (
-        <ContentState message="资料不存在或已不可访问" />
+        <ContentState message={lookup.unavailable ? "资料不存在或已不可访问" : lookup.error ? "资料加载失败，请检查网络后重试" : "资料不存在或已不可访问"}>
+          {lookup.error && <AppButton accessibilityLabel="重试加载资料" onPress={lookup.retry} theme="gray" variant="outlined">点击重试</AppButton>}
+        </ContentState>
       )}
     </View>
   )

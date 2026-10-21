@@ -1,5 +1,7 @@
 import type {
   DesktopContactDirectory,
+  DesktopContactApp,
+  DesktopContactGroup,
   DesktopContactUser,
   DesktopFriendRequest,
 } from "../../shared/account-data"
@@ -204,6 +206,19 @@ export class ContactManager {
     return readEntitySnapshot(await this.client.post("/api/client/entities/resolve", { entities }))
   }
 
+  async resolveProfile(entity: EntityReference): Promise<DesktopContactUser | DesktopContactApp | DesktopContactGroup> {
+    const snapshot = await this.resolveEntities([entity])
+    const rows = entity.type === "user" ? snapshot.users : entity.type === "app" ? snapshot.apps : snapshot.groups
+    const raw = rows.find((row) => row.id === entity.id)
+    if (!raw) throw new AuthFailure("contact_not_found", "资料不存在或无权查看")
+    const stored = entity.type === "user" ? parseUser(raw) : entity.type === "app" ? parseApp(raw) : parseGroup(raw)
+    const descriptor = avatarDescriptor(entity.type, entity.id, raw)
+    if (descriptor) this.refreshedAvatars.set(entityKey(entity), descriptor)
+    // A profile lookup is not directory discovery or a friendship mutation.
+    const { payload: _payload, ...profile } = stored
+    return profile
+  }
+
   applyEntities(snapshot: EntityWireSnapshot, entities: EntityReference[]) {
     this.entityGeneration += 1
     const wanted = new Set(entities.map(entityKey))
@@ -233,8 +248,11 @@ export class ContactManager {
     return retryNetworkAction(async () => {
       const entity = { type, id: entityId }
       const snapshot = await this.resolveEntities([entity])
-      this.applyEntities(snapshot, [entity])
-      const descriptor = this.getAvatarDescriptor(type, entityId)
+      const rows = type === "user" ? snapshot.users : type === "app" ? snapshot.apps : snapshot.groups
+      const raw = rows.find((row) => row.id === entityId)
+      if (this.database.getContactPayload(type, entityId) !== undefined) this.applyEntities(snapshot, [entity])
+      else this.refreshedAvatars.delete(entityKey(entity))
+      const descriptor = raw ? avatarDescriptor(type, entityId, raw) : undefined
       if (descriptor) this.refreshedAvatars.set(`${type}:${entityId}`, descriptor)
       return descriptor
     })

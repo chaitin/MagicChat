@@ -10,6 +10,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { SendNamecardButton } from "@/components/send-namecard-button"
 import { GroupAvatar } from "@/components/group-avatar"
 import {
   UserProfilePopoverLink,
@@ -146,6 +147,7 @@ export function AppDetailPanel({
             )}
             发消息
           </Button>
+          <SendNamecardButton target={{ type: "app", id: app.id }} />
           {onViewAccessInfo && onEditProfile && (
             <div className="grid gap-2">
               <Button
@@ -282,17 +284,20 @@ export function GroupDetailPanel({
             value={group.joined ? "已加入" : "未加入"}
           />
         </div>
-        <Button
-          className="w-full"
-          disabled={startingConversation}
-          onClick={onStartConversation}
-          type="button"
-        >
-          {startingConversation && (
-            <Loader2Icon aria-hidden="true" className="animate-spin" />
-          )}
-          {group.joined ? "发消息" : "加入群聊"}
-        </Button>
+        <div className="grid w-full gap-2">
+          <Button
+            className="w-full"
+            disabled={startingConversation}
+            onClick={onStartConversation}
+            type="button"
+          >
+            {startingConversation && (
+              <Loader2Icon aria-hidden="true" className="animate-spin" />
+            )}
+            {group.joined ? "发消息" : "加入群聊"}
+          </Button>
+          <SendNamecardButton target={{ type: "group", id: group.id }} />
+        </div>
       </div>
     </div>
   )
@@ -363,31 +368,34 @@ export function ContactDetailPanel({
             value={contact.phone ? formatContactPhone(contact.phone) : ""}
           />
         </div>
-        {addFriendLabel ? (
-          <Button
-            className="w-full"
-            disabled={addingFriend || !onAddFriend}
-            onClick={onAddFriend}
-            type="button"
-          >
-            {addingFriend && (
-              <Loader2Icon aria-hidden="true" className="animate-spin" />
-            )}
-            {addFriendLabel}
-          </Button>
-        ) : canStartConversation ? (
-          <Button
-            className="w-full"
-            disabled={startingConversation}
-            onClick={onStartConversation}
-            type="button"
-          >
-            {startingConversation && (
-              <Loader2Icon aria-hidden="true" className="animate-spin" />
-            )}
-            发消息
-          </Button>
-        ) : null}
+        <div className="grid w-full gap-2">
+          {addFriendLabel ? (
+            <Button
+              className="w-full"
+              disabled={addingFriend || !onAddFriend}
+              onClick={onAddFriend}
+              type="button"
+            >
+              {addingFriend && (
+                <Loader2Icon aria-hidden="true" className="animate-spin" />
+              )}
+              {addFriendLabel}
+            </Button>
+          ) : canStartConversation ? (
+            <Button
+              className="w-full"
+              disabled={startingConversation}
+              onClick={onStartConversation}
+              type="button"
+            >
+              {startingConversation && (
+                <Loader2Icon aria-hidden="true" className="animate-spin" />
+              )}
+              发消息
+            </Button>
+          ) : null}
+          <SendNamecardButton target={{ type: "user", id: contact.id }} />
+        </div>
       </div>
     </div>
   )

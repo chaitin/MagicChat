@@ -306,6 +306,9 @@ export function registerAccountDataIpc({
   handle(ACCOUNT_DATA_CHANNELS.resolveUserNames, (input) =>
     auth.resolveUserNames(input as ResolveUserNamesInput),
   )
+  handle(ACCOUNT_DATA_CHANNELS.resolveContact, (input) =>
+    auth.resolveContact(input as Parameters<AuthController["resolveContact"]>[0]),
+  )
   handle(ACCOUNT_DATA_CHANNELS.getContacts, (input) => auth.getContacts(input as string))
   handle(ACCOUNT_DATA_CHANNELS.getAvatar, (input) => auth.getAvatar(input as AvatarRequest))
   handle(ACCOUNT_DATA_CHANNELS.invalidateAvatar, (input) =>

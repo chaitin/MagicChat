@@ -1,4 +1,6 @@
 import { useId, useState, type ReactNode } from "react"
+import { parseContactLink } from "../../../../../../shared/contact-links"
+import { openContactEvent } from "@/components/send-namecard-button"
 import { Copy01Icon, ExternalLinkIcon, Loading03Icon } from "@hugeicons/core-free-icons"
 import type { DesktopMessageBody, DesktopMessageChoiceState } from "../../../../shared/account-data"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
@@ -84,6 +86,7 @@ export function LinkBody({
 }
 
 export function CardBody({
+  targetId,
   title,
   description,
   url,
@@ -91,6 +94,7 @@ export function CardBody({
   title: string
   description: string
   url: string
+  targetId: string
 }) {
   const { showToast } = useAnimatedToast()
 
@@ -111,10 +115,16 @@ export function CardBody({
     <button
       type="button"
       className="grid w-80 max-w-full cursor-pointer gap-2 text-left"
-      onClick={() => void openLink()}
+      onClick={() => {
+        const target = parseContactLink(url)
+        if (target)
+          window.dispatchEvent(new CustomEvent(openContactEvent, { detail: { targetId, target } }))
+        else if (!url.startsWith("jiying:")) void openLink()
+        else showToast({ status: "error", title: "名片链接格式不正确" })
+      }}
     >
       <span className="font-medium">{title}</span>
-      <span className="line-clamp-3 text-muted-foreground">{description}</span>
+      <span className="line-clamp-3 break-all whitespace-pre-wrap text-muted-foreground">{description}</span>
     </button>
   )
 }

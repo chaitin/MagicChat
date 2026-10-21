@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { normalizeOutgoingRichMessageBody } from "../src/main/account/rich-message-input.ts"
 
-test("任务对象卡片转为服务端协议并限制为任务实体", () => {
+test("对象卡片转为服务端协议并拒绝格式非法的通讯录实体", () => {
   assert.deepEqual(
     normalizeOutgoingRichMessageBody({
       type: "entity_card",

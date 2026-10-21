@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router"
 
+import { NamecardDialogHost } from "@/components/send-namecard-button"
 import { AppLayout } from "@/components/app-layout"
 import { ClientConversationRealtimeSync } from "@/components/client-conversation-realtime-sync"
 import { ClientEntityRealtimeSync } from "@/components/client-entity-realtime-sync"
@@ -70,6 +71,7 @@ export function App() {
                   <ClientMessageNotificationSync />
                   <ClientUserDirectoryRealtimeSync />
                   <ClientEntityRealtimeSync />
+                  <NamecardDialogHost />
                   <AppLayout />
                 </ClientRealtimeProvider>
               </ClientDataProvider>
@@ -137,6 +139,7 @@ function DocumentWorkspaceRoute() {
       <ClientRealtimeProvider>
         <ClientUserDirectoryRealtimeSync />
                   <ClientEntityRealtimeSync />
+                  <NamecardDialogHost />
         <DocumentPage />
       </ClientRealtimeProvider>
     </ClientDataProvider>
@@ -149,6 +152,7 @@ function TaskWorkspaceRoute() {
       <ClientRealtimeProvider>
         <ClientUserDirectoryRealtimeSync />
                   <ClientEntityRealtimeSync />
+                  <NamecardDialogHost />
         <ClientDocumentTitle title="任务" />
         <TaskWorkspacePage />
       </ClientRealtimeProvider>

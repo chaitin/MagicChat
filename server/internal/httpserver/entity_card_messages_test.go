@@ -76,9 +76,9 @@ func TestResolveEntityCardMessageBodyUsesFixedTemplates(t *testing.T) {
 		wantTitle       string
 		wantURL         string
 	}{
-		{owner.ID, entityCardTypeUser, "姓名: 项目负责人\n昵称: 老板\n邮箱: owner@example.com", "联系人 - 老板", "/contacts/user/" + owner.ID},
-		{app.ID, entityCardTypeApp, "智能 设计应用", "应用 - 设计助手", "/contacts/app/" + app.ID},
-		{group.ID, entityCardTypeGroup, "2 位成员", "群聊 - 设计群", "/contacts/group/" + group.ID},
+		{owner.ID, entityCardTypeUser, "姓名: 项目负责人\n昵称: 老板\n邮箱: owner@example.com", "联系人 - 老板", "jiying://contact/" + owner.ID},
+		{app.ID, entityCardTypeApp, "智能 设计应用", "应用 - 设计助手", "jiying://app/" + app.ID},
+		{group.ID, entityCardTypeGroup, "2 位成员", "群聊 - 设计群", "jiying://group/" + group.ID},
 		{project.ID, entityCardTypeProject, "官网 改版项目", "项目 - 官网项目", "/projects/" + project.ID},
 		{emptyProject.ID, entityCardTypeProject, "暂无描述", "项目 - 空项目", "/projects/" + emptyProject.ID},
 		{task.ID, entityCardTypeTask, "状态: 进行中\n负责人: 张三\n截止日期: 2026-07-20", "任务 - 完成首页改版", "/projects/" + project.ID + "?taskId=" + task.ID},

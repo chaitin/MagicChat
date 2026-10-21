@@ -4,6 +4,7 @@ export const ACCOUNT_DATA_CHANNELS = {
   initialize: "desktop-next:v1:account-data-initialize",
   refreshAll: "desktop-next:v1:account-data-refresh-all",
   getProfile: "desktop-next:v1:account-profile-get",
+  resolveContact: "desktop-next:v1:contact-profile-resolve",
   updateProfile: "desktop-next:v1:account-profile-update",
   uploadProfileAvatar: "desktop-next:v1:account-profile-avatar-upload",
   searchLocal: "desktop-next:v1:account-data-search-local",
@@ -661,12 +662,13 @@ export type SendTextMessageInput = {
 export type SendRichMessageBody =
   | Extract<DesktopMessageBody, { type: "choice" }>
   | Extract<DesktopMessageBody, { type: "chart" }>
-  | { type: "entity_card"; entityType: "task"; entityId: string }
+  | { type: "entity_card"; entityType: "task" | "user" | "app" | "group"; entityId: string }
 
 export type SendRichMessageInput = {
   targetId: string
   conversationId: string
   body: SendRichMessageBody
+  clientMessageId?: string
   replyToMessageId?: string
 }
 
@@ -788,6 +790,11 @@ export interface AccountDataBridge {
   initialize(targetId: string): Promise<AuthResult<null>>
   refreshAll(targetId: string): Promise<AuthResult<null>>
   getProfile(targetId: string): Promise<AuthResult<AuthUser>>
+  resolveContact(input: {
+    targetId: string
+    type: "user" | "app" | "group"
+    id: string
+  }): Promise<AuthResult<DesktopContactUser | DesktopContactApp | DesktopContactGroup>>
   updateProfile(input: UpdateProfileInput): Promise<AuthResult<AuthUser>>
   uploadProfileAvatar(input: UploadProfileAvatarInput): Promise<AuthResult<AuthUser>>
   searchLocal(input: LocalSearchInput): Promise<AuthResult<LocalSearchResponse>>

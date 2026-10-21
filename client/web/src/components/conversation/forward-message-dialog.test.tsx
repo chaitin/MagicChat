@@ -9,6 +9,50 @@ import type {
 } from "@/lib/client-data-api"
 
 describe("ForwardMessageDialog", () => {
+  it("名片模式只选择一个可发送会话，失败后保留选择供重试", async () => {
+    const user = userEvent.setup()
+    const onForward = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue({
+        sentCount: 1,
+        failedCount: 0,
+        results: [{ conversationId: "second", status: "sent", messages: [] }],
+      })
+    const onComplete = vi.fn()
+    render(
+      <ForwardMessageDialog
+        open
+        purpose="namecard"
+        messageCount={1}
+        conversations={[
+          createConversation("first", "会话一", "group"),
+          createConversation("second", "会话二", "group"),
+          {
+            ...createConversation("readonly", "只读会话", "group"),
+            canSend: false,
+          },
+        ]}
+        onComplete={onComplete}
+        onForward={onForward}
+        onOpenChange={vi.fn()}
+      />
+    )
+    expect(
+      screen.getByRole("heading", { name: "发送名片" })
+    ).toBeInTheDocument()
+    expect(screen.queryByText("只读会话")).not.toBeInTheDocument()
+    await user.click(screen.getByRole("checkbox", { name: "会话一" }))
+    await user.click(screen.getByRole("checkbox", { name: "会话二" }))
+    expect(screen.getByRole("checkbox", { name: "会话一" })).not.toBeChecked()
+    await user.click(screen.getByRole("button", { name: "发送（1）" }))
+    await waitFor(() => expect(onForward).toHaveBeenCalledTimes(1))
+    expect(onComplete).not.toHaveBeenCalled()
+    await user.click(screen.getByRole("button", { name: "发送（1）" }))
+    await waitFor(() => expect(onComplete).toHaveBeenCalledOnce())
+    expect(onForward).toHaveBeenLastCalledWith(["second"])
+  })
+
   it("searches conversations by full pinyin and initials", async () => {
     const user = userEvent.setup()
 

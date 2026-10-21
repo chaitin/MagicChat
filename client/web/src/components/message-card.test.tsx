@@ -6,11 +6,37 @@ import { MessageCard } from "@/components/message-card"
 import type { ClientCardMessageBody } from "@/lib/client-data-api"
 
 describe("MessageCard", () => {
+  it.each([
+    ["contact", "user"],
+    ["app", "app"],
+    ["group", "group"],
+  ])("routes %s namecards to the directory", (kind, route) => {
+    const id = "550e8400-e29b-41d4-a716-446655440000"
+    renderCard(createCard(`jiying://${kind}/${id}`))
+    expect(screen.getByRole("link", { name: /查看详情/ })).toHaveAttribute(
+      "href",
+      `/contacts/${route}/${id}`
+    )
+  })
+
+  it.each([
+    "jiying://contact/not-a-uuid",
+    "jiying://task/550e8400-e29b-41d4-a716-446655440000",
+    "jiying://app/550e8400-e29b-41d4-a716-446655440000?server=other",
+  ])("rejects unsupported namecard URL %s", (url) => {
+    renderCard(createCard(url))
+    expect(screen.queryByRole("link")).not.toBeInTheDocument()
+  })
+
   it("renders an internal action as a router link", () => {
     renderCard(createCard("/projects/project-1?taskId=task-1"))
 
     expect(screen.getByText("任务标题")).toHaveClass("truncate")
-    expect(screen.getByText("任务说明")).toHaveClass("line-clamp-3", "break-all", "whitespace-pre-wrap")
+    expect(screen.getByText("任务说明")).toHaveClass(
+      "line-clamp-3",
+      "break-all",
+      "whitespace-pre-wrap"
+    )
     expect(screen.getByText("任务说明")).not.toHaveClass("truncate")
     expect(
       screen.getByRole("link", { name: "任务标题，查看详情" })

@@ -901,6 +901,13 @@ export class ConversationManager {
     this.assertConversationId(input.conversationId)
     const normalized = normalizeOutgoingRichMessageBody(input.body)
     if (
+      input.clientMessageId !== undefined &&
+      (typeof input.clientMessageId !== "string" ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.clientMessageId))
+    ) {
+      throw new AuthFailure("invalid_client_message_id", "消息请求 ID 格式不正确")
+    }
+    if (
       input.replyToMessageId !== undefined &&
       (!input.replyToMessageId || input.replyToMessageId.length > 128)
     ) {
@@ -909,7 +916,7 @@ export class ConversationManager {
     const data = await this.client.post(
       `/api/client/conversations/${encodeURIComponent(input.conversationId)}/messages`,
       {
-        client_message_id: randomUUID(),
+        client_message_id: input.clientMessageId ?? randomUUID(),
         ...(input.replyToMessageId ? { reply_to_message_id: input.replyToMessageId } : {}),
         body: normalized,
       },

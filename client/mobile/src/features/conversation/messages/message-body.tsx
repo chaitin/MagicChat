@@ -1,4 +1,5 @@
 import * as Clipboard from "expo-clipboard"
+import { parseContactLink } from "../../../../../shared/contact-links"
 import { memo, useRef, useState } from "react"
 import { Alert, Image, Linking, Pressable, View } from "react-native"
 import { Text } from "@/components/mi-sans-text"
@@ -113,7 +114,12 @@ export const MessageBody = memo(function MessageBody({
       <MessageLinkCard
         description={body.description}
         onLongPress={onMessageLongPress}
-        onPress={body.url.trim() ? () => void openExternalUrl(body.url) : undefined}
+        onPress={body.url.trim() ? () => {
+          const target = parseContactLink(body.url)
+          if (target) onMentionPress(target)
+          else if (body.url.startsWith("jiying:")) Alert.alert("无法打开", "名片链接格式不正确。")
+          else void openExternalUrl(body.url)
+        } : undefined}
         title={body.title}
       />
     )

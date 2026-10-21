@@ -6,6 +6,7 @@ import (
 	"errors"
 	stdhtml "html"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -359,6 +360,8 @@ func (cardHandler) Summary(raw json.RawMessage) (string, error) {
 	return "[卡片] " + strings.TrimSpace(body.Title), nil
 }
 
+var contactCardURLPattern = regexp.MustCompile(`^jiying://(contact|app|group)/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
 func normalizeCardURL(rawURL string) (string, error) {
 	cardURL := strings.TrimSpace(rawURL)
 	if cardURL == "" {
@@ -369,6 +372,12 @@ func normalizeCardURL(rawURL string) (string, error) {
 	}
 	if strings.Contains(cardURL, "\\") || strings.ContainsAny(cardURL, " \t\r\n") {
 		return "", errors.New("链接格式错误")
+	}
+	if strings.HasPrefix(cardURL, "jiying:") {
+		if !contactCardURLPattern.MatchString(cardURL) {
+			return "", errors.New("名片链接格式错误")
+		}
+		return cardURL, nil
 	}
 	if strings.HasPrefix(cardURL, "/") {
 		if strings.HasPrefix(cardURL, "//") {

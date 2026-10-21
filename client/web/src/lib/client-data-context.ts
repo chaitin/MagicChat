@@ -48,6 +48,7 @@ export type ClientConversationMessageFocus = {
 }
 
 export type SendConversationMessageOptions = {
+  clientMessageId?: string
   replyToMessageId?: string
 }
 

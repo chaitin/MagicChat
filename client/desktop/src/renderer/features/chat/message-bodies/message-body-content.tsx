@@ -81,7 +81,14 @@ export function MessageBodyContent({
     case "link":
       return <LinkBody title={body.title} url={body.url} flush={flushInteractiveCard} />
     case "card":
-      return <CardBody title={body.title} description={body.description} url={body.url} />
+      return (
+        <CardBody
+          targetId={targetId}
+          title={body.title}
+          description={body.description}
+          url={body.url}
+        />
+      )
     case "chart":
       return <ChartBody body={body} />
     case "choice":
