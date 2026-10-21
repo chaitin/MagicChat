@@ -5,7 +5,7 @@ import { AuthFailure } from "../shared/auth"
 import type { UpdateInfo, UpdateProgress } from "../shared/desktop"
 import { downloadUpdatePackage, validateUpdateFile } from "./update-download"
 import { openDownloadedUpdate } from "./update-installer"
-import { downloadNativeUpdate, installOnNextMacQuit } from "./update-native"
+import { downloadNativeUpdate, installOnNextMacQuit, loadNativeUpdater } from "./update-native"
 import { checkForUpdates } from "./update-service"
 
 export class UpdateManager {
@@ -39,7 +39,7 @@ export class UpdateManager {
     ) {
       this.cancelMacInstallOnQuit?.()
       this.cancelMacInstallOnQuit = null
-      const { autoUpdater } = await import("electron-updater")
+      const autoUpdater = await loadNativeUpdater()
       autoUpdater.autoInstallOnAppQuit = false
     }
     if (!info.updateAvailable) {
@@ -68,7 +68,7 @@ export class UpdateManager {
       (update.platform === "windows" || update.platform === "macos")
     const pending = (
       useNativeUpdater
-        ? import("electron-updater").then(async ({ autoUpdater }) => {
+        ? loadNativeUpdater().then(async (autoUpdater) => {
             if (!this.updaterErrorsHandled) {
               autoUpdater.on("error", (error) => console.error("自动更新失败", error))
               this.updaterErrorsHandled = true
@@ -106,9 +106,10 @@ export class UpdateManager {
     try {
       await pending
     } catch (error) {
+      console.error("下载更新失败", error)
       if (useNativeUpdater && update.platform === "macos") {
-        await import("electron-updater")
-          .then(({ autoUpdater }) => {
+        await loadNativeUpdater()
+          .then((autoUpdater) => {
             autoUpdater.autoInstallOnAppQuit = false
           })
           .catch(() => undefined)
@@ -163,7 +164,7 @@ export class UpdateManager {
     }
     this.cancelMacInstallOnQuit?.()
     this.cancelMacInstallOnQuit = null
-    const { autoUpdater } = await import("electron-updater")
+    const autoUpdater = await loadNativeUpdater()
     autoUpdater.autoRunAppAfterInstall = true
     autoUpdater.quitAndInstall(false, true)
   }

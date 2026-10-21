@@ -771,6 +771,7 @@ export class AccountRuntime {
         this.input.userId,
         this.input.userName,
         (conversationId) => this.notifyChanged(["conversations", "messages"], [conversationId]),
+        (conversationId) => this.notifyChanged(["conversations"], [conversationId]),
       )
       this.contactManager = new ContactManager(this.database, client)
       this.searchManager = new SearchManager(this.database)

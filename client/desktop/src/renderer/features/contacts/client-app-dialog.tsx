@@ -26,6 +26,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+import { prepareAppAvatar } from "@/lib/app-avatar-processing"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -112,9 +113,10 @@ export function ClientAppDialog({
       const result = await window.desktop!.accountData.selectClientAppAvatar(targetId)
       if (!result.ok) throw new Error(result.error.message)
       if (!result.data) return
+      const prepared = await prepareAppAvatar(targetId, result.data)
       const previous = pendingAvatarRef.current
-      pendingAvatarRef.current = result.data
-      setPendingAvatar(result.data)
+      pendingAvatarRef.current = prepared
+      setPendingAvatar(prepared)
       if (previous) {
         void window.desktop!.accountData.releaseMessageFile({ targetId, token: previous.token })
       }
@@ -505,9 +507,10 @@ function EditAppProfileDialog({
       const result = await window.desktop!.accountData.selectClientAppAvatar(targetId)
       if (!result.ok) throw new Error(result.error.message)
       if (!result.data) return
+      const prepared = await prepareAppAvatar(targetId, result.data)
       const previous = pendingAvatarRef.current
-      pendingAvatarRef.current = result.data
-      setPendingAvatar(result.data)
+      pendingAvatarRef.current = prepared
+      setPendingAvatar(prepared)
       if (previous) {
         void window.desktop!.accountData.releaseMessageFile({ targetId, token: previous.token })
       }

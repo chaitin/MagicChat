@@ -17,6 +17,13 @@ export type NativeUpdater = Pick<
   | "off"
 >
 
+export async function loadNativeUpdater(
+  importModule = () => import("electron-updater"),
+): Promise<AppUpdater> {
+  const updaterModule = await importModule()
+  return updaterModule.default.autoUpdater
+}
+
 export function validateNativeMetadata(
   update: UpdateInfo,
   metadata: { version: string; files?: Array<{ url: string; size?: number; sha512?: string }> },

@@ -169,6 +169,41 @@ export class ConversationRepository {
     )
   }
 
+  queueReadSeq(conversationId: string, seq: number) {
+    this.transaction(() => {
+      if (!this.applyReadSeq(conversationId, seq)) throw new Error("Conversation not found")
+      this.database
+        .prepare(`
+          INSERT INTO pending_conversation_reads (conversation_id, up_to_seq) VALUES (?, ?)
+          ON CONFLICT(conversation_id) DO UPDATE SET up_to_seq = MAX(up_to_seq, excluded.up_to_seq)
+        `)
+        .run(conversationId, seq)
+    })
+  }
+
+  pendingReads() {
+    return this.database
+      .prepare(`
+        SELECT pending.conversation_id AS conversationId, pending.up_to_seq AS upToSeq
+        FROM pending_conversation_reads pending
+        JOIN conversations ON conversations.id = pending.conversation_id
+        WHERE conversations.current = 1
+      `)
+      .all() as { conversationId: string; upToSeq: number }[]
+  }
+
+  acknowledgeReadSeq(conversationId: string, seq: number) {
+    this.transaction(() => {
+      this.applyReadSeq(conversationId, seq)
+      // A response for an older request must not remove a newer queued read.
+      this.database
+        .prepare(
+          "DELETE FROM pending_conversation_reads WHERE conversation_id = ? AND up_to_seq <= ?",
+        )
+        .run(conversationId, seq)
+    })
+  }
+
   applyMentionSeq(conversationId: string, seq: number) {
     if (!Number.isSafeInteger(seq) || seq <= 0) return false
     return (

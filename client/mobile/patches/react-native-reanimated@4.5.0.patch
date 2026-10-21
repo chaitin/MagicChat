@@ -1,0 +1,19 @@
+diff --git a/android/src/main/java/com/swmansion/reanimated/NativeProxy.kt b/android/src/main/java/com/swmansion/reanimated/NativeProxy.kt
+index 48e37714232d5ccf74d99d61cb2fac56314087aa..fabe86780c9f24edd7d450147d43dc0e4dda2487 100644
+--- a/android/src/main/java/com/swmansion/reanimated/NativeProxy.kt
++++ b/android/src/main/java/com/swmansion/reanimated/NativeProxy.kt
+@@ -252,6 +252,14 @@ open class NativeProxy {
+     ) {
+         SynchronousPropsBufferParser.parse(intBuffer, doubleBuffer) { viewTag, props ->
+             if (BuildConfig.IS_REACT_NATIVE_86_OR_NEWER) {
++                // Events can flush an animation frame after its view has been detached.
++                // Match preserveMountedTags: missing and preallocated views are not update targets.
++                val view = try {
++                    mFabricUIManager.resolveView(viewTag)
++                } catch (_: IllegalViewOperationException) {
++                    null
++                }
++                if (view == null) return@parse
+                 try {
+                     updatePropsSynchronouslyMethod.invoke(mountingManager, viewTag, props)
+                 } catch (e: Exception) {

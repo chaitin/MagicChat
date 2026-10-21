@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query"
-import { useRouter } from "expo-router"
+import { useFocusEffect, useNavigation, useRouter } from "expo-router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
@@ -46,6 +46,7 @@ export function MessagesScreen() {
   const { colors } = useXGUITheme()
   const toast = useXGUIToast()
   const router = useRouter()
+  const navigation = useNavigation()
   const { invalidateSession } = useAuth()
   const queryClient = useQueryClient()
   const session = useAuthenticatedSession()
@@ -53,6 +54,18 @@ export function MessagesScreen() {
   const muteMutation = useSetConversationMuted(session)
   const dismissMutation = useDismissConversation(session)
   const pressedConversationRef = useRef<string | null>(null)
+  const openingConversationRef = useRef(true)
+  // 跳转只是入队，不能在 push 返回或页面失焦时提前解锁。
+  useFocusEffect(
+    useCallback(() => {
+      openingConversationRef.current = false
+      pressedConversationRef.current = null
+      return () => {
+        openingConversationRef.current = true
+        pressedConversationRef.current = null
+      }
+    }, [])
+  )
   const prepareConversationMessages = useCallback(
     (conversationId: string) => {
       recordMobilePerf("messages.prepare")
@@ -126,15 +139,25 @@ export function MessagesScreen() {
   )
 
   function handleConversationPress(conversationId: string) {
-    recordConversationNavigation(session, conversationId)
-    if (pressedConversationRef.current !== conversationId) {
-      prepareConversationMessages(conversationId)
+    if (openingConversationRef.current || !navigation.isFocused()) return
+
+    openingConversationRef.current = true
+    try {
+      recordConversationNavigation(session, conversationId)
+      if (pressedConversationRef.current !== conversationId) {
+        prepareConversationMessages(conversationId)
+      }
+      pressedConversationRef.current = null
+      router.push(buildConversationHref(conversationId))
+    } catch (error: unknown) {
+      openingConversationRef.current = false
+      showErrorToast(toast, "打开对话失败", error)
     }
-    pressedConversationRef.current = null
-    router.push(buildConversationHref(conversationId))
   }
 
   function handleConversationPressIn(conversationId: string) {
+    if (openingConversationRef.current || !navigation.isFocused()) return
+
     recordConversationPressIn(session, conversationId)
     pressedConversationRef.current = conversationId
     prepareConversationMessages(conversationId)

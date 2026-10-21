@@ -65,6 +65,18 @@ export class AccountDatabase {
     return this.conversations.applyReadSeq(conversationId, seq)
   }
 
+  queueConversationRead(conversationId: string, seq: number) {
+    this.conversations.queueReadSeq(conversationId, seq)
+  }
+
+  listPendingConversationReads() {
+    return this.conversations.pendingReads()
+  }
+
+  acknowledgeConversationRead(conversationId: string, seq: number) {
+    this.conversations.acknowledgeReadSeq(conversationId, seq)
+  }
+
   applyConversationMentionSeq(conversationId: string, seq: number) {
     return this.conversations.applyMentionSeq(conversationId, seq)
   }

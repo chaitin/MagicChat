@@ -250,7 +250,9 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 		Settings: server.settings, NicknamePolicy: server.settings, Notifications: server, FriendshipMessages: server,
 	})
 	server.clientContacts = clientapi.NewContactAPI(server.contacts)
-	server.entitySync = entitysync.NewService(db)
+	server.entitySync = entitysync.NewService(entitysync.Dependencies{
+		DB: db, UserPresence: server.realtime, AppPresence: server.appConnections,
+	})
 	server.messageContents = messagecontentapp.NewService(messagecontentapp.Dependencies{
 		EntityCards: server.entityCards,
 		FetchLinkTitle: func(ctx context.Context, linkURL string) (string, error) {

@@ -47,6 +47,8 @@
       ],
       "./plugins/with-message-selection-menu",
       "./plugins/with-animated-webp",
+      "./plugins/with-android-drawable-log-filter",
+      "./plugins/with-pnpm-autolinking-cache",
       "./plugins/with-jpush-vendor-channels",
       "expo-notifications",
       "./plugins/with-apns-environments",

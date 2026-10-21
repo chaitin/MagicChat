@@ -30,24 +30,36 @@ type Snapshot struct {
 	Removed       []Entity
 }
 
+type Dependencies struct {
+	DB           *gorm.DB
+	UserPresence contactapp.UserPresencePort
+	AppPresence  contactapp.AppPresencePort
+}
+
 type Service struct {
 	db            *gorm.DB
+	userPresence  contactapp.UserPresencePort
+	appPresence   contactapp.AppPresencePort
 	contacts      *contactapp.Service
 	conversations *conversationapp.Service
 }
 
-func NewService(db *gorm.DB) *Service {
+func NewService(deps Dependencies) *Service {
 	return &Service{
-		db:            db,
-		contacts:      contactapp.NewService(contactapp.Dependencies{DB: db}),
-		conversations: conversationapp.NewService(conversationapp.Dependencies{DB: db}),
+		db: deps.DB, userPresence: deps.UserPresence, appPresence: deps.AppPresence,
+		contacts: contactapp.NewService(contactapp.Dependencies{
+			DB: deps.DB, UserPresence: deps.UserPresence, AppPresence: deps.AppPresence,
+		}),
+		conversations: conversationapp.NewService(conversationapp.Dependencies{DB: deps.DB}),
 	}
 }
 
 func (s *Service) Resolve(ctx context.Context, accountID string, entities []Entity) (Snapshot, error) {
 	var result Snapshot
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		reader := NewService(tx)
+		reader := NewService(Dependencies{
+			DB: tx, UserPresence: s.userPresence, AppPresence: s.appPresence,
+		})
 		var err error
 		result, err = reader.resolve(ctx, accountID, entities)
 		return err

@@ -18,7 +18,7 @@ func TestDirectoryRegistrationNotifiesEveryOnlineDeviceWithoutProfilePayload(t *
 	defer router.Close()
 	now := time.Now().UTC()
 	viewer := insertTestUser(t, db, "viewer@discovery.test", "Viewer", store.UserStatusActive, now)
-	sync := entitysync.NewService(db)
+	sync := entitysync.NewService(entitysync.Dependencies{DB: db})
 	seed, err := sync.Pending(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -82,7 +82,7 @@ func TestDirectoryFriendsModeDoesNotBroadcastStrangerRegistrations(t *testing.T)
 	if err := db.Create(&store.UserFriendship{UserIDLow: low, UserIDHigh: high, CreatedAt: now}).Error; err != nil {
 		t.Fatal(err)
 	}
-	sync := entitysync.NewService(db)
+	sync := entitysync.NewService(entitysync.Dependencies{DB: db})
 	online := []string{viewer.ID, friend.ID, stranger.ID}
 	recipients, err := sync.Recipients(context.Background(), store.ClientEntityChange{Type: store.ClientDirectoryUsers, EntityID: stranger.ID}, online)
 	if err != nil || slices.Contains(recipients, viewer.ID) || slices.Contains(recipients, friend.ID) {
@@ -111,7 +111,7 @@ func TestDirectoryAppDiscoveryAndRevocationRespectPermissions(t *testing.T) {
 	viewer := insertTestUser(t, db, "viewer@app-discovery.test", "Viewer", store.UserStatusActive, now)
 	outsider := insertTestUser(t, db, "outsider@app-discovery.test", "Outsider", store.UserStatusActive, now)
 	app := insertTestApp(t, db, store.App{CreatorUserID: &owner.ID, Name: "Restricted", Visibility: store.AppVisibilityRestricted, Enabled: true, CreatedAt: now, UpdatedAt: now})
-	sync := entitysync.NewService(db)
+	sync := entitysync.NewService(entitysync.Dependencies{DB: db})
 	online := []string{owner.ID, viewer.ID, outsider.ID}
 	change := store.ClientEntityChange{Type: store.ClientDirectoryApps, EntityID: app.ID}
 	recipients, err := sync.Recipients(context.Background(), change, online)

@@ -5,6 +5,7 @@ import type { UpdateInfo } from "../src/shared/desktop.ts"
 import {
   downloadNativeUpdate,
   installOnNextMacQuit,
+  loadNativeUpdater,
   validateNativeMetadata,
   type NativeUpdater,
 } from "../src/main/update-native.ts"
@@ -22,6 +23,43 @@ const update: UpdateInfo = {
 
 const fileInfo = (url: string) => ({ url, size: 100, sha512: `${"A".repeat(86)}==` })
 const metadata = { version: "2.3.2", files: [fileInfo("setup.exe")] }
+
+test("CommonJS updater is loaded lazily from the ESM default export", async () => {
+  const namespace = await import("electron-updater")
+  assert.equal(Object.hasOwn(namespace, "autoUpdater"), false)
+  assert.equal(
+    typeof Object.getOwnPropertyDescriptor(namespace.default, "autoUpdater")?.get,
+    "function",
+  )
+  const updater = new EventEmitter()
+  let reads = 0
+  const module = new Proxy(namespace, {
+    get(target, name, receiver) {
+      if (name === "default")
+        return {
+          get autoUpdater() {
+            reads++
+            return updater
+          },
+        }
+      return Reflect.get(target, name, receiver)
+    },
+  })
+  assert.equal(reads, 0)
+  const loaded = await loadNativeUpdater(async () => module)
+  assert.equal(loaded, updater)
+  assert.equal(reads, 1)
+})
+
+test("updater loading errors propagate to the manager", async () => {
+  const error = new Error("updater module unavailable")
+  await assert.rejects(
+    loadNativeUpdater(async () => {
+      throw error
+    }),
+    (value) => value === error,
+  )
+})
 
 test("native updater uses the dynamic trusted feed and leaves Windows install manual", async () => {
   const emitter = new EventEmitter()

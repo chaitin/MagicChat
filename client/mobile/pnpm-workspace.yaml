@@ -12,3 +12,4 @@ minimumReleaseAgeExclude:
   - expo-image-picker@57.0.5
 patchedDependencies:
   'expo-audio@57.0.2': patches/expo-audio@57.0.2.patch
+  react-native-reanimated@4.5.0: patches/react-native-reanimated@4.5.0.patch

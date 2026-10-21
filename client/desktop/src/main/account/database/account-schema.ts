@@ -33,6 +33,11 @@ export function initializeAccountSchema(database: DatabaseSync) {
       payload_json TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS pending_conversation_reads (
+      conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+      up_to_seq INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS messages (
       conversation_id TEXT NOT NULL,
       id TEXT NOT NULL,

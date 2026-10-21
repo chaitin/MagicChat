@@ -7,9 +7,91 @@ import (
 	"time"
 
 	"app/internal/application/entitysync"
+	"app/internal/appregistry"
 	"app/internal/realtime"
 	"app/internal/store"
 )
+
+func TestEntitySyncResolvesLiveUserAndAppPresence(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+	now := time.Now().UTC()
+	viewer := insertTestUser(t, db, "viewer@entity-presence.test", "Viewer", store.UserStatusActive, now)
+	peer := insertTestUser(t, db, "peer@entity-presence.test", "Peer", store.UserStatusActive, now)
+	viewerCookie := loginAsUser(t, server, viewer.Email)
+	peerCookie := loginAsUser(t, server, peer.Email)
+
+	findOnline := func(body map[string]any, field, id string) bool {
+		t.Helper()
+		for _, raw := range body["data"].(map[string]any)[field].([]any) {
+			row := raw.(map[string]any)
+			if row["id"] == id {
+				online, ok := row["online"].(bool)
+				if !ok {
+					t.Fatalf("missing online flag: %v", row)
+				}
+				return online
+			}
+		}
+		t.Fatalf("missing %s %s: %v", field, id, body)
+		return false
+	}
+	ordinaryPresence := func() (bool, bool) {
+		t.Helper()
+		response, users := postJSON(t, server, "/api/client/users/resolve", map[string]any{"user_ids": []string{peer.ID}}, viewerCookie)
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("resolve users status=%d body=%v", response.StatusCode, users)
+		}
+		response, contacts := getJSON(t, server, "/api/client/contacts", viewerCookie)
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("contacts status=%d body=%v", response.StatusCode, contacts)
+		}
+		return findOnline(users, "users", peer.ID), findOnline(contacts, "apps", appregistry.AIAssistantAppID)
+	}
+	waitForPresence := func(want bool) {
+		t.Helper()
+		deadline := time.Now().Add(2 * time.Second)
+		for {
+			userOnline, appOnline := ordinaryPresence()
+			if userOnline == want && appOnline == want {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("ordinary presence: user=%v app=%v, want %v", userOnline, appOnline, want)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	assertEntityPresence := func(want bool) {
+		t.Helper()
+		response, body := postJSON(t, server, "/api/client/entities/resolve", map[string]any{
+			"entities": []map[string]string{{"type": "user", "id": peer.ID}, {"type": "app", "id": appregistry.AIAssistantAppID}},
+		}, viewerCookie)
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("resolve entities status=%d body=%v", response.StatusCode, body)
+		}
+		userOnline := findOnline(body, "users", peer.ID)
+		appOnline := findOnline(body, "apps", appregistry.AIAssistantAppID)
+		if userOnline != want || appOnline != want {
+			t.Fatalf("entity presence: user=%v app=%v, want %v", userOnline, appOnline, want)
+		}
+	}
+
+	waitForPresence(false)
+	assertEntityPresence(false)
+	peerSocket := dialClientWebSocket(t, server, peerCookie)
+	defer peerSocket.Close()
+	appSocket := dialAppWebSocket(t, server, appregistry.AIAssistantAppID, "test-ai-assistant-secret")
+	defer appSocket.Close()
+	waitForPresence(true)
+	assertEntityPresence(true)
+	waitForPresence(true)
+
+	_ = peerSocket.Close()
+	_ = appSocket.Close()
+	waitForPresence(false)
+	assertEntityPresence(false)
+}
 
 func TestEntitySyncResolvesAuthoritativeRoleWithoutLeakingPrivateGroup(t *testing.T) {
 	server, db := newTestRouter(t)
@@ -71,7 +153,7 @@ func TestEntityChangesReachAllMemberDevicesAndRetainConcurrentRevision(t *testin
 	pool.Register(first)
 	pool.Register(second)
 	pool.Register(stranger)
-	sync := entitysync.NewService(db)
+	sync := entitysync.NewService(entitysync.Dependencies{DB: db})
 	s := &Server{db: db, realtime: pool, entitySync: sync}
 	seedChanges, err := sync.Pending(context.Background())
 	if err != nil {
@@ -148,7 +230,7 @@ func TestPrivateAppAvatarRefreshesContainingGroupWithoutExposingAppDirectory(t *
 	if err := db.Create(&store.ConversationMember{ConversationID: group.ID, MemberType: store.ConversationMemberTypeApp, MemberID: app.ID, Role: store.ConversationMemberRoleMember, JoinedAt: now}).Error; err != nil {
 		t.Fatal(err)
 	}
-	sync := entitysync.NewService(db)
+	sync := entitysync.NewService(entitysync.Dependencies{DB: db})
 	pending, err := sync.Pending(context.Background())
 	if err != nil {
 		t.Fatal(err)

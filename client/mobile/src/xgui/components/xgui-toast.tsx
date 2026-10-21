@@ -9,6 +9,7 @@ import {
   useState,
 } from "react"
 import { Modal, StyleSheet, View } from "react-native"
+import { useSafeAreaFrame } from "react-native-safe-area-context"
 import { Text } from "@/components/mi-sans-text"
 import Svg, { Path } from "react-native-svg"
 
@@ -93,6 +94,7 @@ function XGUIToastView({
   toast: XGUIToastState | null
 }) {
   const { colors } = useXGUITheme()
+  const frame = useSafeAreaFrame()
   if (!toast) return null
 
   const textOnly = toast.type === "text"
@@ -101,7 +103,17 @@ function XGUIToastView({
     <View
       accessibilityLiveRegion="assertive"
       pointerEvents={toast.modal ? "auto" : "none"}
-      style={[styles.overlay, !toast.modal && styles.nonModalOverlay]}
+      style={[
+        styles.overlay,
+        !toast.modal && styles.nonModalOverlay,
+        {
+          height: frame.height,
+          width: frame.width,
+          // Modal 从原生窗口原点定位，普通覆盖层已位于应用 frame 内。
+          left: toast.modal ? frame.x : 0,
+          top: toast.modal ? frame.y : 0,
+        },
+      ]}
     >
       <View
         accessibilityRole="alert"
@@ -186,18 +198,13 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   nonModalOverlay: {
-    bottom: 0,
-    left: 0,
-    position: "absolute",
-    right: 0,
-    top: 0,
     zIndex: 1_000,
   },
   overlay: {
     alignItems: "center",
-    flex: 1,
     justifyContent: "center",
     paddingHorizontal: 20,
+    position: "absolute",
     transform: [{ translateY: -40 }],
   },
   textToast: {

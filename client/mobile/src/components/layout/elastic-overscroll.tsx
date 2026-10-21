@@ -1,4 +1,4 @@
-import type { ReactElement } from "react"
+import { useEffect, type ReactElement } from "react"
 import {
   Platform,
   StyleSheet,
@@ -9,6 +9,7 @@ import {
 } from "react-native"
 import { Gesture, GestureDetector } from "react-native-gesture-handler"
 import Animated, {
+  cancelAnimation,
   Easing,
   useAnimatedStyle,
   useSharedValue,
@@ -38,6 +39,15 @@ export function ElasticOverscroll({
   const translationY = useSharedValue(0)
   const touchStartX = useSharedValue(0)
   const touchStartY = useSharedValue(0)
+  const active = useSharedValue(true)
+
+  useEffect(() => {
+    active.set(true)
+    return () => {
+      active.set(false)
+      cancelAnimation(translationY)
+    }
+  }, [active, translationY])
 
   const bindings: ElasticScrollBindings = {
     onContentSizeChange: (_width, height) => { contentHeight.value = height },
@@ -80,17 +90,19 @@ export function ElasticOverscroll({
       }
     })
     .onUpdate((event) => {
-      translationY.value = getElasticTranslation(event.translationY, {
+      if (!active.value) return
+      translationY.set(getElasticTranslation(event.translationY, {
         contentHeight: contentHeight.value,
         offsetY: offsetY.value,
         viewportHeight: viewportHeight.value,
-      })
+      }))
     })
     .onFinalize(() => {
-      translationY.value = withTiming(0, {
+      if (!active.value) return
+      translationY.set(withTiming(0, {
         duration: 220,
         easing: Easing.out(Easing.cubic),
-      })
+      }))
     })
     .simultaneousWithExternalGesture(nativeGesture)
   nativeGesture.simultaneousWithExternalGesture(panGesture)

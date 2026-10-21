@@ -642,7 +642,7 @@ void app.whenReady().then(async () => {
             contentType: selected.contentType ?? "application/octet-stream",
           },
         )
-        selectedMessageFiles.delete(input.selectionToken)
+        await selectedMessageFiles.release(input.selectionToken, input.targetId)
         return app
       },
     },
