@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Slider } from "@/components/ui/slider"
 import type { MediaPreviewBridge, MediaPreviewPayload } from "../../../shared/media"
+import { PreviewToolbarVisibility } from "./preview-toolbar-visibility"
 
 type Point = { x: number; y: number }
 
@@ -282,7 +283,7 @@ function ImagePreview({
     >
       <div
         ref={viewportRef}
-        className={`flex min-h-0 flex-1 touch-none select-none items-center justify-center overflow-hidden bg-muted ${
+        className={`flex min-h-0 flex-1 touch-none select-none items-center justify-center overflow-hidden bg-[#1e1e1e] ${
           dragging ? "cursor-grabbing" : "cursor-grab"
         }`}
         onDoubleClick={reset}
@@ -450,7 +451,7 @@ function VideoPreview({
     <PreviewToolbar bridge={bridge} category="video" videoControls={controls}>
       <div
         ref={viewportRef}
-        className={`flex min-h-0 flex-1 touch-none select-none items-center justify-center overflow-hidden bg-muted ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
+        className={`flex min-h-0 flex-1 touch-none select-none items-center justify-center overflow-hidden bg-[#1e1e1e] ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
         onMouseDown={handleMouseDown}
       >
         <video
@@ -508,12 +509,63 @@ function PreviewToolbar({
   const [busy, setBusy] = useState<"folder" | "copy" | null>(null)
   const { showToast } = useAnimatedToast()
   const stopDragRef = useRef<(() => void) | null>(null)
+  const visibilityRef = useRef<PreviewToolbarVisibility | null>(null)
+  const [toolbarVisible, setToolbarVisible] = useState(true)
 
   useEffect(() => () => stopDragRef.current?.(), [])
+
+  useEffect(() => {
+    const visibility = new PreviewToolbarVisibility(setToolbarVisible)
+    visibilityRef.current = visibility
+    const activity = () => visibility.activity()
+    const mouseDown = () => {
+      visibility.hold("focus", false)
+      visibility.activity()
+    }
+    const leave = (event: MouseEvent) => {
+      if (event.relatedTarget === null) {
+        visibility.hold("hover", false)
+        visibility.leave()
+      }
+    }
+    const stopDragging = () => visibility.hold("drag", false)
+    const blur = () => {
+      visibility.hold("hover", false)
+      visibility.hold("focus", false)
+      visibility.hold("drag", false)
+      visibility.blur()
+    }
+    window.addEventListener("mousemove", activity)
+    window.addEventListener("mousedown", mouseDown)
+    window.addEventListener("wheel", activity, { passive: true })
+    window.addEventListener("keydown", activity)
+    window.addEventListener("mouseout", leave)
+    window.addEventListener("mouseup", stopDragging)
+    window.addEventListener("pointerup", stopDragging)
+    window.addEventListener("pointercancel", stopDragging)
+    window.addEventListener("blur", blur)
+    window.addEventListener("focus", activity)
+    visibility.activity()
+    return () => {
+      visibility.dispose()
+      if (visibilityRef.current === visibility) visibilityRef.current = null
+      window.removeEventListener("mousemove", activity)
+      window.removeEventListener("mousedown", mouseDown)
+      window.removeEventListener("wheel", activity)
+      window.removeEventListener("keydown", activity)
+      window.removeEventListener("mouseout", leave)
+      window.removeEventListener("mouseup", stopDragging)
+      window.removeEventListener("pointerup", stopDragging)
+      window.removeEventListener("pointercancel", stopDragging)
+      window.removeEventListener("blur", blur)
+      window.removeEventListener("focus", activity)
+    }
+  }, [])
 
   async function run(action: "folder" | "copy") {
     if (!bridge || busy) return
     setBusy(action)
+    visibilityRef.current?.hold("busy", true)
     try {
       const result =
         action === "folder" ? await bridge.revealCurrent() : await bridge.copyCurrentImage()
@@ -526,6 +578,7 @@ function PreviewToolbar({
       showToast({ status: "error", title: error instanceof Error ? error.message : "操作失败" })
     } finally {
       setBusy(null)
+      visibilityRef.current?.hold("busy", false)
     }
   }
 
@@ -539,8 +592,8 @@ function PreviewToolbar({
     "transition-colors duration-150 hover:bg-accent hover:text-accent-foreground data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <ContextMenu>
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
+      <ContextMenu onOpenChange={(open) => visibilityRef.current?.hold("context-menu", open)}>
         <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
         <ContextMenuContent>
           {category === "image" && zoom !== undefined && onZoomChange && (
@@ -668,7 +721,28 @@ function PreviewToolbar({
           )}
         </ContextMenuContent>
       </ContextMenu>
-      <footer className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border bg-background px-4 py-2 text-foreground">
+      <footer
+        aria-label="媒体预览操作"
+        data-state={toolbarVisible ? "visible" : "hidden"}
+        className={`absolute inset-x-3 bottom-3 z-10 flex min-h-14 flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 bg-background/90 px-4 py-2 text-foreground shadow-lg backdrop-blur-md transition-[opacity,transform] duration-200 motion-reduce:transition-none ${
+          toolbarVisible
+            ? "translate-y-0 opacity-100"
+            : "pointer-events-none translate-y-2 opacity-0"
+        }`}
+        onMouseEnter={() => visibilityRef.current?.hold("hover", true)}
+        onMouseLeave={() => visibilityRef.current?.hold("hover", false)}
+        onPointerDownCapture={(event) => {
+          if (event.button === 0) visibilityRef.current?.hold("drag", true)
+        }}
+        onFocusCapture={(event) => {
+          visibilityRef.current?.activity()
+          if (event.target.matches(":focus-visible")) visibilityRef.current?.hold("focus", true)
+        }}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget))
+            visibilityRef.current?.hold("focus", false)
+        }}
+      >
         {category === "video" && videoControls && (
           <div className="flex min-w-80 flex-1 items-center gap-2">
             <button
@@ -723,7 +797,7 @@ function PreviewToolbar({
               )}
             </button>
             <span className="mx-1 h-5 shrink-0 border-l border-border" aria-hidden />
-            <DropdownMenu>
+            <DropdownMenu onOpenChange={(open) => visibilityRef.current?.hold("speed-menu", open)}>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
