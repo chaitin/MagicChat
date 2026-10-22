@@ -6,10 +6,15 @@ import { useClientData } from "@/lib/client-data-context"
 import { useRealtime } from "@/lib/realtime-context"
 
 export function ClientEntityRealtimeSync() {
-  const { applyEntitySnapshot, contactApps, contactGroups, conversations, me, refreshContacts, usersById } = useClientData()
+  const { applyEntitySnapshot, contactGroups, conversations, me, refreshContacts, usersById } = useClientData()
   const { ready, subscribeRealtimeEvent } = useRealtime()
   const syncRef = useRef<EntitySynchronizer<Awaited<ReturnType<typeof resolveClientEntities>>> | null>(null)
   const directoryRef = useRef<DirectorySynchronizer | null>(null)
+  const reconciliationRef = useRef<{
+    sync: EntitySynchronizer<Awaited<ReturnType<typeof resolveClientEntities>>>
+    initialized: boolean
+    work?: Promise<void>
+  } | null>(null)
   const accountId = me?.id
   // Snapshot guards also run inside state updaters, where Effect Events are forbidden.
   const currentAccountRef = useRef(accountId)
@@ -19,18 +24,24 @@ export function ClientEntityRealtimeSync() {
   const apply = useEffectEvent(applyEntitySnapshot)
   const refreshDirectory = useEffectEvent(refreshContacts)
   const loaded = useEffectEvent((entity: EntityReference) => entity.type !== "user" || entity.id === me?.id || Boolean(usersById[entity.id]))
-  const known = useEffectEvent((): EntityReference[] => [
-    ...[...new Set([...(me ? [me.id] : []), ...Object.keys(usersById)])].map((id) => ({ type: "user" as const, id })),
-    ...contactApps.map(({ id }) => ({ type: "app" as const, id })),
+  const knownGroups = useEffectEvent((): EntityReference[] => [
     ...[...new Set([...contactGroups.filter((group) => group.joined).map((group) => group.id), ...conversations.filter((item) => item.type === "group").map((item) => item.id)])].map((id) => ({ type: "group" as const, id })),
   ])
 
   const reconcile = useEffectEvent(async () => {
+    if (!ready) return
     const sync = syncRef.current
-    const directory = directoryRef.current
-    if (!sync || !directory) return
-    await directory.refresh()
-    if (syncRef.current === sync) await sync.refresh(known())
+    const reconciliation = reconciliationRef.current
+    if (!sync || reconciliation?.sync !== sync) return
+    if (reconciliation.work) return reconciliation.work
+    const work = (async () => {
+      // Bootstrap already loaded the directory and user profiles before mounting us.
+      if (reconciliation.initialized) await refreshDirectory({ forceUsers: true })
+      reconciliation.initialized = true
+      if (syncRef.current === sync) await sync.refresh(knownGroups())
+    })().finally(() => { if (reconciliation.work === work) reconciliation.work = undefined })
+    reconciliation.work = work
+    return work
   })
 
   useEffect(() => {
@@ -50,6 +61,7 @@ export function ClientEntityRealtimeSync() {
     })
     syncRef.current = sync
     directoryRef.current = directory
+    reconciliationRef.current = { sync, initialized: false }
     const unsubscribers = entityChangeEvents.map((event) => subscribeRealtimeEvent(event, (payload) => {
       const change = parseEntityChange(event, payload)
       if (change && loaded(change.entity)) sync.notify(event, payload)
@@ -72,6 +84,7 @@ export function ClientEntityRealtimeSync() {
       directory.dispose()
       if (syncRef.current === sync) syncRef.current = null
       if (directoryRef.current === directory) directoryRef.current = null
+      if (reconciliationRef.current?.sync === sync) reconciliationRef.current = null
       for (const unsubscribe of unsubscribers) unsubscribe()
       document.removeEventListener("visibilitychange", foreground)
     }

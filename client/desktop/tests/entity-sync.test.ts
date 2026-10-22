@@ -2,24 +2,32 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { createDesktopEntitySync } from "../src/main/account/entity-sync.ts"
 
-test("桌面目录事件发现新联系人和应用，重连先刷新目录再对账实体", async () => {
+test("桌面目录刷新复用全员资料，重连只补齐群权限", async () => {
   const calls: string[] = []
-  let directory = { users: [] as { id: string }[], apps: [] as { id: string }[], groups: [] }
+  let directory = { users: [] as { id: string }[], apps: [] as { id: string }[], groups: [] as { id: string; joined: boolean }[] }
+  const currentUser = { type: "user" as const, id: "me", name: "Old", avatarUrl: "old.webp" }
   let changed!: () => void
   const updated = new Promise<void>((resolve) => { changed = resolve })
   const sync = createDesktopEntitySync({
-    database: { listConversations: () => [], getContactPayload: () => null },
+    database: { listConversations: () => [{ id: "other-group", type: "group" }], getContactPayload: () => null, relatedConversationIds: () => [] },
     contacts: {
-      refresh: async () => { calls.push("directory"); directory = { users: [{ id: "new-user" }], apps: [{ id: "new-app" }], groups: [] } },
+      refresh: async () => {
+        calls.push("directory")
+        directory = {
+          users: [{ id: "me" }, ...Array.from({ length: 1321 }, (_, i) => ({ id: `user-${i}` }))],
+          apps: [{ id: "new-app" }], groups: [{ id: "joined-group", joined: true }, { id: "public-group", joined: false }],
+        }
+      },
       getDirectory: () => directory,
       resolveEntities: async (entities: { type: string; id: string }[]) => {
         calls.push(entities.map(({ type, id }) => `${type}:${id}`).join(","))
         return { versions: {}, users: [], apps: [], groups: [], conversations: [], removed: [] }
       },
-      groupsUsingAvatar: () => [], applyEntities: () => undefined, getAvatarDescriptor: () => null,
+      groupsUsingAvatar: () => [], applyEntities: () => undefined,
+      getAvatarDescriptor: () => ({ type: "user", id: "me", name: "New", avatarUrl: "new.webp" }),
     },
-    conversations: {}, avatars: { markChanged: () => undefined },
-    currentUser: { type: "user", id: "me", name: "Me" }, isCurrent: () => true,
+    conversations: { removeEntity: () => undefined }, avatars: { markChanged: () => undefined },
+    currentUser, isCurrent: () => true,
     onError: assert.fail, onChanged: () => changed(),
   } as never)
   try {
@@ -28,7 +36,11 @@ test("桌面目录事件发现新联系人和应用，重连先刷新目录再�
     await updated
     assert.deepEqual(calls, ["directory"])
     await sync.reconcile()
-    assert.deepEqual(calls, ["directory", "directory", "user:me,user:new-user,app:new-app"])
+    assert.deepEqual(calls, ["directory", "directory", "group:joined-group,group:other-group"])
+    assert.equal(currentUser.name, "New")
+    assert.equal(currentUser.avatarUrl, "new.webp")
+    await sync.reconcile()
+    assert.deepEqual(calls.slice(-2), ["directory", "group:joined-group,group:other-group"])
   } finally { sync.dispose() }
 })
 

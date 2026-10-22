@@ -6,6 +6,7 @@ import { ClientUserDirectoryRealtimeSync } from "@/components/client-user-direct
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map<string, (payload: unknown) => void>(),
+  ready: false,
   invalidateUsers: vi.fn(),
   postMessage: vi.fn(),
   refreshMe: vi.fn().mockResolvedValue(undefined),
@@ -25,7 +26,7 @@ vi.mock("@/lib/client-data-context", () => ({
 
 vi.mock("@/lib/realtime-context", () => ({
   useRealtime: () => ({
-    ready: false,
+    ready: mocks.ready,
     subscribeRealtimeEvent: (
       event: string,
       handler: (payload: unknown) => void
@@ -41,6 +42,7 @@ describe("ClientUserDirectoryRealtimeSync", () => {
 
   beforeEach(() => {
     mocks.handlers.clear()
+    mocks.ready = false
     mocks.invalidateUsers.mockReset()
     mocks.postMessage.mockReset()
     mocks.refreshMe.mockReset().mockResolvedValue(undefined)
@@ -55,6 +57,13 @@ describe("ClientUserDirectoryRealtimeSync", () => {
         }
       }
     )
+  })
+
+  it("连接就绪不再从旧入口强制刷新全员资料", () => {
+    const view = render(<MemoryRouter><ClientUserDirectoryRealtimeSync /></MemoryRouter>)
+    mocks.ready = true
+    view.rerender(<MemoryRouter><ClientUserDirectoryRealtimeSync /></MemoryRouter>)
+    expect(mocks.invalidateUsers).not.toHaveBeenCalled()
   })
 
   it("invalidates profiles with the event version and broadcasts it", () => {

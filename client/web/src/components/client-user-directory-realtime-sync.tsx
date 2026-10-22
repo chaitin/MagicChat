@@ -15,7 +15,7 @@ export function ClientUserDirectoryRealtimeSync() {
     updateUserPresence,
     usersById,
   } = useClientData()
-  const { ready, subscribeRealtimeEvent } = useRealtime()
+  const { subscribeRealtimeEvent } = useRealtime()
   const usersByIdRef = React.useRef(usersById)
   React.useEffect(() => {
     usersByIdRef.current = usersById
@@ -85,10 +85,6 @@ export function ClientUserDirectoryRealtimeSync() {
       for (const unsubscribe of unsubscribers) unsubscribe()
     }
   }, [location.pathname, refreshContacts, subscribeRealtimeEvent])
-
-  React.useEffect(() => {
-    if (ready) invalidateUsers(Object.keys(usersByIdRef.current))
-  }, [invalidateUsers, ready])
 
   return null
 }

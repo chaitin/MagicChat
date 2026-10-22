@@ -313,7 +313,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
         }
         userCacheRef.current.set(profile.id, {
           fetchedAt: now,
-          profile: { ...profile, entityRevision: profile.entityRevision ?? current?.profile.entityRevision },
+          profile: { ...profile, entityRevision: Math.max(profile.entityRevision ?? 0, current?.profile.entityRevision ?? 0) },
           updatedAt: updatedAt || current?.updatedAt || "",
         })
         unavailableUsersRef.current.delete(profile.id)
@@ -340,13 +340,15 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     pendingUserIdsRef.current.clear()
     for (let index = 0; index < ids.length; index += userResolveBatchSize) {
       const batch = ids.slice(index, index + userResolveBatchSize)
+      // The ordinary profile endpoint has no entity revision; retain the request-start version so a racing event still wins.
+      const revisions = new Map(batch.map((id) => [id, userCacheRef.current.get(id)?.profile.entityRevision]))
       try {
         const users = await resolveClientUsers(batch)
         const returnedIds = new Set(users.map((user) => user.id))
         const staleIds: string[] = []
         for (const user of users) {
           const requiredVersion = requiredUserVersionsRef.current.get(user.id)
-          cacheUserProfiles([user], user.updatedAt)
+          cacheUserProfiles([{ ...user, entityRevision: revisions.get(user.id) }], user.updatedAt)
           if (
             requiredVersion &&
             compareUserVersions(user.updatedAt, requiredVersion) < 0
@@ -619,7 +621,8 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     }
   }, [ensureUsers, handleError])
 
-  const refreshContacts = useCallback(async () => {
+  const refreshContacts = useCallback(async (options?: { forceUsers?: boolean }) => {
+    const requestedAt = Date.now()
     let entityGeneration = entitySnapshotGenerationRef.current
     const accountGeneration = conversationAccountGenerationRef.current
     const sequence = ++contactSnapshotSequenceRef.current
@@ -645,8 +648,15 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
       setContactDirectoryMode(nextContacts.directoryMode)
       setContactGroups((current) => nextContacts.groups.map((item) => ({ ...item, entityRevision: current.find((value) => value.id === item.id)?.entityRevision })))
       setContactUserIds(nextContacts.userIds)
-      for (const id of nextContacts.userIds) unavailableUsersRef.current.delete(id)
-      await ensureUsers(nextContacts.userIds)
+      const userIds = options?.forceUsers
+        ? [...new Set([...nextContacts.userIds, ...userCacheRef.current.keys()])]
+        : nextContacts.userIds
+      for (const id of userIds) {
+        unavailableUsersRef.current.delete(id)
+        const cached = userCacheRef.current.get(id)
+        if (options?.forceUsers && cached && cached.fetchedAt < requestedAt) cached.fetchedAt = 0
+      }
+      await ensureUsers(userIds)
       if (!isCurrent()) return
       // Finish any pre-activation lookup first, then bypass its negative cache.
       const missing = nextContacts.userIds.filter((id) => !userCacheRef.current.has(id))
@@ -655,6 +665,10 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
         await ensureUsers(missing)
       }
       if (!isCurrent()) return
+      setMe((current) => {
+        const profile = current ? userCacheRef.current.get(current.id)?.profile : undefined
+        return current && profile ? { ...current, avatar: profile.avatar, email: profile.email, name: profile.name, nickname: profile.nickname, phone: profile.phone } : current
+      })
       if (nextContacts.directoryMode === "friends") {
         await refreshFriendRequests()
       } else {

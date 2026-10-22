@@ -109,19 +109,60 @@ describe("实体实时同步", () => {
     let finish!: () => void
     mocks.refresh.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve }))
     mocks.resolve.mockResolvedValue({ versions: {}, removed: [] })
+    mocks.data.contactGroups = [{ id: "old-group", joined: true }]
     mocks.realtime.ready = true
     const view = render(<ClientEntityRealtimeSync />)
+    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(1))
+    mocks.realtime.ready = false
+    view.rerender(<ClientEntityRealtimeSync />)
+    mocks.realtime.ready = true
+    view.rerender(<ClientEntityRealtimeSync />)
     await waitFor(() => expect(mocks.refresh).toHaveBeenCalledTimes(1))
     mocks.data.me = { id: "other" }
+    mocks.data.contactGroups = [{ id: "new-group", joined: true }]
     view.rerender(<ClientEntityRealtimeSync />)
-    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(2))
     await act(async () => finish())
-    expect(mocks.resolve).toHaveBeenCalledTimes(1)
-    expect(mocks.resolve.mock.calls[0]?.[0]).toEqual([{ type: "user", id: "other" }])
+    expect(mocks.resolve).toHaveBeenCalledTimes(2)
+    expect(mocks.resolve.mock.calls[1]?.[0]).toEqual([{ type: "group", id: "new-group" }])
   })
 
-  it("握手恢复时先重新发现目录，再对账已缓存群权限和用户头像", async () => {
+  it("首次就绪不重复请求已加载的全员资料和应用", async () => {
+    mocks.data.usersById = Object.fromEntries(Array.from({ length: 1322 }, (_, i) => [`user-${i}`, { id: `user-${i}` }]))
     mocks.data.contactApps = [{ id: "app1" }]
+    mocks.realtime.ready = true
+    render(<ClientEntityRealtimeSync />)
+    await act(async () => undefined)
+    expect(mocks.refresh).not.toHaveBeenCalled()
+    expect(mocks.resolve).not.toHaveBeenCalled()
+  })
+
+  it("重连和回前台同时发生时合并对账，不重复刷新资料", async () => {
+    let finish!: () => void
+    mocks.refresh.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve }))
+    mocks.resolve.mockResolvedValue({ versions: {}, removed: [] })
+    mocks.data.contactGroups = [{ id: "group", joined: true }]
+    mocks.realtime.ready = true
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible")
+    const view = render(<ClientEntityRealtimeSync />)
+    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(1))
+    mocks.realtime.ready = false
+    view.rerender(<ClientEntityRealtimeSync />)
+    mocks.realtime.ready = true
+    view.rerender(<ClientEntityRealtimeSync />)
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledTimes(1))
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"))
+      document.dispatchEvent(new Event("visibilitychange"))
+    })
+    await act(async () => finish())
+    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(2))
+    expect(mocks.refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it("首次握手复用启动资料，重连只刷新一轮目录并对账群权限", async () => {
+    mocks.data.contactApps = [{ id: "app1" }]
+    mocks.data.usersById = Object.fromEntries(Array.from({ length: 1322 }, (_, i) => [`user-${i}`, { id: `user-${i}` }]))
     mocks.data.contactGroups = [{ id: "g1", joined: true }]
     mocks.data.conversations = [{ id: "g2", type: "group" }]
     mocks.resolve.mockResolvedValue({ versions: {}, removed: [] })
@@ -129,10 +170,16 @@ describe("实体实时同步", () => {
     mocks.realtime.ready = true
     view.rerender(<ClientEntityRealtimeSync />)
     await waitFor(() => expect(mocks.resolve).toHaveBeenCalled())
+    expect(mocks.refresh).not.toHaveBeenCalled()
+    expect(mocks.resolve.mock.calls[0]?.[0]).toEqual([{ type: "group", id: "g1" }, { type: "group", id: "g2" }])
+    mocks.realtime.ready = false
+    view.rerender(<ClientEntityRealtimeSync />)
+    mocks.realtime.ready = true
+    view.rerender(<ClientEntityRealtimeSync />)
+    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(2))
     expect(mocks.refresh).toHaveBeenCalledTimes(1)
-    expect(mocks.refresh.mock.invocationCallOrder[0]).toBeLessThan(mocks.resolve.mock.invocationCallOrder[0]!)
-    expect(mocks.resolve.mock.calls[0]?.[0]).toEqual([
-      { type: "user", id: "me" }, { type: "app", id: "app1" }, { type: "group", id: "g1" }, { type: "group", id: "g2" },
-    ])
+    expect(mocks.refresh).toHaveBeenCalledWith({ forceUsers: true })
+    expect(mocks.refresh.mock.invocationCallOrder[0]).toBeLessThan(mocks.resolve.mock.invocationCallOrder[1]!)
+    expect(mocks.resolve.mock.calls[1]?.[0]).toEqual([{ type: "group", id: "g1" }, { type: "group", id: "g2" }])
   })
 })

@@ -12,6 +12,43 @@ describe("ClientDataProvider", () => {
     vi.useRealTimers()
   })
 
+  it.each([false, true])("重连只刷新一轮普通资料并保留实体版本，实时新版本优先=%s", async (racing) => {
+    vi.useFakeTimers()
+    let lookups = 0
+    let finish!: (value: Response) => void
+    let nextResponse!: Response
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === "/api/client/me") return Promise.resolve(jsonResponse(createCurrentUserResponse()))
+      if (url === "/api/client/conversations") return Promise.resolve(jsonResponse(createConversationsResponse([])))
+      if (url === "/api/client/projects?limit=100") return Promise.resolve(jsonResponse(createProjectsResponse()))
+      if (url === "/api/client/contacts") return Promise.resolve(jsonResponse(createDiscoveryContactsResponse(true)))
+      if (url === "/api/client/users/resolve") {
+        lookups++
+        const response = createDiscoveryUsersResponse(init)
+        for (const profile of response.data.users) profile.online = lookups > 1
+        if (lookups === 2) {
+          nextResponse = jsonResponse(response)
+          return new Promise<Response>((resolve) => { finish = resolve })
+        }
+        return Promise.resolve(jsonResponse(response))
+      }
+      return Promise.reject(new Error(`unexpected request: ${url}`))
+    }))
+    render(<MemoryRouter initialEntries={["/chat"]}><ClientDataProvider><DirectoryDiscoveryProbe /></ClientDataProvider></MemoryRouter>)
+    await act(async () => vi.advanceTimersByTimeAsync(1_000))
+    expect(lookups).toBe(1)
+    fireEvent.click(screen.getByRole("button", { name: "apply user revision 3" }))
+    await act(async () => vi.advanceTimersByTimeAsync(1))
+    fireEvent.click(screen.getByRole("button", { name: "refresh fresh profiles" }))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    expect(lookups).toBe(2)
+    if (racing) fireEvent.click(screen.getByRole("button", { name: "apply user revision 4" }))
+    await act(async () => { finish(nextResponse); await vi.advanceTimersByTimeAsync(0) })
+    expect(lookups).toBe(2)
+    expect(screen.getByTestId("directory-user-version")).toHaveTextContent(racing ? "4:false" : "3:true")
+  })
+
   it("目录刷新被资料事件打断后重新读取，仍能发现新用户和应用", async () => {
     vi.useFakeTimers()
     let requests = 0
@@ -1107,9 +1144,18 @@ function createDiscoveryUsersResponse(init?: RequestInit) {
 }
 
 function DirectoryDiscoveryProbe() {
-  const { applyEntitySnapshot, contacts, contactApps, ensureUsers, refreshContacts } = useClientData()
+  const { applyEntitySnapshot, contacts, contactApps, ensureUsers, getUser, refreshContacts } = useClientData()
+  function applyUser(revision: number) {
+    const profile = getUser("user-2")
+    if (!profile) return
+    applyEntitySnapshot({ users: [{ ...profile, online: false, entityRevision: revision, updatedAt: "2026-10-14T00:00:00Z" }], apps: [], groups: [], conversations: [], removed: [], versions: { "user:user-2": revision } }, [{ type: "user", id: "user-2" }], () => true)
+  }
   return <>
     <button onClick={() => void refreshContacts()}>refresh directory</button>
+    <button onClick={() => void refreshContacts({ forceUsers: true })}>refresh fresh profiles</button>
+    <button onClick={() => applyUser(3)}>apply user revision 3</button>
+    <button onClick={() => applyUser(4)}>apply user revision 4</button>
+    <output data-testid="directory-user-version">{getUser("user-2")?.entityRevision}:{String(getUser("user-2")?.online)}</output>
     <button onClick={() => void ensureUsers(["user-2"])}>lookup inactive user</button>
     <button onClick={() => applyEntitySnapshot({ users: [], apps: [], groups: [], conversations: [], removed: [], versions: {} }, [{ type: "user", id: "user-1" }], () => true)}>change directory metadata</button>
     <output data-testid="directory-users">{contacts.map(({ id, name }) => `${id}:${name}`).join(",")}</output>

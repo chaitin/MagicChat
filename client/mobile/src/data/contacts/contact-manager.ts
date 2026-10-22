@@ -76,8 +76,8 @@ class ContactManager {
     return this.queueUsers(target, rawIds, false)
   }
 
-  async refreshUsers(target: AuthenticatedTarget, rawIds: string[]) {
-    return this.queueUsers(target, rawIds, true)
+  async refreshUsers(target: AuthenticatedTarget, rawIds: string[], freshSince?: number) {
+    return this.queueUsers(target, rawIds, true, freshSince)
   }
 
   async applyEntities(
@@ -115,12 +115,12 @@ class ContactManager {
     })
   }
 
-  private queueUsers(target: AuthenticatedTarget, rawIds: string[], force: boolean) {
+  private queueUsers(target: AuthenticatedTarget, rawIds: string[], force: boolean, freshSince?: number) {
     const key = targetKey(target)
     const previous = this.userTasks.get(key)
     const task = (async () => {
       await previous?.catch(() => undefined)
-      await this.ensureUsersSerial(target, rawIds, force)
+      await this.ensureUsersSerial(target, rawIds, force, freshSince)
     })()
     this.userTasks.set(key, task)
     return task.finally(() => {
@@ -128,19 +128,25 @@ class ContactManager {
     })
   }
 
-  private async ensureUsersSerial(target: AuthenticatedTarget, rawIds: string[], force: boolean) {
+  private async ensureUsersSerial(target: AuthenticatedTarget, rawIds: string[], force: boolean, freshSince?: number) {
     const snapshot = await this.getSnapshot(target)
     const normalizedIds = [...new Set(rawIds.map((id) => id.trim()).filter(Boolean))]
     if (normalizedIds.length === 0) return
     const rows = await readUserProfiles(target, normalizedIds)
     const now = Date.now()
-    const ids = force ? normalizedIds : normalizedIds.filter((id) => {
+    const ids = force ? normalizedIds.filter((id) => {
+      const row = rows.get(id)
+      return freshSince === undefined || !row?.profile || row.cached_at < freshSince
+    }) : normalizedIds.filter((id) => {
       const row = rows.get(id)
       return !(row && (row.missing_until ?? 0) > now) && !(row?.profile && now - row.cached_at < PROFILE_TTL)
     })
     for (let offset = 0; offset < ids.length; offset += BATCH_SIZE) {
       const batch = ids.slice(offset, offset + BATCH_SIZE)
-      const profiles = await resolveClientUsers(target, batch)
+      // Retain the pre-request revision: the ordinary endpoint omits it, and newer entity events must win.
+      const profiles = (await resolveClientUsers(target, batch)).map((profile) => ({
+        ...profile, entityRevision: rows.get(profile.id)?.profile?.entityRevision,
+      }))
       const returned = new Set(profiles.map((profile) => profile.id))
       await mergeUserProfiles(target, profiles, batch.filter((id) => !returned.has(id)), Date.now() + MISSING_TTL)
       const latest = await readUserProfiles(target, batch)

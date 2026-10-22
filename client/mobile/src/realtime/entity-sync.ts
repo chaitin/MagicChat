@@ -67,6 +67,8 @@ export function createMobileEntitySync(
     },
   })
 
+  let reconciliation: Promise<void> | undefined
+
   return {
     notify(event: string, payload: unknown) {
       if (directorySync.notify(event, payload)) return true
@@ -87,16 +89,29 @@ export function createMobileEntitySync(
         }
       }).catch(options.onError)
     },
-    async reconcile() {
-      await directorySync.refresh()
-      if (!options.isCurrent()) return
-      const [contacts, conversations] = await Promise.all([contactManager.getSnapshot(target), conversationManager.list(target)])
-      const entities: EntityReference[] = [
-        ...[...new Set([target.userId, ...Object.keys(contacts.usersById)])].map((id) => ({ type: "user" as const, id })),
-        ...contacts.directory.apps.map(({ id }) => ({ type: "app" as const, id })),
-        ...[...new Set([...contacts.directory.groups.filter((group) => group.joined).map((group) => group.id), ...conversations.filter((item) => item.type === "group").map((item) => item.id)])].map((id) => ({ type: "group" as const, id })),
-      ]
-      await sync.refresh(entities)
+    reconcile() {
+      if (reconciliation) return reconciliation
+      const startedAt = Date.now()
+      const work = (async () => {
+        await directorySync.refresh()
+        if (!options.isCurrent()) return
+        const [contacts, conversations] = await Promise.all([contactManager.getSnapshot(target), conversationManager.list(target)])
+        // Reuse profiles fetched by directory discovery or the UI during this recovery.
+        await contactManager.refreshUsers(target, [...new Set([target.userId, ...contacts.directory.userIds, ...Object.keys(contacts.usersById)])], startedAt)
+        if (!options.isCurrent()) return
+        const latest = await contactManager.getSnapshot(target)
+        const profile = latest.usersById[target.userId]
+        if (profile) queryClient.setQueryData<ClientUser>(queryKeys.currentUser(target), (current) => current ? {
+          ...current, avatar: profile.avatar, email: profile.email, name: profile.name,
+          nickname: profile.nickname, phone: profile.phone,
+        } : undefined)
+        const entities: EntityReference[] = [
+          ...[...new Set([...latest.directory.groups.filter((group) => group.joined).map((group) => group.id), ...conversations.filter((item) => item.type === "group").map((item) => item.id)])].map((id) => ({ type: "group" as const, id })),
+        ]
+        await sync.refresh(entities)
+      })().finally(() => { if (reconciliation === work) reconciliation = undefined })
+      reconciliation = work
+      return work
     },
     dispose() { directorySync.dispose(); sync.dispose() },
   }

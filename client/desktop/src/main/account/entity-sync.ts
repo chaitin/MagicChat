@@ -22,7 +22,17 @@ export function createDesktopEntitySync(options: {
     onError: options.onError,
     refresh: async () => {
       await contacts.refresh()
-      if (options.isCurrent()) options.onChanged([], [])
+      if (!options.isCurrent()) return
+      const directory = contacts.getDirectory()
+      const currentUser = contacts.getAvatarDescriptor("user", options.currentUser.id)
+      if (currentUser) Object.assign(options.currentUser, currentUser)
+      const references: EntityReference[] = [
+        ...directory.users.map(({ id }) => ({ type: "user" as const, id })),
+        ...directory.apps.map(({ id }) => ({ type: "app" as const, id })),
+        ...directory.groups.map(({ id }) => ({ type: "group" as const, id })),
+      ]
+      for (const entity of references) avatars.markChanged(entity.type, entity.id)
+      options.onChanged([], references)
     },
   })
   const sync = new EntitySynchronizer({
@@ -75,8 +85,7 @@ export function createDesktopEntitySync(options: {
       if (!options.isCurrent()) return
       const directory = contacts.getDirectory()
       await sync.refresh([
-        ...[...new Set([options.currentUser.id, ...directory.users.map((user) => user.id)])].map((id) => ({ type: "user" as const, id })),
-        ...directory.apps.map(({ id }) => ({ type: "app" as const, id })),
+        ...(directory.users.some(({ id }) => id === options.currentUser.id) ? [] : [{ type: "user" as const, id: options.currentUser.id }]),
         ...[...new Set([...directory.groups.filter((group) => group.joined).map((group) => group.id), ...database.listConversations().filter((item) => item.type === "group").map((item) => item.id)])].map((id) => ({ type: "group" as const, id })),
       ])
     },
