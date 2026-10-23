@@ -1018,7 +1018,7 @@ export function ChatPage({
         />
       ) : activeSection === "projects" ? (
         <ProjectsPage
-          key={targetId}
+          key={`projects:${targetId}`}
           targetId={targetId}
           resolvedTheme={resolvedTheme}
           mentionLabelResolver={resolveMentionLabel}
@@ -1034,7 +1034,7 @@ export function ChatPage({
       )}
       {createProjectTarget === targetId && (
         <ProjectCreateDialog
-          key={targetId}
+          key={`create-project:${targetId}`}
           targetId={targetId}
           theme={resolvedTheme}
           groups={projectGroups}
@@ -1078,7 +1078,7 @@ export function ChatPage({
         />
       )}
       <NamecardDialogHost
-        key={targetId}
+        key={`namecard:${targetId}`}
         targetId={targetId}
         theme={resolvedTheme}
         conversations={conversations}

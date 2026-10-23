@@ -123,7 +123,7 @@ test("会话头像保留话题来源定位、未读徽标和列表背景", async
     source("features/messages/conversation-list.tsx"),
     source("features/search/search-result-list.tsx"),
   ])
-  assert.match(avatar, /const size = compact \? 28 : 44/)
+  assert.match(avatar, /size = compact \? 28 : 44/)
   assert.match(avatar, /topicSource: \{ borderRadius: 34, bottom: -4, padding: 1, position: "absolute", right: -4, zIndex: 1 \}/)
   assert.match(avatar, /accessible accessibilityLabel=\{`话题来源：\$\{sourceSender\.name\}`\}/)
   assert.match(avatar, /conversation\.unreadCount > 0 \? \([\s\S]*?<XGUIBadge/)
@@ -147,7 +147,8 @@ test("头像缓存图片继续保留重试、裁切及 SVG 路径", async () => 
 
 test("通讯录头像保留尺寸与在线圆点位置", async () => {
   const avatar = await source("features/contacts/contact-directory-avatar.tsx")
-  assert.match(avatar, /avatar: \{ height: 44, width: 44 \}/)
+  assert.match(avatar, /size = 44/)
+  assert.match(avatar, /style=\{\{ height: size, width: size \}\}/)
   assert.match(avatar, /borderRadius: 5\.5,[\s\S]*?bottom: -2,[\s\S]*?height: 11,[\s\S]*?right: -2/)
 })
 

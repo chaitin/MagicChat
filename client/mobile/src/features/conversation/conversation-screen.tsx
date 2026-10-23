@@ -50,7 +50,6 @@ import {
   MessageComposer,
   type MessageComposerHandle,
 } from "@/features/conversation/composer/message-composer"
-import { ForwardMessageSheet } from "@/features/conversation/forward-message-sheet"
 import { MessageList } from "@/features/conversation/messages/message-list"
 import { useTargetMessageNavigation } from "@/features/conversation/messages/use-target-message-navigation"
 import { mergeOptimisticMessages } from "@/features/conversation/optimistic-message-model"
@@ -71,6 +70,7 @@ import {
 } from "@/navigation/conversations"
 import { buildEntityDetailHref } from "@/navigation/entity-details"
 import { buildAttachmentImagePreviewHref } from "@/navigation/image-preview"
+import { buildSendTargetHref } from "@/navigation/send-target"
 import {
   hydrateClientConversationUsers,
   useClientData,
@@ -109,7 +109,7 @@ export function ConversationScreen() {
   useEffect(() => {
     recordMobilePerf("conversation.commit")
   })
-  const { invalidateSession } = useAuth()
+  const { invalidateSession, generation } = useAuth()
   const { activateConversation, ready: realtimeReady } = useRealtime()
   const session = useAuthenticatedSession()
   const messageLocationScope = JSON.stringify([session.id, session.url, session.userId, conversationId, routeTargetMessageId])
@@ -130,9 +130,6 @@ export function ConversationScreen() {
     if (activeReplyLocation) Alert.alert("无法定位消息", "原消息不存在或已不可见")
   }, [activeReplyLocation])
   const composerRef = useRef<MessageComposerHandle>(null)
-  const [forwardMessageState, setForwardMessage] =
-    useState<ScopedMessageActionTarget | null>(null)
-  const [forwardSheetOpen, setForwardSheetOpen] = useState(false)
   const [replyTargetState, setReplyTarget] =
     useState<ScopedMessageActionTarget | null>(null)
   const [messageActionTarget, setMessageActionTarget] =
@@ -140,17 +137,10 @@ export function ConversationScreen() {
   const [messageActionSheetOpen, setMessageActionSheetOpen] = useState(false)
   const [unlistedConversation, setUnlistedConversation] =
     useState<ClientConversation>()
-  const forwardMessage =
-    forwardMessageState?.conversationId === conversationId
-      ? forwardMessageState
-      : null
   const replyTarget =
     replyTargetState?.conversationId === conversationId
       ? replyTargetState
       : null
-  const requestForwardSheetClose = useCallback(() => {
-    setForwardSheetOpen(false)
-  }, [])
   const {
     contacts,
     conversations,
@@ -324,7 +314,6 @@ export function ConversationScreen() {
   const messageActions = useConversationMessageActions({
     conversationId,
     confirmedMessages: messagesQuery.messages,
-    forwardMessageId: forwardMessage?.id,
     onReplySent: (messageId) => {
       setReplyTarget((current) => current?.id === messageId ? null : current)
     },
@@ -385,11 +374,13 @@ export function ConversationScreen() {
   )
   const handleSelectionForward = useCallback(
     (target: ScopedMessageActionTarget) => {
-      setForwardMessage(target)
       composerRef.current?.dismissAccessory()
-      requestAnimationFrame(() => setForwardSheetOpen(true))
+      Keyboard.dismiss()
+      router.push(buildSendTargetHref(session, generation, {
+        purpose: "forward", sourceConversationId: target.conversationId, messageId: target.id,
+      }))
     },
-    []
+    [generation, router, session]
   )
   const handleMessageLongPress = useCallback(
     (message: PresentedMessage) => {
@@ -740,19 +731,6 @@ export function ConversationScreen() {
           onOpenChange={setMessageActionSheetOpen}
           open={messageActionSheetOpen}
           title="消息操作"
-        />
-      ) : null}
-      {forwardMessage ? (
-        <ForwardMessageSheet
-          conversations={conversations}
-          onAnimationComplete={(open) => {
-            if (!open) setForwardMessage(null)
-          }}
-          onForward={messageActions.forward}
-          onRequestClose={requestForwardSheetClose}
-          open={forwardSheetOpen}
-          server={session}
-          source={forwardMessage}
         />
       ) : null}
     </View>

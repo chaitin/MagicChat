@@ -159,35 +159,34 @@ test("会话置顶与免打扰不在退场期间重复显示加载层", async ()
   assert.match(list, /delayLongPress=\{500\}/)
 })
 
-test("主题、转发、提醒、退出与注销继续接入公共弹层", async () => {
-  const [me, profile, forward, mention] = await Promise.all([
+test("主题、提醒、退出与注销继续接入公共弹层", async () => {
+  const [me, profile, mention] = await Promise.all([
     source("src/features/me/me-screen.tsx"),
     source("src/features/me/profile-screen.tsx"),
-    source("src/features/conversation/forward-message-sheet.tsx"),
     source("src/features/conversation/composer/mention-picker-sheet.tsx"),
   ])
 
   assert.match(me, /<XGUIPicker/)
   assert.match(me, /title="退出登录"/)
   assert.match(profile, /title="注销账号"/)
-  assert.match(forward, /<XGUIHalfScreenDialog/)
   assert.match(mention, /<XGUIHalfScreenDialog/)
   assert.doesNotMatch(mention, /<HalfScreenSearchInput\s+autoFocus/)
 })
 
-test("转发候选列表和头像随弹层立即显示", async () => {
-  const forward = await source("src/features/conversation/forward-message-sheet.tsx")
+test("转发候选列表和头像在独立页面直接显示", async () => {
+  const forward = await source("src/features/send-to/send-to-screen.tsx")
 
   assert.match(forward, /<FlatList/)
   assert.match(forward, /<ConversationAvatar/)
   assert.doesNotMatch(forward, /contentReady/)
 })
 
-test("聊天内容空白点击关闭键盘且转发等待前一弹层退场", async () => {
+test("聊天内容空白点击关闭键盘且转发等待前一弹层退场后进入独立页",  async () => {
   const conversation = await source("src/features/conversation/conversation-screen.tsx")
 
   assert.match(conversation, /onContentTouch=\{\(\) => \{/)
   assert.match(conversation, /Keyboard\.dismiss\(\)/)
-  assert.match(conversation, /requestAnimationFrame\(\(\) => setForwardSheetOpen\(true\)\)/)
+  assert.match(conversation, /router.push\(buildSendTargetHref\(session, generation/)
+  assert.doesNotMatch(conversation, /ForwardMessageSheet|forwardSheetOpen/)
   assert.match(conversation, /deferUntilClosed: true,\s+label: "转发"/)
 })

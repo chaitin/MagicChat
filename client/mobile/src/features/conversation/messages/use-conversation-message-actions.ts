@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react"
 
 import { ApiRequestError, isUnauthorizedError } from "@/data/api-client"
 import {
-  useForwardConversationMessage,
   useSendConversationFileMessage,
   useSendConversationImageMessage,
   useSendConversationTextMessage,
@@ -33,14 +32,12 @@ import { useAuth } from "@/providers/auth-provider"
 export function useConversationMessageActions({
   conversationId,
   confirmedMessages,
-  forwardMessageId,
   onReplySent,
   replyToMessageId,
   server,
 }: {
   conversationId: string
   confirmedMessages: ClientMessage[]
-  forwardMessageId: string | undefined
   onReplySent: (messageId: string) => void
   replyToMessageId: string | undefined
   server: AuthenticatedTarget
@@ -98,10 +95,6 @@ export function useConversationMessageActions({
     conversationId
   )
   const submitChoiceMutation = useSubmitConversationMessageChoiceResponse(
-    server,
-    conversationId
-  )
-  const forwardMutation = useForwardConversationMessage(
     server,
     conversationId
   )
@@ -212,44 +205,7 @@ export function useConversationMessageActions({
     }
   }
 
-  async function forward(targetConversationIds: string[]) {
-    if (!forwardMessageId || forwardMutation.isPending) return false
-
-    try {
-      const result = await forwardMutation.mutateAsync({
-        clientForwardId: createClientMessageId(),
-        messageId: forwardMessageId,
-        targetConversationIds,
-      })
-      if (result.sentCount === 0) {
-        const firstFailure = result.results.find(
-          (candidate) => candidate.status === "failed"
-        )
-        toast.show({ message: firstFailure?.status === "failed"
-            ? firstFailure.error.message
-            : "转发消息失败，请重试。", modal: false, type: "text", duration: 1_000 })
-        return false
-      }
-
-      toast.show({ message: result.failedCount > 0
-          ? `已转发到 ${result.sentCount} 个会话，${result.failedCount} 个失败`
-          : `已转发到 ${result.sentCount} 个会话`, modal: false, type: "text", duration: 1_000 })
-      return true
-    } catch (error: unknown) {
-      if (isUnauthorizedError(error)) {
-        void invalidateSession()
-        router.replace("/server-management")
-      } else {
-        toast.show({ message: error instanceof ApiRequestError
-            ? error.message
-            : "转发消息失败，请重试。", modal: false, type: "text", duration: 1_000 })
-      }
-      return false
-    }
-  }
-
   return {
-    forward,
     isSending,
     optimisticMessages,
     retryMessage,

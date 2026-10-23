@@ -11,6 +11,7 @@ import type { ServerTarget } from "@/core/server-target"
 import type { ResourceLoadState } from "@/data/resources"
 import { MessageBody } from "@/features/conversation/messages/message-body"
 import { MessageChoice } from "@/features/conversation/messages/message-choice"
+import { MessageHighlightOutline } from "@/features/conversation/messages/message-highlight-outline"
 import { MessageReactionChips } from "@/features/conversation/messages/message-reactions"
 import { TopicReplyPreview } from "@/features/conversation/topic/topic-reply-preview"
 import {
@@ -24,6 +25,7 @@ export const MessageBubble = memo(function MessageBubble({
   currentUserId,
   avatarType,
   highlighted = false,
+  highlightRequestKey = 0,
   message,
   messageActionsEnabled = true,
   canAddReaction,
@@ -55,6 +57,7 @@ export const MessageBubble = memo(function MessageBubble({
   canRespondToChoice: boolean
   currentUserId: string
   highlighted?: boolean
+  highlightRequestKey?: number
   message: PresentedMessage
   messageActionsEnabled?: boolean
   onAvatarLongPress?: (sender: EntityReference) => void
@@ -84,6 +87,7 @@ export const MessageBubble = memo(function MessageBubble({
   const { colors } = useXGUITheme()
   const didLongPressAvatarRef = useRef(false)
   const didLongPressReplyRef = useRef(false)
+  const canLocateReply = Boolean(onLocateReplyMessage) && messageActionsEnabled
   function handleReplyReferencePress(event: GestureResponderEvent) {
     event.stopPropagation()
     if (didLongPressReplyRef.current || !messageActionsEnabled || !message.replyTo) return
@@ -96,11 +100,12 @@ export const MessageBubble = memo(function MessageBubble({
 
   if (message.role === "system") {
     return (
-      <View style={{ alignItems: "center", backgroundColor: highlighted ? colors.brand1 : undefined, paddingHorizontal: 24 }}>
-        <View style={{ maxWidth: "85%" }}>
+      <View style={{ alignItems: "center", paddingHorizontal: 24 }}>
+        <View style={{ maxWidth: "85%", position: "relative" }}>
           <Text style={{ color: colors.textPlaceholder, fontSize: 13, lineHeight: 20, textAlign: "center" }}>
             {formatClientMessageBodySummary(message.body, resolveMentionLabel)}
           </Text>
+          {highlighted ? <MessageHighlightOutline key={highlightRequestKey} /> : null}
         </View>
       </View>
     )
@@ -182,7 +187,7 @@ export const MessageBubble = memo(function MessageBubble({
   )
 
   return (
-    <View style={{ alignItems: "flex-start", backgroundColor: highlighted ? colors.brand1 : undefined, flexDirection: "row", gap: 7, justifyContent: fromMe ? "flex-end" : "flex-start", paddingHorizontal: 13 }}>
+    <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 7, justifyContent: fromMe ? "flex-end" : "flex-start", paddingHorizontal: 13 }}>
       {!fromMe ? avatar : null}
       <View style={{ alignItems: fromMe ? "flex-end" : "flex-start", gap: 2, maxWidth: "82%", width: structuredBubbleWidth }}>
         <View style={{ alignItems: "center", flexDirection: "row", gap: 7 }}>
@@ -241,18 +246,38 @@ export const MessageBubble = memo(function MessageBubble({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="定位被引用的原消息"
-                disabled={!onLocateReplyMessage || !messageActionsEnabled}
+                disabled={!canLocateReply}
                 onPressIn={() => { didLongPressReplyRef.current = false }}
                 onPress={handleReplyReferencePress}
                 onLongPress={handleReplyReferenceLongPress}
-                style={{ borderColor: colors.separator, borderLeftWidth: 2, marginBottom: 7, paddingLeft: 7 }}
+                style={({ pressed }) => ({
+                  backgroundColor: pressed && canLocateReply ? colors.foreground5 : undefined,
+                  marginBottom: 7,
+                  paddingLeft: 9,
+                  position: "relative",
+                })}
               >
-                <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 14, fontWeight: "600", lineHeight: 21 }}>
-                  {message.replyTo.author}
-                </Text>
-                <Text numberOfLines={2} style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>
-                  {message.replyTo.summary}
-                </Text>
+                {({ pressed }) => (
+                  <>
+                    <View
+                      pointerEvents="none"
+                      style={{
+                        backgroundColor: pressed && canLocateReply ? colors.brand : colors.separator,
+                        bottom: 0,
+                        left: 0,
+                        position: "absolute",
+                        top: 0,
+                        width: 2,
+                      }}
+                    />
+                    <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 14, fontWeight: "600", lineHeight: 21 }}>
+                      {message.replyTo!.author}
+                    </Text>
+                    <Text numberOfLines={2} style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>
+                      {message.replyTo!.summary}
+                    </Text>
+                  </>
+                )}
               </Pressable>
             ) : null}
             {message.body.type === "choice" ? (
@@ -318,6 +343,17 @@ export const MessageBubble = memo(function MessageBubble({
               />
             ) : null}
           </View>
+          {highlighted ? (
+            <MessageHighlightOutline
+              key={highlightRequestKey}
+              style={{
+                borderBottomLeftRadius: 12,
+                borderBottomRightRadius: 12,
+                borderTopLeftRadius: fromMe ? 12 : 5,
+                borderTopRightRadius: fromMe ? 5 : 12,
+              }}
+            />
+          ) : null}
         </View>
 
         {message.delegatedByName ? (

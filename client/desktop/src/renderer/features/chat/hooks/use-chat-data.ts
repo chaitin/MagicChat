@@ -2,7 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { DesktopConversation, DesktopMessage } from "../../../../shared/account-data"
 import {
   advanceLocalMessageGap,
-  contiguousMessageSuffix,
   mergeLocalMessageWindows,
   type MessageGap,
 } from "../../../../shared/message-window"
@@ -16,6 +15,7 @@ import {
   boundMessageWindow,
   hasEarlierMessages,
   mergeRefreshedMessages,
+  retainMessageWindow,
   MAX_VISIBLE_MESSAGES,
   visibleMessageGap,
 } from "../bounded-message-window"
@@ -1047,14 +1047,4 @@ export function useChatData({
     retryMessage,
     loadBeforeMessages,
   }
-}
-
-function retainMessageWindow(next: DesktopMessage[], current: DesktopMessage[]) {
-  const virtualMessages = next.filter((message) => message.virtualType).slice(-MAX_VISIBLE_MESSAGES)
-  const visibleCount = Math.min(
-    MAX_VISIBLE_MESSAGES - virtualMessages.length,
-    Math.max(50, current.filter((message) => !message.virtualType).length),
-  )
-  const regularMessages = contiguousMessageSuffix(next.filter((message) => !message.virtualType))
-  return [...virtualMessages, ...(visibleCount ? regularMessages.slice(-visibleCount) : [])]
 }

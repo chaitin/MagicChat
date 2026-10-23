@@ -35,7 +35,7 @@ const { ConversationManager } = await import("../src/main/account/conversation-m
 const { parseConversation, parseMessage } =
   await import("../src/main/account/conversation-parser.ts")
 const { mergeLocalMessageWindows } = await import("../src/shared/message-window.ts")
-const { boundMessageWindow } =
+const { boundMessageWindow, mergeRefreshedMessages, retainMessageWindow } =
   await import("../src/renderer/features/chat/bounded-message-window.ts")
 
 for (const type of ["group", "topic"] as const) {
@@ -146,6 +146,86 @@ test("允许话题消息读取不会放开话题列表和附件管理入口", ()
     database.close()
   }
 })
+
+for (const type of ["text", "markdown", "link", "file", "image", "video"] as const) {
+  test(`${type} 真实SQLite确认后仅一条消息，刷新和迟到发送结果均不能恢复临时项`, () => {
+    const { database, manager } = createTopicFixture()
+    try {
+      const input = {
+        conversationId: "room",
+        clientMessageId: `request-${type}`,
+        senderId: "user",
+        senderName: "User",
+      }
+      let body: Record<string, unknown>
+      if (type === "text" || type === "markdown" || type === "link") {
+        const content = type === "link" ? "https://example.test" : "hello"
+        database.createOptimisticMessage({ ...input, bodyType: type, content })
+        body = type === "link" ? { type, url: content, title: content } : { type, content }
+      } else if (type === "file") {
+        database.createOptimisticFileMessage({
+          ...input,
+          filePath: "/not-opened-fixture",
+          name: "test.txt",
+          sizeBytes: 1,
+        })
+        body = { type, file_id: "server-file", name: "test.txt", size_bytes: 1 }
+      } else if (type === "image") {
+        database.createOptimisticImageMessage({
+          ...input,
+          filePath: "/not-opened-fixture",
+          name: "test.webp",
+          sizeBytes: 1,
+          contentType: "image/webp",
+          width: 256,
+          height: 256,
+          caption: "",
+        })
+        body = { type, file_id: "server-image", width: 256, height: 256 }
+      } else {
+        database.createOptimisticVideoMessage({
+          ...input,
+          filePath: "/not-opened-fixture",
+          name: "test.mp4",
+          sizeBytes: 1,
+          contentType: "video/mp4",
+          caption: "",
+        })
+        body = {
+          type,
+          file_id: "server-video",
+          name: "test.mp4",
+          size_bytes: 1,
+          content_type: "video/mp4",
+        }
+      }
+      const pending = manager.listMessages("room", 200)
+      assert.equal(pending.at(-1)?.deliveryStatus, "sending")
+      database.upsertMessages([
+        parseMessage(
+          {
+            id: "server-confirmation",
+            conversation_id: "room",
+            client_message_id: input.clientMessageId,
+            seq: 81,
+            created_at: "2026-10-22T00:00:00Z",
+            sender: { id: "user", type: "user", name: "User" },
+            body,
+          },
+          "room",
+        ),
+      ])
+      const confirmed = manager.listMessages("room", 200)
+      assert.equal(confirmed.length, 81)
+      assert.equal(confirmed.at(-1)?.bodyType, type)
+      assert.equal(confirmed.at(-1)?.deliveryStatus, undefined)
+      assert.deepEqual(mergeRefreshedMessages(pending, confirmed, true).messages, confirmed)
+      assert.deepEqual(retainMessageWindow(pending, confirmed), confirmed)
+    } finally {
+      database.close()
+    }
+  })
+}
 
 function createTopicFixture({ read = false, viewOnly = false } = {}) {
   const database = new AccountDatabase(":memory:")

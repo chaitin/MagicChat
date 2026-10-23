@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils"
 import { useCachedMedia } from "../use-cached-media"
 import { MediaContext } from "./context"
 import { MarkdownBody, TextBody } from "./text-body"
-import { formatFileSize, imageThumbnailFrame, mediaUrl, progressPercentage } from "./utils"
+import { formatFileSize, imageThumbnailFrame, mediaUrl } from "./utils"
 
 export function ImageBody({
   body,
@@ -112,22 +112,29 @@ export function VideoBody({
       <button
         type="button"
         className="group relative flex aspect-video w-64 max-w-full items-center justify-center overflow-hidden bg-foreground"
-        aria-label={media.cached ? "播放视频" : "下载并播放视频"}
+        aria-label={
+          media.status === "verifying"
+            ? "正在校验视频"
+            : downloading
+              ? "正在下载视频"
+              : media.cached
+                ? "播放视频"
+                : "下载并播放视频"
+        }
+        aria-busy={downloading}
         disabled={downloading}
         onClick={() => void downloadAndOpen()}
       >
+        {downloading && <span className="absolute inset-0 bg-black/35" aria-hidden />}
         <HugeiconsIcon
-          icon={PlayCircle02Icon}
-          className="size-10 text-background transition-colors group-hover:text-xgui-brand-4"
+          icon={downloading ? Loading03Icon : PlayCircle02Icon}
+          className={cn(
+            "relative size-10 text-background transition-colors group-hover:text-xgui-brand-4",
+            downloading && "animate-spin",
+          )}
           strokeWidth={1}
           aria-hidden
         />
-        {downloading && (
-          <MediaProgressOverlay
-            downloadedBytes={media.downloadedBytes}
-            totalBytes={media.totalBytes}
-          />
-        )}
       </button>
       <MediaCaption body={body} flush={flush} />
     </div>
@@ -307,29 +314,6 @@ function ImageLoadingOverlay() {
       aria-label="图片加载中"
     >
       <HugeiconsIcon icon={Loading03Icon} className="size-6 animate-spin" aria-hidden />
-    </span>
-  )
-}
-
-function MediaProgressOverlay({
-  downloadedBytes,
-  totalBytes,
-}: {
-  downloadedBytes: number
-  totalBytes?: number
-}) {
-  const percentage = progressPercentage(downloadedBytes, totalBytes)
-  return (
-    <span className="absolute inset-0 bg-black/35">
-      <span className="absolute right-0 bottom-0 left-0 h-1 bg-white/25">
-        <span
-          className={cn(
-            "block h-full bg-xgui-brand transition-[width]",
-            percentage === undefined && "w-1/3 animate-pulse",
-          )}
-          style={percentage === undefined ? undefined : { width: `${percentage}%` }}
-        />
-      </span>
     </span>
   )
 }

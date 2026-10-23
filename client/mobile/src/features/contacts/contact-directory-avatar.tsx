@@ -14,6 +14,7 @@ export function ContactDirectoryAvatar({
   name,
   online,
   server,
+  size = 44,
   type,
 }: {
   avatar: string
@@ -21,21 +22,23 @@ export function ContactDirectoryAvatar({
   name: string
   online?: boolean
   server: ServerTarget
+  size?: number
   type: "user" | "app" | "group"
 }) {
   const { colors } = useXGUITheme()
 
   return (
-    <View style={styles.avatar}>
+    <View style={{ height: size, width: size }}>
       {type === "group" ? (
         <GroupAvatar
           avatar={avatar}
           members={members}
           name={name}
           server={server}
+          size={size}
         />
       ) : (
-        <AppAvatar accessibilityLabel={name} avatar={avatar} server={server} type={type} />
+        <AppAvatar accessibilityLabel={name} avatar={avatar} server={server} size={size} type={type} />
       )}
 
       {online !== undefined ? (
@@ -54,7 +57,6 @@ export function ContactDirectoryAvatar({
 }
 
 const styles = StyleSheet.create({
-  avatar: { height: 44, width: 44 },
   onlineIndicator: {
     borderRadius: 5.5,
     borderWidth: 2,

@@ -6,7 +6,26 @@ export const MAX_VISIBLE_MESSAGES = 200
 export type MessageGap = { afterSeq: number; beforeSeq: number; unavailable?: boolean }
 
 export function mergeLocalMessageWindows(older: DesktopMessage[], newer: DesktopMessage[]) {
-  const byId = new Map([...older, ...newer].map((message) => [message.id, message]))
+  const byId = new Map<string, DesktopMessage>()
+  const idByRequest = new Map<string, string>()
+  for (const message of [...older, ...newer]) {
+    const requestKey =
+      message.clientMessageId && !message.virtualType
+        ? JSON.stringify([
+            message.conversationId,
+            message.senderType,
+            message.senderId,
+            message.clientMessageId,
+          ])
+        : undefined
+    const previousId = requestKey ? idByRequest.get(requestKey) : undefined
+    const previous = byId.get(previousId ?? message.id)
+    // HTTP and realtime responses can arrive in either order; confirmation must win.
+    if (previous && !previous.deliveryStatus && message.deliveryStatus) continue
+    if (previousId && previousId !== message.id) byId.delete(previousId)
+    byId.set(message.id, message)
+    if (requestKey) idByRequest.set(requestKey, message.id)
+  }
   const messages = [...byId.values()].sort(
     (left, right) =>
       left.seq - right.seq ||

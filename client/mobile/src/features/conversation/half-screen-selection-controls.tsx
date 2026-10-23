@@ -69,6 +69,7 @@ export function HalfScreenSearchInput({
 export function HalfScreenSelectionRow({
   accessibilityLabel,
   checkbox = false,
+  checkboxPosition = "start",
   leading,
   onPress,
   selected,
@@ -78,6 +79,7 @@ export function HalfScreenSelectionRow({
 }: {
   accessibilityLabel?: string
   checkbox?: boolean
+  checkboxPosition?: "start" | "end"
   leading?: ReactNode
   onPress: () => void
   selected?: boolean
@@ -86,12 +88,21 @@ export function HalfScreenSelectionRow({
   value?: string
 }) {
   const { colors } = useXGUITheme()
+  const checkboxContent = checkbox ? (
+    <View style={[
+      styles.checkbox,
+      checkboxPosition === "end" && { marginLeft: 12, marginRight: 0 },
+      selected ? { backgroundColor: colors.brand } : { borderColor: colors.foreground3, borderWidth: 1 },
+    ]}>
+      {selected ? <Check color="#FFFFFF" size={13} strokeWidth={2.4} /> : null}
+    </View>
+  ) : null
 
   return (
     <Pressable
       accessibilityLabel={accessibilityLabel ?? title}
       accessibilityRole={checkbox ? "checkbox" : "button"}
-      accessibilityState={{ selected }}
+      accessibilityState={checkbox ? { checked: Boolean(selected) } : { selected }}
       onPress={onPress}
     >
       {({ pressed }) => (
@@ -105,20 +116,7 @@ export function HalfScreenSelectionRow({
             },
           ]}
         >
-          {checkbox ? (
-            <View
-              style={[
-                styles.checkbox,
-                selected
-                  ? { backgroundColor: colors.brand }
-                  : { borderColor: colors.textPlaceholder, borderWidth: 1 },
-              ]}
-            >
-              {selected ? (
-                <Check color="#FFFFFF" size={15} strokeWidth={2.4} />
-              ) : null}
-            </View>
-          ) : null}
+          {checkboxPosition === "start" ? checkboxContent : null}
           {leading ? <View style={styles.leading}>{leading}</View> : null}
           <Text
             numberOfLines={1}
@@ -135,6 +133,7 @@ export function HalfScreenSelectionRow({
             </Text>
           ) : null}
           {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
+          {checkboxPosition === "end" ? checkboxContent : null}
           <View
             pointerEvents="none"
             style={[
@@ -151,11 +150,11 @@ export function HalfScreenSelectionRow({
 const styles = StyleSheet.create({
   checkbox: {
     alignItems: "center",
-    borderRadius: 11,
-    height: 22,
+    borderRadius: 10,
+    height: 20,
     justifyContent: "center",
     marginRight: 12,
-    width: 22,
+    width: 20,
   },
   clearButton: {
     alignItems: "center",

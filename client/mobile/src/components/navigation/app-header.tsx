@@ -22,6 +22,7 @@ export type HeaderAction = {
 export function AppHeader({
   actions = [],
   backAccessory,
+  headerAction,
   onBackPress,
   onMenuPress,
   title,
@@ -29,6 +30,7 @@ export function AppHeader({
 }: {
   actions?: HeaderAction[]
   backAccessory?: ReactNode
+  headerAction?: ReactNode
   onBackPress?: () => void
   onMenuPress?: () => void
   title: string
@@ -80,7 +82,7 @@ export function AppHeader({
         </View>
 
         <View style={styles.actions}>
-          {actions.slice(0, 2).map((action) => (
+          {headerAction ?? actions.slice(0, 2).map((action) => (
             <CompactIconButton
               accessibilityLabel={action.label}
               buttonRef={action.buttonRef}

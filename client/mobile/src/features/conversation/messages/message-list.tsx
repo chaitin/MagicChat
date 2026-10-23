@@ -403,6 +403,7 @@ export function MessageList({
               }
               currentUserId={currentUserId}
               highlighted={item.message.id === highlightedMessageId && highlightedMessageId === initialMessageId}
+              highlightRequestKey={focusRequestKey}
               message={item.message}
               messageActionsEnabled={item.message.virtualType !== "topic_source"}
               optimisticClientMessageId={

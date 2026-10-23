@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
   },
   optionLabel: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 14,
     lineHeight: 22,
     minWidth: 0,
   },

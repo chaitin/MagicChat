@@ -67,22 +67,21 @@ test("推荐给好友渲染StudentCardIcon，并与发消息图标的大小、�
   const { default: StudentCardIcon } = await import("@hugeicons/core-free-icons/dist/esm/StudentCardIcon")
   const code = source("features/entity-details/send-namecard-action.tsx")
   const ast = ts.createSourceFile("action.tsx", code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
-  const component = ast.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === "AccountSendNamecardAction")!
+  const component = ast.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === "SendNamecardAction")!
   const compiled = ts.transpileModule(`export ${component.getText(ast)}`, {
     fileName: "action.tsx",
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
   }).outputText
   type Element = { type: string; props: Record<string, unknown>; children: Element[] }
-  const exports = {} as { AccountSendNamecardAction: (input: unknown) => Element }
+  const exports = {} as { SendNamecardAction: (input: unknown) => Element }
   runInNewContext(compiled, {
     exports, StudentCardIcon, Svg: "Svg", Path: "Path", XGUIListItem: "XGUIListItem",
-    ForwardMessageSheet: "ForwardMessageSheet",
     React: { Fragment: "Fragment", createElement: (type: string, props: Record<string, unknown>, ...children: Element[]) => ({ type, props, children }) },
-    useAuthenticatedSession: () => ({}), useClientData: () => ({ conversations: [] }),
+    useAuthenticatedSession: () => ({}), useAuth: () => ({ generation: 1 }), useRouter: () => ({ push() {} }),
     useXGUIToast: () => ({}), useXGUITheme: () => ({ colors: { link: "#123456" } }),
     useState: (value: unknown) => [value, () => {}], useRef: (value: unknown) => ({ current: value }), useEffect: () => {},
   })
-  const row = exports.AccountSendNamecardAction({ target: { type: "user", id: "user-id" } }).children[0]
+  const row = exports.SendNamecardAction({ target: { type: "user", id: "user-id" } })
   assert.equal(row.props.title, "推荐给好友")
   const icon = row.props.leading as Element
   assert.equal(icon.type, "Svg")
@@ -107,7 +106,7 @@ test("三类消息气泡名片进入资料导航，不交给操作系统打开",
   assert.match(body, /parseContactLink\(body.url\)[\s\S]*?if \(target\) onMentionPress\(target\)/)
 })
 
-test("推荐给好友位于主操作上方且使用独立列表，复用转发选择框并限制单选", () => {
+test("推荐给好友位于主操作上方且使用独立列表，进入发送名片页面",  () => {
   const action = source("features/entity-details/entity-detail-action.tsx")
   const ast = ts.createSourceFile("action.tsx", action, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
   const syntax = ts.transpileModule(action, {
@@ -127,12 +126,11 @@ test("推荐给好友位于主操作上方且使用独立列表，复用转发�
   assert.doesNotMatch(lists[0].getText(ast), /<XGUIListItem/)
   assert.match(lists[1].getText(ast), /<XGUIListItem/)
   assert.doesNotMatch(lists[1].getText(ast), /<SendNamecardAction/)
-  const sheet = source("features/conversation/forward-message-sheet.tsx")
-  assert.match(sheet, /purpose === "namecard"\) next.clear\(\)/)
   const send = source("features/entity-details/send-namecard-action.tsx")
   assert.match(send, /accessibilityLabel="推荐给好友"/)
   assert.match(send, /title="推荐给好友"/)
-  assert.match(send, /<ForwardMessageSheet[\s\S]*?purpose="namecard"/)
-  assert.match(send, /messageIds.current.get\(conversationId\)/)
-  assert.match(send, /messageManager.writeMessages\(session, \[message\]\)/)
+  assert.match(send, /router.push\(buildSendTargetHref\(session, generation, \{ purpose: "namecard", entity: target \}\)\)/)
+  assert.doesNotMatch(send, /ForwardMessageSheet|mountedSheet/)
+  const sender = source("features/send-to/use-send-to-conversations.ts")
+  assert.match(sender, /messageManager.writeMessages\(session, \[sent\]\)/)
 })

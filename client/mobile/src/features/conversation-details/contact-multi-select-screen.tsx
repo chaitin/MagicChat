@@ -1,6 +1,6 @@
-import { Check, ChevronLeft } from "lucide-react-native"
+import { ChevronLeft } from "lucide-react-native"
 import { useMemo, useState } from "react"
-import { FlatList, Pressable, StyleSheet, View } from "react-native"
+import { FlatList, StyleSheet, View } from "react-native"
 import { Text } from "@/components/mi-sans-text"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
@@ -9,6 +9,7 @@ import type { ContactUser } from "@/core/models"
 import { getContactDisplayName } from "@/domain/contacts/contact-display"
 import {
   HalfScreenSearchInput,
+  HalfScreenSelectionRow,
 } from "@/features/conversation/half-screen-selection-controls"
 import { ContactDirectoryAvatar } from "@/features/contacts/contact-directory-avatar"
 import { buildDirectorySections } from "@/features/contacts/contact-directory-model"
@@ -105,7 +106,6 @@ export function ContactMultiSelectScreen({
         title={title}
         titleColor={colors.textPrimary}
         titleFontSize={16}
-        titleFontWeight="600"
       />
 
       <HalfScreenSearchInput
@@ -161,51 +161,27 @@ function ContactSelectionRow({
   user: ContactUser
 }) {
   const session = useAuthenticatedSession()
-  const { colors } = useXGUITheme()
   const displayName = getContactDisplayName(user)
 
   return (
-    <Pressable
+    <HalfScreenSelectionRow
       accessibilityLabel={`${selected ? "取消选择" : "选择"}${displayName}`}
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: selected }}
+      checkbox
+      checkboxPosition="end"
+      leading={
+        <ContactDirectoryAvatar
+          avatar={user.avatar}
+          name={displayName}
+          online={user.online}
+          server={session}
+          size={32}
+          type="user"
+        />
+      }
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.row,
-        {
-          backgroundColor: pressed ? colors.background1 : colors.background2,
-        },
-      ]}
-    >
-      <View
-        style={[
-          styles.checkbox,
-          {
-            backgroundColor: selected ? colors.brand : "transparent",
-            borderColor: selected ? colors.brand : colors.foreground4,
-          },
-        ]}
-      >
-        {selected ? <Check color="#FFFFFF" size={16} strokeWidth={3} /> : null}
-      </View>
-      <ContactDirectoryAvatar
-        avatar={user.avatar}
-        name={displayName}
-        online={user.online}
-        server={session}
-        type="user"
-      />
-      <Text
-        numberOfLines={1}
-        style={[styles.name, { color: colors.textPrimary }]}
-      >
-        {displayName}
-      </Text>
-      <View
-        pointerEvents="none"
-        style={[styles.separator, { backgroundColor: colors.separator }]}
-      />
-    </Pressable>
+      selected={selected}
+      title={displayName}
+    />
   )
 }
 
@@ -214,14 +190,6 @@ function normalizeId(value: string) {
 }
 
 const styles = StyleSheet.create({
-  checkbox: {
-    alignItems: "center",
-    borderRadius: 12,
-    borderWidth: 1,
-    height: 24,
-    justifyContent: "center",
-    width: 24,
-  },
   emptyState: {
     alignItems: "center",
     paddingHorizontal: 24,
@@ -235,27 +203,7 @@ const styles = StyleSheet.create({
   listContent: {
     flexGrow: 1,
   },
-  name: {
-    flex: 1,
-    fontSize: 16,
-    lineHeight: 22,
-  },
-  row: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    height: 56,
-    paddingHorizontal: 16,
-    position: "relative",
-  },
   screen: {
     flex: 1,
-  },
-  separator: {
-    bottom: StyleSheet.hairlineWidth,
-    height: StyleSheet.hairlineWidth,
-    left: 64,
-    position: "absolute",
-    right: 16,
   },
 })

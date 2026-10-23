@@ -49,6 +49,7 @@ import {
 } from "@/components/conversation/message-reactions"
 import { CollapsibleMessageContent } from "@/components/conversation/collapsible-message-content"
 import { messageReactionChipToneClassName } from "@/components/conversation/message-reaction-styles"
+import { useMessageHighlight } from "@/components/conversation/use-message-highlight"
 import { UserProfilePopover } from "@/components/user-profile-popover"
 import type {
   ConversationPanelMentionTarget,
@@ -62,6 +63,7 @@ const MessageChart = React.lazy(async () => {
 })
 
 export const SystemMessageBadge = React.memo(function SystemMessageBadge({
+  highlightRequestKey,
   currentUserId,
   mentionLabelResolver,
   message,
@@ -69,14 +71,21 @@ export const SystemMessageBadge = React.memo(function SystemMessageBadge({
   currentUserId: string
   mentionLabelResolver: MentionLabelResolver
   message: ConversationPanelMessage
+  highlightRequestKey?: number
 }) {
+  const badgeRef = React.useRef<HTMLSpanElement | null>(null)
+  useMessageHighlight(badgeRef, highlightRequestKey)
   return (
     <div
       className="flex justify-center"
       data-conversation-message-id={message.id}
     >
       <Badge
-        className="h-auto max-w-[min(80%,36rem)] text-center leading-relaxed whitespace-normal"
+        className={cn(
+          "h-auto max-w-[min(80%,36rem)] text-center leading-relaxed whitespace-normal",
+          highlightRequestKey !== undefined && "ring-2 ring-xgui-orange"
+        )}
+        ref={badgeRef}
         variant="secondary"
       >
         <MessageBodyRenderer
@@ -90,6 +99,7 @@ export const SystemMessageBadge = React.memo(function SystemMessageBadge({
 }, areSystemMessageBadgePropsEqual)
 
 type MessageBubbleProps = {
+  highlightRequestKey?: number
   message: ConversationPanelMessage
   conversation: ClientConversation
   currentUserId: string
@@ -120,6 +130,7 @@ type MessageBubbleProps = {
 }
 
 export const MessageBubble = React.memo(function MessageBubble({
+  highlightRequestKey,
   message,
   conversation,
   currentUserId,
@@ -162,6 +173,7 @@ export const MessageBubble = React.memo(function MessageBubble({
   const canAddReaction = canReply && message.body.type !== "revoked"
   const copyText = getMessageCopyText(message, mentionLabelResolver)
   const bubbleRef = React.useRef<HTMLDivElement | null>(null)
+  useMessageHighlight(bubbleRef, highlightRequestKey)
   const selectedCopyTextRef = React.useRef("")
   function handleMessageContextMenu() {
     selectedCopyTextRef.current = getSelectedTextWithinElement(
@@ -237,6 +249,7 @@ export const MessageBubble = React.memo(function MessageBubble({
     <div
       className={cn(
         "group/message-bubble min-w-0 rounded-md text-sm leading-relaxed shadow-sm",
+        highlightRequestKey !== undefined && "ring-2 ring-xgui-orange",
         message.topic
           ? "max-w-[calc(30rem+1.5rem)]"
           : message.body.type === "text"
@@ -469,15 +482,18 @@ function areSystemMessageBadgePropsEqual(
     currentUserId: string
     mentionLabelResolver: MentionLabelResolver
     message: ConversationPanelMessage
+    highlightRequestKey?: number
   },
   next: {
     currentUserId: string
     mentionLabelResolver: MentionLabelResolver
     message: ConversationPanelMessage
+    highlightRequestKey?: number
   }
 ) {
   return (
     previous.currentUserId === next.currentUserId &&
+    previous.highlightRequestKey === next.highlightRequestKey &&
     previous.message.body === next.message.body &&
     (previous.mentionLabelResolver === next.mentionLabelResolver ||
       !messageBodyUsesMentionLabels(next.message.body))
@@ -492,6 +508,7 @@ function areMessageBubblePropsEqual(
     previous.conversation.name === next.conversation.name &&
     previous.conversation.type === next.conversation.type &&
     previous.currentUserId === next.currentUserId &&
+    previous.highlightRequestKey === next.highlightRequestKey &&
     previous.onForward === next.onForward &&
     previous.onCreateTopic === next.onCreateTopic &&
     previous.onInsertMention === next.onInsertMention &&
@@ -756,7 +773,7 @@ function MessageReplyReference({
         event.stopPropagation()
         if (!disabled) onLocate()
       }}
-      className="mb-2 block w-full min-w-0 cursor-pointer border-l-2 border-foreground/20 pl-2 text-left text-xs hover:border-teal-500 hover:bg-foreground/5 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none"
+      className="mb-2 block w-full min-w-0 cursor-pointer border-l-2 border-foreground/20 pl-2 text-left text-xs hover:border-xgui-brand hover:bg-foreground/5 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:border-xgui-brand active:bg-foreground/5 disabled:pointer-events-none"
     >
       <span className="block truncate font-medium text-foreground/80">
         {replyTo.author}

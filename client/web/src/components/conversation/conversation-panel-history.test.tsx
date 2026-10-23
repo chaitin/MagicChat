@@ -79,11 +79,18 @@ vi.mock("@/components/ui/scroll-area", () => {
 })
 
 vi.mock("@/components/conversation/conversation-message", () => ({
-  MessageBubble({ message }: { message: ConversationPanelMessage }) {
+  MessageBubble({
+    message,
+    highlightRequestKey,
+  }: {
+    message: ConversationPanelMessage
+    highlightRequestKey?: number
+  }) {
     testState.bubbleRenderCount += 1
     return (
       <div
         data-conversation-message-id={message.id}
+        data-highlight-request-key={highlightRequestKey}
         data-testid={`message-${message.id}`}
         ref={(node) => {
           if (node) {
@@ -96,10 +103,17 @@ vi.mock("@/components/conversation/conversation-message", () => ({
       </div>
     )
   },
-  SystemMessageBadge({ message }: { message: ConversationPanelMessage }) {
+  SystemMessageBadge({
+    message,
+    highlightRequestKey,
+  }: {
+    message: ConversationPanelMessage
+    highlightRequestKey?: number
+  }) {
     return (
       <div
         data-conversation-message-id={message.id}
+        data-highlight-request-key={highlightRequestKey}
         data-testid={`message-${message.id}`}
       >
         {message.author}
@@ -415,13 +429,49 @@ describe("ConversationPanelHistory", () => {
     expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalledWith({
       block: "center",
     })
-    expect(screen.getByTestId("message-message-1").parentElement).toHaveClass(
-      "ring-2"
+    expect(screen.getByTestId("message-message-1")).toHaveAttribute(
+      "data-highlight-request-key",
+      "1"
     )
+    expect(
+      screen.getByTestId("message-message-1").parentElement
+    ).not.toHaveClass("ring-2", "bg-teal-500/10")
     expect(onFocusHandled).toHaveBeenCalledWith(1)
     fireEvent.click(screen.getByRole("button", { name: "回到最新消息" }))
     expect(onReturnToLatest).toHaveBeenCalledOnce()
   })
+
+  it.each(["other", "system"] as const)(
+    "restarts %s highlight on repeated focus and clears it after two seconds",
+    (role) => {
+      vi.useFakeTimers()
+      const message = createMessage("message-1", role)
+      const props = createProps([message])
+      const navigation = createHistoryNavigation({
+        focus: { messageId: message.id, requestKey: 1 },
+      })
+      const { rerender } = render(
+        <ConversationPanelHistory {...props} navigation={navigation} />
+      )
+      const target = screen.getByTestId("message-message-1")
+      expect(target).toHaveAttribute("data-highlight-request-key", "1")
+      act(() => vi.advanceTimersByTime(1_000))
+      rerender(
+        <ConversationPanelHistory
+          {...props}
+          navigation={{
+            ...navigation,
+            focus: { messageId: message.id, requestKey: 2 },
+          }}
+        />
+      )
+      expect(target).toHaveAttribute("data-highlight-request-key", "2")
+      act(() => vi.advanceTimersByTime(1_999))
+      expect(target).toHaveAttribute("data-highlight-request-key", "2")
+      act(() => vi.advanceTimersByTime(1))
+      expect(target).not.toHaveAttribute("data-highlight-request-key")
+    }
+  )
 
   it("lets users fetch the latest page when automatic catch-up exceeds 100", () => {
     const onReturnToLatest = vi.fn()

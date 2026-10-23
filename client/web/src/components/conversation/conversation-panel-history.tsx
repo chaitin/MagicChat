@@ -19,7 +19,7 @@ import { ConversationStatusIndicator } from "@/components/conversation/conversat
 import { formatConversationMessageTime } from "@/lib/conversation-message-presenter"
 import { conversationMessageRetentionLimit } from "@/lib/client-data-state"
 import type { ClientConversationMessageFocus } from "@/lib/client-data-context"
-import { cn } from "@/lib/utils"
+import { MESSAGE_HIGHLIGHT_DURATION_MS } from "@/components/conversation/use-message-highlight"
 import type {
   ConversationPanelMentionTarget,
   ConversationPanelMessage,
@@ -109,7 +109,10 @@ export const ConversationPanelHistory = React.memo(
     const [viewportNearBottom, setViewportNearBottom] = React.useState(true)
     const [pendingNewMessageCount, setPendingNewMessageCount] =
       React.useState(0)
-    const [highlightedMessageId, setHighlightedMessageId] = React.useState("")
+    const [highlightedMessage, setHighlightedMessage] = React.useState<{
+      messageId: string
+      requestKey: number
+    } | null>(null)
     const handledFocusRequestKeyRef = React.useRef(0)
     const highlightTimeoutRef = React.useRef<number | null>(null)
 
@@ -311,14 +314,17 @@ export const ConversationPanelHistory = React.memo(
       nearBottomRef.current = false
       setViewportNearBottom(false)
       setPendingNewMessageCount(0)
-      setHighlightedMessageId(focus.messageId)
+      setHighlightedMessage({
+        messageId: focus.messageId,
+        requestKey: focus.requestKey,
+      })
       if (highlightTimeoutRef.current !== null) {
         window.clearTimeout(highlightTimeoutRef.current)
       }
       highlightTimeoutRef.current = window.setTimeout(() => {
-        setHighlightedMessageId("")
+        setHighlightedMessage(null)
         highlightTimeoutRef.current = null
-      }, searchResultHighlightDurationMs)
+      }, MESSAGE_HIGHLIGHT_DURATION_MS)
     }, [messages, navigation?.focus, navigation?.onFocusHandled])
 
     function handleViewportScroll(event: React.UIEvent<HTMLDivElement>) {
@@ -508,21 +514,25 @@ export const ConversationPanelHistory = React.memo(
                     {formatConversationMessageTime(message.createdAt)}
                   </div>
                 )}
-                <div
-                  className={cn(
-                    "rounded-md transition-[background-color,box-shadow] duration-500",
-                    highlightedMessageId === message.id &&
-                      "bg-teal-500/10 ring-2 ring-teal-500/30"
-                  )}
-                >
+                <div>
                   {message.role === "system" ? (
                     <SystemMessageBadge
+                      highlightRequestKey={
+                        highlightedMessage?.messageId === message.id
+                          ? highlightedMessage.requestKey
+                          : undefined
+                      }
                       currentUserId={currentUserId}
                       mentionLabelResolver={mentionLabelResolver}
                       message={message}
                     />
                   ) : (
                     <MessageBubble
+                      highlightRequestKey={
+                        highlightedMessage?.messageId === message.id
+                          ? highlightedMessage.requestKey
+                          : undefined
+                      }
                       canReply={
                         canReply && message.virtualType !== "topic_source"
                       }
@@ -652,7 +662,6 @@ function isMessageForwardable(message: ConversationPanelMessage) {
 
 const messageTimeMarkerThresholdMs = 60 * 60 * 1000
 const historyRetentionMs = 3 * 60 * 1000
-const searchResultHighlightDurationMs = 3_000
 
 function noop() {}
 

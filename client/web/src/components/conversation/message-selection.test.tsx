@@ -44,6 +44,14 @@ describe("conversation message selection", () => {
       </MemoryRouter>
     )
     const view = render(bubble(onLocate))
+    expect(
+      screen.getByRole("button", { name: "定位被引用的原消息" })
+    ).toHaveClass(
+      "hover:border-xgui-brand",
+      "hover:bg-foreground/5",
+      "active:border-xgui-brand",
+      "active:bg-foreground/5"
+    )
     await user.click(screen.getByRole("button", { name: "定位被引用的原消息" }))
     expect(onLocate).toHaveBeenCalledWith(message)
     expect(onParentClick).not.toHaveBeenCalled()
