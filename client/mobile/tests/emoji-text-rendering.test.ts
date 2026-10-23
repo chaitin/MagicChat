@@ -51,6 +51,7 @@ const native = {
   ScrollView: host,
   Image: host,
   Linking: { openURL: () => Promise.resolve() },
+  useWindowDimensions: () => ({ width: 360, scale: 3, fontScale: 0.85 }),
   StyleSheet: { flatten, create: (value: unknown) => value, hairlineWidth: 1 },
 }
 const theme = { useXGUITheme: () => ({ colors: { textPrimary: "black", textSecondary: "gray", link: "blue", orange: "orange" } }) }
@@ -68,6 +69,7 @@ const mentions = loadComponent("features/conversation/messages/message-mention-t
 })
 const markdown = loadComponent("features/conversation/messages/markdown-message.tsx", {
   "react-native": native,
+  "lucide-react-native": { Check: host },
   "expo-router": { useRouter: () => ({ push() {} }) },
   "@/components/mi-sans-text": textModule,
   "@/features/conversation/messages/message-mention-text": mentions,

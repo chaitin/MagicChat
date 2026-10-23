@@ -16,6 +16,19 @@
 
 官方压缩包未附授权文件；发布前需核对字体使用与分发条款。
 
+## JetBrains Mono 代码字体
+
+Markdown 代码块与行内代码使用 JetBrains Mono `v2.304` 的原始 TTF，仅影响代码，不替换界面正文或 Emoji 字体。来源：https://github.com/JetBrains/JetBrainsMono/tree/v2.304/fonts/ttf 。字体及 SIL Open Font License 1.1 原文存放于 `assets/fonts/jetbrains-mono/`。
+
+通过现有 `expo-font` 启动加载普通、半粗、斜体与半粗斜体，按代码所在文本的样式选择对应文件，不使用系统字体合成字重或斜体。
+
+| 文件 | SHA-256 |
+| --- | --- |
+| JetBrainsMono-Regular.ttf | `a0bf60ef0f83c5ed4d7a75d45838548b1f6873372dfac88f71804491898d138f` |
+| JetBrainsMono-SemiBold.ttf | `1b3bfa1ed5665a4ce3f9feb68d2d4e40e70bf8b4b7d9a3edd418f321b4e166a0` |
+| JetBrainsMono-Italic.ttf | `9d0a1f7a708e6af183f1193b7e81d40da294f5c67682c085d8401c60aac8ded4` |
+| JetBrainsMono-SemiBoldItalic.ttf | `3b3000507a7285872395ddbb4e53a28f07910dbf494fb0d5e1421dd60b5d8436` |
+
 ## Emoji 字体
 
 `assets/fonts/emoji/JiyingEmoji.ttf` 的彩色字形来自 Desktop 使用的 `@infolektuell/noto-color-emoji@0.2.0`，原字体为 Noto Color Emoji（Google，OFL-1.1），版本 `2.042`。字体和原始授权保存在仓库共享目录 `assets/fonts/noto-color-emoji/`，Mobile 的 `assets/fonts/emoji` 通过 Git 软链接引用（与现有 MiSans 一样，Windows 检出需要启用符号链接支持）。

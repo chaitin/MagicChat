@@ -12,11 +12,13 @@ import { linkifyMessageText } from "@/domain/messages/message-links"
 import { useXGUITheme } from "@/xgui"
 
 export function MessageMentionText({
+  autoLink = true,
   content,
   currentUserId,
   onMentionPress,
   resolveMentionLabel,
 }: {
+  autoLink?: boolean
   content: string
   currentUserId: string
   onMentionPress: (target: EntityReference) => void
@@ -29,7 +31,7 @@ export function MessageMentionText({
     if (part.type === "text") {
       return (
         <Fragment key={`text:${index}`}>
-          {linkifyMessageText(part.text).map((textPart, textIndex) =>
+          {autoLink ? linkifyMessageText(part.text).map((textPart, textIndex) =>
             textPart.type === "link" ? (
               <Text
                 style={{ color: colors.link, fontWeight: "600" }}
@@ -41,7 +43,7 @@ export function MessageMentionText({
             ) : (
               <Text key={`plain:${textIndex}`}>{textPart.value}</Text>
             )
-          )}
+          ) : <Text>{part.text}</Text>}
         </Fragment>
       )
     }

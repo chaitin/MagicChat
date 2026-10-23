@@ -46,6 +46,7 @@
         }
       ],
       "./plugins/with-message-selection-menu",
+      "./plugins/with-inline-view-text",
       "./plugins/with-animated-webp",
       "./plugins/with-android-drawable-log-filter",
       "./plugins/with-pnpm-autolinking-cache",

@@ -15,6 +15,10 @@ void SplashScreen.preventAutoHideAsync().catch(() => undefined)
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     JiyingEmoji: require("../../assets/fonts/emoji/JiyingEmoji.ttf"),
+    JetBrainsMono: require("../../assets/fonts/jetbrains-mono/JetBrainsMono-Regular.ttf"),
+    "JetBrainsMono-SemiBold": require("../../assets/fonts/jetbrains-mono/JetBrainsMono-SemiBold.ttf"),
+    "JetBrainsMono-Italic": require("../../assets/fonts/jetbrains-mono/JetBrainsMono-Italic.ttf"),
+    "JetBrainsMono-SemiBoldItalic": require("../../assets/fonts/jetbrains-mono/JetBrainsMono-SemiBoldItalic.ttf"),
   })
   const [inputFontsInitialized, setInputFontsInitialized] = useState(false)
   useEffect(() => {
