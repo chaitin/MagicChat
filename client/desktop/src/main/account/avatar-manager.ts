@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import { mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises"
 import path from "node:path"
-import type { AvatarRequest, AvatarResult, AvatarType } from "../../shared/account-data"
+import type { AccountDataChangedEvent, AvatarRequest, AvatarResult, AvatarType } from "../../shared/account-data"
 import { AuthFailure } from "../../shared/auth"
 import { AccountDatabase } from "./account-database"
 import { avatarExtensionFor } from "./avatar-content-type"
@@ -23,6 +23,10 @@ import type {
 } from "./avatar-types"
 
 const AVATAR_MAX_AGE_MS = 24 * 60 * 60 * 1_000
+const COMPOSITE_RETRY_MS = 30_000
+
+type AvatarChange = NonNullable<AccountDataChangedEvent["avatarChange"]>
+type CompositeTile = { member: AvatarMemberDescriptor; record?: AvatarCacheRecord }
 
 export class AvatarManager {
   private readonly avatarDirectory: string
@@ -30,6 +34,9 @@ export class AvatarManager {
   private readonly resourceInFlight = new Map<string, Promise<AvatarCacheRecord | undefined>>()
   private readonly generations = new Map<string, number>()
   private readonly compositeInputs = new Map<string, string>()
+  private readonly compositeMembers = new Map<string, Set<string>>()
+  private readonly compositeRetries = new Map<string, ReturnType<typeof setTimeout>>()
+  private closed = false
 
   constructor(
     accountDirectory: string,
@@ -40,6 +47,7 @@ export class AvatarManager {
     private readonly contacts: ContactManager,
     private readonly projects: ProjectManager,
     private readonly currentUser: AvatarDescriptor,
+    private readonly onChanged?: (changes: AvatarChange[]) => void,
   ) {
     this.avatarDirectory = path.join(accountDirectory, "avatars")
   }
@@ -83,9 +91,58 @@ export class AvatarManager {
   markChanged(type: AvatarType, id: string) {
     const key = `${type}:${id}`
     this.generations.set(key, (this.generations.get(key) ?? 0) + 1)
-    if (type === "group") {
-      this.compositeInputs.delete(`group-composite-v${compositeStyleVersion}-light:${id}`)
-      this.compositeInputs.delete(`group-composite-v${compositeStyleVersion}-dark:${id}`)
+    if (type === "group") this.clearCompositeInputs(id)
+  }
+
+  close() {
+    this.closed = true
+    for (const timer of this.compositeRetries.values()) clearTimeout(timer)
+    this.compositeRetries.clear()
+  }
+
+  private clearCompositeInputs(groupId: string) {
+    for (const theme of ["light", "dark"]) {
+      const key = `group-composite-v${compositeStyleVersion}-${theme}:${groupId}`
+      this.compositeInputs.delete(key)
+      clearTimeout(this.compositeRetries.get(key))
+      this.compositeRetries.delete(key)
+    }
+  }
+
+  private notifyOrdinaryAvatarChanged(descriptor: AvatarDescriptor | AvatarMemberDescriptor) {
+    if (this.closed || descriptor.type === "project") return
+    const changes: AvatarChange[] = [{ type: descriptor.type, id: descriptor.id }]
+    if (descriptor.type === "user" || descriptor.type === "app") {
+      const reference = `${descriptor.type}:${descriptor.id}`
+      for (const [groupId, members] of this.compositeMembers) {
+        if (!members.has(reference)) continue
+        this.clearCompositeInputs(groupId)
+        changes.push({ type: "group", id: groupId })
+      }
+    }
+    this.onChanged?.(changes)
+  }
+
+  private rememberComposite(inputKey: string, groupId: string, tiles: CompositeTile[]) {
+    if (this.closed) return
+    this.compositeInputs.set(inputKey, compositeInputSignature(tiles))
+    this.compositeMembers.set(groupId, new Set(tiles.map(({ member }) => `${member.type}:${member.id}`)))
+    const incomplete = tiles.some(({ member, record }) =>
+      normalizeSourceUrl(this.serverUrl, member.avatarUrl) && !record,
+    )
+    const timer = this.compositeRetries.get(inputKey)
+    if (!incomplete) {
+      clearTimeout(timer)
+      this.compositeRetries.delete(inputKey)
+    } else if (!timer) {
+      // 只对下载失败的占位限频重试；本来没有头像的成员不重试。
+      const retry = setTimeout(() => {
+        this.compositeRetries.delete(inputKey)
+        this.compositeInputs.delete(inputKey)
+        if (!this.closed) this.onChanged?.([{ type: "group", id: groupId }])
+      }, COMPOSITE_RETRY_MS)
+      retry.unref()
+      this.compositeRetries.set(inputKey, retry)
     }
   }
 
@@ -249,7 +306,10 @@ export class AvatarManager {
       return { ...cached, checkedAt: now }
     }
     if (!sourceUrl) {
-      if (cached) await this.removeRecord(cached)
+      if (cached) {
+        await this.removeRecord(cached)
+        this.notifyOrdinaryAvatarChanged(descriptor)
+      }
       return undefined
     }
 
@@ -280,6 +340,7 @@ export class AvatarManager {
       this.database.upsertAvatarCache(record)
       if (cached && cached.localFile !== localFile)
         await removeFile(this.localPath(cached.localFile))
+      if (!cachedAvailable || cached?.resourceKey !== resourceKey) this.notifyOrdinaryAvatarChanged(descriptor)
       return record
     } catch {
       return cached && cachedAvailable ? cached : undefined
@@ -294,7 +355,9 @@ export class AvatarManager {
     const cacheType = `group-composite-v${compositeStyleVersion}-${theme}`
     const inputKey = `${cacheType}:${descriptor.id}`
     const generation = this.generations.get(`group:${descriptor.id}`) ?? 0
-    let inputSignature = compositeSignature(selectGroupMembers(descriptor.members ?? []))
+    const inputSignature = compositeInputSignature(selectGroupMembers(descriptor.members ?? []).map((member) => ({
+      member, record: this.database.getAvatarCache(member.type, member.id),
+    })))
     const legacy = this.database.deleteAvatarCache(`group-composite-${theme}`, descriptor.id)
     if (legacy) await removeFile(this.localPath(legacy.localFile))
     const cached = this.database.getAvatarCache(cacheType, descriptor.id)
@@ -329,7 +392,6 @@ export class AvatarManager {
     }
 
     const members = selectGroupMembers(currentDescriptor.members ?? [])
-    inputSignature = compositeSignature(members)
     if (members.length === 0) return { status: "fallback", type: "group" }
     const grid = members.length <= 4 ? 2 : 3
     const tiles = await Promise.all(
@@ -353,7 +415,7 @@ export class AvatarManager {
       })),
     })
     if (cached && cachedAvailable && cached.sourceUrl === `composite:${signature}`) {
-      this.compositeInputs.set(inputKey, inputSignature)
+      this.rememberComposite(inputKey, descriptor.id, tiles)
       if (validatedAt) this.database.touchAvatarCache(cacheType, descriptor.id, validatedAt)
       return { status: "ready", type: "group", resourceUrl: resourceUrl(cached) }
     }
@@ -383,8 +445,9 @@ export class AvatarManager {
       return current ? { status: "ready", type: "group", resourceUrl: resourceUrl(current) } : { status: "fallback", type: "group" }
     }
     this.database.upsertAvatarCache(record)
-    this.compositeInputs.set(inputKey, inputSignature)
+    this.rememberComposite(inputKey, descriptor.id, tiles)
     if (cached && cached.localFile !== localFile) await removeFile(this.localPath(cached.localFile))
+    if (!this.closed) this.onChanged?.([{ type: "group", id: descriptor.id }])
     return { status: "ready", type: "group", resourceUrl: resourceUrl(record) }
   }
 
@@ -399,6 +462,12 @@ export class AvatarManager {
     }
     return path.join(this.avatarDirectory, localFile)
   }
+}
+
+function compositeInputSignature(tiles: CompositeTile[]) {
+  return compositeSignature(tiles.map(({ member, record }) => ({
+    ...member, resourceKey: record?.resourceKey ?? "",
+  })))
 }
 
 function validateReference(type: AvatarType, id: string) {

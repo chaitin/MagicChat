@@ -107,6 +107,13 @@ export class AuthFailure extends Error {
   }
 }
 
+export function isAuthenticationFailure(code: string): boolean {
+  return [
+    "unauthorized", "not_authenticated", "invalid_session", "expired_session",
+    "stale_target", "secure_storage_unavailable", "http_401",
+  ].includes(code)
+}
+
 export function normalizeServerName(value: unknown): string {
   if (typeof value !== "string") throw new AuthFailure("invalid_server_name", "请输入服务器名称")
   const name = value.trim()

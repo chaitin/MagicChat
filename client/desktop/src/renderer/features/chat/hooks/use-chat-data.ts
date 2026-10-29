@@ -57,6 +57,7 @@ export function useChatData({
   const [contactRevision, setContactRevision] = useState(0)
   const [focusRevision, setFocusRevision] = useState(0)
   const readInFlightRef = useRef(new Set<string>())
+  const [openReadIntent, setOpenReadIntent] = useState<{ targetId: string; conversationId: string } | null>(null)
   const [mentionLabels, setMentionLabels] = useState<Map<string, string>>(new Map())
   const [resolvedUserNames, setResolvedUserNames] = useState<{
     targetId: string
@@ -102,7 +103,10 @@ export function useChatData({
   )
 
   useEffect(() => {
-    const refreshFocus = () => setFocusRevision((revision) => revision + 1)
+    const refreshFocus = () => {
+      if (document.visibilityState !== "visible") setOpenReadIntent(null)
+      setFocusRevision((revision) => revision + 1)
+    }
     document.addEventListener("visibilitychange", refreshFocus)
     window.addEventListener("focus", refreshFocus)
     return () => {
@@ -112,18 +116,30 @@ export function useChatData({
   }, [])
 
   useEffect(() => {
+    const clearOpenRead = () => setOpenReadIntent((current) => current === openReadIntent ? null : current)
+    const explicitlyOpened = openReadIntent?.targetId === targetId && openReadIntent.conversationId === selectedId
+    if (openReadIntent && (
+      !explicitlyOpened || activeSection !== "chat" || document.visibilityState !== "visible"
+    )) clearOpenRead()
+    const readKey = `${targetId}:${selectedId}`
     if (
       !window.desktop ||
       !selectedId ||
+      !selected ||
       activeSection !== "chat" ||
       loadingMessages ||
-      !selected?.unreadCount ||
-      (selected.type === "topic" && !selected.topic?.participating) ||
+      loadedConversationIdRef.current !== selectedId ||
       document.visibilityState !== "visible" ||
-      !document.hasFocus() ||
-      readInFlightRef.current.has(selectedId)
+      readInFlightRef.current.has(readKey)
     )
       return
+    if (selected.type === "topic" && !selected.topic?.participating) {
+      clearOpenRead()
+      return
+    }
+    if (!explicitlyOpened && (!selected.unreadCount || !document.hasFocus())) return
+    // 只消费本次渲染的阅读意图，不能清掉后来点击的会话或延续到后续新消息。
+    if (explicitlyOpened) clearOpenRead()
     const upToSeq = Math.max(
       0,
       ...messages
@@ -131,25 +147,26 @@ export function useChatData({
           (message) =>
             message.conversationId === selectedId &&
             !message.virtualType &&
-            message.deliveryStatus !== "sending",
+            !message.deliveryStatus,
         )
         .map((message) => message.seq),
     )
     if (upToSeq <= (selected.lastReadSeq ?? 0)) return
     const conversationId = selectedId
-    readInFlightRef.current.add(conversationId)
+    readInFlightRef.current.add(readKey)
     void window.desktop.accountData
       .markConversationRead({ targetId, conversationId, upToSeq })
       .then((result) => {
-        readInFlightRef.current.delete(conversationId)
+        readInFlightRef.current.delete(readKey)
         if (result.ok) setFocusRevision((revision) => revision + 1)
       })
       .catch(() => {
-        readInFlightRef.current.delete(conversationId)
+        readInFlightRef.current.delete(readKey)
       })
   }, [
     activeSection,
     focusRevision,
+    openReadIntent,
     loadingMessages,
     messages,
     selected?.lastReadSeq,
@@ -172,10 +189,13 @@ export function useChatData({
       ) {
         setConversationRevision((revision) => revision + 1)
       }
+      setOpenReadIntent(conversationId && document.visibilityState === "visible"
+        ? { targetId, conversationId }
+        : null)
       setTransientConversation(null)
       setSelectedIdState(conversationId)
     },
-    [conversations],
+    [conversations, targetId],
   )
 
   const openTopicConversation = useCallback(
@@ -197,9 +217,9 @@ export function useChatData({
           return
         }
         if (selectedIdRef.current !== previousId) return
+        setSelectedId(conversationId)
         setTransientConversation(result.data)
         setConversationRevision((revision) => revision + 1)
-        setSelectedIdState(conversationId)
       } catch {
         showToast({ status: "error", title: "无法加入话题，请稍后重试" })
       } finally {

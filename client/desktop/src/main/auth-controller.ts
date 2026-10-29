@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { BrowserWindow, type Session } from "electron"
 import {
   AuthFailure,
+  isAuthenticationFailure,
   isRecord,
   normalizeEmail,
   normalizeServer,
@@ -264,7 +265,8 @@ export class AuthController {
     if (!active.user || !active.credential || !runtime) {
       throw new AuthFailure("not_authenticated", "请重新登录账号")
     }
-    return this.initializeAccountRuntime(active, runtime, () => runtime.refreshAll())
+    // 刷新已登录账号时，普通同步错误不能触发初始化失败的登出清理。
+    return this.initializeAccountRuntime(active, runtime, () => runtime.refreshAll(), false)
   }
 
   async getProfile(targetId: string) {
@@ -874,12 +876,15 @@ export class AuthController {
     active: ActiveConnection,
     runtime: AccountRuntime,
     operation: () => Promise<void> = () => runtime.initialize(),
+    resetOnFailure = true,
   ) {
     try {
       await operation()
       return null
     } catch (error) {
-      if (this.accountRuntime === runtime) {
+      if (this.accountRuntime === runtime && (
+        resetOnFailure || (error instanceof AuthFailure && isAuthenticationFailure(error.code))
+      )) {
         const credential = active.credential
         const accountKey = active.user ? createAccountKey(active.server.url, active.user.id) : null
         this.destroyAccountRuntime()

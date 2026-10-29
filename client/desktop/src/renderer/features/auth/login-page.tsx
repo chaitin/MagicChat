@@ -28,6 +28,7 @@ import { SigningInPage } from "./signing-in-page"
 import { ChatPage } from "../chat/chat-page"
 import { useConnection } from "./use-connection"
 import type { ThemePreference } from "../../../shared/desktop"
+import { isAuthenticationFailure } from "../../../shared/auth"
 
 export function LoginPage({
   theme,
@@ -84,11 +85,16 @@ export function LoginPage({
   const handleInitializationFailure = useCallback(
     (problem: { code: string; message: string }) => {
       setRefreshingAll(false)
+      if (refreshingAll && connection?.user && !isAuthenticationFailure(problem.code)) {
+        setScreen("chat")
+        showToast({ status: "error", title: "刷新失败", description: problem.message })
+        return
+      }
       if (connection) accept({ ...connection, user: null })
       setScreen("servers")
       showToast({ status: "error", title: "账号初始化失败", description: problem.message })
     },
-    [accept, connection, showToast],
+    [accept, connection, refreshingAll, showToast],
   )
   const handleSignOut = useCallback(async () => {
     if (!connection || !window.desktop) return false
@@ -117,14 +123,6 @@ export function LoginPage({
   useEffect(() => {
     onOrganizationNameChange(connection?.user ? connection.info.organizationName : "")
   }, [connection?.info.organizationName, connection?.user, onOrganizationNameChange])
-
-  useEffect(() => {
-    if (!connection?.targetId || !window.desktop) return
-    return window.desktop.accountData.onSyncStateChange((event) => {
-      if (event.targetId !== connection.targetId || event.state !== "loading") return
-      setScreen((current) => (current === "chat" ? "signing-in" : current))
-    })
-  }, [connection?.targetId])
 
   useEffect(() => {
     if (screen !== "startup" || loading) return

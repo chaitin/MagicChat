@@ -743,6 +743,7 @@ export class AccountRuntime {
     this.clientAppManager = undefined
     this.projectManager = undefined
     this.projectTaskManager = undefined
+    this.avatarManager?.close()
     this.avatarManager = undefined
     this.database?.close()
     this.database = undefined
@@ -802,6 +803,7 @@ export class AccountRuntime {
         this.contactManager,
         this.projectManager,
         currentUserAvatar,
+        (changes) => { if (!this.closed) this.notifyChanged([], [], changes) },
       )
       this.entitySync = createDesktopEntitySync({
         database: this.database,

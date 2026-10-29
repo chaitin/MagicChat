@@ -6,6 +6,7 @@ import test, { after } from "node:test"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { build } from "vite"
 import type { AvatarCacheRecord, AvatarDescriptor } from "../src/main/account/avatar-types.ts"
+import type { AvatarResult } from "../src/shared/account-data.ts"
 
 const bundleDirectory = await mkdtemp(path.join(os.tmpdir(), "dianbao-avatar-tests-"))
 after(() => rm(bundleDirectory, { recursive: true, force: true }))
@@ -94,6 +95,61 @@ async function setup() {
   }
 }
 
+async function setupGroup() {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "dianbao-group-recovery-"))
+  const records = new Map<string, AvatarCacheRecord>()
+  const failing = new Set<string>()
+  const changes: Array<Array<{ type: "user" | "group" | "app"; id: string }>> = []
+  const listeners = new Set<(changed: (typeof changes)[number]) => void>()
+  let downloads = 0
+  let members: NonNullable<AvatarDescriptor["members"]> = Array.from({ length: 9 }, (_, index) => ({
+    type: "user", id: `u${index + 1}`, name: `成员${index + 1}`,
+    avatarUrl: `/u${index + 1}.png`, role: index === 0 ? "owner" : "member",
+  }))
+  const manager = new AvatarManager(directory, "https://chat.example.test", {
+    getAvatarCache: (type: string, id: string) => records.get(`${type}:${id}`),
+    getAvatarCacheByResourceKey: (key: string) => [...records.values()].find((record) => record.resourceKey === key),
+    deleteAvatarCache: (type: string, id: string) => {
+      const key = `${type}:${id}`
+      const record = records.get(key)
+      records.delete(key)
+      return record
+    },
+    upsertAvatarCache: (record: AvatarCacheRecord) => records.set(`${record.type}:${record.entityId}`, record),
+  } as never, {
+    downloadAvatar: async (url: string) => {
+      downloads += 1
+      if (failing.has(new URL(url).pathname)) throw new Error("temporary network failure")
+      return { bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47]), contentType: "image/png" }
+    },
+  } as never, {} as never, {
+    getAvatarDescriptor: (type: string, id: string) => type === "group"
+      ? { type, id, name: "群聊", avatarUrl: "", members }
+      : members.find((member) => member.id === id),
+    hydrateAvatarDescriptor: (value: AvatarDescriptor) => value,
+  } as never, {} as never, { type: "user", id: "me", name: "我", avatarUrl: "" }, (changed) => {
+    changes.push(changed)
+    for (const listener of listeners) listener(changed)
+  })
+  return {
+    manager, failing, changes, listeners,
+    downloads: () => downloads,
+    setAvatar: (id: string, avatarUrl: string) => {
+      members = members.map((member) => member.id === id ? { ...member, avatarUrl } : member)
+    },
+    images: async (result: AvatarResult) => {
+      assert.equal(result.status, "ready")
+      const resource = await manager.readResource(new URL(result.resourceUrl!).pathname.slice(1))
+      return (Buffer.from(resource.bytes).toString().match(/<image /g) ?? []).length
+    },
+    cleanup: async () => {
+      manager.close()
+      await rm(directory, { recursive: true, force: true })
+    },
+  }
+}
+
+const groupRequest = { type: "group", id: "g1", theme: "light" } as const
 const request = { type: "user", id: "project-member", theme: "light" } as const
 
 test("资料URL变化立即替换24小时内的头像缓存，无需额外刷新资料", async (t) => {
@@ -156,6 +212,132 @@ test("九宫格随成员头像及角色顺序变化，不等待24小时缓存过
   assert.equal(second.status, "ready")
   assert.notDeepEqual(first, second)
   assert.equal(records.get("user:u2")?.sourceUrl, "https://chat.example.test/new-two.png")
+})
+
+test("资料补全重建群拼图后通知列表与header同步，缓存命中不重复广播", async (t) => {
+  const fixture = await setupGroup()
+  t.after(fixture.cleanup)
+  fixture.setAvatar("u2", "")
+  let sidebar = await fixture.manager.getAvatar(groupRequest)
+  const oldUrl = sidebar.resourceUrl
+  assert.equal(await fixture.images(sidebar), 8)
+  const pending: Promise<void>[] = []
+  fixture.listeners.add((changes) => {
+    if (changes.some((change) => change.type === "group" && change.id === "g1")) {
+      pending.push(fixture.manager.getAvatar(groupRequest).then((result) => { sidebar = result }))
+    }
+  })
+  fixture.setAvatar("u2", "/u2.png")
+  const header = await fixture.manager.getAvatar(groupRequest)
+  await Promise.all(pending)
+  assert.equal(await fixture.images(header), 9)
+  assert.notEqual(header.resourceUrl, oldUrl)
+  assert.deepEqual(sidebar, header)
+  const notifications = fixture.changes.length
+  const downloads = fixture.downloads()
+  assert.deepEqual(await fixture.manager.getAvatar(groupRequest), header)
+  assert.equal(fixture.changes.length, notifications)
+  assert.equal(fixture.downloads(), downloads)
+})
+
+test("成员图片恢复主动失效并通知相关群的亮暗拼图，不重复下载已有头像", async (t) => {
+  const fixture = await setupGroup()
+  t.after(fixture.cleanup)
+  fixture.failing.add("/u2.png")
+  const darkRequest = { ...groupRequest, theme: "dark" } as const
+  const light = await fixture.manager.getAvatar(groupRequest)
+  const dark = await fixture.manager.getAvatar(darkRequest)
+  assert.equal(await fixture.images(light), 8)
+  assert.equal(await fixture.images(dark), 8)
+  fixture.changes.length = 0
+  fixture.failing.clear()
+  await fixture.manager.getAvatar({ type: "user", id: "u2", theme: "light" })
+  assert.ok(fixture.changes.flat().some((change) => change.type === "group" && change.id === "g1"))
+  const downloads = fixture.downloads()
+  const nextLight = await fixture.manager.getAvatar(groupRequest)
+  const nextDark = await fixture.manager.getAvatar(darkRequest)
+  assert.notEqual(nextLight.resourceUrl, light.resourceUrl)
+  assert.notEqual(nextDark.resourceUrl, dark.resourceUrl)
+  assert.equal(await fixture.images(nextLight), 9)
+  assert.equal(await fixture.images(nextDark), 9)
+  assert.equal(fixture.downloads(), downloads)
+})
+
+test("临时下载失败的群拼图30秒后重试，两个显示位置合并请求，恢复后停止重试", async (t) => {
+  const fixture = await setupGroup()
+  t.after(fixture.cleanup)
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] })
+  fixture.failing.add("/u2.png")
+  const partial = await fixture.manager.getAvatar(groupRequest)
+  assert.equal(await fixture.images(partial), 8)
+  const downloads = fixture.downloads()
+  fixture.changes.length = 0
+  assert.deepEqual(await fixture.manager.getAvatar(groupRequest), partial)
+  assert.equal(fixture.downloads(), downloads)
+  t.mock.timers.tick(29_999)
+  assert.equal(fixture.changes.length, 0)
+  fixture.failing.clear()
+  t.mock.timers.tick(1)
+  assert.ok(fixture.changes.flat().some((change) => change.type === "group" && change.id === "g1"))
+  const [sidebar, header] = await Promise.all([
+    fixture.manager.getAvatar(groupRequest), fixture.manager.getAvatar(groupRequest),
+  ])
+  assert.equal(await fixture.images(sidebar), 9)
+  assert.deepEqual(sidebar, header)
+  assert.equal(fixture.downloads(), downloads + 1)
+  fixture.changes.length = 0
+  t.mock.timers.tick(60_000)
+  assert.equal(fixture.changes.length, 0)
+})
+
+test("持续下载失败每30秒只重试缺失头像一次，不因刷新通知形成请求循环", async (t) => {
+  const fixture = await setupGroup()
+  t.after(fixture.cleanup)
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] })
+  fixture.failing.add("/u2.png")
+  const partial = await fixture.manager.getAvatar(groupRequest)
+  const downloads = fixture.downloads()
+  const pending: Promise<AvatarResult>[] = []
+  fixture.listeners.add((changes) => {
+    if (changes.some((change) => change.type === "group" && change.id === "g1")) {
+      pending.push(fixture.manager.getAvatar(groupRequest), fixture.manager.getAvatar(groupRequest))
+    }
+  })
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    fixture.changes.length = 0
+    t.mock.timers.tick(30_000)
+    const results = await Promise.all(pending.splice(0))
+    assert.equal(results.length, 2)
+    for (const result of results) assert.deepEqual(result, partial)
+    assert.equal(fixture.changes.length, 1)
+    assert.equal(fixture.downloads(), downloads + attempt)
+  }
+})
+
+test("成员本来没有头像不触发定时重试或额外网络请求", async (t) => {
+  const fixture = await setupGroup()
+  t.after(fixture.cleanup)
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] })
+  fixture.setAvatar("u2", "")
+  const initial = await fixture.manager.getAvatar(groupRequest)
+  assert.equal(await fixture.images(initial), 8)
+  fixture.changes.length = 0
+  t.mock.timers.tick(60_000)
+  assert.equal(fixture.changes.length, 0)
+  assert.deepEqual(await fixture.manager.getAvatar(groupRequest), initial)
+  assert.equal(fixture.downloads(), 8)
+})
+
+test("关闭头像管理器后取消不完整拼图的定时重试", async (t) => {
+  const fixture = await setupGroup()
+  t.after(fixture.cleanup)
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] })
+  fixture.failing.add("/u2.png")
+  await fixture.manager.getAvatar(groupRequest)
+  fixture.manager.close()
+  fixture.changes.length = 0
+  t.mock.timers.tick(60_000)
+  assert.equal(fixture.changes.length, 0)
 })
 
 test("项目成员不在本地通讯录时仍获取资料、下载真实头像并复用缓存", async () => {

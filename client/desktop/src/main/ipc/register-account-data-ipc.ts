@@ -146,9 +146,15 @@ export function registerAccountDataIpc({
   handle(ACCOUNT_DATA_CHANNELS.archiveTopic, (input) =>
     auth.archiveTopic(input as ConversationTargetInput),
   )
-  handle(ACCOUNT_DATA_CHANNELS.markConversationRead, (input) =>
-    auth.markConversationRead(input as MarkConversationReadInput),
-  )
+  handle(ACCOUNT_DATA_CHANNELS.markConversationRead, async (input) => {
+    const window = getMainWindow()
+    // 主动进入可豁免文档焦点误判，但不能豁免原生窗口的后台状态。
+    if (
+      !window || window.isDestroyed() || !window.isVisible() ||
+      window.isMinimized() || !window.isFocused()
+    ) return null
+    return auth.markConversationRead(input as MarkConversationReadInput)
+  })
   handle(ACCOUNT_DATA_CHANNELS.createGroupConversation, (input) =>
     auth.createGroupConversation(input as CreateGroupConversationInput),
   )
