@@ -49,6 +49,7 @@ export class RealtimeManager {
       serverUrl: string
       token: string | ((previousToken?: string) => Promise<string>)
       synchronize: () => Promise<void>
+      applyPresenceEvent: (event: RealtimeEvent) => void
       applyEvent: (event: RealtimeEvent) => Promise<void>
       onStateChange: (state: RealtimeState) => void
     },
@@ -198,6 +199,16 @@ export class RealtimeManager {
     if (envelope.name === READY_EVENT) {
       if (!this.synchronizing && !this.ready) void this.synchronize(socket, generation)
       return
+    }
+    // 短时状态不能等待资料和历史补同步；回复到达也须立即清除同发送者状态。
+    if (envelope.name === "conversation.status" || envelope.name === "message.created") {
+      try {
+        this.options.applyPresenceEvent(envelope)
+      } catch {
+        socket.terminate()
+        return
+      }
+      if (envelope.name === "conversation.status") return
     }
     if (this.synchronizing || !this.ready) {
       if (this.bufferedEvents.length >= MAX_BUFFERED_EVENTS) {

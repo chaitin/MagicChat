@@ -823,6 +823,7 @@ export class AccountRuntime {
             ? credential
             : (previousToken) => credential(previousToken),
         synchronize: () => this.synchronize(),
+        applyPresenceEvent: (event) => this.applyPresenceEvent(event),
         applyEvent: (event) => this.applyRealtimeEvent(event),
         onStateChange: (state) => {
           this.realtimeReady = state === "ready"
@@ -876,9 +877,8 @@ export class AccountRuntime {
     if (failure?.status === "rejected") throw failure.reason
   }
 
-  private async applyRealtimeEvent(event: RealtimeEvent) {
-    if (this.entitySync?.notify(event.name, event.payload)) return
-    if (event.name === "conversation.removed") this.entitySync?.forget(conversationIdFromEvent(event.payload))
+  private applyPresenceEvent(event: RealtimeEvent) {
+    if (this.closed) return
     const presenceEvent = parseConversationPresenceEvent(
       this.input.targetId,
       event.name,
@@ -888,6 +888,11 @@ export class AccountRuntime {
       throw new AuthFailure("invalid_realtime_event", "输入状态推送格式不正确")
     }
     if (presenceEvent) this.input.onConversationPresenceChanged(presenceEvent)
+  }
+
+  private async applyRealtimeEvent(event: RealtimeEvent) {
+    if (this.entitySync?.notify(event.name, event.payload)) return
+    if (event.name === "conversation.removed") this.entitySync?.forget(conversationIdFromEvent(event.payload))
     if (event.name === "conversation.status") return
 
     const conversationChange = await this.conversationManager!.applyRealtimeEvent(

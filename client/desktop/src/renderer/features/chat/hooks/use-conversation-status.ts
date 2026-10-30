@@ -145,16 +145,16 @@ export function useConversationStatus({
 
   useEffect(() => stopHeartbeat, [stopHeartbeat])
 
+  // 已收到的状态可即时展示；后台补同步未ready不等于连接已断开。
   return useMemo(() => {
     if (
-      !realtimeReady ||
       !conversation ||
       (conversation.type !== "direct" && conversation.type !== "app")
     ) {
       return undefined
     }
     return receivedStatuses.get(conversation.id)?.status
-  }, [conversation, realtimeReady, receivedStatuses])
+  }, [conversation, receivedStatuses])
 }
 
 function sameSender(left: ConversationPresenceSender, right: ConversationPresenceSender) {

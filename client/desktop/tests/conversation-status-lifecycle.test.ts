@@ -188,14 +188,15 @@ test("应用状态事件到达后交给Header展示，回复到达时清除", (t
   assert.equal(f.status, undefined)
 })
 
-test("重连期间先收到缓存状态、随后ready时，Header立即恢复第二行状态", (t) => {
+test("后台补同步尚未ready，也立即显示已收到的实时Header状态", (t) => {
   const f = fixture()
   t.after(f.cleanup)
   f.state("loading")
-  f.event("conversation.status")
   assert.equal(f.status, undefined)
+  f.event("conversation.status")
+  assert.equal(f.status, "正在运行", "真实状态不能等全员资料和历史消息同步完成才显示")
   f.state("ready")
-  assert.equal(f.status, "正在运行", "恢复连接不能继续复用loading时缓存的空状态")
+  assert.equal(f.status, "正在运行")
 })
 
 test("单聊输入状态经过同一解析与订阅链路展示", (t) => {
@@ -203,6 +204,22 @@ test("单聊输入状态经过同一解析与订阅链路展示", (t) => {
   t.after(f.cleanup)
   f.event("conversation.status", { id: "other", type: "user" })
   assert.equal(f.status, "正在输入")
+})
+
+test("断线或状态过期后，后台ready不能复活旧状态", (t) => {
+  const f = fixture()
+  t.after(f.cleanup)
+  f.event("conversation.status")
+  assert.equal(f.status, "正在运行")
+  f.state("loading")
+  assert.equal(f.status, undefined)
+  f.state("ready")
+  assert.equal(f.status, undefined)
+  f.state("loading")
+  f.event("conversation.status")
+  f.expire()
+  f.state("ready")
+  assert.equal(f.status, undefined)
 })
 
 test("状态心跳刷新过期时间，过期后清除Header状态", (t) => {

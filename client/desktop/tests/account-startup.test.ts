@@ -5,6 +5,7 @@ import path from "node:path"
 import test from "node:test"
 import { runInNewContext } from "node:vm"
 import ts from "typescript"
+import { parseConversationPresenceEvent } from "../src/main/account/conversation-presence.ts"
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -27,6 +28,8 @@ function harness(cached: boolean | "empty", connected = true) {
   if (connected) transport.resolve()
   const states: string[] = []
   const changes: Array<{ domains: string[] }> = []
+  const presences: unknown[] = []
+  let applyPresence!: (event: unknown) => void
   let online!: Promise<void>
   let snapshotCalls = 0
   let conversations = cached === true ? [{ id: "cached" }] : []
@@ -49,7 +52,7 @@ function harness(cached: boolean | "empty", connected = true) {
   }
   class Realtime extends Manager {
     private options: { synchronize: () => Promise<void>; onStateChange: (state: string) => void }
-    constructor(options: { synchronize: () => Promise<void>; onStateChange: (state: string) => void }) { super(); this.options = options }
+    constructor(options: { synchronize: () => Promise<void>; onStateChange: (state: string) => void; applyPresenceEvent: (event: unknown) => void }) { super(); this.options = options; applyPresence = options.applyPresenceEvent }
     start() {
       started.resolve()
       online = transport.promise.then(() => this.options.synchronize()).then(() => this.options.onStateChange("ready"))
@@ -57,7 +60,7 @@ function harness(cached: boolean | "empty", connected = true) {
     }
   }
   const dependencies = {
-    AuthFailure, AccountDatabase: Database, AuthenticatedClient: Manager,
+    AuthFailure, parseConversationPresenceEvent, AccountDatabase: Database, AuthenticatedClient: Manager,
     ConversationManager: Conversations, ContactManager: Manager, SearchManager: Manager,
     ClientAppManager: Manager, ProjectManager: Manager, ProjectTaskManager: Manager,
     MediaManager: Manager, AvatarManager: Manager, RealtimeManager: Realtime,
@@ -79,10 +82,11 @@ function harness(cached: boolean | "empty", connected = true) {
   })
   const runtime = new exports.AccountRuntime({
     targetId: "target", serverUrl: "https://example.test", userId: "user", userName: "User", token: "token",
-    userDataPath: "/unused", onDataChanged(event: { domains: string[] }) { changes.push(event) }, onSyncStateChange: ({ state }: { state: string }) => states.push(state),
+    userDataPath: "/unused", onConversationPresenceChanged(event: unknown) { presences.push(event) }, onDataChanged(event: { domains: string[] }) { changes.push(event) }, onSyncStateChange: ({ state }: { state: string }) => states.push(state),
   })
   return {
-    runtime, critical, directory, messages, started, states, changes,
+    runtime, critical, directory, messages, started, states, changes, presences,
+    presence: (event: unknown) => applyPresence(event),
     online: () => online,
     isClosed: () => closed,
     snapshotCalls: () => snapshotCalls,
@@ -157,6 +161,20 @@ test("后台资料同步失败时仍通知已落库消息，不能只更新左�
     assert.ok(h.changes.some((event) => event.domains.includes("conversations")))
     assert.ok(h.changes.some((event) => event.domains.includes("messages")), "部分任务失败不能取消其他已完成消息的通知")
     assert.deepEqual(h.states, [], "不能把同步失败伪装成全部成功")
+  } finally { h.runtime.close(); await h.finish() }
+})
+
+test("Runtime状态通道无需等待补同步，关闭账号后旧状态不能再投递", { timeout: 2000 }, async () => {
+  const h = harness(true)
+  try {
+    await h.runtime.initialize()
+    h.presence({ name: "conversation.status", payload: { conversation_id: "cached", status: "正在运行", sender: { type: "app", id: "app" } } })
+    assert.equal(h.presences.length, 1)
+    h.presence({ name: "message.created", payload: { message: { conversation_id: "cached", sender: { type: "app", id: "app" } } } })
+    assert.equal(h.presences.length, 2)
+    h.runtime.close()
+    h.presence({ name: "conversation.status", payload: { conversation_id: "cached", status: "正在运行", sender: { type: "app", id: "app" } } })
+    assert.equal(h.presences.length, 2)
   } finally { h.runtime.close(); await h.finish() }
 })
 
