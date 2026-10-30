@@ -26,6 +26,9 @@ type StartupPhase =
   | "sync.current-state.failed"
   | "realtime.connect.start"
   | "realtime.transport.ready"
+  | "realtime.recovery.start"
+  | "realtime.recovery.ready"
+  | `sync.entities.${"directory" | "profiles" | "groups"}.${"start" | "ready" | "failed"}`
 
 type StartupMetrics = Partial<Record<
   "elapsedMs" | "count" | "loaded" | "queueMs" | "executionMs" | "failures",

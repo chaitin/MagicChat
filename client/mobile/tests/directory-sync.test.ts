@@ -114,6 +114,7 @@ test("Mobile目录事件发现新ID后立即补资料，绕过激活前的负缓
       ensureUsers: async (_target: unknown, ids: string[]) => { calls.push(`ensure:${ids.join(",")}`); finished.resolve() },
     } },
     "@/data/contacts/entity-sync-api": {}, "@/data/conversations": {}, "@/data/query": {}, "@/data/messages/message-manager": {},
+    "@/diagnostics/mobile-startup": { traceMobileStartup: () => undefined },
   })
   const create = module.createMobileEntitySync as (...args: unknown[]) => { notify: (event: string, payload: unknown) => boolean; dispose: () => void }
   const sync = create({}, { userId: "me" }, { isCurrent: () => true, onError: assert.fail })

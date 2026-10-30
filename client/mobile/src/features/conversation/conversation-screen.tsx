@@ -109,7 +109,7 @@ export function ConversationScreen() {
     recordMobilePerf("conversation.commit")
   })
   const { invalidateSession, generation } = useAuth()
-  const { activateConversation, ready: realtimeReady } = useRealtime()
+  const { activateConversation, refreshGroupProfile, ready: realtimeReady } = useRealtime()
   const session = useAuthenticatedSession()
   const messageLocationScope = JSON.stringify([session.id, session.url, session.userId, conversationId, routeTargetMessageId])
   const [replyLocation, setReplyLocation] = useState<{ scope: string; messageId: string; requestKey: number } | null>(null)
@@ -239,6 +239,12 @@ export function ConversationScreen() {
         : undefined,
     [contacts.apps, conversationSource, usersById]
   )
+  const groupProfileId = conversation?.type === "group" ? conversation.id :
+    conversation?.type === "topic" && conversation.topic?.parentConversationType === "group"
+      ? conversation.topic.parentConversationId : ""
+  useEffect(() => {
+    if (isFocused && realtimeReady && groupProfileId) void refreshGroupProfile(groupProfileId).catch(() => undefined)
+  }, [conversationId, generation, groupProfileId, isFocused, realtimeReady, refreshGroupProfile])
   const isTopicConversation = expectsTopic || conversation?.type === "topic"
   const topicArchived = Boolean(conversation?.topic?.archived)
   const createTopicMutation = useCreateConversationTopic(

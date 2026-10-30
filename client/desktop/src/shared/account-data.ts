@@ -15,6 +15,7 @@ export const ACCOUNT_DATA_CHANNELS = {
   getLocalMessageContext: "desktop-next:v1:message-context-local-get",
   listLocalMessagesAfter: "desktop-next:v1:messages-after-local-list",
   getConversationInfo: "desktop-next:v1:conversation-info-get",
+  refreshGroupProfile: "desktop-next:v1:group-profile-refresh",
   addGroupMembers: "desktop-next:v1:conversation-members-add",
   manageGroup: "desktop-next:v1:conversation-group-manage",
   uploadGroupAvatar: "desktop-next:v1:conversation-group-avatar-upload",
@@ -813,6 +814,7 @@ export interface AccountDataBridge {
     input: LocalMessagesAfterInput,
   ): Promise<AuthResult<DesktopLocalMessageWindow>>
   getConversationInfo(input: ConversationTargetInput): Promise<AuthResult<DesktopConversationInfo>>
+  refreshGroupProfile(input: ConversationTargetInput): Promise<AuthResult<null>>
   addGroupMembers(input: AddGroupMembersInput): Promise<AuthResult<DesktopConversation>>
   manageGroup(input: ManageGroupInput): Promise<AuthResult<DesktopConversation | null>>
   uploadGroupAvatar(input: UploadGroupAvatarInput): Promise<AuthResult<DesktopConversation>>

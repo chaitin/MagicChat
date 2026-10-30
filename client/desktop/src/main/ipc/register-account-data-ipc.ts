@@ -90,6 +90,9 @@ export function registerAccountDataIpc({
   handle(ACCOUNT_DATA_CHANNELS.listLocalMessagesAfter, (input) =>
     auth.listLocalMessagesAfter(input as LocalMessagesAfterInput),
   )
+  handle(ACCOUNT_DATA_CHANNELS.refreshGroupProfile, (input) =>
+    auth.refreshGroupProfile(input as ConversationTargetInput),
+  )
   handle(ACCOUNT_DATA_CHANNELS.getConversationInfo, (input) =>
     auth.getConversationInfo(input as ConversationTargetInput),
   )

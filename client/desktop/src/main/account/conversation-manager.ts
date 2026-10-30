@@ -813,7 +813,7 @@ export class ConversationManager {
 
   applyEntity(payload: unknown, revision: number) {
     this.entityGeneration += 1
-    this.database.applyConversationEntity(parseConversation(payload, this.currentUserId), revision)
+    return this.database.applyConversationEntity(parseConversation(payload, this.currentUserId), revision)
   }
 
   removeEntity(id: string) {

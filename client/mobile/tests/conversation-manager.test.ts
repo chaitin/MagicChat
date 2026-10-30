@@ -63,6 +63,17 @@ function setup(fetch: () => Promise<ClientConversation[]> = async () => []) {
   return { manager, store, notifications: () => notifications }
 }
 
+test("旧群快照不能覆盖话题或被标记为完整应用", async () => {
+  const { manager } = setup()
+  await manager.upsert(target, conversation("g", { entityRevision: 3, members: [], avatar: "new.webp" }))
+  await manager.upsert(target, conversation("t", {
+    type: "topic", entityRevision: 3, avatar: "new.webp",
+    topic: { id: "topic", parentConversationId: "g", parentConversationType: "group", parentConversationName: "Group", sourceMessageId: "m", archived: false } as ClientConversation["topic"],
+  }))
+  assert.equal(await manager.applyEntity(target, conversation("g", { avatar: "old.webp", members: [] }), 2, 1, () => true), false)
+  assert.equal((await manager.get(target, "t"))?.avatar, "new.webp")
+})
+
 test("实体快照更新管理员和头像，不覆盖请求期间的新消息与本地偏好", async () => {
   const { manager } = setup()
   await manager.upsert(target, conversation("c-1", { lastMessageSeq: 5, lastReadSeq: 2, unreadCount: 3 }))

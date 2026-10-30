@@ -88,14 +88,13 @@ export class ConversationRepository {
   }
 
   applyEntity(conversation: StoredConversation, revision: number) {
-    if (!record(conversation.payload)) return
+    if (!record(conversation.payload)) return false
     const existing = this.getPayload(conversation.id)
     if (!record(existing)) {
       this.upsertCurrent([{ ...conversation, payload: { ...conversation.payload, entity_revision: revision } }])
-      return
     }
-    if (Number(existing.entity_revision ?? 0) > revision) return
-    const payload: Record<string, unknown> = { ...existing, entity_revision: revision }
+    if (record(existing) && Number(existing.entity_revision ?? 0) > revision) return false
+    const payload: Record<string, unknown> = { ...(record(existing) ? existing : conversation.payload), entity_revision: revision }
     for (const field of entityFields) if (field in conversation.payload) payload[field] = conversation.payload[field]
     this.database.prepare(`UPDATE conversations SET name = ?, avatar = ?, member_count = ?,
       payload_json = ?, current = 1 WHERE id = ?`).run(
@@ -105,6 +104,7 @@ export class ConversationRepository {
       if (id === conversation.id) continue
       const child = this.getPayload(id)
       if (!record(child) || !record(child.topic)) continue
+      if (Number(child.entity_revision ?? 0) > revision) return false
       const next = { ...child, avatar: payload.avatar, members: payload.members,
         can_send: child.topic.archived !== true && payload.can_send !== false,
         entity_revision: revision, topic: { ...child.topic, parent_conversation_name: conversation.name } }
@@ -112,6 +112,7 @@ export class ConversationRepository {
         conversation.avatar, JSON.stringify(next), id,
       )
     }
+    return true
   }
 
   relatedIds(id: string): string[] {

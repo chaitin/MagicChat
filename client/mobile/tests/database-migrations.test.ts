@@ -10,7 +10,7 @@ import {
 
 test("v4 to v5 migration adds conversations without deleting message data", () => {
   const sql = createDatabaseMigrationSQL(4)
-  assert.equal(DATABASE_VERSION, 6)
+  assert.equal(DATABASE_VERSION, 7)
   assert.doesNotMatch(sql, /DELETE\s+FROM\s+cached_messages/i)
   assert.doesNotMatch(sql, /DELETE\s+FROM\s+message_sync_state/i)
 
@@ -52,7 +52,7 @@ test("v4 to v5 migration adds conversations without deleting message data", () =
 })
 
 test("new database and v3, v4, v5 upgrades remain compatible", () => {
-  assert.equal(DATABASE_VERSION, 6)
+  assert.equal(DATABASE_VERSION, 7)
   for (const previousVersion of [0, 3, 4, 5]) {
     const database = new DatabaseSync(":memory:")
     try {
@@ -74,7 +74,7 @@ test("new database and v3, v4, v5 upgrades remain compatible", () => {
       assert.equal(database.prepare("SELECT COUNT(*) count FROM cached_messages").get()?.count, preserved)
       assert.equal(database.prepare("SELECT COUNT(*) count FROM message_sync_state").get()?.count, preserved)
       assert.equal(database.prepare("SELECT COALESCE(SUM(message_count), 0) count FROM message_cache_stats").get()?.count, preserved)
-      assert.equal(database.prepare("PRAGMA user_version").get()?.user_version, 6)
+      assert.equal(database.prepare("PRAGMA user_version").get()?.user_version, 7)
       assert.equal(requiresNormalizedMessageReset(previousVersion), previousVersion < 4)
     } finally {
       database.close()

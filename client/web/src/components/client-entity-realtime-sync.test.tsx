@@ -6,24 +6,161 @@ import { ClientEntityRealtimeSync } from "@/components/client-entity-realtime-sy
 const mocks = vi.hoisted(() => ({
   handlers: new Map<string, (payload: unknown) => void>(),
   resolve: vi.fn(), apply: vi.fn(), refresh: vi.fn(),
-  data: { me: { id: "me" }, contactApps: [] as { id: string }[], contactGroups: [] as { id: string; joined: boolean }[], conversations: [] as { id: string; type: string }[], usersById: {} as Record<string, unknown> },
+  data: { me: { id: "me" }, contactApps: [] as { id: string }[], contactGroups: [] as { id: string; joined: boolean }[], conversations: [] as { id: string; type: string; topic?: { parentConversationId: string; parentConversationType: string } }[], usersById: {} as Record<string, unknown> },
   realtime: { ready: false },
+  foregroundConversationId: "",
+  profiles: new Map<string, { id: string; syncedAt: number; snapshot: unknown }>(),
   subscribe: vi.fn((event: string, handler: (payload: unknown) => void) => {
     mocks.handlers.set(event, handler)
     return () => { mocks.handlers.delete(event) }
   }),
 }))
-vi.mock("@/lib/client-data-context", () => ({ useClientData: () => ({ ...mocks.data, applyEntitySnapshot: mocks.apply, refreshContacts: mocks.refresh }) }))
+vi.mock("@/lib/client-data-context", () => ({ useClientData: () => ({ ...mocks.data, foregroundConversationId: mocks.foregroundConversationId, applyEntitySnapshot: mocks.apply, refreshContacts: mocks.refresh }) }))
 vi.mock("@/lib/realtime-context", () => ({ useRealtime: () => ({ ...mocks.realtime, subscribeRealtimeEvent: mocks.subscribe }) }))
 vi.mock("@/lib/client-api/entity-sync", () => ({ resolveClientEntities: (entities: unknown) => mocks.resolve(entities) }))
+vi.mock("@/lib/group-profile-cache", async (original) => {
+  const actual = await original<typeof import("@/lib/group-profile-cache")>()
+  return { ...actual, createWebGroupProfileStore: (accountId: string) => ({
+    read: async (ids: string[]) => ids.flatMap((id) => {
+      const record = mocks.profiles.get(`${accountId}:${id}`)
+      return record ? [record] : []
+    }),
+    write: async (records: { id: string; syncedAt: number; snapshot: unknown }[]) => {
+      for (const record of records) mocks.profiles.set(`${accountId}:${record.id}`, record)
+    },
+    remove: async (ids: string[]) => { for (const id of ids) mocks.profiles.delete(`${accountId}:${id}`) },
+    close: async () => undefined,
+  }) }
+})
+
+const groupSnapshot = (revision = 1) => ({
+  users: [], apps: [], removed: [], versions: { "group:g1": revision },
+  groups: [{ id: "g1", joined: true }],
+  conversations: [{ id: "g1", type: "group", members: [], entityRevision: revision }],
+})
 
 describe("实体实时同步", () => {
   beforeEach(() => {
     mocks.handlers.clear(); mocks.resolve.mockReset(); mocks.apply.mockReset(); mocks.refresh.mockReset().mockResolvedValue(undefined)
     mocks.data = { me: { id: "me" }, contactApps: [], contactGroups: [], conversations: [], usersById: {} }
     mocks.realtime.ready = false
+    mocks.foregroundConversationId = ""
+    mocks.profiles.clear()
   })
   afterEach(() => vi.restoreAllMocks())
+
+  it("刷新后恢复完整缓存，一小时内初始化不请求；进群和再次进入仍强刷", async () => {
+    const snapshot = groupSnapshot()
+    mocks.profiles.set("me:g1", { id: "g1", syncedAt: Date.now(), snapshot })
+    mocks.data.contactGroups = [{ id: "g1", joined: true }]
+    mocks.data.conversations = [{ id: "g1", type: "group" }]
+    mocks.realtime.ready = true
+    mocks.resolve.mockResolvedValue(snapshot)
+    const view = render(<ClientEntityRealtimeSync />)
+    await waitFor(() => expect(mocks.apply).toHaveBeenCalled())
+    await act(async () => undefined)
+    expect(mocks.resolve).not.toHaveBeenCalled()
+    mocks.foregroundConversationId = "g1"
+    view.rerender(<ClientEntityRealtimeSync />)
+    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(1))
+    await act(async () => undefined)
+    mocks.foregroundConversationId = ""
+    view.rerender(<ClientEntityRealtimeSync />)
+    mocks.foregroundConversationId = "g1"
+    view.rerender(<ClientEntityRealtimeSync />)
+    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(2))
+    await act(async () => undefined)
+    view.unmount()
+    mocks.foregroundConversationId = ""
+    render(<ClientEntityRealtimeSync />)
+    await act(async () => undefined)
+    expect(mocks.resolve).toHaveBeenCalledTimes(2)
+  })
+
+  it("从群聊切到同群话题仍强刷父群，话题ID不作为群ID请求", async () => {
+    mocks.profiles.set("me:g1", { id: "g1", syncedAt: Date.now(), snapshot: groupSnapshot() })
+    mocks.data.contactGroups = [{ id: "g1", joined: true }]
+    mocks.data.conversations = [{ id: "g1", type: "group" },
+      { id: "t1", type: "topic", topic: { parentConversationId: "g1", parentConversationType: "group" } }]
+    mocks.foregroundConversationId = "g1"
+    mocks.realtime.ready = true
+    mocks.resolve.mockResolvedValue(groupSnapshot())
+    const view = render(<ClientEntityRealtimeSync />)
+    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(1))
+    await act(async () => undefined)
+    mocks.foregroundConversationId = "t1"
+    view.rerender(<ClientEntityRealtimeSync />)
+    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(2))
+    expect(mocks.resolve.mock.calls.every((call) => call[0][0].id === "g1")).toBe(true)
+  })
+
+  it("回到可见页面强刷当前群，后台批量校准仍遵循TTL", async () => {
+    mocks.profiles.set("me:g1", { id: "g1", syncedAt: Date.now(), snapshot: groupSnapshot() })
+    mocks.data.contactGroups = [{ id: "g1", joined: true }]
+    mocks.data.conversations = [{ id: "g1", type: "group" }]
+    mocks.foregroundConversationId = "g1"
+    mocks.realtime.ready = true
+    mocks.resolve.mockResolvedValue(groupSnapshot())
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible")
+    render(<ClientEntityRealtimeSync />)
+    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(1))
+    await act(async () => undefined)
+    act(() => document.dispatchEvent(new Event("visibilitychange")))
+    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(2))
+  })
+
+  it("被本地新版本拒绝的响应不续期；不可访问的完整结果清除缓存", async () => {
+    const syncedAt = Date.now() - 10_000
+    mocks.profiles.set("me:g1", { id: "g1", syncedAt, snapshot: groupSnapshot(3) })
+    mocks.data.contactGroups = [{ id: "g1", joined: true }]
+    mocks.data.conversations = [{ id: "g1", type: "group" }]
+    mocks.realtime.ready = true
+    mocks.resolve.mockResolvedValue(groupSnapshot(2))
+    mocks.apply.mockReturnValue({ syncedGroups: [] })
+    const view = render(<ClientEntityRealtimeSync />)
+    await waitFor(() => expect(mocks.apply).toHaveBeenCalled())
+    await act(async () => undefined)
+    mocks.foregroundConversationId = "g1"
+    view.rerender(<ClientEntityRealtimeSync />)
+    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(1))
+    await act(async () => undefined)
+    expect(mocks.profiles.get("me:g1")?.syncedAt).toBe(syncedAt)
+    mocks.foregroundConversationId = ""
+    view.rerender(<ClientEntityRealtimeSync />)
+    mocks.resolve.mockResolvedValue({ users: [], apps: [], groups: [], conversations: [], versions: {}, removed: [{ type: "group", id: "g1" }] })
+    mocks.foregroundConversationId = "g1"
+    view.rerender(<ClientEntityRealtimeSync />)
+    await waitFor(() => expect(mocks.profiles.has("me:g1")).toBe(false))
+  })
+
+  it("过期缓存重新校准，实时变更不受TTL限制；失败不续期", async () => {
+    const snapshot = groupSnapshot()
+    mocks.profiles.set("me:g1", { id: "g1", syncedAt: Date.now() - 60 * 60_000, snapshot })
+    mocks.data.contactGroups = [{ id: "g1", joined: true }]
+    mocks.realtime.ready = true
+    mocks.resolve.mockResolvedValue(snapshot)
+    render(<ClientEntityRealtimeSync />)
+    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(1))
+    await act(async () => undefined)
+    expect(mocks.profiles.get("me:g1")?.syncedAt).toBeGreaterThan(Date.now() - 60_000)
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    mocks.resolve.mockRejectedValue(new Error("offline"))
+    act(() => mocks.handlers.get("conversation.members.updated")?.({ conversation_id: "g1", revision: 2 }))
+    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(warn).toHaveBeenCalled())
+    expect(mocks.profiles.has("me:g1")).toBe(false)
+  })
+
+  it("只有时间而无完整资料不能跳过，其他账号缓存不能恢复", async () => {
+    mocks.profiles.set("me:g1", { id: "g1", syncedAt: Date.now(), snapshot: { ...groupSnapshot(), conversations: [] } })
+    mocks.profiles.set("other:g1", { id: "g1", syncedAt: Date.now(), snapshot: groupSnapshot(9) })
+    mocks.data.contactGroups = [{ id: "g1", joined: true }]
+    mocks.realtime.ready = true
+    mocks.resolve.mockResolvedValue(groupSnapshot())
+    render(<ClientEntityRealtimeSync />)
+    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(1))
+    expect(mocks.apply.mock.calls.every((call) => call[0].versions["group:g1"] !== 9)).toBe(true)
+  })
 
   it("实体有效性检查可在延迟到渲染阶段的状态更新器中执行，切账号后仍失效", async () => {
     let check: ((entity: { type: "user"; id: string }) => boolean) | undefined

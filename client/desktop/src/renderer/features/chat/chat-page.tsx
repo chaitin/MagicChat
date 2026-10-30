@@ -247,6 +247,20 @@ export function ChatPage({
     })
     onNotificationHandled()
   }, [notificationTarget, targetId, setSelectedId, onNotificationHandled])
+  const groupProfileConversationId = selected?.type === "group" || selected?.type === "topic" ? selected.id : ""
+  useEffect(() => {
+    if (activeSection !== "chat" || !groupProfileConversationId || !window.desktop) return
+    const refresh = () => { void window.desktop!.accountData.refreshGroupProfile({ targetId, conversationId: groupProfileConversationId }).catch(() => undefined) }
+    refresh()
+    let disconnected = false
+    window.addEventListener("focus", refresh)
+    const unsubscribe = window.desktop.accountData.onSyncStateChange((event) => {
+      if (event.targetId !== targetId) return
+      if (event.state === "loading") disconnected = true
+      else if (disconnected) { disconnected = false; refresh() }
+    })
+    return () => { unsubscribe(); window.removeEventListener("focus", refresh) }
+  }, [activeSection, groupProfileConversationId, targetId])
   const conversationStatus = useConversationStatus({
     targetId,
     conversation: selected,

@@ -5,6 +5,7 @@ import path from "node:path"
 import test from "node:test"
 import { runInNewContext } from "node:vm"
 import ts from "typescript"
+import { GroupProfileSyncCache } from "../../shared/group-profile-sync-cache.ts"
 import { parseConversationPresenceEvent } from "../src/main/account/conversation-presence.ts"
 
 function deferred<T>() {
@@ -60,7 +61,7 @@ function harness(cached: boolean | "empty", connected = true) {
     }
   }
   const dependencies = {
-    AuthFailure, parseConversationPresenceEvent, AccountDatabase: Database, AuthenticatedClient: Manager,
+    AuthFailure, GroupProfileSyncCache, parseConversationPresenceEvent, AccountDatabase: Database, AuthenticatedClient: Manager,
     ConversationManager: Conversations, ContactManager: Manager, SearchManager: Manager,
     ClientAppManager: Manager, ProjectManager: Manager, ProjectTaskManager: Manager,
     MediaManager: Manager, AvatarManager: Manager, RealtimeManager: Realtime,

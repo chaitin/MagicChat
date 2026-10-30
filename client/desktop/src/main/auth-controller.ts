@@ -315,6 +315,10 @@ export class AuthController {
     return this.accountData.listLocalMessagesAfter(...args)
   }
 
+  refreshGroupProfile(...args: Parameters<AccountDataFacade["refreshGroupProfile"]>) {
+    return this.accountData.refreshGroupProfile(...args)
+  }
+
   getConversationInfo(...args: Parameters<AccountDataFacade["getConversationInfo"]>) {
     return this.accountData.getConversationInfo(...args)
   }

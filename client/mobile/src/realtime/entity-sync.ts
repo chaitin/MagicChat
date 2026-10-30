@@ -1,4 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query"
+import type { GroupProfileSyncCache } from "../../../shared/group-profile-sync-cache"
 import { DirectorySynchronizer } from "../../../shared/directory-sync"
 import { EntitySynchronizer, entityKey, parseEntityChange, type EntityReference } from "../../../shared/entity-sync"
 import type { AuthenticatedTarget } from "@/core/server-target"
@@ -8,11 +9,12 @@ import { resolveClientEntities } from "@/data/contacts/entity-sync-api"
 import { conversationManager } from "@/data/conversations"
 import { queryKeys } from "@/data/query"
 import { messageManager } from "@/data/messages/message-manager"
+import { traceMobileStartup } from "@/diagnostics/mobile-startup"
 
 export function createMobileEntitySync(
   queryClient: QueryClient,
   target: AuthenticatedTarget,
-  options: { isCurrent: () => boolean; onError: (error: unknown) => void },
+  options: { isCurrent: () => boolean; onError: (error: unknown) => void; groupCache?: GroupProfileSyncCache },
 ) {
   const directorySync = new DirectorySynchronizer({
     ...options,
@@ -33,14 +35,17 @@ export function createMobileEntitySync(
     },
     version: (snapshot, entity) => snapshot.versions[entityKey(entity)] ?? null,
     apply: async (snapshot, entities, isCurrent) => {
+      const syncedGroups: string[] = []
       await contactManager.applyEntities(target, snapshot, entities, isCurrent)
       for (const entity of entities) {
         if (!isCurrent(entity) || entity.type !== "group") continue
         const conversation = snapshot.conversations.find((item) => item.id === entity.id)
         if (conversation) {
           const revision = snapshot.versions[entityKey(entity)] ?? 0
-          await conversationManager.applyEntity(target, conversation, revision, snapshot.startedAt, () => isCurrent(entity))
+          const applied = await conversationManager.applyEntity(target, conversation, revision, snapshot.startedAt, () => isCurrent(entity))
+          if (applied !== false) syncedGroups.push(entity.id)
         } else {
+          options.groupCache?.invalidate(entity.id)
           const ids = await conversationManager.removeTree(target, entity.id, snapshot.startedAt)
           for (const id of ids) {
             queryClient.removeQueries({ exact: true, queryKey: queryKeys.conversationMessages(target, id) })
@@ -64,6 +69,7 @@ export function createMobileEntitySync(
         }
         void queryClient.invalidateQueries({ exact: true, queryKey: queryKeys.currentUser(target) }).catch(options.onError)
       }
+      return { syncedGroups }
     },
   })
 
@@ -81,6 +87,7 @@ export function createMobileEntitySync(
       } else sync.notify(event, payload)
       return true
     },
+    refreshGroup(id: string) { return sync.refresh([{ type: "group", id }]) },
     forget(id: string) {
       sync.forget({ type: "group", id })
       void contactManager.getSnapshot(target).then((snapshot) => {
@@ -92,13 +99,25 @@ export function createMobileEntitySync(
     reconcile() {
       if (reconciliation) return reconciliation
       const startedAt = Date.now()
+      let stage: "directory" | "profiles" | "groups" = "directory"
+      let stageStartedAt = performance.now()
       const work = (async () => {
+        traceMobileStartup("sync.entities.directory.start")
         await directorySync.refresh()
+        traceMobileStartup("sync.entities.directory.ready", { elapsedMs: performance.now() - stageStartedAt })
         if (!options.isCurrent()) return
+        stage = "profiles"
+        stageStartedAt = performance.now()
+        traceMobileStartup("sync.entities.profiles.start")
         const [contacts, conversations] = await Promise.all([contactManager.getSnapshot(target), conversationManager.list(target)])
         // Reuse profiles fetched by directory discovery or the UI during this recovery.
-        await contactManager.refreshUsers(target, [...new Set([target.userId, ...contacts.directory.userIds, ...Object.keys(contacts.usersById)])], startedAt)
+        const userIds = [...new Set([target.userId, ...contacts.directory.userIds, ...Object.keys(contacts.usersById)])]
+        await contactManager.refreshUsers(target, userIds, startedAt)
+        traceMobileStartup("sync.entities.profiles.ready", { count: userIds.length, elapsedMs: performance.now() - stageStartedAt })
         if (!options.isCurrent()) return
+        stage = "groups"
+        stageStartedAt = performance.now()
+        traceMobileStartup("sync.entities.groups.start")
         const latest = await contactManager.getSnapshot(target)
         const profile = latest.usersById[target.userId]
         if (profile) queryClient.setQueryData<ClientUser>(queryKeys.currentUser(target), (current) => current ? {
@@ -108,8 +127,12 @@ export function createMobileEntitySync(
         const entities: EntityReference[] = [
           ...[...new Set([...latest.directory.groups.filter((group) => group.joined).map((group) => group.id), ...conversations.filter((item) => item.type === "group").map((item) => item.id)])].map((id) => ({ type: "group" as const, id })),
         ]
-        await sync.refresh(entities)
-      })().finally(() => { if (reconciliation === work) reconciliation = undefined })
+        await sync.refresh(entities, { useCache: true })
+        traceMobileStartup("sync.entities.groups.ready", { count: entities.length, elapsedMs: performance.now() - stageStartedAt })
+      })().catch((error: unknown) => {
+        traceMobileStartup(`sync.entities.${stage}.failed`, { failures: 1, elapsedMs: performance.now() - stageStartedAt })
+        throw error
+      }).finally(() => { if (reconciliation === work) reconciliation = undefined })
       reconciliation = work
       return work
     },

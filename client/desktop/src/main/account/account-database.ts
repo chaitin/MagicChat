@@ -248,7 +248,33 @@ export class AccountDatabase {
   }
 
   applyConversationEntity(...args: Parameters<ConversationRepository["applyEntity"]>) {
-    this.conversations.applyEntity(...args)
+    return this.conversations.applyEntity(...args)
+  }
+
+  getGroupProfileSyncStates(ids: string[]) {
+    const wanted = new Set(ids)
+    const rows = this.database.prepare(`SELECT s.group_id, s.last_success_at, c.payload_json
+      FROM group_profile_sync_state s LEFT JOIN conversations c ON c.id=s.group_id AND c.current=1`).all() as
+      { group_id: string; last_success_at: number; payload_json: string | null }[]
+    return rows.filter((row) => wanted.has(row.group_id)).map((row) => {
+      let hasSnapshot = false
+      try {
+        const payload = row.payload_json ? JSON.parse(row.payload_json) : null
+        hasSnapshot = payload?.type === "group" && Array.isArray(payload.members)
+      } catch { /* Missing snapshots cannot extend the synchronization cache. */ }
+      return { id: row.group_id, syncedAt: row.last_success_at, hasSnapshot }
+    })
+  }
+
+  markGroupProfilesSynced(ids: string[], at: number) {
+    const write = this.database.prepare(`INSERT OR REPLACE INTO group_profile_sync_state (group_id,last_success_at)
+      SELECT id,? FROM conversations WHERE id=? AND type='group' AND current=1`)
+    for (const id of ids) write.run(at, id)
+  }
+
+  invalidateGroupProfiles(ids: string[]) {
+    const remove = this.database.prepare("DELETE FROM group_profile_sync_state WHERE group_id=?")
+    for (const id of ids) remove.run(id)
   }
 
   relatedConversationIds(id: string) {

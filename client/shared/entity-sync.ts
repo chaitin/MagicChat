@@ -1,3 +1,5 @@
+import type { GroupProfileSyncCache } from "./group-profile-sync-cache.ts"
+
 export type EntityReference = { type: "user" | "app" | "group"; id: string }
 export type EntityChange = { entity: EntityReference; revision: number }
 
@@ -63,15 +65,17 @@ type Pending = EntityChange & { epoch: number; force: boolean }
 type SyncOptions<Snapshot> = {
   resolve: (entities: EntityReference[]) => Promise<Snapshot>
   version: (snapshot: Snapshot, entity: EntityReference) => number | null
-  apply: (snapshot: Snapshot, entities: EntityReference[], isCurrent: (entity: EntityReference) => boolean) => Promise<void>
+  apply: (snapshot: Snapshot, entities: EntityReference[], isCurrent: (entity: EntityReference) => boolean) => Promise<void | { syncedGroups: string[] }>
   isCurrent: () => boolean
   onError: (error: unknown) => void
   retryDelayMs?: number
+  groupCache?: GroupProfileSyncCache
 }
 
 /** One instance per authenticated runtime, never shared between accounts. */
 export class EntitySynchronizer<Snapshot> {
   private pending = new Map<string, Pending>()
+  private active = new Map<string, Pending>()
   private applied = new Map<string, number>()
   private epochs = new Map<string, number>()
   private inFlight: Promise<void> | undefined
@@ -85,13 +89,22 @@ export class EntitySynchronizer<Snapshot> {
   notify(event: string, payload: unknown) {
     const change = parseEntityChange(event, payload)
     if (!change) return false
-    this.enqueue(change, false)
+    if (this.enqueue(change, false) && change.entity.type === "group") this.options.groupCache?.invalidate(change.entity.id)
     this.start()
     return true
   }
 
-  async refresh(entities: EntityReference[]) {
-    for (const entity of entities) this.enqueue({ entity, revision: 0 }, true)
+  async refresh(entities: EntityReference[], options: { useCache?: boolean } = {}) {
+    let wanted = entities
+    if (options.useCache && this.options.groupCache) {
+      const stale = new Set(await this.options.groupCache.stale(entities.filter((entity) => entity.type === "group").map((entity) => entity.id)))
+      wanted = entities.filter((entity) => entity.type !== "group" || stale.has(entity.id))
+    }
+    for (const entity of wanted) {
+      const active = this.active.get(entityKey(entity))
+      if (active && active.epoch === (this.epochs.get(entityKey(entity)) ?? 0)) continue
+      this.enqueue({ entity, revision: 0 }, true)
+    }
     await this.flush()
   }
 
@@ -100,6 +113,7 @@ export class EntitySynchronizer<Snapshot> {
     this.epochs.set(key, (this.epochs.get(key) ?? 0) + 1)
     this.pending.delete(key)
     this.applied.delete(key)
+    if (entity.type === "group") this.options.groupCache?.invalidate(entity.id)
   }
 
   dispose() {
@@ -131,6 +145,7 @@ export class EntitySynchronizer<Snapshot> {
       epoch: this.epochs.get(key) ?? 0,
       force: force || previous?.force === true,
     })
+    return true
   }
 
   private start() {
@@ -157,7 +172,11 @@ export class EntitySynchronizer<Snapshot> {
       // Full group snapshots may contain 1,000 members. Bound response size as
       // well as entity count during reconnect reconciliation.
       const batch = [...this.pending.values()].filter((item) => item.entity.type !== "group" || groups++ < 4).slice(0, 100)
-      for (const item of batch) this.pending.delete(entityKey(item.entity))
+      for (const item of batch) {
+        this.pending.delete(entityKey(item.entity))
+        this.active.set(entityKey(item.entity), item)
+      }
+      const checkpoint = this.options.groupCache?.checkpoint(batch.filter((item) => item.entity.type === "group").map((item) => item.entity.id))
       try {
         const snapshot = await this.options.resolve(batch.map((item) => item.entity))
         if (!this.current()) return
@@ -179,7 +198,13 @@ export class EntitySynchronizer<Snapshot> {
           if (next && !next.force && (version === null || next.revision <= version)) this.pending.delete(key)
           return true
         })
-        if (eligible.length) await this.options.apply(snapshot, eligible.map((item) => item.entity), isCurrent)
+        const application = eligible.length ? await this.options.apply(snapshot, eligible.map((item) => item.entity), isCurrent) : undefined
+        if (checkpoint) {
+          const ids = eligible.filter((item) => item.entity.type === "group" &&
+            (!application || application.syncedGroups.includes(item.entity.id)) &&
+            this.options.version(snapshot, item.entity) !== null).map((item) => item.entity.id)
+          await this.options.groupCache!.synced(ids, checkpoint, (id) => isCurrent({ type: "group", id }) && !this.pending.has(`group:${id}`)).catch(this.options.onError)
+        }
         for (const item of eligible) {
           if (!isCurrent(item.entity)) continue
           const key = entityKey(item.entity)
@@ -195,6 +220,8 @@ export class EntitySynchronizer<Snapshot> {
         }
         this.deferRetry()
         throw error
+      } finally {
+        for (const item of batch) if (this.active.get(entityKey(item.entity)) === item) this.active.delete(entityKey(item.entity))
       }
     }
   }

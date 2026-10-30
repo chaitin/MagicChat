@@ -31,6 +31,8 @@ function fixture(options: { webOrigin?: string } = {}) {
   const appliedEvents: { event: string; payload: unknown }[] = []
   const entityEvents: { event: string; payload: unknown }[] = []
   const forgottenEntities: string[] = []
+  const groupRefreshes: string[] = []
+  const startupPhases: string[] = []
   const queryClient = {}
   const markReauthRequired = () => undefined
   class MockSocket {
@@ -83,6 +85,10 @@ function fixture(options: { webOrigin?: string } = {}) {
         return { auth: async () => ({ accountId, generation, token: "test-token" }), isCurrent }
       },
     } },
+    "@/data/conversations": { conversationManager: { get: async (_target: unknown, id: string) =>
+      id === "topic-1" ? { type: "topic", topic: { parentConversationType: "group", parentConversationId: "group-1" } } : { id, type: "group" } } },
+    "@/data/database/database-service": { databaseService: {} },
+    "@/data/conversations/group-profile-sync-store": { createMobileGroupProfileCache: () => undefined },
     "@/data/users/current-user-api": { fetchCurrentUser: async () => ({}) },
     "@/notifications/message-notifications": { prepareMessageNotifications: async () => undefined, showBackgroundMessageNotification: async () => undefined },
     "@/notifications/push-runtime-state": { hasActiveRemotePushDelegation: () => false },
@@ -95,7 +101,7 @@ function fixture(options: { webOrigin?: string } = {}) {
       },
       refreshClientDataOnForeground: async (_client: unknown, _target: unknown, options: { messagesAlreadySynchronizing: boolean }) => { foregroundRequests++; foregroundOptions.push(options) },
     },
-    "@/diagnostics/mobile-startup": { traceMobileStartup: () => undefined },
+    "@/diagnostics/mobile-startup": { traceMobileStartup: (phase: string) => startupPhases.push(phase) },
     "@/realtime/realtime-client": { RealtimeClient, buildRealtimeWebSocketUrl },
     "@/realtime/realtime-connection": connection,
     "@/realtime/realtime-context": { DISCONNECTED_REALTIME_SNAPSHOT, RealtimeContext },
@@ -105,6 +111,7 @@ function fixture(options: { webOrigin?: string } = {}) {
     "@/realtime/realtime-recovery": { RealtimeRecovery },
     "@/realtime/entity-sync": { createMobileEntitySync: () => ({
       reconcile: async () => undefined,
+      refreshGroup: async (id: string) => { groupRefreshes.push(id) },
       dispose: () => undefined,
       forget: (id: string) => forgottenEntities.push(id),
       notify: (event: string, payload: unknown) => {
@@ -138,7 +145,7 @@ function fixture(options: { webOrigin?: string } = {}) {
     }
   }
   return {
-    render, runEffects, sockets, synchronizations, foregroundOptions, appliedEvents, entityEvents, forgottenEntities,
+    render, runEffects, sockets, synchronizations, foregroundOptions, appliedEvents, entityEvents, forgottenEntities, groupRefreshes, startupPhases,
     synchronizationFactories: () => synchronizationFactories,
     foregroundRequests: () => foregroundRequests,
     switchAccount: (next: ReturnType<typeof account> | null) => { active = next },
@@ -177,8 +184,24 @@ test("Provider在首个effect之前就展示连接态，Socket握手不能提前
   assert.equal(f.render().ready, true)
   assert.equal(f.render().isRecovering, true)
   assert.equal(f.synchronizations.length, 1)
+  assert.ok(f.startupPhases.includes("realtime.recovery.start"))
+  assert.ok(!f.startupPhases.includes("realtime.recovery.ready"))
   f.synchronizations[0]!.resolve()
   await flush()
+  assert.equal(f.render().isRecovering, false)
+  assert.equal(f.startupPhases.at(-1), "realtime.recovery.ready")
+})
+
+test("回前台强刷当前群话题的父群，不改变标题恢复状态", async (t) => {
+  const f = fixture()
+  t.after(f.dispose)
+  f.render(); f.runEffects(); await flush()
+  f.sockets[0]!.open(); f.sockets[0]!.ready(); await flush()
+  f.synchronizations[0]!.resolve(); await flush()
+  f.render().activateConversation("topic-1")
+  f.appState("background"); f.appState("active")
+  await flush()
+  assert.deepEqual(f.groupRefreshes, ["group-1"])
   assert.equal(f.render().isRecovering, false)
 })
 

@@ -65,6 +65,12 @@ export const DATABASE_SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS cached_conversations_parent
   ON cached_conversations (server_key, user_id, parent_conversation_id);
 
+  CREATE TABLE IF NOT EXISTS group_profile_sync_state (
+    server_key TEXT NOT NULL, user_id TEXT NOT NULL, group_id TEXT NOT NULL,
+    last_success_at INTEGER NOT NULL,
+    PRIMARY KEY (server_key, user_id, group_id)
+  );
+
   CREATE TABLE IF NOT EXISTS cached_contact_directories (
     server_key TEXT NOT NULL, user_id TEXT NOT NULL, payload_json TEXT NOT NULL,
     observed_at INTEGER NOT NULL, cached_at INTEGER NOT NULL,

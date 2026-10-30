@@ -33,7 +33,7 @@ import type {
   UpdateClientAppInput,
   UpdateProfileInput,
 } from "../../shared/account-data"
-import { AuthFailure, type AuthUser } from "../../shared/auth"
+import { AuthFailure, isRecord, type AuthUser } from "../../shared/auth"
 import type { CachedMedia, MediaCacheRequest, MediaDownloadProgress } from "../../shared/media"
 import { AccountDatabase } from "./account-database"
 import { AvatarManager } from "./avatar-manager"
@@ -45,6 +45,7 @@ import { ClientAppManager } from "./client-app-manager"
 import { ContactManager } from "./contact-manager"
 import { ConversationManager } from "./conversation-manager"
 import { conversationIdFromEvent } from "./conversation-parser"
+import { GroupProfileSyncCache } from "../../../../shared/group-profile-sync-cache.ts"
 import { createDesktopEntitySync } from "./entity-sync"
 import { parseConversationMembers } from "./conversation-members"
 import { parseConversationPresenceEvent } from "./conversation-presence"
@@ -184,6 +185,17 @@ export class AccountRuntime {
   listConversations(selectedConversationId: string | null = null): DesktopConversation[] {
     this.assertInitialized()
     return this.conversationManager!.listConversations(selectedConversationId)
+  }
+
+  async refreshGroupProfile(conversationId: string) {
+    this.assertInitialized()
+    const payload = this.database!.getConversationPayload(conversationId)
+    if (!isRecord(payload)) return null
+    const groupId = payload.type === "group" ? conversationId :
+      payload.type === "topic" && isRecord(payload.topic) && payload.topic.parent_conversation_type === "group"
+        ? payload.topic.parent_conversation_id : null
+    if (typeof groupId === "string") await this.entitySync!.refreshGroup(groupId)
+    return null
   }
 
   async openTopicConversation(conversationId: string) {
@@ -805,7 +817,15 @@ export class AccountRuntime {
         currentUserAvatar,
         (changes) => { if (!this.closed) this.notifyChanged([], [], changes) },
       )
+      const groupCache = new GroupProfileSyncCache({
+        read: async (ids) => this.database!.getGroupProfileSyncStates(ids),
+        write: async (ids, at) => { this.database!.markGroupProfilesSynced(ids, at) },
+        remove: async (ids) => { this.database!.invalidateGroupProfiles(ids) },
+        isCurrent: () => !this.closed,
+        onError: (error) => { if (!this.closed) console.warn("更新群资料缓存失败", error) },
+      })
       this.entitySync = createDesktopEntitySync({
+        groupCache,
         database: this.database,
         contacts: this.contactManager,
         conversations: this.conversationManager,

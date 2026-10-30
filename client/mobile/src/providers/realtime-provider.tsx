@@ -5,6 +5,9 @@ import { AppState, Platform, type AppStateStatus } from "react-native"
 import type { AuthenticatedTarget } from "@/core/server-target"
 import { isUnauthorizedError } from "@/data/api-client"
 import { accountAuthRuntime } from "@/data/auth/account-runtime-instance"
+import { conversationManager } from "@/data/conversations"
+import { databaseService } from "@/data/database/database-service"
+import { createMobileGroupProfileCache } from "@/data/conversations/group-profile-sync-store"
 import { fetchCurrentUser } from "@/data/users/current-user-api"
 import { prepareMessageNotifications, showBackgroundMessageNotification } from "@/notifications/message-notifications"
 import { hasActiveRemotePushDelegation } from "@/notifications/push-runtime-state"
@@ -27,6 +30,8 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
   const [snapshot, setSnapshot] = useState<RealtimeSnapshot>(DISCONNECTED_REALTIME_SNAPSHOT)
   const [recovery, setRecovery] = useState<{ key: string; recovering: boolean } | null>(null)
   const activeConversationIdRef = useRef("")
+  const entitySyncRef = useRef<ReturnType<typeof createMobileEntitySync> | null>(null)
+  const refreshGroupProfile = useCallback(async (groupId: string) => { await entitySyncRef.current?.refreshGroup(groupId) }, [])
   const [dispatcher] = useState(() => new RealtimeDispatcher())
   const [runtimeSlot] = useState(() => new RealtimeClientSlot())
   const clientRef = useRef<{ client: RealtimeClient; targetKey: string } | null>(null)
@@ -99,7 +104,19 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
     const handleError = (error: unknown) => {
       if (isUnauthorizedError(error) && isCurrent()) void markReauthRequired(identity.accountId)
     }
-    const entitySync = createMobileEntitySync(queryClient, activeServer, { isCurrent, onError: handleError })
+    const groupCache = createMobileGroupProfileCache(databaseService, activeServer, { isCurrent, onError: handleError })
+    const entitySync = createMobileEntitySync(queryClient, activeServer, { isCurrent, onError: handleError, groupCache })
+    entitySyncRef.current = entitySync
+    const refreshForegroundGroup = async () => {
+      const id = activeConversationIdRef.current
+      if (!id || !isCurrent()) return
+      const conversation = await conversationManager.get(activeServer, id)
+      if (!isCurrent() || activeConversationIdRef.current !== id) return
+      const groupId = conversation?.type === "group" ? conversation.id :
+        conversation?.type === "topic" && conversation.topic?.parentConversationType === "group"
+          ? conversation.topic.parentConversationId : ""
+      if (groupId) await entitySync.refreshGroup(groupId)
+    }
     const dispatchTarget = dispatcher.activate(handleError)
     let synchronization: ReturnType<typeof createRealtimeSynchronization> | undefined
     let connectStartedAt = performance.now()
@@ -109,12 +126,14 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
       onChange: (recovering) => {
         if (!isActive || !isCurrent()) return
         if (recovering) synchronization = undefined
+        else traceMobileStartup("realtime.recovery.ready", { elapsedMs: performance.now() - connectStartedAt })
         setRecovery((current) => current?.key === recoveryKey && current.recovering === recovering
           ? current : { key: recoveryKey, recovering })
       },
       onError: handleError,
       shouldRetry: (error) => !isUnauthorizedError(error),
       synchronize: () => {
+        traceMobileStartup("realtime.recovery.start")
         synchronization ??= createRealtimeSynchronization(queryClient, activeServer, {
           freshSnapshot: true,
           getActiveConversationId: () => activeConversationIdRef.current,
@@ -161,6 +180,7 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
         client.connect()
         connectionRecovery.retry()
         void entitySync.reconcile().catch(handleError)
+        if (client.getSnapshot().ready && !connectionRecovery.isRecovering) void refreshForegroundGroup().catch(handleError)
         void prepareMessageNotifications().catch(() => undefined)
         void refreshClientDataOnForeground(queryClient, activeServer, {
           getActiveConversationId: () => activeConversationIdRef.current,
@@ -177,6 +197,7 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
       isActive = false
       connectionRecovery.dispose()
       entitySync.dispose()
+      if (entitySyncRef.current === entitySync) entitySyncRef.current = null
       dispatchTarget.dispose()
       runtimeSlot.clear(client)
       if (clientRef.current === record) clientRef.current = null
@@ -188,9 +209,9 @@ export function RealtimeProvider({ children }: React.PropsWithChildren) {
   }, [active, dispatcher, isPreparingSignIn, markReauthRequired, queryClient, realtimeEnabled, recoveryKey, runtimeSlot, server])
 
   const value = useMemo(() => realtimeEnabled ? {
-    activateConversation, isRecovering, ready: snapshot.ready, status: snapshot.status, waitUntilReady,
+    activateConversation, refreshGroupProfile, isRecovering, ready: snapshot.ready, status: snapshot.status, waitUntilReady,
   } : { ...DISCONNECTED_REALTIME_SNAPSHOT, activateConversation, waitUntilReady },
-  [activateConversation, isRecovering, realtimeEnabled, snapshot.ready, snapshot.status, waitUntilReady])
+  [activateConversation, refreshGroupProfile, isRecovering, realtimeEnabled, snapshot.ready, snapshot.status, waitUntilReady])
   return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>
 }
 

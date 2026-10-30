@@ -1,3 +1,4 @@
+import { GroupProfileSyncCache } from "../../../../shared/group-profile-sync-cache.ts"
 import { DirectorySynchronizer } from "../../../../shared/directory-sync.ts"
 import { EntitySynchronizer, entityKey, parseEntityChange, type EntityReference } from "../../../../shared/entity-sync.ts"
 import type { AccountDatabase } from "./account-database"
@@ -15,6 +16,7 @@ export function createDesktopEntitySync(options: {
   isCurrent: () => boolean
   onChanged: (conversationIds: string[], avatars: EntityReference[]) => void
   onError: (error: unknown) => void
+  groupCache?: GroupProfileSyncCache
 }) {
   const { database, contacts, conversations, avatars } = options
   const directorySync = new DirectorySynchronizer({
@@ -36,6 +38,7 @@ export function createDesktopEntitySync(options: {
     },
   })
   const sync = new EntitySynchronizer({
+    groupCache: options.groupCache,
     isCurrent: options.isCurrent,
     onError: options.onError,
     resolve: (entities) => contacts.resolveEntities(entities),
@@ -44,6 +47,7 @@ export function createDesktopEntitySync(options: {
       const entities = references.filter(isCurrent)
       if (!entities.length) return
       const groups = new Set<string>()
+      const syncedGroups: string[] = []
       for (const entity of entities) {
         if (entity.type === "group") groups.add(entity.id)
         else for (const id of contacts.groupsUsingAvatar(entity.type, entity.id)) groups.add(id)
@@ -52,8 +56,12 @@ export function createDesktopEntitySync(options: {
       for (const entity of entities) {
         if (entity.type === "group") {
           const value = snapshot.conversations.find((item) => item.id === entity.id)
-          if (value) conversations.applyEntity(value, snapshot.versions[entityKey(entity)] ?? 0)
-          else conversations.removeEntity(entity.id)
+          if (value) {
+            if (conversations.applyEntity(value, snapshot.versions[entityKey(entity)] ?? 0) !== false) syncedGroups.push(entity.id)
+          } else {
+            options.groupCache?.invalidate(entity.id)
+            conversations.removeEntity(entity.id)
+          }
         } else if (entity.type === "user" && entity.id === options.currentUser.id) {
           const descriptor = contacts.getAvatarDescriptor("user", entity.id)
           if (descriptor) Object.assign(options.currentUser, descriptor)
@@ -63,6 +71,7 @@ export function createDesktopEntitySync(options: {
       for (const id of groups) avatars.markChanged("group", id)
       const ids = [...new Set([...groups].flatMap((id) => database.relatedConversationIds(id)))]
       options.onChanged(ids, entities)
+      return { syncedGroups }
     },
   })
 
@@ -76,6 +85,7 @@ export function createDesktopEntitySync(options: {
       }
       return true
     },
+    refreshGroup(id: string) { return sync.refresh([{ type: "group", id }]) },
     forget(id: string) {
       sync.forget({ type: "group", id })
       if (database.getContactPayload("group", id)) sync.notify("conversation.updated", { conversation_id: id })
@@ -87,7 +97,7 @@ export function createDesktopEntitySync(options: {
       await sync.refresh([
         ...(directory.users.some(({ id }) => id === options.currentUser.id) ? [] : [{ type: "user" as const, id: options.currentUser.id }]),
         ...[...new Set([...directory.groups.filter((group) => group.joined).map((group) => group.id), ...database.listConversations().filter((item) => item.type === "group").map((item) => item.id)])].map((id) => ({ type: "group" as const, id })),
-      ])
+      ], { useCache: true })
     },
     dispose() { directorySync.dispose(); sync.dispose() },
   }

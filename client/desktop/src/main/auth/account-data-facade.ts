@@ -144,6 +144,14 @@ export class AccountDataFacade {
     return this.requireRuntime().listLocalMessagesAfter(input.conversationId, input.afterSeq)
   }
 
+  async refreshGroupProfile(input: ConversationTargetInput) {
+    await this.ready(input?.targetId)
+    if (typeof input.conversationId !== "string" || !input.conversationId || input.conversationId.length > 128) {
+      throw new AuthFailure("invalid_conversation", "会话参数不正确")
+    }
+    return this.requireRuntime().refreshGroupProfile(input.conversationId)
+  }
+
   async getConversationInfo(input: ConversationTargetInput) {
     await this.ready(input?.targetId)
     return this.requireRuntime().getConversationInfo(input.conversationId)

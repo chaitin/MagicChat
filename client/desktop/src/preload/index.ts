@@ -101,6 +101,7 @@ const bridge: DesktopBridge = {
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getLocalMessageContext, input),
     listLocalMessagesAfter: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listLocalMessagesAfter, input),
+    refreshGroupProfile: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.refreshGroupProfile, input),
     getConversationInfo: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getConversationInfo, input),
     addGroupMembers: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.addGroupMembers, input),

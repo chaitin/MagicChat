@@ -63,7 +63,7 @@ export type SendConversationVideoOptions = SendConversationMessageOptions & {
 }
 
 export type ClientDataContextValue = {
-  applyEntitySnapshot: (snapshot: Awaited<ReturnType<typeof resolveClientEntities>>, entities: EntityReference[], isCurrent: (entity: EntityReference) => boolean) => void
+  applyEntitySnapshot: (snapshot: Awaited<ReturnType<typeof resolveClientEntities>>, entities: EntityReference[], isCurrent: (entity: EntityReference) => boolean) => void | { syncedGroups: string[] }
   contactApps: ContactApp[]
   contactGroups: ContactGroup[]
   conversations: ClientConversation[]

@@ -396,7 +396,7 @@ test("choice unread wins mention ties and removes duplicate choice prefix", () =
 })
 
 test("cache v5 preserves normalized message rows while adding conversations", () => {
-  assert.equal(DATABASE_VERSION, 6)
+  assert.equal(DATABASE_VERSION, 7)
   assert.equal(requiresNormalizedMessageReset(3), true)
   assert.equal(requiresNormalizedMessageReset(4), false)
 

@@ -14,7 +14,7 @@ function load(path: string, dependencies: Record<string, unknown>) {
   const code = ts.transpileModule(readFileSync(new URL(path, import.meta.url), "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText
-  runInNewContext(code, { exports, queueMicrotask, setTimeout, clearTimeout, require: (name: string) => {
+  runInNewContext(code, { exports, performance, queueMicrotask, setTimeout, clearTimeout, require: (name: string) => {
     assert.ok(name in dependencies, name)
     return dependencies[name]
   } })
@@ -61,7 +61,8 @@ function fixture(count = 1322) {
 }
 
 test("Mobile冷启动和缓存重连均只获取一轮用户资料，实体接口仅补群权限", async (t) => {
-  const { manager, rows, requests } = fixture()
+  const { manager, rows, requests, setResolver } = fixture()
+  const traces: { phase: string; metrics?: { count?: number; elapsedMs?: number; failures?: number } }[] = []
   const entities: entitySync.EntityReference[][] = []
   const permissions: string[] = []
   const create = load("../src/realtime/entity-sync.ts", {
@@ -77,6 +78,7 @@ test("Mobile冷启动和缓存重连均只获取一轮用户资料，实体接�
     } },
     "@/data/query": { queryKeys: { currentUser: () => ["me"] } },
     "@/data/messages/message-manager": {},
+    "@/diagnostics/mobile-startup": { traceMobileStartup: (phase: string, metrics?: typeof traces[number]["metrics"]) => traces.push({ phase, metrics }) },
   }).createMobileEntitySync as typeof createMobileEntitySync
   const sync = create({ setQueryData: () => undefined, invalidateQueries: async () => undefined } as never, target, { isCurrent: () => true, onError: assert.fail })
   t.after(() => sync.dispose())
@@ -87,6 +89,14 @@ test("Mobile冷启动和缓存重连均只获取一轮用户资料，实体接�
   assert.equal(requests.flat().length, 1322)
   assert.deepEqual(entities, [[{ type: "group", id: "group" }]])
   assert.deepEqual(permissions, ["group"])
+  assert.deepEqual(traces.map((entry) => entry.phase), [
+    "sync.entities.directory.start", "sync.entities.directory.ready",
+    "sync.entities.profiles.start", "sync.entities.profiles.ready",
+    "sync.entities.groups.start", "sync.entities.groups.ready",
+  ])
+  assert.equal(traces.find((entry) => entry.phase === "sync.entities.profiles.ready")?.metrics?.count, 1322)
+  assert.equal(traces.find((entry) => entry.phase === "sync.entities.groups.ready")?.metrics?.count, 1)
+  assert.ok(traces.filter((entry) => entry.phase.endsWith(".ready")).every((entry) => entry.metrics!.elapsedMs! >= 0))
   for (const row of rows.values()) row.cached_at = Date.now() - 1000
   await sync.reconcile()
   assert.equal(requests.length, 6)
@@ -94,6 +104,13 @@ test("Mobile冷启动和缓存重连均只获取一轮用户资料，实体接�
   assert.equal(requests.slice(3).flat().length, 1322)
   assert.deepEqual(entities[1], [{ type: "group", id: "group" }])
   assert.equal((await manager.getSnapshot(target)).usersById.me?.online, true)
+  for (const row of rows.values()) row.cached_at = Date.now() - 1000
+  const failure = new Error("private-user-data")
+  setResolver(async () => { throw failure })
+  await assert.rejects(sync.reconcile(), (error) => error === failure)
+  assert.equal(traces.at(-1)?.phase, "sync.entities.profiles.failed")
+  assert.equal(traces.at(-1)?.metrics?.failures, 1)
+  assert.ok(!JSON.stringify(traces).includes("private-user-data"))
 })
 
 test("Mobile资料按500分批串行加载，保留去重和缓存复用", async () => {

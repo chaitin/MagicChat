@@ -1,1 +1,1 @@
-export const DATABASE_VERSION = 6
+export const DATABASE_VERSION = 7

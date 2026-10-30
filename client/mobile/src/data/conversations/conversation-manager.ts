@@ -145,8 +145,8 @@ export function createConversationManager(dependencies: Dependencies) {
       revision: number,
       startedAt: number,
       isCurrent: () => boolean,
-    ): Promise<void> {
-      if (!isCurrent()) return
+    ): Promise<boolean> {
+      if (!isCurrent()) return false
       const updated = await this.patch(target, value.id, (current) =>
         !isCurrent() || (current.entityRevision ?? 0) > revision ? {} : {
           entityRevision: revision,
@@ -161,17 +161,22 @@ export function createConversationManager(dependencies: Dependencies) {
       if (!updated && isCurrent()) {
         await this.upsert(target, { ...value, entityRevision: revision }, { source: "http", startedAt })
       }
+      const applied = await this.get(target, value.id)
+      if (!isCurrent() || !applied || applied.entityRevision !== revision) return false
       const topics = await this.list(target)
       for (const topic of topics) {
-        if (topic.topic?.parentConversationId !== value.id || !isCurrent()) continue
-        await this.patch(target, topic.id, (current) => !isCurrent() ? {} : {
+        if (topic.topic?.parentConversationId !== value.id) continue
+        if (!isCurrent() || (topic.entityRevision ?? 0) > revision) return false
+        const updatedTopic = await this.patch(target, topic.id, (current) => !isCurrent() || (current.entityRevision ?? 0) > revision ? {} : {
           avatar: value.avatar,
           members: value.members,
           entityRevision: revision,
           canSend: !current.topic?.archived && value.canSend !== false,
           topic: current.topic ? { ...current.topic, parentConversationName: value.name } : undefined,
         })
+        if (!updatedTopic || (await this.get(target, topic.id))?.entityRevision !== revision) return false
       }
+      return isCurrent()
     },
 
     async remove(

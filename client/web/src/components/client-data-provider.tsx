@@ -506,7 +506,9 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     entitySnapshotGenerationRef.current += 1
     const generation = conversationAccountGenerationRef.current
     const valid = (entity: EntityReference) => mountedRef.current &&
-      generation === conversationAccountGenerationRef.current && isCurrent(entity)
+      generation === conversationAccountGenerationRef.current && isCurrent(entity) &&
+      (entity.type !== "group" || snapshot.versions[entityKey(entity)] === undefined ||
+        (conversationsRef.current.find((item) => item.id === entity.id)?.entityRevision ?? 0) <= snapshot.versions[entityKey(entity)])
     const wanted = new Set(entities.filter(valid).map(entityKey))
     for (const user of snapshot.users) {
       if (!wanted.has(`user:${user.id}`)) continue
@@ -563,6 +565,8 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
       }
       return next
     })
+    return { syncedGroups: entities.filter((entity) => entity.type === "group" && valid(entity) &&
+      snapshot.conversations.some((item) => item.id === entity.id)).map((entity) => entity.id) }
   }, [cacheUserProfiles])
 
   const refreshMe = useCallback(async () => {
