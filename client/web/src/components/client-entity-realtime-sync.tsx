@@ -24,8 +24,8 @@ export function ClientEntityRealtimeSync() {
   const apply = useEffectEvent(applyEntitySnapshot)
   const refreshDirectory = useEffectEvent(refreshContacts)
   const loaded = useEffectEvent((entity: EntityReference) => entity.type !== "user" || entity.id === me?.id || Boolean(usersById[entity.id]))
-  const knownGroups = useEffectEvent((): EntityReference[] => [
-    ...[...new Set([...contactGroups.filter((group) => group.joined).map((group) => group.id), ...conversations.filter((item) => item.type === "group").map((item) => item.id)])].map((id) => ({ type: "group" as const, id })),
+  const knownGroups = useEffectEvent((groups = contactGroups): EntityReference[] => [
+    ...[...new Set([...groups.filter((group) => group.joined).map((group) => group.id), ...conversations.filter((item) => item.type === "group").map((item) => item.id)])].map((id) => ({ type: "group" as const, id })),
   ])
 
   const reconcile = useEffectEvent(async () => {
@@ -35,10 +35,9 @@ export function ClientEntityRealtimeSync() {
     if (!sync || reconciliation?.sync !== sync) return
     if (reconciliation.work) return reconciliation.work
     const work = (async () => {
-      // Bootstrap already loaded the directory and user profiles before mounting us.
-      if (reconciliation.initialized) await refreshDirectory({ forceUsers: true })
+      const groups = await refreshDirectory({ forceUsers: reconciliation.initialized })
       reconciliation.initialized = true
-      if (syncRef.current === sync) await sync.refresh(knownGroups())
+      if (syncRef.current === sync) await sync.refresh(knownGroups(groups || undefined))
     })().finally(() => { if (reconciliation.work === work) reconciliation.work = undefined })
     reconciliation.work = work
     return work
@@ -55,7 +54,7 @@ export function ClientEntityRealtimeSync() {
       onError: (error) => console.warn("同步实体资料失败", error),
     })
     const directory = new DirectorySynchronizer({
-      refresh: () => refreshDirectory(),
+      refresh: async () => { await refreshDirectory() },
       isCurrent: () => active && currentAccountRef.current === accountId,
       onError: (error) => console.warn("同步通讯录失败", error),
     })

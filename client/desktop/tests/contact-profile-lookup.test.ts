@@ -55,6 +55,44 @@ const snapshot = (type: "user" | "app" | "group") => ({
   versions: { [`${type}:${id}`]: 1 },
 })
 
+test("通讯录1322人按500分批且最多两个资料请求并发", { timeout: 2000 }, async () => {
+  const db = new AccountDatabase(":memory:")
+  const ids = Array.from({ length: 1322 }, (_, i) => `user-${i}`)
+  const batches: string[][] = []
+  let release!: () => void
+  let started!: () => void
+  const blocked = new Promise<void>((resolve) => { release = resolve })
+  const firstTwo = new Promise<void>((resolve) => { started = resolve })
+  let active = 0
+  let peak = 0
+  const manager = new ContactManager(db, {
+    get: async (path: string) => {
+      assert.equal(path, "/api/client/contacts")
+      return { directory_mode: "organization", user_ids: ids, groups: [], apps: [] }
+    },
+    post: async (path: string, body: { user_ids: string[] }) => {
+      assert.equal(path, "/api/client/users/resolve")
+      batches.push(body.user_ids)
+      peak = Math.max(peak, ++active)
+      if (batches.length === 2) started()
+      await blocked
+      active -= 1
+      return { users: body.user_ids.map((userId) => ({ ...user, id: userId })) }
+    },
+  } as never)
+  try {
+    const work = manager.refresh()
+    await firstTwo
+    assert.equal(batches.length, 2)
+    release()
+    await work
+    assert.deepEqual(batches.map((batch) => batch.length), [500, 500, 322])
+    assert.equal(new Set(batches.flat()).size, 1322)
+    assert.equal(manager.getDirectory().users.length, 1322)
+    assert.equal(peak, 2)
+  } finally { release(); db.close() }
+})
+
 test("查看陌生人名片只返回资料与头像，不加入好友目录", async () => {
   const db = new AccountDatabase(":memory:")
   db.replaceContacts({ mode: "friends", users: [], groups: [], apps: [] })

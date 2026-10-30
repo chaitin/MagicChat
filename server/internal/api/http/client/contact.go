@@ -45,7 +45,7 @@ type contactGroupAvatarMemberResponse struct {
 }
 
 type resolveUsersRequest struct {
-	UserIDs []string `json:"user_ids"`
+	UserIDs []string `json:"user_ids" validate:"max=500"`
 }
 
 type resolveUsersResponse struct {
@@ -177,7 +177,7 @@ func (a *ContactAPI) listUsers(c echo.Context) error {
 // resolveUsers godoc
 //
 // @Summary 批量解析用户资料
-// @Description 根据用户 ID 批量返回启用用户的资料，每次最多 100 个。
+// @Description 根据用户 ID 批量返回启用用户的资料，每次最多 500 个。
 // @Tags 客户端通讯录
 // @Accept json
 // @Produce json

@@ -35,17 +35,20 @@ export function ProjectSidebar({ onCreate }: { onCreate: () => void }) {
     me,
     personalProject,
     projects,
+    projectsError,
+    projectsLoading,
     projectsLoadingMore,
     projectsNextCursor,
+    refreshProjects,
   } = useClientData()
   const [keyword, setKeyword] = React.useState("")
   const normalizedKeyword = normalizePinyinSearchQuery(keyword)
-  const visiblePersonalWorkspace = normalizedKeyword
+  const visiblePersonalWorkspace = personalProject && (normalizedKeyword
     ? createPinyinSearchText([
         personalProject.name,
         personalProject.description,
       ]).includes(normalizedKeyword)
-    : true
+    : true)
   const visibleProjects = normalizedKeyword
     ? projects.filter((project) =>
         createPinyinSearchText([project.name, project.description]).includes(
@@ -97,7 +100,16 @@ export function ProjectSidebar({ onCreate }: { onCreate: () => void }) {
         </div>
       </SidebarHeader>
       <SidebarContent className="gap-0">
-        {visiblePersonalWorkspace && (
+        {projectsLoading && !personalProject && projects.length === 0 && (
+          <div className="px-3 py-8 text-center text-sm text-muted-foreground" role="status">正在加载项目</div>
+        )}
+        {projectsError && (
+          <div className="px-3 py-4 text-center text-sm text-muted-foreground" role="alert">
+            <p>{projectsError.message}</p>
+            <Button onClick={() => void refreshProjects().catch(() => undefined)} variant="ghost">重试</Button>
+          </div>
+        )}
+        {personalProject && visiblePersonalWorkspace && (
           <ProjectListSection>
             <ProjectListButton
               active={projectId === personalProject.id}
@@ -119,7 +131,7 @@ export function ProjectSidebar({ onCreate }: { onCreate: () => void }) {
             ))}
           </ProjectListSection>
         )}
-        {!visiblePersonalWorkspace && visibleProjects.length === 0 && (
+        {!projectsLoading && !projectsError && !visiblePersonalWorkspace && visibleProjects.length === 0 && (
           <div className="px-3 py-8 text-center text-sm text-muted-foreground">
             没有匹配的项目
           </div>

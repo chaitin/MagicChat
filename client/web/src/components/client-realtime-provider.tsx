@@ -14,7 +14,6 @@ import {
   RealtimeContext,
   type RealtimeContextValue,
 } from "@/lib/realtime-context"
-import { ClientLoadingPage } from "@/components/client-loading-page"
 import { useAppInfo } from "@/lib/app-info-context"
 
 export function ClientRealtimeProvider({
@@ -113,11 +112,6 @@ export function ClientRealtimeProvider({
       subscribeRealtimeEvent,
     ]
   )
-
-  const ready = snapshot.ready || hasReadyOnce
-  if (!ready) {
-    return <ClientLoadingPage />
-  }
 
   return (
     <RealtimeContext.Provider value={value}>

@@ -10,6 +10,7 @@ const b: AuthenticatedTarget = { id: "server", url: "https://b.test", userId: "u
 function operations(run: (name: string, current: () => boolean) => Promise<void>): SessionBootstrapOperations {
   return {
     messages: ({ isCurrent }) => run("messages", isCurrent),
+    conversations: ({ isCurrent }) => run("conversations", isCurrent),
     currentUser: ({ isCurrent }) => run("currentUser", isCurrent),
     contacts: ({ isCurrent }) => run("contacts", isCurrent),
     projects: ({ isCurrent }) => run("projects", isCurrent),
@@ -24,11 +25,11 @@ test("same session shares inflight and runs every operation once", async () => {
   const second = coordinator.start(a, ops)
   assert.equal(first, second)
   await first
-  assert.deepEqual([...counts.values()], [1, 1, 1, 1])
+  assert.deepEqual([...counts.values()], [1, 1, 1, 1, 1])
   assert.equal(coordinator.getSnapshot(a).phase, "ready")
   assert.equal("realtime" in coordinator.getSnapshot(a).operations, false)
   await coordinator.start(a, ops)
-  assert.deepEqual([...counts.values()], [1, 1, 1, 1])
+  assert.deepEqual([...counts.values()], [1, 1, 1, 1, 1])
 })
 
 test("targets are isolated and failed operations alone retry", async () => {
@@ -66,7 +67,7 @@ test("rapid target switch prevents old operations from publishing into current p
   await assert.rejects(oldRun, /失效/)
 
   assert.deepEqual(projections, [
-    "new:messages", "new:currentUser", "new:contacts", "new:projects",
+    "new:currentUser", "new:conversations", "new:contacts", "new:projects", "new:messages",
   ])
   assert.equal(coordinator.getSnapshot(a).phase, "idle")
   assert.equal(coordinator.getSnapshot(b).phase, "ready")
@@ -104,7 +105,55 @@ test("provider remount contract does not repeat completed bootstrap", async () =
   await coordinator.start(a, ops)
   // TargetClientDataProvider calls start again when the provider remounts.
   await coordinator.start(a, ops)
-  assert.equal(runs, 4)
+  assert.equal(runs, 5)
+})
+
+test("首屏只等待个人资料和会话，不等待消息预热、通讯录或项目", async () => {
+  const coordinator = new SessionBootstrapCoordinator()
+  let release!: () => void
+  const background = new Promise<void>((resolve) => { release = resolve })
+  const completion = coordinator.start(a, operations(async (name) => {
+    if (!["currentUser", "conversations"].includes(name)) await background
+  }))
+  await coordinator.waitForCritical(a)
+  assert.equal(coordinator.getSnapshot(a).localAvailable, true)
+  assert.equal(coordinator.getSnapshot(a).ready, false)
+  assert.equal(coordinator.getSnapshot(a).operations.messages, "running")
+  let backgroundUpdates = 0
+  const unsubscribe = coordinator.subscribe(a, () => { backgroundUpdates += 1 })
+  release()
+  await completion
+  assert.equal(coordinator.getSnapshot(a).ready, true)
+  assert.ok(backgroundUpdates > 0)
+  unsubscribe()
+})
+
+test("非关键阶段失败不阻止首屏，关键身份失败仍拒绝登录", async () => {
+  const coordinator = new SessionBootstrapCoordinator()
+  const backgroundFailure = coordinator.start(a, operations(async (name) => {
+    if (name === "projects") throw new Error("projects offline")
+  }))
+  void backgroundFailure.catch(() => undefined)
+  await coordinator.waitForCritical(a)
+  await assert.rejects(backgroundFailure, /projects offline/)
+  const identityFailure = coordinator.start(b, operations(async (name) => {
+    if (name === "currentUser") throw new Error("401")
+  }))
+  void identityFailure.catch(() => undefined)
+  await assert.rejects(coordinator.waitForCritical(b), /401/)
+  await assert.rejects(identityFailure, /401/)
+})
+
+test("切账号立即取消旧首屏等待，不接受迟到的关键数据", async () => {
+  const coordinator = new SessionBootstrapCoordinator()
+  let release!: () => void
+  const blocked = new Promise<void>((resolve) => { release = resolve })
+  const completion = coordinator.start(a, operations(async () => blocked))
+  const critical = assert.rejects(coordinator.waitForCritical(a), /失效/)
+  coordinator.invalidate(a)
+  await critical
+  release()
+  await assert.rejects(completion, /失效/)
 })
 
 test("subscriptions are released across remounts", async () => {

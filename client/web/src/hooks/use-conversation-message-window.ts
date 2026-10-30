@@ -55,7 +55,7 @@ export function useConversationMessageWindow({
   }, [coordinator])
 
   const ensureConversationMessages = useCallback(
-    (conversationId: string) => {
+    (conversationId: string, options: { quiet?: boolean; limit?: number } = {}) => {
       if (!conversationId) {
         return
       }
@@ -84,8 +84,8 @@ export function useConversationMessageWindow({
         loading: true,
       }))
 
-      void listConversationMessages(conversationId, {
-        limit: messagePageLimit,
+      return listConversationMessages(conversationId, {
+        limit: options.limit ?? messagePageLimit,
       })
         .then((result) => {
           if (!coordinator.requestIsCurrent(conversationId, version)) {
@@ -125,7 +125,7 @@ export function useConversationMessageWindow({
             loaded: false,
             loading: false,
           }))
-          toast.error(message)
+          if (!options.quiet) toast.error(message)
         })
         .finally(() => {
           coordinator.finishRequest("initial", conversationId, requestToken)
@@ -303,7 +303,7 @@ export function useConversationMessageWindow({
   )
 
   const replaceWithLatestMessages = useCallback(
-    (conversationId: string) => {
+    (conversationId: string, options: { quiet?: boolean; limit?: number } = {}) => {
       if (!conversationId) {
         return
       }
@@ -312,18 +312,18 @@ export function useConversationMessageWindow({
         ...currentState,
         error: null,
         focus: null,
-        loaded: false,
-        loading: true,
+        loaded: options.quiet ? currentState.loaded : false,
+        loading: !options.quiet,
         loadingAfter: false,
         loadingBefore: false,
-        messages: [],
-        page: null,
+        messages: options.quiet ? currentState.messages : [],
+        page: options.quiet ? currentState.page : null,
         pendingLatestMessageCount: 0,
         viewMode: "latest",
       }))
 
-      void listConversationMessages(conversationId, {
-        limit: messagePageLimit,
+      return listConversationMessages(conversationId, {
+        limit: options.limit ?? messagePageLimit,
       })
         .then((result) => {
           if (!coordinator.requestIsCurrent(conversationId, version)) {
@@ -362,10 +362,10 @@ export function useConversationMessageWindow({
           updateConversationMessageState(conversationId, (currentState) => ({
             ...currentState,
             error: message,
-            loaded: false,
+            loaded: options.quiet ? currentState.loaded : false,
             loading: false,
           }))
-          toast.error(message)
+          if (!options.quiet) toast.error(message)
         })
     },
     [
@@ -531,12 +531,12 @@ export function useConversationMessageWindow({
   )
 
   const returnToLatestConversationMessages = useCallback(
-    (conversationId: string) => replaceWithLatestMessages(conversationId),
+    (conversationId: string, options?: { quiet?: boolean; limit?: number }) => replaceWithLatestMessages(conversationId, options),
     [replaceWithLatestMessages]
   )
 
   const syncAfterConversationMessages = useCallback(
-    (conversationId: string, afterSeq: number, targetSeq: number) => {
+    (conversationId: string, afterSeq: number, targetSeq: number, options: { quiet?: boolean } = {}) => {
       const state = conversationMessageStatesRef.current[conversationId]
       if (
         coordinator.getDesiredMode(conversationId) === "history" ||
@@ -548,7 +548,7 @@ export function useConversationMessageWindow({
       if (!requestToken) return
       const version = coordinator.getRequestVersion(conversationId)
 
-      void (async () => {
+      return (async () => {
         let cursor = afterSeq
         for (
           let pageIndex = 0;
@@ -557,7 +557,7 @@ export function useConversationMessageWindow({
         ) {
           const result = await listConversationMessages(conversationId, {
             afterSeq: cursor,
-            limit: messagePageLimit,
+            limit: Math.min(messagePageLimit, targetSeq - cursor),
           })
           if (!coordinator.requestIsCurrent(conversationId, version)) return
           const lastReceivedMessage = result.messages.at(-1)
@@ -590,7 +590,13 @@ export function useConversationMessageWindow({
       })()
         .catch((error: unknown) => {
           if (coordinator.requestIsCurrent(conversationId, version)) {
-            toast.error(getClientDataErrorMessage(error, "同步新消息失败"))
+            const message = getClientDataErrorMessage(error, "同步新消息失败")
+            updateConversationMessageState(conversationId, (currentState) => ({
+              ...currentState, error: message,
+              latestKnownSeq: Math.max(currentState.latestKnownSeq, targetSeq),
+              page: currentState.page ? { ...currentState.page, hasMoreAfter: true } : null,
+            }))
+            if (!options.quiet) toast.error(message)
           }
         })
         .finally(() =>

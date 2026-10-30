@@ -107,7 +107,7 @@ describe("实体实时同步", () => {
 
   it("切账号后，旧目录恢复完成不能触发新账号实体对账", async () => {
     let finish!: () => void
-    mocks.refresh.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve }))
+    mocks.refresh.mockResolvedValueOnce(undefined).mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve }))
     mocks.resolve.mockResolvedValue({ versions: {}, removed: [] })
     mocks.data.contactGroups = [{ id: "old-group", joined: true }]
     mocks.realtime.ready = true
@@ -117,7 +117,7 @@ describe("实体实时同步", () => {
     view.rerender(<ClientEntityRealtimeSync />)
     mocks.realtime.ready = true
     view.rerender(<ClientEntityRealtimeSync />)
-    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledTimes(2))
     mocks.data.me = { id: "other" }
     mocks.data.contactGroups = [{ id: "new-group", joined: true }]
     view.rerender(<ClientEntityRealtimeSync />)
@@ -127,19 +127,19 @@ describe("实体实时同步", () => {
     expect(mocks.resolve.mock.calls[1]?.[0]).toEqual([{ type: "group", id: "new-group" }])
   })
 
-  it("首次就绪不重复请求已加载的全员资料和应用", async () => {
+  it("首次对账只刷新目录，不强制重拉已加载的全员资料和应用", async () => {
     mocks.data.usersById = Object.fromEntries(Array.from({ length: 1322 }, (_, i) => [`user-${i}`, { id: `user-${i}` }]))
     mocks.data.contactApps = [{ id: "app1" }]
     mocks.realtime.ready = true
     render(<ClientEntityRealtimeSync />)
     await act(async () => undefined)
-    expect(mocks.refresh).not.toHaveBeenCalled()
+    expect(mocks.refresh).toHaveBeenCalledExactlyOnceWith({ forceUsers: false })
     expect(mocks.resolve).not.toHaveBeenCalled()
   })
 
   it("重连和回前台同时发生时合并对账，不重复刷新资料", async () => {
     let finish!: () => void
-    mocks.refresh.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve }))
+    mocks.refresh.mockResolvedValueOnce(undefined).mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve }))
     mocks.resolve.mockResolvedValue({ versions: {}, removed: [] })
     mocks.data.contactGroups = [{ id: "group", joined: true }]
     mocks.realtime.ready = true
@@ -150,17 +150,25 @@ describe("实体实时同步", () => {
     view.rerender(<ClientEntityRealtimeSync />)
     mocks.realtime.ready = true
     view.rerender(<ClientEntityRealtimeSync />)
-    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledTimes(2))
     act(() => {
       document.dispatchEvent(new Event("visibilitychange"))
       document.dispatchEvent(new Event("visibilitychange"))
     })
     await act(async () => finish())
     await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(2))
-    expect(mocks.refresh).toHaveBeenCalledTimes(1)
+    expect(mocks.refresh).toHaveBeenCalledTimes(2)
   })
 
-  it("首次握手复用启动资料，重连只刷新一轮目录并对账群权限", async () => {
+  it("目录返回的新群立即对账权限，不依赖React提交目录状态的时序", async () => {
+    mocks.realtime.ready = true
+    mocks.refresh.mockResolvedValue([{ id: "joined", joined: true }, { id: "public", joined: false }])
+    mocks.resolve.mockResolvedValue({ versions: {}, removed: [] })
+    render(<ClientEntityRealtimeSync />)
+    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledExactlyOnceWith([{ type: "group", id: "joined" }]))
+  })
+
+  it("首次握手后台加载目录，重连只刷新一轮资料并对账群权限", async () => {
     mocks.data.contactApps = [{ id: "app1" }]
     mocks.data.usersById = Object.fromEntries(Array.from({ length: 1322 }, (_, i) => [`user-${i}`, { id: `user-${i}` }]))
     mocks.data.contactGroups = [{ id: "g1", joined: true }]
@@ -170,16 +178,16 @@ describe("实体实时同步", () => {
     mocks.realtime.ready = true
     view.rerender(<ClientEntityRealtimeSync />)
     await waitFor(() => expect(mocks.resolve).toHaveBeenCalled())
-    expect(mocks.refresh).not.toHaveBeenCalled()
+    expect(mocks.refresh).toHaveBeenCalledExactlyOnceWith({ forceUsers: false })
     expect(mocks.resolve.mock.calls[0]?.[0]).toEqual([{ type: "group", id: "g1" }, { type: "group", id: "g2" }])
     mocks.realtime.ready = false
     view.rerender(<ClientEntityRealtimeSync />)
     mocks.realtime.ready = true
     view.rerender(<ClientEntityRealtimeSync />)
     await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(2))
-    expect(mocks.refresh).toHaveBeenCalledTimes(1)
+    expect(mocks.refresh).toHaveBeenCalledTimes(2)
     expect(mocks.refresh).toHaveBeenCalledWith({ forceUsers: true })
-    expect(mocks.refresh.mock.invocationCallOrder[0]).toBeLessThan(mocks.resolve.mock.invocationCallOrder[1]!)
+    expect(mocks.refresh.mock.invocationCallOrder[1]).toBeLessThan(mocks.resolve.mock.invocationCallOrder[1]!)
     expect(mocks.resolve.mock.calls[1]?.[0]).toEqual([{ type: "group", id: "g1" }, { type: "group", id: "g2" }])
   })
 })

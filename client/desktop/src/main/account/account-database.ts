@@ -41,6 +41,15 @@ export class AccountDatabase {
     this.search = new SearchRepository(this.database)
   }
 
+  hasConversationSnapshot() {
+    return Boolean(this.database.prepare("SELECT 1 FROM metadata WHERE key = ?").get("conversation_snapshot")) ||
+      Boolean(this.database.prepare("SELECT 1 FROM conversations WHERE current = 1 LIMIT 1").get())
+  }
+
+  markConversationSnapshotLoaded() {
+    this.database.prepare("INSERT OR REPLACE INTO metadata(key, value) VALUES (?, '1')").run("conversation_snapshot")
+  }
+
   upsertCurrentConversations(conversations: StoredConversation[]) {
     this.conversations.upsertCurrent(conversations)
   }

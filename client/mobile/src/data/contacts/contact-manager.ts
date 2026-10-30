@@ -7,10 +7,10 @@ import { createServerKey } from "@/data/server-key"
 import { resolveClientUsers } from "@/data/users/user-profiles-api"
 import type { resolveClientEntities } from "@/data/contacts/entity-sync-api"
 import { preserveEntityMetadata, type EntityReference } from "../../../../shared/entity-sync"
+import { USER_PROFILE_BATCH_SIZE } from "../../../../shared/directory-sync"
 
 const PROFILE_TTL = 5 * 60_000
 const MISSING_TTL = 30_000
-const BATCH_SIZE = 100
 const EMPTY_DIRECTORY: ClientContactDirectory = { apps: [], groups: [], userIds: [] }
 
 export type ContactSnapshot = {
@@ -141,8 +141,8 @@ class ContactManager {
       const row = rows.get(id)
       return !(row && (row.missing_until ?? 0) > now) && !(row?.profile && now - row.cached_at < PROFILE_TTL)
     })
-    for (let offset = 0; offset < ids.length; offset += BATCH_SIZE) {
-      const batch = ids.slice(offset, offset + BATCH_SIZE)
+    for (let offset = 0; offset < ids.length; offset += USER_PROFILE_BATCH_SIZE) {
+      const batch = ids.slice(offset, offset + USER_PROFILE_BATCH_SIZE)
       // Retain the pre-request revision: the ordinary endpoint omits it, and newer entity events must win.
       const profiles = (await resolveClientUsers(target, batch)).map((profile) => ({
         ...profile, entityRevision: rows.get(profile.id)?.profile?.entityRevision,

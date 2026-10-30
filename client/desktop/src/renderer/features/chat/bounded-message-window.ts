@@ -38,8 +38,11 @@ export function mergeRefreshedMessages(
   incoming: DesktopMessage[],
   atBottom: boolean,
 ) {
-  // Incoming records win updates, while already loaded history remains available.
-  const merged = mergeLocalMessageWindows(current, incoming).messages
+  // Incoming records win updates, while history from this conversation remains available.
+  const previous = incoming.length
+    ? current.filter((message) => message.conversationId === incoming[0].conversationId)
+    : current
+  const merged = mergeLocalMessageWindows(previous, incoming).messages
   return boundMessageWindow(merged, atBottom ? "newer" : "older")
 }
 

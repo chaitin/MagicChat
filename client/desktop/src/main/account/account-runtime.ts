@@ -74,6 +74,7 @@ export class AccountRuntime {
   private initialization?: Promise<void>
   private revision = 0
   private initialized = false
+  private initialConversations: Promise<void> = Promise.resolve()
   private closed = false
   private realtimeReady = false
   private pushPresence?: ReturnType<typeof createPushPresenceReporter>
@@ -100,7 +101,7 @@ export class AccountRuntime {
 
   initialize(): Promise<void> {
     if (this.closed) return Promise.reject(new AuthFailure("account_closed", "账号数据已关闭"))
-    if (this.initialized) return this.realtimeManager!.waitUntilReady()
+    if (this.initialized) return Promise.resolve()
     this.initialization ??= this.initializeOnce()
     return this.initialization
   }
@@ -195,7 +196,6 @@ export class AccountRuntime {
   async markConversationRead(conversationId: string, upToSeq: number) {
     this.assertInitialized()
     await this.conversationManager!.markRead(conversationId, upToSeq)
-    this.notifyChanged(["conversations"], [conversationId])
     return null
   }
 
@@ -830,7 +830,12 @@ export class AccountRuntime {
           this.input.onSyncStateChange({ targetId: this.input.targetId, state })
         },
       })
-      await this.realtimeManager.start()
+      this.initialConversations = this.database.hasConversationSnapshot()
+        ? Promise.resolve()
+        : this.conversationManager.refreshSnapshot().then(() => undefined)
+      const online = this.realtimeManager.start()
+      void online.catch((error) => { if (!this.closed) console.warn("后台同步账号数据失败", error) })
+      await this.initialConversations
       if (this.closed) throw new AuthFailure("account_closed", "账号数据已关闭")
       this.initialized = true
       if (this.input.isDesktopActive) {
@@ -853,13 +858,22 @@ export class AccountRuntime {
 
   private async synchronize() {
     const results = await Promise.allSettled([
-      this.conversationManager!.refresh(),
+      (async () => {
+        // A connection always gets a post-subscription snapshot, after any initial HTTP load.
+        await this.initialConversations
+        if (this.closed) return
+        const snapshot = await this.conversationManager!.refreshSnapshot()
+        if (this.closed) return
+        this.notifyChanged(["conversations"], [])
+        await this.conversationManager!.synchronizeMessages(snapshot)
+      })(),
       this.entitySync!.reconcile(),
     ])
     const failure = results.find((result) => result.status === "rejected")
-    if (failure?.status === "rejected") throw failure.reason
     if (this.closed) throw new AuthFailure("account_closed", "账号数据已关闭")
+    // 部分任务失败不撤销其他任务已落库的数据，也不能漏掉它们的变更通知。
     this.notifyChanged(["conversations", "messages", "contacts"], [])
+    if (failure?.status === "rejected") throw failure.reason
   }
 
   private async applyRealtimeEvent(event: RealtimeEvent) {

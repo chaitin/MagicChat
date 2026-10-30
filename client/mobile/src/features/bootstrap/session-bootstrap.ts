@@ -4,8 +4,10 @@ import type { ClientMessageList } from "@/core/models"
 import type { AuthenticatedTarget } from "@/core/server-target"
 import { isUnauthorizedError } from "@/data/api-client"
 import { contactManager } from "@/data/contacts"
+import { conversationManager } from "@/data/conversations"
 import {
   projectContactsSnapshot,
+  projectConversationsSnapshot,
   projectProjectsSnapshot,
 } from "@/data/manager-query-projector"
 import { cacheBootstrappedConversationMessages } from "@/data/messages/message-query-cache"
@@ -25,6 +27,12 @@ export function createSessionBootstrapOperations({
   target: AuthenticatedTarget
 }): SessionBootstrapOperations {
   return {
+    conversations: async ({ isCurrent }) => {
+      const cached = await conversationManager.list(target)
+      if (!isCurrent()) return
+      const conversations = cached.length ? cached : (await conversationManager.refreshSnapshot(target)).snapshot
+      if (isCurrent()) projectConversationsSnapshot(queryClient, target, conversations)
+    },
     messages: async ({ isCurrent }) => {
       const publishPage = (conversationId: string, page: ClientMessageList) => {
         if (isCurrent()) cacheBootstrappedConversationMessages(queryClient, target, new Map([[conversationId, page]]))

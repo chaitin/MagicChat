@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -77,6 +78,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { ClientLoadingPage } from "@/components/client-loading-page"
 import { entityKey, preserveEntityMetadata, type EntityReference } from "../../../shared/entity-sync"
+import { USER_PROFILE_BATCH_SIZE } from "../../../shared/directory-sync"
+import { AUTO_MESSAGE_PAGE_SIZE, createMessageSyncBudget, runAutomaticMessageJobs, selectAutomaticConversations } from "../../../shared/message-sync-budget"
 import type { resolveClientEntities } from "@/lib/client-api/entity-sync"
 import { useConversationActions } from "@/hooks/use-conversation-actions"
 import { useConversationMessageRetention } from "@/hooks/use-conversation-message-retention"
@@ -86,14 +89,12 @@ import { useAppInfo } from "@/lib/app-info-context"
 
 type BootstrapState = "loading" | "ready" | "error"
 
-const minimumBootstrapLoadingMs = 1_000
 const refreshIntervalMs = 15_000
 const reactionSnapshotBatchSize = 100
 const choiceSnapshotBatchSize = 100
 const maxReactionSnapshotCatchUpAttempts = 3
 const userProfileCacheTtlMs = 5 * 60 * 1_000
 const unavailableUserCacheTtlMs = 30 * 1_000
-const userResolveBatchSize = 100
 
 type CachedUserProfile = {
   fetchedAt: number
@@ -194,6 +195,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
   )
   const userDeferredsRef = useRef<Map<string, UserProfileDeferred>>(new Map())
   const userFlushScheduledRef = useRef(false)
+  const automaticMessageSyncRef = useRef<Promise<void> | null>(null)
   const [me, setMe] = useState<ClientUser | null>(null)
   const [meError, setMeError] = useState<ClientDataRequestError | null>(null)
   const [meLoading, setMeLoading] = useState(true)
@@ -338,8 +340,8 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     userFlushScheduledRef.current = false
     const ids = Array.from(pendingUserIdsRef.current)
     pendingUserIdsRef.current.clear()
-    for (let index = 0; index < ids.length; index += userResolveBatchSize) {
-      const batch = ids.slice(index, index + userResolveBatchSize)
+    for (let index = 0; index < ids.length; index += USER_PROFILE_BATCH_SIZE) {
+      const batch = ids.slice(index, index + USER_PROFILE_BATCH_SIZE)
       // The ordinary profile endpoint has no entity revision; retain the request-start version so a racing event still wins.
       const revisions = new Map(batch.map((id) => [id, userCacheRef.current.get(id)?.profile.entityRevision]))
       try {
@@ -675,6 +677,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
         setIncomingFriendRequests([])
         setOutgoingFriendRequests([])
       }
+      return nextContacts.groups
     } catch (error) {
       if (!isCurrent()) return
       const requestError = handleError(error, "加载通讯录失败")
@@ -798,6 +801,8 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
   )
 
   const refreshProjects = useCallback(async () => {
+    const accountGeneration = conversationAccountGenerationRef.current
+    const isCurrent = () => mountedRef.current && conversationAccountGenerationRef.current === accountGeneration
     const isInitialLoad = personalProject === null && projects.length === 0
     setProjectsError(null)
     setProjectsLoading(isInitialLoad)
@@ -805,16 +810,20 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
 
     try {
       const page = await listClientProjects({ limit: 100 })
+      if (!isCurrent()) return
       setPersonalProject(page.personalProject)
       setProjects(page.projects)
       setProjectsNextCursor(page.nextCursor)
     } catch (error) {
+      if (!isCurrent()) return
       const requestError = handleError(error, "加载项目列表失败")
       setProjectsError(requestError)
       throw requestError
     } finally {
-      setProjectsLoading(false)
-      setProjectsRefreshing(false)
+      if (isCurrent()) {
+        setProjectsLoading(false)
+        setProjectsRefreshing(false)
+      }
     }
   }, [handleError, personalProject, projects.length])
 
@@ -1696,77 +1705,63 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
 
   const syncLoadedConversationMessages = useCallback(
     (snapshot?: ClientConversation[]) => {
-      const serverSeqById = new Map(
-        (Array.isArray(snapshot) ? snapshot : conversationsRef.current).map(
-          (conversation) => [conversation.id, conversation.lastMessageSeq]
-        )
-      )
-      let remaining = 100
-      for (const [conversationId, state] of Object.entries(
-        conversationMessageStatesRef.current
-      ).sort(
-        ([left], [right]) =>
-          Number(right === includedConversationIdRef.current) -
-          Number(left === includedConversationIdRef.current)
-      )) {
-        if (!state.loaded) {
-          continue
+      const accountGeneration = conversationAccountGenerationRef.current
+      const isCurrent = () => mountedRef.current && conversationAccountGenerationRef.current === accountGeneration
+      const previous = automaticMessageSyncRef.current
+      const work = (previous?.catch(() => undefined) ?? Promise.resolve()).then(async () => {
+        if (!isCurrent()) return
+        const budget = createMessageSyncBudget()
+        const jobs: (() => Promise<void>)[] = []
+        const conversations = Array.isArray(snapshot) ? snapshot : conversationsRef.current
+        for (const conversation of selectAutomaticConversations(conversations, includedConversationIdRef.current)) {
+          const conversationId = conversation.id
+          const state = conversationMessageStatesRef.current[conversationId]
+          const newestSeq = state ? getNewestMessageSeq(state) : 0
+          const missing = conversation.lastMessageSeq - newestSeq
+          const decision = state?.viewMode === "history"
+            ? { type: "skip" as const }
+            : budget.decide(conversation, { httpSyncedThroughSeq: newestSeq })
+          const refreshLatest = decision.type === "skip" && missing === 0 &&
+            conversationId === includedConversationIdRef.current && state?.viewMode === "latest"
+            ? budget.decide({ lastMessageSeq: Math.min(conversation.lastMessageSeq, AUTO_MESSAGE_PAGE_SIZE) }, undefined)
+            : { type: "skip" as const }
+          if (missing > 0 && state?.page) {
+            updateConversationMessageState(conversationId, (current) => ({
+              ...current, latestKnownSeq: Math.max(current.latestKnownSeq, conversation.lastMessageSeq),
+              page: current.page ? { ...current.page, hasMoreAfter: true } : null,
+            }))
+          }
+          jobs.push(async () => {
+            if (!isCurrent()) return
+            if (decision.type === "after") {
+              await syncAfterConversationMessages(conversationId, decision.afterSeq, decision.targetSeq, { quiet: true })
+            } else if (decision.type === "latest") {
+              if (state?.loaded) await returnToLatestConversationMessages(conversationId, { quiet: true, limit: decision.limit })
+              else await ensureConversationMessages(conversationId, { quiet: true, limit: decision.limit })
+            } else if (refreshLatest.type === "latest") {
+              await returnToLatestConversationMessages(conversationId, { quiet: true, limit: refreshLatest.limit })
+            }
+            if (!isCurrent() || !state?.loaded) return
+            const metadata: Promise<unknown>[] = [refreshMessageReactions(conversationId, state.messages.map((message) => message.id))]
+            const choices = state.messages.filter((message) => message.body.type === "choice").map((message) => message.id)
+            for (let index = 0; index < choices.length; index += choiceSnapshotBatchSize) {
+              metadata.push(listConversationMessageChoiceSnapshots(conversationId, choices.slice(index, index + choiceSnapshotBatchSize))
+                .then((result) => { if (isCurrent()) applyChoiceSnapshots(result) }))
+            }
+            await Promise.allSettled(metadata)
+          })
         }
-
-        const newestSeq = getNewestMessageSeq(state)
-        const missing =
-          (serverSeqById.get(conversationId) ?? newestSeq) - newestSeq
-        if (
-          newestSeq > 0 &&
-          missing > 0 &&
-          missing <= 100 &&
-          missing <= remaining
-        ) {
-          remaining -= missing
-          syncAfterConversationMessages(
-            conversationId,
-            newestSeq,
-            newestSeq + missing
-          )
-        } else if (missing > 0 && state.page) {
-          updateConversationMessageState(conversationId, (current) => ({
-            ...current,
-            latestKnownSeq: Math.max(
-              current.latestKnownSeq,
-              newestSeq + missing
-            ),
-            page: current.page ? { ...current.page, hasMoreAfter: true } : null,
-          }))
-        } else if (
-          missing === 0 &&
-          conversationId === includedConversationIdRef.current &&
-          state.viewMode === "latest"
-        ) {
-          returnToLatestConversationMessages(conversationId)
-        }
-        void refreshMessageReactions(
-          conversationId,
-          state.messages.map((message) => message.id)
-        ).catch(() => undefined)
-        const choiceMessageIds = state.messages
-          .filter((message) => message.body.type === "choice")
-          .map((message) => message.id)
-        for (
-          let index = 0;
-          index < choiceMessageIds.length;
-          index += choiceSnapshotBatchSize
-        ) {
-          void listConversationMessageChoiceSnapshots(
-            conversationId,
-            choiceMessageIds.slice(index, index + choiceSnapshotBatchSize)
-          )
-            .then(applyChoiceSnapshots)
-            .catch(() => undefined)
-        }
-      }
+        await runAutomaticMessageJobs(jobs, (run) => run())
+      })
+      automaticMessageSyncRef.current = work
+      void work.finally(() => {
+        if (automaticMessageSyncRef.current === work) automaticMessageSyncRef.current = null
+      }).catch(() => undefined)
+      return work
     },
     [
       applyChoiceSnapshots,
+      ensureConversationMessages,
       refreshMessageReactions,
       returnToLatestConversationMessages,
       syncAfterConversationMessages,
@@ -1857,26 +1852,17 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     const generation = ++bootstrapGenerationRef.current
     const isCurrent = () =>
       mountedRef.current && bootstrapGenerationRef.current === generation
-    const minimumLoading = wait(minimumBootstrapLoadingMs)
 
     try {
-      const [nextMe, nextContacts, nextConversations, nextProjects] =
+      const [nextMe, nextConversations] =
         await Promise.all([
           getCurrentClientUser(),
-          listClientContacts(),
           shouldLoadConversations
             ? listClientConversations(undefined, {
                 includeConversationId: includedConversationIdRef.current,
               })
             : Promise.resolve([]),
-          listClientProjects({ limit: 100 }),
         ])
-
-      await ensureUsers(nextContacts.userIds)
-      if (nextContacts.directoryMode === "friends") {
-        await refreshFriendRequests()
-      }
-      await minimumLoading
       if (!isCurrent()) return
       if (entityGeneration === entitySnapshotGenerationRef.current) setMe(nextMe)
       cacheUserProfiles([
@@ -1892,12 +1878,6 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
           type: "user",
         },
       ])
-      if (entityGeneration === entitySnapshotGenerationRef.current) {
-        setContactApps((current) => nextContacts.apps.map((item) => ({ ...item, entityRevision: current.find((value) => value.id === item.id)?.entityRevision })))
-        setContactDirectoryMode(nextContacts.directoryMode)
-        setContactGroups((current) => nextContacts.groups.map((item) => ({ ...item, entityRevision: current.find((value) => value.id === item.id)?.entityRevision })))
-        setContactUserIds(nextContacts.userIds)
-      }
       const accountChanged = shouldReplaceConversationSnapshot(
         conversationAccountIdRef.current,
         nextMe.id
@@ -1934,17 +1914,10 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
         )
       )
       if (accountChanged) setLatestCachedMessages({})
-      setPersonalProject(nextProjects.personalProject)
-      setProjects(nextProjects.projects)
-      setProjectsNextCursor(nextProjects.nextCursor)
       setBootstrapState("ready")
     } catch (error) {
       if (!isCurrent()) return
       const requestError = handleError(error, "加载工作区失败")
-
-      if (requestError.status !== 401 && requestError.code !== "unauthorized") {
-        await minimumLoading
-      }
 
       if (!isCurrent()) return
       setBootstrapError(requestError)
@@ -1952,18 +1925,25 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     } finally {
       if (isCurrent()) {
         setMeLoading(false)
-        setContactsLoading(false)
-        setProjectsLoading(false)
       }
     }
   }, [
     cacheUserProfiles,
-    ensureUsers,
     handleError,
     invalidateConversationMessageRequests,
-    refreshFriendRequests,
     shouldLoadConversations,
   ])
+
+  const refreshSecondaryData = useEffectEvent(() => {
+    void refreshContacts().catch(() => undefined)
+    void refreshProjects().catch(() => undefined)
+  })
+  useEffect(() => {
+    if (bootstrapState !== "ready") return
+    let active = true
+    queueMicrotask(() => { if (active) refreshSecondaryData() })
+    return () => { active = false }
+  }, [bootstrapState, me?.id])
 
   const retryBootstrap = useCallback(async () => {
     setBootstrapError(null)
@@ -2092,7 +2072,7 @@ export function ClientDataProvider({ children }: { children: ReactNode }) {
     )
   }
 
-  if (!me || !personalProject) {
+  if (!me) {
     return <ClientLoadingPage />
   }
 
@@ -2455,12 +2435,6 @@ function getConversationLastMessageSender(
     nickname: member?.nickname ?? "",
     type: message.sender.type,
   }
-}
-
-function wait(ms: number) {
-  return new Promise<void>((resolve) => {
-    window.setTimeout(resolve, ms)
-  })
 }
 
 function ClientDataErrorPage({

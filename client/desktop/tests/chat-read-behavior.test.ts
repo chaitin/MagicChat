@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 import ts from "typescript"
+import { AuthFailure } from "../src/shared/auth.ts"
 import type { DesktopConversation, DesktopMessage } from "../src/shared/account-data.ts"
 
 const hooks = "../src/renderer/features/chat/hooks/use-chat-data.ts"
@@ -72,6 +73,7 @@ function fixture(focused = false) {
     hasFocus: () => focused,
   })
   const submitRead = callback(ipc, "ipcRead", {
+    AuthFailure,
     getMainWindow: () => ({
       isDestroyed: () => false,
       isFocused: () => nativeFocused,
@@ -107,11 +109,13 @@ function fixture(focused = false) {
     messages: [message("room", 98), message("room", 99), message("room", 100)],
     selectedIdRef: { current: "room" as string | null },
     loadedConversationIdRef: { current: "room" as string | null },
+    loadedConversationTargetRef: { current: "account" as string | null },
     openReadIntent: null as OpenReadIntent,
     setOpenReadIntent: (value: OpenReadIntent | ((current: OpenReadIntent) => OpenReadIntent)) => {
       scope.openReadIntent = typeof value === "function" ? value(scope.openReadIntent) : value
     },
     readInFlightRef: { current: new Set<string>() },
+    acknowledgedReadSeqRef: { current: new Map<string, number>() },
     shouldReloadConversationListForSelection: () => false,
     setTransientConversation: () => {},
     setConversationRevision: () => {},
@@ -181,6 +185,7 @@ test("主动进入等到对应会话加载完成，不读取上一会话残留�
   f.read()
   assert.equal(f.calls.length, 0)
   f.scope.loadedConversationIdRef.current = "other"
+  f.scope.loadedConversationTargetRef.current = "account"
   f.scope.loadingMessages = true
   f.read()
   assert.equal(f.calls.length, 0)
@@ -198,6 +203,7 @@ test("快速切换会话后旧消息不能清除原会话或新会话未读", (t
   f.select("other")
   f.scope.messages = [message("room", 100)]
   f.scope.loadedConversationIdRef.current = "other"
+  f.scope.loadedConversationTargetRef.current = "account"
   f.read()
   assert.equal(f.calls.length, 0)
 })
@@ -211,6 +217,7 @@ test("旧渲染的已读Effect不能清掉后来点击的新会话阅读意图",
   staleRead()
   assert.equal(f.scope.openReadIntent?.conversationId, "other")
   f.scope.loadedConversationIdRef.current = "other"
+  f.scope.loadedConversationTargetRef.current = "account"
   f.scope.messages = [message("other", 100)]
   f.read()
   assert.equal(f.calls.at(-1)?.conversationId, "other")
@@ -350,6 +357,7 @@ for (const state of [
     const calls: unknown[] = []
     const input = { targetId: "account", conversationId: "room", upToSeq: 100 }
     const operation = callback(ipc, "ipcRead", {
+      AuthFailure,
       getMainWindow: () =>
         state === "missing"
           ? null
@@ -366,7 +374,12 @@ for (const state of [
         },
       },
     })
-    await operation(input)
+    if (state === "focused") await operation(input)
+    else
+      await assert.rejects(
+        operation(input),
+        (error: unknown) => error instanceof AuthFailure && error.code === "window_inactive",
+      )
     assert.deepEqual(calls, state === "focused" ? [input] : [])
   })
 }

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 import { runInNewContext } from "node:vm"
 import ts from "typescript"
-import { DirectorySynchronizer, directoryUpdatedEvent } from "../../shared/directory-sync.ts"
+import { DirectorySynchronizer, directoryUpdatedEvent, USER_PROFILE_BATCH_SIZE } from "../../shared/directory-sync.ts"
 import * as entitySync from "../../shared/entity-sync.ts"
 
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve))
@@ -142,6 +142,7 @@ test("Mobile资料事件不能让目录刷新静默丢掉新注册ID", async () 
     "@/data/server-key": { createServerKey: () => "server" },
     "@/data/users/user-profiles-api": {},
     "../../../../shared/entity-sync": entitySync,
+    "../../../../shared/directory-sync": { USER_PROFILE_BATCH_SIZE },
   })
   const manager = module.contactManager as {
     refresh: (target: unknown) => Promise<{ directory: typeof stored }>

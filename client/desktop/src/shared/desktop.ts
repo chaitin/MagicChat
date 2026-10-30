@@ -96,6 +96,7 @@ export type SystemInfo = {
 }
 
 export const DESKTOP_CHANNELS = {
+  rendererReady: "desktop-next:v1:renderer-ready",
   openHomepage: "desktop-next:v1:open-homepage",
   openExternalLink: "desktop-next:v1:open-external-link",
   openWebLink: "desktop-next:v1:open-web-link",

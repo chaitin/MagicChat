@@ -38,8 +38,7 @@ export function ClientConversationRealtimeSync() {
     updateConversationLastReadSeq,
     updateMessageTopic,
   } = useClientData()
-  const hasSeenRealtimeReadyRef = React.useRef(realtimeReady)
-  const previousRealtimeReadyRef = React.useRef(realtimeReady)
+  const previousRealtimeReadyRef = React.useRef(false)
   const activeConversationId = React.useMemo(
     () =>
       matchPath("/chat/:conversationId", location.pathname)?.params
@@ -259,14 +258,10 @@ export function ClientConversationRealtimeSync() {
       return
     }
 
-    if (hasSeenRealtimeReadyRef.current) {
-      void refreshConversations()
-        .then((snapshot) => syncLoadedConversationMessages(snapshot))
-        .catch(() => undefined)
-    } else {
-      syncLoadedConversationMessages()
-    }
-    hasSeenRealtimeReadyRef.current = true
+    // Fetch after subscribing, including on first connect, to close the bootstrap gap.
+    void refreshConversations()
+      .then((snapshot) => syncLoadedConversationMessages(snapshot))
+      .catch(() => undefined)
   }, [realtimeReady, refreshConversations, syncLoadedConversationMessages])
 
   return null

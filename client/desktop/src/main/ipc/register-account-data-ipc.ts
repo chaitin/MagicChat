@@ -152,7 +152,7 @@ export function registerAccountDataIpc({
     if (
       !window || window.isDestroyed() || !window.isVisible() ||
       window.isMinimized() || !window.isFocused()
-    ) return null
+    ) throw new AuthFailure("window_inactive", "窗口尚未就绪，暂不标记已读")
     return auth.markConversationRead(input as MarkConversationReadInput)
   })
   handle(ACCOUNT_DATA_CHANNELS.createGroupConversation, (input) =>

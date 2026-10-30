@@ -11,6 +11,6 @@ export function combineClientDataState(input: {
   bootstrapState: ReturnType<typeof getClientDataBootstrapState>
 }) {
   const bootstrapReady = input.enabled && input.bootstrapState.ready
-  const isReady = input.enabled && input.currentUserAvailable && input.contactsAvailable && input.conversationsAvailable && input.contactsLocalReady && input.conversationsLocalReady && input.profilesReady
+  const isReady = input.enabled && input.currentUserAvailable && input.conversationsAvailable && input.conversationsLocalReady
   return { bootstrapReady, blockingBootstrapError: input.enabled ? input.bootstrapState.blockingError : null, isReady }
 }

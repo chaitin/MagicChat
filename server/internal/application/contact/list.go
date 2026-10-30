@@ -53,8 +53,8 @@ func (s *Service) ListUsers(ctx context.Context, cmd ListUsersCommand) (ListUser
 }
 
 func (s *Service) ResolveUsers(ctx context.Context, cmd ResolveUsersCommand) (ResolveUsersResult, error) {
-	if len(cmd.UserIDs) > 100 {
-		return ResolveUsersResult{}, invalidError("每次最多查询 100 个用户", nil)
+	if len(cmd.UserIDs) > 500 {
+		return ResolveUsersResult{}, invalidError("每次最多查询 500 个用户", nil)
 	}
 	ids := make([]string, 0, len(cmd.UserIDs))
 	seen := make(map[string]struct{}, len(cmd.UserIDs))
@@ -74,7 +74,9 @@ func (s *Service) ResolveUsers(ctx context.Context, cmd ResolveUsersCommand) (Re
 		return ResolveUsersResult{Users: []User{}}, nil
 	}
 	var values []store.User
-	if err := s.db.WithContext(ctx).Where("id IN ? AND status = ?", ids, store.UserStatusActive).Find(&values).Error; err != nil {
+	if err := s.db.WithContext(ctx).
+		Select("id", "email", "name", "nickname", "phone", "avatar", "last_online_at", "updated_at").
+		Where("id IN ? AND status = ?", ids, store.UserStatusActive).Find(&values).Error; err != nil {
 		return ResolveUsersResult{}, internalError(err)
 	}
 	valuesByID := make(map[string]store.User, len(values))

@@ -91,8 +91,10 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
   }, [queryClient])
   const bootstrapBeforeCommit = useCallback(async (account: AccountRecord) => {
     const { completion, preparation } = beginBootstrap(account)
+    // Noncritical local warmup continues after the authenticated account is published.
+    void completion.catch(() => undefined)
     try {
-      await completion
+      await sessionBootstrapCoordinator.waitForCritical(preparation.target)
       return preparation
     } catch (error) {
       sessionBootstrapCoordinator.invalidate(preparation.target)

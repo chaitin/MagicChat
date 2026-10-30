@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { AUTO_MESSAGE_PAGE_SIZE, MAX_AUTO_MESSAGES_PER_CONVERSATION, createMessageSyncBudget, runAutomaticMessageJobs, selectAutomaticConversations, type MessageSyncDecision } from "../../../../shared/message-sync-budget.ts"
 import type {
   DesktopConversation,
   DesktopMessage,
@@ -47,6 +48,10 @@ export class ConversationManager {
   private readonly checkedLatestAt = new Map<string, number>()
   private refreshGeneration = 0
   private entityGeneration = 0
+  private closed = false
+  private activeConversationId?: string
+  // 普通资料对账不应中断消息补追；移除会话才使其在途消息失效。
+  private messageGenerations = new Map<string, number>()
 
   constructor(
     private readonly database: AccountDatabase,
@@ -72,31 +77,44 @@ export class ConversationManager {
   }
 
   async refresh(): Promise<void> {
+    await this.synchronizeMessages(await this.refreshSnapshot())
+  }
+
+  async refreshSnapshot(): Promise<DesktopConversation[]> {
     const generation = this.entityGeneration
     const conversations = await retryNetworkAction(() => this.fetchConversations())
-    if (generation !== this.entityGeneration) return this.refresh()
+    if (this.closed) return []
+    if (generation !== this.entityGeneration) return this.refreshSnapshot()
     this.refreshGeneration += 1
     this.database.upsertCurrentConversations(conversations)
+    this.database.markConversationSnapshotLoaded()
     const currentConversationIds = new Set(conversations.map((conversation) => conversation.id))
     for (const conversationId of this.virtualMessages.keys()) {
       if (!currentConversationIds.has(conversationId) && !this.viewedTopics.has(conversationId)) {
         this.virtualMessages.delete(conversationId)
       }
     }
-    let remaining = 100
-    for (const conversation of [...conversations].sort(
-      (left, right) => Number(right.unreadCount > 0) - Number(left.unreadCount > 0),
-    )) {
-      const previous = this.database.getMessageSyncSeq(conversation.id)
-      const targetSeq = conversation.lastMessageSeq ?? 0
-      const missing = targetSeq - previous
-      if (missing <= 0 || missing > 100 || missing > remaining) continue
-      remaining -= missing
-      await retryNetworkAction(() => this.catchUpConversation(conversation.id, previous, targetSeq))
-    }
+    return conversations
+  }
+
+  async synchronizeMessages(conversations: DesktopConversation[]) {
+    const budget = createMessageSyncBudget()
+    if (this.closed) return
+    const jobs = selectAutomaticConversations(conversations, this.activeConversationId).map((conversation) => ({
+      id: conversation.id,
+      generation: this.messageGenerations.get(conversation.id) ?? 0,
+      decision: budget.decide(conversation, { httpSyncedThroughSeq: this.database.getMessageSyncSeq(conversation.id) }),
+    })).filter(({ decision }) => decision.type !== "skip")
+    await runAutomaticMessageJobs(jobs, async ({ id, decision, generation }) => {
+      const isCurrent = () => !this.closed && (this.messageGenerations.get(id) ?? 0) === generation
+      if (!isCurrent()) return
+      await retryNetworkAction(() => this.catchUpConversation(id, decision, isCurrent))
+    })
   }
 
   async ensureLatestOnOpen(conversationId: string) {
+    this.activeConversationId = conversationId
+    const generation = this.messageGenerations.get(conversationId) ?? 0
     const existing = this.latestOnOpen.get(conversationId)
     if (existing) return existing
     const work = (async () => {
@@ -111,42 +129,36 @@ export class ConversationManager {
       )
         return
       const page = await this.fetchMessagePage(conversationId)
+      if (this.closed || generation !== (this.messageGenerations.get(conversationId) ?? 0)) return
       this.database.upsertMessages(this.captureVirtualMessages(conversationId, page.messages))
       this.checkedLatestAt.set(conversationId, this.refreshGeneration)
     })().finally(() => {
-      this.latestOnOpen.delete(conversationId)
+      if (this.latestOnOpen.get(conversationId) === work) this.latestOnOpen.delete(conversationId)
     })
     this.latestOnOpen.set(conversationId, work)
     return work
   }
 
-  private async catchUpConversation(conversationId: string, previous: number, targetSeq: number) {
-    if (previous === 0) {
-      const latest = await this.fetchMessagePage(conversationId)
-      const messages = [...latest.messages]
-      let beforeSeq = messages[0]?.seq
-      let hasMoreBefore = latest.hasMoreBefore
-      while (hasMoreBefore && beforeSeq !== undefined && messages.length < 100) {
-        const older = await this.fetchMessagePage(conversationId, beforeSeq)
-        if (!older.messages.length || older.messages[0]!.seq >= beforeSeq) break
-        messages.unshift(...older.messages)
-        beforeSeq = older.messages[0]!.seq
-        hasMoreBefore = older.hasMoreBefore
-      }
-      if (messages.length && !hasMoreBefore) {
+  private async catchUpConversation(conversationId: string, decision: MessageSyncDecision, isCurrent: () => boolean) {
+    if (!isCurrent() || decision.type === "skip") return
+    if (decision.type === "latest") {
+      const latest = await this.fetchMessagePage(conversationId, undefined, undefined, decision.limit)
+      if (!isCurrent()) return
+      if (latest.messages.length) {
         this.database.commitSyncedMessages(
           conversationId,
-          this.captureVirtualMessages(conversationId, messages),
-          messages.at(-1)!.seq,
+          this.captureVirtualMessages(conversationId, latest.messages),
+          latest.messages.at(-1)!.seq,
         )
-      } else if (messages.length) {
-        this.database.upsertMessages(this.captureVirtualMessages(conversationId, messages))
       }
       return
     }
-    let cursor = previous
-    for (let pageIndex = 0; pageIndex < 5 && cursor < targetSeq; pageIndex++) {
-      const page = await this.fetchMessagePage(conversationId, undefined, cursor)
+    const targetSeq = decision.targetSeq
+    let cursor = Math.max(decision.afterSeq, this.database.getMessageSyncSeq(conversationId))
+    for (let pageIndex = 0; pageIndex < MAX_AUTO_MESSAGES_PER_CONVERSATION / AUTO_MESSAGE_PAGE_SIZE && cursor < targetSeq; pageIndex++) {
+      if (!isCurrent()) return
+      const page = await this.fetchMessagePage(conversationId, undefined, cursor, Math.min(AUTO_MESSAGE_PAGE_SIZE, targetSeq - cursor))
+      if (!isCurrent()) return
       const next = page.messages.at(-1)?.seq ?? cursor
       if (next <= cursor) break
       this.database.commitSyncedMessages(conversationId, page.messages, next)
@@ -807,7 +819,10 @@ export class ConversationManager {
   removeEntity(id: string) {
     this.entityGeneration += 1
     const ids = this.database.removeConversationTree(id)
-    for (const child of ids) {
+    for (const child of new Set([id, ...ids])) {
+      this.messageGenerations.set(child, (this.messageGenerations.get(child) ?? 0) + 1)
+      this.latestOnOpen.delete(child)
+      this.checkedLatestAt.delete(child)
       this.virtualMessages.delete(child)
       this.viewedTopics.delete(child)
     }
@@ -1028,6 +1043,8 @@ export class ConversationManager {
   }
 
   close() {
+    this.closed = true
+    this.entityGeneration += 1
     this.readSync.close()
     this.outgoingMessages.close()
   }
@@ -1281,8 +1298,8 @@ export class ConversationManager {
     return [...virtualMessages, ...messages.filter((message) => !virtualIds.has(message.id))]
   }
 
-  private async fetchMessagePage(conversationId: string, beforeSeq?: number, afterSeq?: number) {
-    const search = new URLSearchParams({ limit: String(MESSAGE_PAGE_SIZE) })
+  private async fetchMessagePage(conversationId: string, beforeSeq?: number, afterSeq?: number, limit = MESSAGE_PAGE_SIZE) {
+    const search = new URLSearchParams({ limit: String(limit) })
     if (beforeSeq !== undefined) search.set("before_seq", String(beforeSeq))
     if (afterSeq !== undefined) search.set("after_seq", String(afterSeq))
     const data = await this.client.get(

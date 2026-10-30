@@ -2,6 +2,7 @@ import type { AuthenticatedTarget } from "@/core/server-target"
 
 export type SessionBootstrapOperationName =
   | "messages"
+  | "conversations"
   | "currentUser"
   | "contacts"
   | "projects"
@@ -36,7 +37,7 @@ type Entry = {
 }
 
 const names: SessionBootstrapOperationName[] = [
-  "messages", "currentUser", "contacts", "projects",
+  "currentUser", "conversations", "contacts", "projects", "messages",
 ]
 
 export function getSessionBootstrapKey(target: AuthenticatedTarget) {
@@ -113,6 +114,26 @@ export class SessionBootstrapCoordinator {
     return entry.inflight
   }
 
+  waitForCritical(target: AuthenticatedTarget) {
+    const key = getSessionBootstrapKey(target)
+    const entry = this.entries.get(key)
+    if (!entry) return Promise.reject(new Error("初始化尚未启动"))
+    const generation = entry.generation
+    const critical: SessionBootstrapOperationName[] = ["currentUser", "conversations"]
+    return new Promise<void>((resolve, reject) => {
+      let unsubscribe = () => {}
+      const finish = (error?: Error) => { unsubscribe(); error ? reject(error) : resolve() }
+      const check = () => {
+        if (!this.isCurrent(key, entry, generation)) return finish(new Error("登录初始化已失效"))
+        const error = critical.map((name) => entry.errors[name]).find(Boolean)
+        if (error) return finish(error)
+        if (critical.every((name) => entry.states[name] === "ready")) finish()
+      }
+      unsubscribe = this.subscribe(target, check)
+      check()
+    })
+  }
+
   refresh(target: AuthenticatedTarget) {
     const entry = this.entries.get(getSessionBootstrapKey(target))
     if (!entry) throw new Error("初始化尚未启动")
@@ -134,11 +155,8 @@ export class SessionBootstrapCoordinator {
 
   subscribe(target: AuthenticatedTarget, listener: () => void) {
     const key = getSessionBootstrapKey(target)
-    let listeners = this.listeners.get(key)
-    if (!listeners) {
-      listeners = new Set()
-      this.listeners.set(key, listeners)
-    }
+    const listeners = this.listeners.get(key) ?? this.entries.get(key)?.listeners ?? new Set<() => void>()
+    this.listeners.set(key, listeners)
     listeners.add(listener)
     return () => {
       listeners?.delete(listener)
@@ -176,7 +194,7 @@ export class SessionBootstrapCoordinator {
     const errors = names.flatMap((name) => entry.errors[name] ? [entry.errors[name]!] : [])
     const allReady = names.every((name) => entry.states[name] === "ready")
     const running = names.some((name) => entry.states[name] === "running")
-    const localAvailable = entry.states.currentUser === "ready" && entry.states.contacts === "ready"
+    const localAvailable = entry.states.currentUser === "ready" && entry.states.conversations === "ready"
     entry.snapshot = {
       key: entry.snapshot.key,
       phase: allReady ? "ready" : errors.length && !running ? "degraded" : "running",

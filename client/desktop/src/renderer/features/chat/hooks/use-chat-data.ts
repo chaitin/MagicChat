@@ -57,6 +57,7 @@ export function useChatData({
   const [contactRevision, setContactRevision] = useState(0)
   const [focusRevision, setFocusRevision] = useState(0)
   const readInFlightRef = useRef(new Set<string>())
+  const acknowledgedReadSeqRef = useRef(new Map<string, number>())
   const [openReadIntent, setOpenReadIntent] = useState<{ targetId: string; conversationId: string } | null>(null)
   const [mentionLabels, setMentionLabels] = useState<Map<string, string>>(new Map())
   const [resolvedUserNames, setResolvedUserNames] = useState<{
@@ -91,6 +92,8 @@ export function useChatData({
   const selectedIdRef = useRef(selectedId)
   const openingTopicsRef = useRef(new Set<string>())
   const loadedConversationIdRef = useRef<string | null>(null)
+  const loadedConversationTargetRef = useRef<string | null>(null)
+  const loadedMessageRevisionRef = useRef(-1)
   const historyRef = useRef<HTMLDivElement>(null)
   selectedIdRef.current = selectedId
   messagesRef.current = messages
@@ -116,6 +119,12 @@ export function useChatData({
   }, [])
 
   useEffect(() => {
+    if (!openReadIntent) return
+    const frame = window.requestAnimationFrame(() => setFocusRevision((revision) => revision + 1))
+    return () => window.cancelAnimationFrame(frame)
+  }, [openReadIntent])
+
+  useEffect(() => {
     const clearOpenRead = () => setOpenReadIntent((current) => current === openReadIntent ? null : current)
     const explicitlyOpened = openReadIntent?.targetId === targetId && openReadIntent.conversationId === selectedId
     if (openReadIntent && (
@@ -129,6 +138,7 @@ export function useChatData({
       activeSection !== "chat" ||
       loadingMessages ||
       loadedConversationIdRef.current !== selectedId ||
+      loadedConversationTargetRef.current !== targetId ||
       document.visibilityState !== "visible" ||
       readInFlightRef.current.has(readKey)
     )
@@ -138,8 +148,6 @@ export function useChatData({
       return
     }
     if (!explicitlyOpened && (!selected.unreadCount || !document.hasFocus())) return
-    // 只消费本次渲染的阅读意图，不能清掉后来点击的会话或延续到后续新消息。
-    if (explicitlyOpened) clearOpenRead()
     const upToSeq = Math.max(
       0,
       ...messages
@@ -151,14 +159,23 @@ export function useChatData({
         )
         .map((message) => message.seq),
     )
-    if (upToSeq <= (selected.lastReadSeq ?? 0)) return
+    if (upToSeq <= Math.max(selected.lastReadSeq ?? 0, acknowledgedReadSeqRef.current.get(readKey) ?? 0)) {
+      if (explicitlyOpened) clearOpenRead()
+      return
+    }
+    const requestIntent = explicitlyOpened ? openReadIntent : null
     const conversationId = selectedId
     readInFlightRef.current.add(readKey)
     void window.desktop.accountData
       .markConversationRead({ targetId, conversationId, upToSeq })
       .then((result) => {
         readInFlightRef.current.delete(readKey)
-        if (result.ok) setFocusRevision((revision) => revision + 1)
+        if (result.ok) {
+          acknowledgedReadSeqRef.current.set(readKey, Math.max(acknowledgedReadSeqRef.current.get(readKey) ?? 0, upToSeq))
+          // 列表快照可晚于IPC确认到达，不能据旧未读数重复提交同一序号。
+          if (requestIntent) setOpenReadIntent((current) => current === requestIntent ? null : current)
+          setFocusRevision((revision) => revision + 1)
+        }
       })
       .catch(() => {
         readInFlightRef.current.delete(readKey)
@@ -188,6 +205,10 @@ export function useChatData({
         )
       ) {
         setConversationRevision((revision) => revision + 1)
+      }
+      if (conversationId !== selectedIdRef.current) {
+        loadedConversationIdRef.current = null
+        loadedConversationTargetRef.current = null
       }
       setOpenReadIntent(conversationId && document.visibilityState === "visible"
         ? { targetId, conversationId }
@@ -623,12 +644,20 @@ export function useChatData({
   useEffect(() => {
     if (!selectedId || !window.desktop) {
       loadedConversationIdRef.current = null
+      loadedConversationTargetRef.current = null
       setMessages([])
       return
     }
     let cancelled = false
-    const switchingConversation = loadedConversationIdRef.current !== selectedId
-    loadedConversationIdRef.current = selectedId
+    const switchingConversation = loadedConversationIdRef.current !== selectedId || loadedConversationTargetRef.current !== targetId
+    const latestConfirmedSeq = messagesRef.current
+      .filter((message) => message.conversationId === selectedId && !message.virtualType && !message.deliveryStatus)
+      .at(-1)?.seq ?? 0
+    // 摘要快照也能带来新消息序号；已覆盖的快照不重复读取，但消息编辑通知仍须刷新。
+    if (
+      !switchingConversation && loadedMessageRevisionRef.current === messageRevision &&
+      latestConfirmedSeq >= (selected?.lastMessageSeq ?? 0)
+    ) return
     if (switchingConversation) {
       browsingOlderWindowRef.current = false
       pendingHistoryRefreshRef.current = false
@@ -684,6 +713,10 @@ export function useChatData({
             ? boundMessageWindow(result.data, "newer")
             : mergeRefreshedMessages(messagesRef.current, result.data, isAtBottomRef.current)
           if (bounded.removedAfter) browsingOlderWindowRef.current = true
+          // 只有有效响应写入窗口后才完成切换；途中被实时事件取消仍是首次加载。
+          loadedConversationIdRef.current = selectedId
+          loadedConversationTargetRef.current = targetId
+          loadedMessageRevisionRef.current = messageRevision
           setMessages(bounded.messages)
           const oldestMessage = bounded.messages.find((message) => !message.virtualType)
           setHasMoreBeforeMessages(Boolean(oldestMessage && oldestMessage.seq > 1))
@@ -714,7 +747,7 @@ export function useChatData({
     return () => {
       cancelled = true
     }
-  }, [messageRevision, selectedId, showToast, targetId])
+  }, [messageRevision, selectedId, selected?.lastMessageSeq, showToast, targetId])
 
   const updateHistoryScrollPosition = useCallback((viewport: HTMLDivElement) => {
     const atBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= 48

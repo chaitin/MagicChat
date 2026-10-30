@@ -46,6 +46,8 @@ import { registerMediaIpc } from "./ipc/register-media-ipc"
 import { decodePreviewImage } from "./media-preview-image-decoder"
 import { MediaPreviewWindow } from "./media-preview-window"
 import { MainWindowSizeStore, MIN_MAIN_WINDOW_SIZE } from "./main-window-size"
+import { MainWindowMessages } from "./renderer-messages"
+import { SystemNotificationAvailability } from "./system-notification-availability"
 import { SelectedMessageFileStore } from "./message-files/selected-message-file-store"
 import { isAllowedMainWindowPermission } from "./permission-policy"
 import {
@@ -80,6 +82,21 @@ if (!hasSingleInstanceLock) app.quit()
 
 const mainWindowSizeStore = new MainWindowSizeStore(app.getPath("userData"))
 let mainWindow: BrowserWindow | null = null
+const mainWindowMessages = new MainWindowMessages(() => mainWindow)
+const rendererEventChannels = new Set<string>([
+  DESKTOP_CHANNELS.openSettings,
+  DESKTOP_CHANNELS.requestSignOut,
+  DESKTOP_CHANNELS.requestQuit,
+  DESKTOP_CHANNELS.openMessageNotification,
+  DESKTOP_CHANNELS.playMessageSound,
+  DESKTOP_CHANNELS.windowMaximizedChanged,
+  DESKTOP_CHANNELS.updateProgress,
+  ACCOUNT_DATA_CHANNELS.syncStateChanged,
+  ACCOUNT_DATA_CHANNELS.changed,
+  ACCOUNT_DATA_CHANNELS.conversationPresenceChanged,
+  MEDIA_CHANNELS.downloadProgress,
+  TASK_WINDOW_CHANNELS.changed,
+])
 let contentZoom: ContentZoom = DEFAULT_CONTENT_ZOOM
 let tray: Tray | null = null
 let unreadAttention: ReturnType<typeof createUnreadAttention> | null = null
@@ -117,8 +134,20 @@ function createWindow() {
     },
   })
   mainWindow = window
+  mainWindowMessages.pause()
   window.webContents.setZoomFactor(contentZoom)
-  window.webContents.on("did-finish-load", () => window.webContents.setZoomFactor(contentZoom))
+  window.webContents.on("did-start-navigation", (details) => {
+    if (details.isMainFrame && !details.isSameDocument) mainWindowMessages.pause()
+  })
+  window.webContents.on("render-process-gone", (_event, details) => {
+    mainWindowMessages.pause()
+    console.warn("主窗口渲染进程退出", details.reason, details.exitCode)
+  })
+  window.webContents.on("did-finish-load", () => {
+    if (window.isDestroyed() || window.webContents.isDestroyed()) return
+    window.webContents.setZoomFactor(contentZoom)
+    mainWindowMessages.flush()
+  })
   window.removeMenu()
   window.once("ready-to-show", () => window.show())
   let saveSizeTimer: ReturnType<typeof setTimeout> | undefined
@@ -150,11 +179,14 @@ function createWindow() {
     clearTimeout(saveSizeTimer)
     clearUnreadAttention()
     mainWindow = null
+    mainWindowMessages.pause()
   })
   window.webContents.on("did-start-loading", clearUnreadAttention)
+  // did-finish-load can fire while isLoadingMainFrame() is still true.
+  window.webContents.on("did-stop-loading", () => mainWindowMessages.flush())
   const sendMaximizedState = () => {
     if (!window.isDestroyed()) {
-      window.webContents.send(DESKTOP_CHANNELS.windowMaximizedChanged, window.isMaximized())
+      mainWindowMessages.send(DESKTOP_CHANNELS.windowMaximizedChanged, window.isMaximized())
     }
   }
   window.on("maximize", sendMaximizedState)
@@ -185,17 +217,17 @@ function showMainWindow() {
 
 function openSettings() {
   showMainWindow()
-  mainWindow?.webContents.send(DESKTOP_CHANNELS.openSettings)
+  mainWindowMessages.sendWhenReady(DESKTOP_CHANNELS.openSettings)
 }
 
 function requestSignOut() {
   showMainWindow()
-  mainWindow?.webContents.send(DESKTOP_CHANNELS.requestSignOut)
+  mainWindowMessages.sendWhenReady(DESKTOP_CHANNELS.requestSignOut)
 }
 
 function requestQuit() {
   showMainWindow()
-  mainWindow?.webContents.send(DESKTOP_CHANNELS.requestQuit)
+  mainWindowMessages.sendWhenReady(DESKTOP_CHANNELS.requestQuit)
 }
 
 function quitApp() {
@@ -301,7 +333,7 @@ function createTrayMenuIcon(type: "open" | "settings" | "signOut" | "quit") {
   )
 }
 
-function assertTrustedSender(event: IpcMainInvokeEvent) {
+function assertTrustedSender(event: Pick<IpcMainInvokeEvent, "sender" | "senderFrame">) {
   if (
     !mainWindow ||
     event.sender !== mainWindow.webContents ||
@@ -331,19 +363,43 @@ void app.whenReady().then(async () => {
   let notificationSettings: NotificationSettings = DEFAULT_NOTIFICATION_SETTINGS
   let activeConversation: { targetId: string; conversationId: string } | null = null
   const activeNotifications = new Set<SystemNotification>()
+  const notificationAvailability = new SystemNotificationAvailability()
   const updates = new UpdateManager(updateCacheDirectory(app.getPath("userData")), (progress) => {
-    mainWindow?.webContents.send(DESKTOP_CHANNELS.updateProgress, progress)
+    mainWindowMessages.send(DESKTOP_CHANNELS.updateProgress, progress)
   })
   function notifyIncomingMessage(event: IncomingMessageNotification) {
     const window = mainWindow
-    if (isMessageNotificationSuppressed(event, activeConversation, window?.isFocused() ?? false)) {
+    if (
+      isMessageNotificationSuppressed(
+        event,
+        activeConversation,
+        Boolean(window && !window.isDestroyed() && window.isFocused()),
+      )
+    ) {
       return
     }
-    if (notificationSettings.soundEnabled && window && !window.isDestroyed()) {
-      window.webContents.send(DESKTOP_CHANNELS.playMessageSound)
-    }
-    if (!notificationSettings.desktopEnabled || !SystemNotification.isSupported()) return
+    if (notificationSettings.soundEnabled)
+      mainWindowMessages.send(DESKTOP_CHANNELS.playMessageSound)
+    void showIncomingMessageNotification(event)
+  }
+  async function showIncomingMessageNotification(event: IncomingMessageNotification) {
+    let createdNotification: SystemNotification | undefined
     try {
+      if (!notificationSettings.desktopEnabled || !(await notificationAvailability.canShow()))
+        return
+      const window = mainWindow
+      if (
+        isQuitting ||
+        !auth.isActiveTarget(event.targetId) ||
+        !notificationSettings.desktopEnabled ||
+        isMessageNotificationSuppressed(
+          event,
+          activeConversation,
+          Boolean(window && !window.isDestroyed() && window.isFocused()),
+        ) ||
+        !SystemNotification.isSupported()
+      )
+        return
       const notification = new SystemNotification({
         title: "即应",
         body: notificationSettings.showMessagePreview
@@ -351,19 +407,33 @@ void app.whenReady().then(async () => {
           : "收到新消息",
         silent: true,
       })
+      createdNotification = notification
       activeNotifications.add(notification)
       notification.on("close", () => activeNotifications.delete(notification))
+      notification.on("failed", (_event, message) => {
+        activeNotifications.delete(notification)
+        notificationAvailability.failed()
+        console.warn("无法显示桌面通知", message)
+      })
       notification.on("click", () => {
+        if (isQuitting || !auth.isActiveTarget(event.targetId)) return
         showMainWindow()
-        if (!auth.isActiveTarget(event.targetId)) return
-        mainWindow?.webContents.send(DESKTOP_CHANNELS.openMessageNotification, {
-          targetId: event.targetId,
-          conversationId: event.conversationId,
-          messageId: event.messageId,
-        })
+        mainWindowMessages.sendWhenReady(
+          DESKTOP_CHANNELS.openMessageNotification,
+          [
+            {
+              targetId: event.targetId,
+              conversationId: event.conversationId,
+              messageId: event.messageId,
+            },
+          ],
+          () => auth.isActiveTarget(event.targetId),
+        )
       })
       notification.show()
     } catch (error) {
+      if (createdNotification) activeNotifications.delete(createdNotification)
+      notificationAvailability.failed()
       console.warn("无法显示桌面通知", error)
     }
   }
@@ -380,13 +450,12 @@ void app.whenReady().then(async () => {
       }
     },
     onSyncStateChange: (event) =>
-      mainWindow?.webContents.send(ACCOUNT_DATA_CHANNELS.syncStateChanged, event),
-    onDataChanged: (event) => mainWindow?.webContents.send(ACCOUNT_DATA_CHANNELS.changed, event),
+      mainWindowMessages.send(ACCOUNT_DATA_CHANNELS.syncStateChanged, event),
+    onDataChanged: (event) => mainWindowMessages.send(ACCOUNT_DATA_CHANNELS.changed, event),
     onIncomingMessage: notifyIncomingMessage,
     onConversationPresenceChanged: (event) =>
-      mainWindow?.webContents.send(ACCOUNT_DATA_CHANNELS.conversationPresenceChanged, event),
-    onMediaProgress: (event) =>
-      mainWindow?.webContents.send(MEDIA_CHANNELS.downloadProgress, event),
+      mainWindowMessages.send(ACCOUNT_DATA_CHANNELS.conversationPresenceChanged, event),
+    onMediaProgress: (event) => mainWindowMessages.send(MEDIA_CHANNELS.downloadProgress, event),
   })
   app.on("browser-window-focus", () => auth.refreshPushPresence())
   app.on("browser-window-blur", () => auth.refreshPushPresence())
@@ -415,6 +484,9 @@ void app.whenReady().then(async () => {
     () => mainWindow,
     () => contentZoom,
     appIconPath,
+    (change) => {
+      mainWindowMessages.send(TASK_WINDOW_CHANNELS.changed, change)
+    },
   )
   const screenshot = new ScreenshotManager(
     path.join(__dirname, "../preload/screenshot.cjs"),
@@ -444,6 +516,21 @@ void app.whenReady().then(async () => {
       }),
     )
   }
+  ipcMain.on(DESKTOP_CHANNELS.rendererReady, (event, channel: unknown, ready: unknown) => {
+    if (
+      typeof channel !== "string" ||
+      !rendererEventChannels.has(channel) ||
+      typeof ready !== "boolean"
+    )
+      return
+    try {
+      assertTrustedSender(event)
+    } catch {
+      // Subscriptions from old frames or task windows must not mark the main frame ready.
+      return
+    }
+    mainWindowMessages.setReady(channel, ready)
+  })
   function windowForControl(event: IpcMainInvokeEvent) {
     const window = BrowserWindow.fromWebContents(event.sender)
     if (

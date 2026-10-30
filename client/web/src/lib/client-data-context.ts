@@ -80,7 +80,7 @@ export type ClientDataContextValue = {
   meError: ClientDataRequestError | null
   meLoading: boolean
   meRefreshing: boolean
-  personalProject: ClientProjectSummary
+  personalProject: ClientProjectSummary | null
   projects: ClientProjectSummary[]
   projectsError: ClientDataRequestError | null
   projectsLoading: boolean
@@ -219,7 +219,7 @@ export type ClientDataContextValue = {
   ) => Promise<ClientConversation>
   refreshConversations: () => Promise<ClientConversation[] | undefined>
   refreshRestoredConversation: (conversationId: string) => Promise<void>
-  refreshContacts: (options?: { forceUsers?: boolean }) => Promise<void>
+  refreshContacts: (options?: { forceUsers?: boolean }) => Promise<ContactGroup[] | void>
   refreshFriendRequests: () => Promise<void>
   refreshMe: () => Promise<void>
   refreshProjects: () => Promise<void>

@@ -12,15 +12,22 @@ import {
 const platform =
   process.platform === "darwin" ? "macos" : process.platform === "win32" ? "windows" : "linux"
 
+function subscribe<T>(channel: string, callback: (value: T) => void) {
+  const listener = (_event: Electron.IpcRendererEvent, value: T) => callback(value)
+  ipcRenderer.on(channel, listener)
+  ipcRenderer.send(DESKTOP_CHANNELS.rendererReady, channel, true)
+  return () => {
+    ipcRenderer.removeListener(channel, listener)
+    if (ipcRenderer.listenerCount(channel) === 0) {
+      ipcRenderer.send(DESKTOP_CHANNELS.rendererReady, channel, false)
+    }
+  }
+}
+
 const bridge: DesktopBridge = {
   taskWindows: {
     open: (input) => ipcRenderer.invoke(TASK_WINDOW_CHANNELS.open, input),
-    onChanged: (callback) => {
-      const listener = (_event: Electron.IpcRendererEvent, value: TaskWindowChange) =>
-        callback(value)
-      ipcRenderer.on(TASK_WINDOW_CHANNELS.changed, listener)
-      return () => ipcRenderer.removeListener(TASK_WINDOW_CHANNELS.changed, listener)
-    },
+    onChanged: (callback) => subscribe<TaskWindowChange>(TASK_WINDOW_CHANNELS.changed, callback),
   },
   openHomepage: () => ipcRenderer.invoke(DESKTOP_CHANNELS.openHomepage),
   openExternalLink: (url) => ipcRenderer.invoke(DESKTOP_CHANNELS.openExternalLink, url),
@@ -32,11 +39,8 @@ const bridge: DesktopBridge = {
   downloadUpdate: () => ipcRenderer.invoke(DESKTOP_CHANNELS.downloadUpdate),
   installUpdate: () => ipcRenderer.invoke(DESKTOP_CHANNELS.installUpdate),
   restartToInstallUpdate: () => ipcRenderer.invoke(DESKTOP_CHANNELS.restartToInstallUpdate),
-  onUpdateProgress: (callback) => {
-    const listener = (_event: Electron.IpcRendererEvent, value: UpdateProgress) => callback(value)
-    ipcRenderer.on(DESKTOP_CHANNELS.updateProgress, listener)
-    return () => ipcRenderer.removeListener(DESKTOP_CHANNELS.updateProgress, listener)
-  },
+  onUpdateProgress: (callback) =>
+    subscribe<UpdateProgress>(DESKTOP_CHANNELS.updateProgress, callback),
   getSystemInfo: () => ipcRenderer.invoke(DESKTOP_CHANNELS.getSystemInfo),
   getStorageInfo: () => ipcRenderer.invoke(DESKTOP_CHANNELS.getStorageInfo),
   openStorageDirectory: () => ipcRenderer.invoke(DESKTOP_CHANNELS.openStorageDirectory),
@@ -54,34 +58,12 @@ const bridge: DesktopBridge = {
     ipcRenderer.invoke(DESKTOP_CHANNELS.setShortcutSettings, settings),
   setShortcutRecording: (recording) =>
     ipcRenderer.invoke(DESKTOP_CHANNELS.setShortcutRecording, recording),
-  onOpenSettings: (callback) => {
-    const listener = () => callback()
-    ipcRenderer.on(DESKTOP_CHANNELS.openSettings, listener)
-    return () => ipcRenderer.removeListener(DESKTOP_CHANNELS.openSettings, listener)
-  },
-  onRequestSignOut: (callback) => {
-    const listener = () => callback()
-    ipcRenderer.on(DESKTOP_CHANNELS.requestSignOut, listener)
-    return () => ipcRenderer.removeListener(DESKTOP_CHANNELS.requestSignOut, listener)
-  },
-  onRequestQuit: (callback) => {
-    const listener = () => callback()
-    ipcRenderer.on(DESKTOP_CHANNELS.requestQuit, listener)
-    return () => ipcRenderer.removeListener(DESKTOP_CHANNELS.requestQuit, listener)
-  },
-  onPlayMessageSound: (callback) => {
-    const listener = () => callback()
-    ipcRenderer.on(DESKTOP_CHANNELS.playMessageSound, listener)
-    return () => ipcRenderer.removeListener(DESKTOP_CHANNELS.playMessageSound, listener)
-  },
-  onOpenMessageNotification: (callback) => {
-    const listener = (
-      _event: Electron.IpcRendererEvent,
-      value: { targetId: string; conversationId: string; messageId: string },
-    ) => callback(value)
-    ipcRenderer.on(DESKTOP_CHANNELS.openMessageNotification, listener)
-    return () => ipcRenderer.removeListener(DESKTOP_CHANNELS.openMessageNotification, listener)
-  },
+  onOpenSettings: (callback) => subscribe(DESKTOP_CHANNELS.openSettings, callback),
+  onRequestSignOut: (callback) => subscribe(DESKTOP_CHANNELS.requestSignOut, callback),
+  onRequestQuit: (callback) => subscribe(DESKTOP_CHANNELS.requestQuit, callback),
+  onPlayMessageSound: (callback) => subscribe(DESKTOP_CHANNELS.playMessageSound, callback),
+  onOpenMessageNotification: (callback) =>
+    subscribe(DESKTOP_CHANNELS.openMessageNotification, callback),
   windowControls: {
     platform,
     getMaximized: () => ipcRenderer.invoke(DESKTOP_CHANNELS.windowGetState),
@@ -89,12 +71,7 @@ const bridge: DesktopBridge = {
     toggleMaximize: () => ipcRenderer.invoke(DESKTOP_CHANNELS.windowToggleMaximize),
     close: () => ipcRenderer.invoke(DESKTOP_CHANNELS.windowClose),
     quit: () => ipcRenderer.invoke(DESKTOP_CHANNELS.windowQuit),
-    onMaximizedChange: (callback) => {
-      const listener = (_event: Electron.IpcRendererEvent, maximized: boolean) =>
-        callback(maximized)
-      ipcRenderer.on(DESKTOP_CHANNELS.windowMaximizedChanged, listener)
-      return () => ipcRenderer.removeListener(DESKTOP_CHANNELS.windowMaximizedChanged, listener)
-    },
+    onMaximizedChange: (callback) => subscribe(DESKTOP_CHANNELS.windowMaximizedChanged, callback),
   },
   media: {
     ensureCached: (input) => ipcRenderer.invoke(MEDIA_CHANNELS.ensureCached, input),
@@ -102,12 +79,8 @@ const bridge: DesktopBridge = {
     revealCached: (input) => ipcRenderer.invoke(MEDIA_CHANNELS.revealCached, input),
     copyImage: (input) => ipcRenderer.invoke(MEDIA_CHANNELS.copyImage, input),
     openPreview: (input) => ipcRenderer.invoke(MEDIA_CHANNELS.openPreview, input),
-    onDownloadProgress: (callback) => {
-      const listener = (_event: Electron.IpcRendererEvent, value: MediaDownloadProgress) =>
-        callback(value)
-      ipcRenderer.on(MEDIA_CHANNELS.downloadProgress, listener)
-      return () => ipcRenderer.removeListener(MEDIA_CHANNELS.downloadProgress, listener)
-    },
+    onDownloadProgress: (callback) =>
+      subscribe<MediaDownloadProgress>(MEDIA_CHANNELS.downloadProgress, callback),
   },
   accountData: {
     initialize: (targetId) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.initialize, targetId),
@@ -246,25 +219,10 @@ const bridge: DesktopBridge = {
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.uploadClientAppAvatar, input),
     getAvatar: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getAvatar, input),
     invalidateAvatar: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.invalidateAvatar, input),
-    onSyncStateChange: (callback) => {
-      const listener = (_event: Electron.IpcRendererEvent, value: Parameters<typeof callback>[0]) =>
-        callback(value)
-      ipcRenderer.on(ACCOUNT_DATA_CHANNELS.syncStateChanged, listener)
-      return () => ipcRenderer.removeListener(ACCOUNT_DATA_CHANNELS.syncStateChanged, listener)
-    },
-    onChanged: (callback) => {
-      const listener = (_event: Electron.IpcRendererEvent, value: Parameters<typeof callback>[0]) =>
-        callback(value)
-      ipcRenderer.on(ACCOUNT_DATA_CHANNELS.changed, listener)
-      return () => ipcRenderer.removeListener(ACCOUNT_DATA_CHANNELS.changed, listener)
-    },
-    onConversationPresenceChanged: (callback) => {
-      const listener = (_event: Electron.IpcRendererEvent, value: Parameters<typeof callback>[0]) =>
-        callback(value)
-      ipcRenderer.on(ACCOUNT_DATA_CHANNELS.conversationPresenceChanged, listener)
-      return () =>
-        ipcRenderer.removeListener(ACCOUNT_DATA_CHANNELS.conversationPresenceChanged, listener)
-    },
+    onSyncStateChange: (callback) => subscribe(ACCOUNT_DATA_CHANNELS.syncStateChanged, callback),
+    onChanged: (callback) => subscribe(ACCOUNT_DATA_CHANNELS.changed, callback),
+    onConversationPresenceChanged: (callback) =>
+      subscribe(ACCOUNT_DATA_CHANNELS.conversationPresenceChanged, callback),
   },
   auth: {
     getServer: () => ipcRenderer.invoke(AUTH_CHANNELS.getServer),

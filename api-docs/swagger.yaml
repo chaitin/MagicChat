@@ -1979,6 +1979,7 @@ definitions:
       user_ids:
         items:
           type: string
+        maxItems: 500
         type: array
     type: object
   client.resolveUsersResponse:
@@ -8501,7 +8502,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 根据用户 ID 批量返回启用用户的资料，每次最多 100 个。
+      description: 根据用户 ID 批量返回启用用户的资料，每次最多 500 个。
       parameters:
       - description: 用户 ID
         in: body

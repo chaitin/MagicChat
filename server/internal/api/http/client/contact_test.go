@@ -90,6 +90,28 @@ func TestContactAPIResolvesUsers(t *testing.T) {
 	}
 }
 
+func TestContactAPIRejectsResolveBatchOver500(t *testing.T) {
+	ids := make([]string, 501)
+	for i := range ids {
+		ids[i] = "7f8d8b84-6d2c-4b12-9a8a-019a7e2787d4"
+	}
+	body, err := json.Marshal(resolveUsersRequest{UserIDs: ids})
+	if err != nil {
+		t.Fatal(err)
+	}
+	api := NewContactAPI(contactapp.NewService(contactapp.Dependencies{}))
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/users/resolve", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	if err := api.resolveUsers(e.NewContext(req, rec)); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusBadRequest || !bytes.Contains(rec.Body.Bytes(), []byte("每次最多查询 500 个用户")) {
+		t.Fatalf("status=%d, body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestContactAPIListsUsers(t *testing.T) {
 	stub := &contactServiceStub{usersResult: contactapp.ListUsersResult{Users: []contactapp.User{{ID: "user-id", Type: contactapp.ContactTypeUser}}}}
 	api := NewContactAPI(stub)

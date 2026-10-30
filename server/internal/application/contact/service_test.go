@@ -2,6 +2,7 @@ package contact
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -86,6 +87,63 @@ func TestServiceResolvesActiveUsersByIDInRequestOrder(t *testing.T) {
 	}
 	if !result.Users[0].Online || !result.Users[0].UpdatedAt.Equal(bob.UpdatedAt) {
 		t.Fatalf("bob = %#v", result.Users[0])
+	}
+}
+
+func TestServiceResolveUsersBatchLimit(t *testing.T) {
+	db := openContactTestDB(t)
+	now := time.Date(2026, 7, 15, 10, 30, 0, 0, time.UTC)
+	lastOnlineAt := now.Add(-time.Hour)
+	users := make([]store.User, 500)
+	ids := make([]string, 501)
+	for i := range users {
+		users[i] = store.User{
+			ID: uuid.NewString(), Email: fmt.Sprintf("batch-%d@example.com", i), Name: fmt.Sprintf("User %d", i),
+			Nickname: "Nickname", Avatar: store.DefaultUserAvatar, LastOnlineAt: &lastOnlineAt,
+			PasswordHash: "hash", Status: store.UserStatusActive, CreatedAt: now, UpdatedAt: now,
+		}
+		ids[499-i] = users[i].ID
+	}
+	ids[500] = uuid.NewString()
+	if err := db.CreateInBatches(users, 50).Error; err != nil {
+		t.Fatal(err)
+	}
+	queries := 0
+	if err := db.Callback().Query().Before("gorm:query").Register("test:count_resolve_queries", func(tx *gorm.DB) {
+		if tx.Statement.Table == "users" {
+			queries++
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(Dependencies{DB: db, UserPresence: contactUserPresence{ids[0]: true}})
+	for _, count := range []int{0, 100, 500, 501} {
+		t.Run(fmt.Sprintf("count_%d", count), func(t *testing.T) {
+			queries = 0
+			result, err := service.ResolveUsers(context.Background(), ResolveUsersCommand{UserIDs: ids[:count]})
+			if count > 500 {
+				if ErrorCodeOf(err) != CodeInvalidRequest || ErrorMessage(err) != "每次最多查询 500 个用户" || queries != 0 {
+					t.Fatalf("error=%v, queries=%d", err, queries)
+				}
+				return
+			}
+			if err != nil || len(result.Users) != count {
+				t.Fatalf("users=%d, error=%v, want %d", len(result.Users), err, count)
+			}
+			wantQueries := 1
+			if count == 0 {
+				wantQueries = 0
+			}
+			if queries != wantQueries {
+				t.Fatalf("queries=%d, want %d", queries, wantQueries)
+			}
+			for i, user := range result.Users {
+				if user.ID != ids[i] || user.Nickname != "Nickname" || user.Avatar != store.DefaultUserAvatar ||
+					!user.UpdatedAt.Equal(now) || user.LastOnlineAt == nil || !user.LastOnlineAt.Equal(lastOnlineAt) || user.Online != (i == 0) {
+					t.Fatalf("user %d = %#v", i, user)
+				}
+			}
+		})
 	}
 }
 

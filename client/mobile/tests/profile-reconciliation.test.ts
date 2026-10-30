@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 import { runInNewContext } from "node:vm"
 import ts from "typescript"
-import { DirectorySynchronizer } from "../../shared/directory-sync.ts"
+import { DirectorySynchronizer, USER_PROFILE_BATCH_SIZE } from "../../shared/directory-sync.ts"
 import * as entitySync from "../../shared/entity-sync.ts"
 import { applyContactProfileBatch } from "../src/data/contacts/contact-profile-snapshot.ts"
 import type { contactManager as Manager } from "../src/data/contacts/contact-manager.ts"
@@ -55,8 +55,9 @@ function fixture(count = 1322) {
       return resolveProfiles(batch)
     } },
     "../../../../shared/entity-sync": entitySync,
+    "../../../../shared/directory-sync": { USER_PROFILE_BATCH_SIZE },
   }).contactManager as typeof Manager
-  return { manager, rows, requests, setResolver: (resolve: typeof resolveProfiles) => { resolveProfiles = resolve } }
+  return { manager, rows, requests, ids, setResolver: (resolve: typeof resolveProfiles) => { resolveProfiles = resolve } }
 }
 
 test("Mobile冷启动和缓存重连均只获取一轮用户资料，实体接口仅补群权限", async (t) => {
@@ -82,16 +83,46 @@ test("Mobile冷启动和缓存重连均只获取一轮用户资料，实体接�
   const first = sync.reconcile()
   assert.equal(sync.reconcile(), first)
   await first
-  assert.equal(requests.length, 14)
+  assert.deepEqual(requests.map((batch) => batch.length), [500, 500, 322])
   assert.equal(requests.flat().length, 1322)
   assert.deepEqual(entities, [[{ type: "group", id: "group" }]])
   assert.deepEqual(permissions, ["group"])
   for (const row of rows.values()) row.cached_at = Date.now() - 1000
   await sync.reconcile()
-  assert.equal(requests.length, 28)
-  assert.equal(requests.slice(14).flat().length, 1322)
+  assert.equal(requests.length, 6)
+  assert.deepEqual(requests.slice(3).map((batch) => batch.length), [500, 500, 322])
+  assert.equal(requests.slice(3).flat().length, 1322)
   assert.deepEqual(entities[1], [{ type: "group", id: "group" }])
   assert.equal((await manager.getSnapshot(target)).usersById.me?.online, true)
+})
+
+test("Mobile资料按500分批串行加载，保留去重和缓存复用", async () => {
+  const { manager, requests, ids, setResolver } = fixture(1001)
+  let release!: () => void
+  let started!: () => void
+  const blocked = new Promise<void>((resolve) => { release = resolve })
+  const first = new Promise<void>((resolve) => { started = resolve })
+  let active = 0
+  let peak = 0
+  setResolver(async (batch) => {
+    peak = Math.max(peak, ++active)
+    started()
+    await blocked
+    active -= 1
+    return batch.map((id) => user(id))
+  })
+  const work = manager.ensureUsers(target, [...ids, ids[0]!, " "])
+  await first
+  assert.equal(requests.length, 1)
+  release()
+  await work
+  assert.deepEqual(requests.map((batch) => batch.length), [500, 500, 1])
+  assert.equal(Object.keys((await manager.getSnapshot(target)).usersById).length, 1001)
+  assert.equal(peak, 1)
+  await manager.ensureUsers(target, ids)
+  assert.equal(requests.length, 3)
+  await manager.refreshUsers(target, ids)
+  assert.equal(requests.length, 6)
 })
 
 test("Mobile本轮已获取的资料可复用，后续明确刷新仍能重新获取", async () => {

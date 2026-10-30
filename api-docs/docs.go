@@ -9939,7 +9939,7 @@ const docTemplate = `{
         },
         "/api/client/users/resolve": {
             "post": {
-                "description": "根据用户 ID 批量返回启用用户的资料，每次最多 100 个。",
+                "description": "根据用户 ID 批量返回启用用户的资料，每次最多 500 个。",
                 "consumes": [
                     "application/json"
                 ],
@@ -12977,6 +12977,7 @@ const docTemplate = `{
             "properties": {
                 "user_ids": {
                     "type": "array",
+                    "maxItems": 500,
                     "items": {
                         "type": "string"
                     }

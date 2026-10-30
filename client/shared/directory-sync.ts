@@ -1,3 +1,4 @@
+export const USER_PROFILE_BATCH_SIZE = 500
 export const directoryUpdatedEvent = "contact.directory.updated"
 
 type DirectorySyncOptions = {

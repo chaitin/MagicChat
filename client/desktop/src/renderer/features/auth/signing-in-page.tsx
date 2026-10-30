@@ -24,7 +24,6 @@ export function SigningInPage({
     const complete = onComplete
     const fail = onFailure
     let cancelled = false
-    const minimumDisplay = new Promise<void>((resolve) => window.setTimeout(resolve, 1_000))
 
     async function initialize() {
       let result: AuthResult<null>
@@ -37,7 +36,6 @@ export function SigningInPage({
       } catch {
         result = { ok: false, error: { code: "bridge", message: "桌面服务暂不可用，请重试" } }
       }
-      await minimumDisplay
       if (cancelled) return
       if (result.ok) complete()
       else fail(result.error)
@@ -59,11 +57,11 @@ export function SigningInPage({
                 variant="dither"
                 size={64}
                 speed={2}
-                label="正在加载在线数据"
+                label="正在准备聊天数据"
                 className="text-muted-foreground"
               />
               <TextShimmer as="h1" className="text-base font-normal">
-                正在加载在线数据
+                正在准备聊天数据
               </TextShimmer>
             </CardContent>
           </Card>

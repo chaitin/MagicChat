@@ -12,6 +12,91 @@ describe("ClientDataProvider", () => {
     vi.useRealTimers()
   })
 
+  it.each(["/api/client/contacts", "/api/client/users/resolve", "/api/client/projects?limit=100"])("首屏不等待后台请求 %s，也没有固定一秒等待", async (blockedUrl) => {
+    vi.useFakeTimers()
+    let finish!: () => void
+    const blocked = new Promise<void>((resolve) => { finish = resolve })
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === blockedUrl) await blocked
+      if (url === "/api/client/me") return jsonResponse(createCurrentUserResponse())
+      if (url === "/api/client/conversations") return jsonResponse(createConversationsResponse([]))
+      if (url === "/api/client/projects?limit=100") return jsonResponse(createProjectsResponse())
+      if (url === "/api/client/contacts") return jsonResponse(createDiscoveryContactsResponse(true))
+      if (url === "/api/client/users/resolve") return jsonResponse(createDiscoveryUsersResponse(init))
+      throw new Error(`unexpected request: ${url}`)
+    }))
+    function Probe() {
+      const { me, contactsLoading, projectsLoading } = useClientData()
+      return <div data-testid="startup">{me?.id}:{String(contactsLoading)}:{String(projectsLoading)}</div>
+    }
+    render(<MemoryRouter initialEntries={["/chat"]}><ClientDataProvider><Probe /></ClientDataProvider></MemoryRouter>)
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    await vi.waitFor(() => expect(screen.getByTestId("startup")).toHaveTextContent("user-1"), { timeout: 500 })
+    expect(screen.getByTestId("startup").textContent).toContain("true")
+    await act(async () => { finish(); await vi.advanceTimersByTimeAsync(0) })
+    expect(screen.getByTestId("startup")).toHaveTextContent("user-1:false:false")
+  })
+
+  it("通讯录和项目后台失败不会把主界面退回初始化错误页", async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === "/api/client/me") return jsonResponse(createCurrentUserResponse())
+      if (url === "/api/client/conversations") return jsonResponse(createConversationsResponse([]))
+      throw new Error("secondary offline")
+    }))
+    function Probe() {
+      const { contactsError, projectsError } = useClientData()
+      return <div data-testid="startup">ready:{String(Boolean(contactsError))}:{String(Boolean(projectsError))}</div>
+    }
+    render(<MemoryRouter initialEntries={["/chat"]}><ClientDataProvider><Probe /></ClientDataProvider></MemoryRouter>)
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    await vi.waitFor(() => expect(screen.getByTestId("startup")).toHaveTextContent("ready:true:true"), { timeout: 500 })
+  })
+
+  it("自动消息预取共享100条预算、最多三个请求并发，当前和未读会话优先", async () => {
+    vi.useFakeTimers()
+    let finish!: () => void
+    const blocked = new Promise<void>((resolve) => { finish = resolve })
+    const requests: { id: string; limit: number }[] = []
+    let active = 0
+    let peak = 0
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === "/api/client/me") return jsonResponse(createCurrentUserResponse())
+      if (url === "/api/client/contacts") return jsonResponse(createContactsResponse())
+      if (url === "/api/client/projects?limit=100") return jsonResponse(createProjectsResponse())
+      const message = url.match(/\/conversations\/([^/]+)\/messages\?/)
+      if (message) {
+        requests.push({ id: message[1], limit: Number(new URL(url, "https://example.test").searchParams.get("limit")) })
+        peak = Math.max(peak, ++active)
+        await blocked
+        active -= 1
+        return jsonResponse(createMessagesResponseFor(message[1]))
+      }
+      if (url.startsWith("/api/client/conversations")) return jsonResponse(createConversationsResponse(
+        Array.from({ length: 40 }, (_, i) => ({ ...createConversationResponse(`c${i}`), last_message_seq: 20, unread_count: i === 35 ? 1 : 0 }))
+      ))
+      throw new Error(`unexpected request: ${url}`)
+    }))
+    function Probe() {
+      const { syncLoadedConversationMessages } = useClientData()
+      return <button onClick={() => syncLoadedConversationMessages()}>sync</button>
+    }
+    render(<MemoryRouter initialEntries={["/chat/c39"]}><ClientDataProvider><Probe /></ClientDataProvider></MemoryRouter>)
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    await vi.waitFor(() => expect(screen.getByRole("button", { name: "sync" })).toBeInTheDocument(), { timeout: 500 })
+    fireEvent.click(screen.getByRole("button", { name: "sync" }))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    expect(requests).toHaveLength(3)
+    expect(requests.slice(0, 2).map(({ id }) => id)).toEqual(["c39", "c35"])
+    await act(async () => { finish(); await vi.advanceTimersByTimeAsync(0) })
+    expect(requests).toHaveLength(5)
+    expect(requests.reduce((sum, { limit }) => sum + limit, 0)).toBe(100)
+    expect(peak).toBe(3)
+  })
+
   it.each([false, true])("重连只刷新一轮普通资料并保留实体版本，实时新版本优先=%s", async (racing) => {
     vi.useFakeTimers()
     let lookups = 0
@@ -490,6 +575,53 @@ describe("ClientDataProvider", () => {
     expect(screen.getByTestId("directory-mode")).toHaveTextContent("friends")
     expect(screen.getByTestId("incoming-count")).toHaveTextContent("1")
     expect(screen.getByTestId("friend-name")).toBeEmptyDOMElement()
+  })
+
+  it.each([
+    [500, [500]], [501, [500, 1]], [1322, [500, 500, 322]],
+  ] as const)("%i人按500分批串行加载，并复用已获取资料", async (count, expected) => {
+    vi.useFakeTimers()
+    const ids = Array.from({ length: count }, (_, i) => `batch-user-${i}`)
+    const requests: string[][] = []
+    let release!: () => void
+    const blocked = new Promise<void>((resolve) => { release = resolve })
+    let active = 0
+    let peak = 0
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === "/api/client/me") return jsonResponse(createCurrentUserResponse())
+      if (url === "/api/client/contacts") return jsonResponse(createContactsResponse())
+      if (url === "/api/client/projects?limit=100") return jsonResponse(createProjectsResponse())
+      if (url === "/api/client/users/resolve") {
+        const batch = (JSON.parse(String(init?.body)) as { user_ids: string[] }).user_ids
+        requests.push(batch)
+        peak = Math.max(peak, ++active)
+        await blocked
+        active -= 1
+        return jsonResponse({ success: true, data: { users: batch.map((id) => ({
+          id, name: id, email: `${id}@example.com`, avatar: "", type: "user", online: false,
+          updated_at: "2026-07-09T01:00:00Z",
+        })) } })
+      }
+      throw new Error(`unexpected request: ${url}`)
+    }))
+    function Probe() {
+      const { ensureUsers, usersById } = useClientData()
+      return <><button onClick={() => void ensureUsers([...ids, ids[0]!, " "])}>加载批次</button>
+        <span data-testid="batch-last">{usersById[ids[count - 1]!]?.name}</span></>
+    }
+    render(<MemoryRouter initialEntries={["/tasks/project-1/task-1"]}><ClientDataProvider><Probe /></ClientDataProvider></MemoryRouter>)
+    await act(async () => vi.advanceTimersByTimeAsync(1000))
+    fireEvent.click(screen.getByRole("button", { name: "加载批次" }))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    expect(requests).toHaveLength(1)
+    await act(async () => { release(); await vi.advanceTimersByTimeAsync(0) })
+    await vi.waitFor(() => expect(screen.getByTestId("batch-last")).toHaveTextContent(ids[count - 1]!))
+    expect(requests.map((batch) => batch.length)).toEqual(expected)
+    expect(peak).toBe(1)
+    fireEvent.click(screen.getByRole("button", { name: "加载批次" }))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    expect(requests).toHaveLength(expected.length)
   })
 
   it("batches and caches user profile resolution", async () => {

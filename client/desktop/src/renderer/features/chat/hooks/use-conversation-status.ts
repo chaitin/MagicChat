@@ -154,7 +154,7 @@ export function useConversationStatus({
       return undefined
     }
     return receivedStatuses.get(conversation.id)?.status
-  }, [conversation, receivedStatuses])
+  }, [conversation, realtimeReady, receivedStatuses])
 }
 
 function sameSender(left: ConversationPresenceSender, right: ConversationPresenceSender) {

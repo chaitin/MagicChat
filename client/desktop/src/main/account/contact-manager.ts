@@ -15,6 +15,7 @@ import {
 import { AuthenticatedClient } from "./authenticated-client"
 import { retryNetworkAction } from "./retry"
 import { coalesceRefresh } from "./coalesced-refresh"
+import { USER_PROFILE_BATCH_SIZE } from "../../../../shared/directory-sync.ts"
 import type { AvatarDescriptor, AvatarMemberDescriptor } from "./avatar-types"
 import { entityKey, readEntitySnapshot, type EntityReference, type EntityWireSnapshot } from "../../../../shared/entity-sync.ts"
 
@@ -46,9 +47,9 @@ export class ContactManager {
   private async refreshDirectory() {
     const generation = this.entityGeneration
     const snapshot = await retryNetworkAction(() => this.fetchDirectory())
-    const batches = chunk(snapshot.userIds, 100)
+    const batches = chunk(snapshot.userIds, USER_PROFILE_BATCH_SIZE)
     const users = (
-      await mapConcurrent(batches, 4, (userIds) =>
+      await mapConcurrent(batches, 2, (userIds) =>
         retryNetworkAction(() => this.resolveUsers(userIds)),
       )
     ).flat()

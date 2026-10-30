@@ -65,16 +65,16 @@ export function App() {
           element={
             <>
               <GlobalBeforeUnloadGuard />
-              <ClientDataProvider>
-                <ClientRealtimeProvider>
+              <ClientRealtimeProvider>
+                <ClientDataProvider>
                   <ClientConversationRealtimeSync />
                   <ClientMessageNotificationSync />
                   <ClientUserDirectoryRealtimeSync />
                   <ClientEntityRealtimeSync />
                   <NamecardDialogHost />
                   <AppLayout />
-                </ClientRealtimeProvider>
-              </ClientDataProvider>
+                </ClientDataProvider>
+              </ClientRealtimeProvider>
             </>
           }
         >

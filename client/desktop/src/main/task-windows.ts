@@ -8,6 +8,7 @@ import {
 import { AuthFailure } from "../shared/auth"
 import { parseTaskWindowOpenInput } from "./task-window-policy"
 import { centerWindowWithinWorkArea } from "./window-position"
+import { sendToRenderer } from "./renderer-messages"
 
 export class TaskWindows {
   private readonly windows = new Map<
@@ -22,6 +23,7 @@ export class TaskWindows {
     private readonly getMainWindow: () => BrowserWindow | null,
     private readonly getZoom: () => ContentZoom,
     private readonly iconPath: string,
+    private readonly notifyMainChanged: (change: TaskWindowChange) => void,
   ) {}
 
   async open(input: unknown) {
@@ -63,7 +65,11 @@ export class TaskWindows {
     window.on("closed", () => this.windows.delete(contents))
     const sendMaximizedState = () => {
       if (!window.isDestroyed())
-        window.webContents.send(DESKTOP_CHANNELS.windowMaximizedChanged, window.isMaximized())
+        sendToRenderer(
+          window.webContents,
+          DESKTOP_CHANNELS.windowMaximizedChanged,
+          window.isMaximized(),
+        )
     }
     window.on("maximize", sendMaximizedState)
     window.on("unmaximize", sendMaximizedState)
@@ -102,17 +108,17 @@ export class TaskWindows {
   notifyChanged(sender: WebContents): TaskWindowChange {
     const { targetId, projectId } = this.getContext(sender)
     const change = { targetId, projectId }
-    this.getMainWindow()?.webContents.send(TASK_WINDOW_CHANNELS.changed, change)
+    this.notifyMainChanged(change)
     for (const [contents] of this.windows) {
       if (contents !== sender && !contents.isDestroyed())
-        contents.send(TASK_WINDOW_CHANNELS.changed, change)
+        sendToRenderer(contents, TASK_WINDOW_CHANNELS.changed, change)
     }
     return change
   }
 
   notifyThemeChanged(theme: ThemePreference) {
     for (const [contents] of this.windows) {
-      if (!contents.isDestroyed()) contents.send(TASK_WINDOW_CHANNELS.themeChanged, theme)
+      sendToRenderer(contents, TASK_WINDOW_CHANNELS.themeChanged, theme)
     }
   }
 

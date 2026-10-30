@@ -24,6 +24,22 @@ describe("useConversationMessageWindow", () => {
     mocks.listConversationMessages.mockReset()
   })
 
+  it("后台最新页刷新保留缓存展示，并使用预算指定的请求上限", async () => {
+    const pending = createDeferred<ClientMessageList>()
+    mocks.listConversationMessages.mockReturnValue(pending.promise)
+    const { result } = renderHook(useMessageWindowHarness)
+    const cached = createPage(181, 200, true, false)
+    act(() => result.current.updateState((state) => ({ ...state, loaded: true, messages: cached.messages, page: cached.page })))
+    let request: Promise<void> | undefined
+    act(() => { request = result.current.actions.returnToLatestConversationMessages("conversation-1", { quiet: true, limit: 3 }) })
+    expect(result.current.state.loaded).toBe(true)
+    expect(result.current.state.loading).toBe(false)
+    expect(result.current.state.messages).toEqual(cached.messages)
+    expect(mocks.listConversationMessages).toHaveBeenCalledWith("conversation-1", { limit: 3 })
+    await act(async () => { pending.resolve(createPage(198, 200, true, false)); await request })
+    expect(result.current.state.messages.at(-1)?.seq).toBe(200)
+  })
+
   it("focuses a cached quoted message without refetching the window", async () => {
     const { result } = renderHook(useMessageWindowHarness)
     const cached = createPage(181, 200, true, false)
@@ -103,7 +119,7 @@ describe("useConversationMessageWindow", () => {
       )
     })
     act(() =>
-      result.current.actions.returnToLatestConversationMessages(
+      void result.current.actions.returnToLatestConversationMessages(
         "conversation-1"
       )
     )
@@ -183,7 +199,7 @@ describe("useConversationMessageWindow", () => {
         page: initial.page,
       }))
     )
-    act(() =>
+    await act(() =>
       result.current.actions.syncAfterConversationMessages(
         "conversation-1",
         20,
@@ -227,7 +243,7 @@ describe("useConversationMessageWindow", () => {
     )
 
     act(() =>
-      result.current.actions.returnToLatestConversationMessages(
+      void result.current.actions.returnToLatestConversationMessages(
         "conversation-1"
       )
     )
@@ -311,7 +327,7 @@ describe("useConversationMessageWindow", () => {
     const { result } = renderHook(useMessageWindowHarness)
 
     act(() =>
-      result.current.actions.ensureConversationMessages("conversation-1")
+      void result.current.actions.ensureConversationMessages("conversation-1")
     )
     act(() => {
       result.current.actions.invalidateConversationMessageRequests()
@@ -415,7 +431,7 @@ describe("useConversationMessageWindow", () => {
     const { result } = renderHook(useMessageWindowHarness)
 
     act(() =>
-      result.current.actions.returnToLatestConversationMessages(
+      void result.current.actions.returnToLatestConversationMessages(
         "conversation-1"
       )
     )

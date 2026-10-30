@@ -3,6 +3,7 @@ import test from "node:test"
 import type { DesktopMessage } from "../src/shared/account-data.ts"
 import {
   boundMessageWindow,
+  mergeRefreshedMessages,
   MAX_VISIBLE_MESSAGES,
   visibleMessageGap,
 } from "../src/renderer/features/chat/bounded-message-window.ts"
@@ -40,6 +41,20 @@ test("向下翻或收到新消息保留最新 200 条并允许向上重新加载
   assert.equal(result.messages.at(-1)?.id, "message-250")
   assert.equal(result.removedBefore, true)
   assert.equal(result.removedAfter, false)
+})
+
+test("刷新合并只保留当前会话历史，旧会话高序号消息不能挤掉新会话消息", () => {
+  const previous = messages.slice(0, 200).map((message) => ({ ...message, conversationId: "old", seq: message.seq + 1000 }))
+  const incoming = messages.slice(0, 4).map((message) => ({ ...message, conversationId: "new" }))
+  const result = mergeRefreshedMessages(previous, incoming, true)
+  assert.deepEqual(result.messages, incoming)
+  assert.equal(result.removedBefore, false)
+  assert.equal(result.removedAfter, false)
+})
+
+test("空刷新不丢失同一会话已加载的历史", () => {
+  const previous = messages.slice(0, 50).map((message) => ({ ...message, conversationId: "current" }))
+  assert.deepEqual(mergeRefreshedMessages(previous, [], true).messages, previous)
 })
 
 test("缺口任一端被裁掉时不展示过期的加载入口", () => {

@@ -3,8 +3,20 @@ import test from "node:test"
 
 import { ApiRequestError } from "../src/data/api-client.ts"
 import { getClientDataBootstrapState } from "../src/providers/client-data-bootstrap.ts"
+import { combineClientDataState } from "../src/providers/client-data/state.ts"
 
 const connectionError = new ApiRequestError("offline", { kind: "connection" })
+
+test("已有个人资料与本地会话即可显示首屏，不等待全员资料", () => {
+  const input = {
+    enabled: true, currentUserAvailable: true, conversationsAvailable: true, conversationsLocalReady: true,
+    contactsAvailable: false, contactsLocalReady: false, profilesReady: false,
+    bootstrapState: { ready: false, blockingError: null },
+  }
+  assert.equal(combineClientDataState(input).isReady, true)
+  assert.equal(combineClientDataState({ ...input, currentUserAvailable: false }).isReady, false)
+  assert.equal(combineClientDataState({ ...input, conversationsLocalReady: false }).isReady, false)
+})
 
 test("cached bootstrap data suppresses background connection failures", () => {
   const state = getClientDataBootstrapState([

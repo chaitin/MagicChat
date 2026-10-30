@@ -17,7 +17,7 @@ test("sync budget skips unchanged, enforces 100 per conversation and in total", 
   assert.deepEqual(createMessageSyncBudget().decide(conversation(200), { httpSyncedThroughSeq: 100 }), { type: "after", afterSeq: 100, targetSeq: 200 })
   assert.deepEqual(createMessageSyncBudget().decide(conversation(201), { httpSyncedThroughSeq: 100 }), { type: "skip" })
   assert.deepEqual(createMessageSyncBudget().decide(conversation(101), undefined), { type: "skip" })
-  assert.deepEqual(createMessageSyncBudget().decide(conversation(100), { httpSyncedThroughSeq: 0 }), { type: "latest" })
+  assert.deepEqual(createMessageSyncBudget().decide(conversation(100), { httpSyncedThroughSeq: 0 }), { type: "latest", limit: 20 })
 })
 
 test("catch-up pages until snapshot boundary without crossing the budget", async () => {

@@ -3,7 +3,6 @@ import type { AuthenticatedTarget } from "@/core/server-target"
 import { createAuthenticatedScopeKey } from "@/data/server-key"
 import { traceMobileStartup } from "@/diagnostics/mobile-startup"
 import {
-  AUTO_MESSAGE_PAGE_SIZE,
   AUTO_MESSAGE_SYNC_CONCURRENCY,
   catchUpMessagesTo,
   createMessageSyncBudget,
@@ -116,7 +115,7 @@ export function createAutomaticMessageSynchronizer(dependencies: AutomaticMessag
                 return result
               })
             } else if (job.decision.type === "latest") {
-              await dependencies.synchronizeLatest(target, job.id, AUTO_MESSAGE_PAGE_SIZE)
+              await dependencies.synchronizeLatest(target, job.id, job.decision.limit)
             } else continue
             job.done = true
           } catch (error) {

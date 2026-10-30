@@ -134,7 +134,7 @@ test("desktop skips unchanged and large gaps, and fetches a large gap only when 
     await manager.refresh()
     assert.deepEqual(
       requests.filter((url) => url.includes("/messages")),
-      ["/api/client/conversations/changed/messages?limit=20"],
+      ["/api/client/conversations/changed/messages?limit=1"],
     )
     assert.equal(database.getMessageSyncSeq("changed"), 1)
     assert.equal(database.getMessageSyncSeq("large"), 0)
@@ -214,6 +214,82 @@ test("desktop catches up all missing messages through 20-item pages", async () =
   } finally {
     database.close()
   }
+})
+
+test("空会话列表的成功快照也会记录为可用缓存", async () => {
+  const database = new AccountDatabase(":memory:")
+  try {
+    assert.equal(database.hasConversationSnapshot(), false)
+    const manager = new ConversationManager(database, { get: async () => ({ conversations: [] }) } as never, "user", "User", () => undefined)
+    await manager.refreshSnapshot()
+    assert.equal(database.hasConversationSnapshot(), true)
+    assert.equal(database.listConversations().length, 0)
+  } finally { database.close() }
+})
+
+for (const remove of [false, true]) {
+  test(remove ? "群权限撤销后丢弃迟到消息补追" : "正常群资料对账不会中断消息补追", async () => {
+    const database = new AccountDatabase(":memory:")
+    let release!: () => void
+    let started!: () => void
+    const blocked = new Promise<void>((resolve) => { release = resolve })
+    const requested = new Promise<void>((resolve) => { started = resolve })
+    const group = { id: "chat", type: "group", name: "Chat", created_at: "2026-01-01T00:00:00Z", last_message_seq: 1 }
+    try {
+      const manager = new ConversationManager(database, { get: async (url: string) => {
+        if (url === "/api/client/conversations") return { conversations: [group] }
+        started()
+        await blocked
+        return {
+          messages: [{ id: "m1", conversation_id: "chat", seq: 1, created_at: "2026-01-01T00:00:00Z", sender: { id: "user", type: "user" }, body: { type: "text", content: "hello" } }],
+          page: { has_more_before: false, has_more_after: false },
+        }
+      } } as never, "user", "User", () => undefined)
+      const work = manager.refresh()
+      await requested
+      if (remove) manager.removeEntity("chat")
+      else manager.applyEntity({ ...group, name: "Renamed" }, 1)
+      release()
+      await work
+      assert.equal(database.getMessageSyncSeq("chat"), remove ? 0 : 1)
+      assert.equal(database.listMessages("chat", "user", 20).length, remove ? 0 : 1)
+    } finally { release(); database.close() }
+  })
+}
+
+test("移除后重新加入会话不复用旧请求，旧完成也不清除新请求", async () => {
+  const database = new AccountDatabase(":memory:")
+  let releaseOld!: () => void
+  let releaseNew!: () => void
+  const old = new Promise<void>((resolve) => { releaseOld = resolve })
+  const fresh = new Promise<void>((resolve) => { releaseNew = resolve })
+  let seq = 1
+  let calls = 0
+  try {
+    const manager = new ConversationManager(database, { get: async (url: string) => {
+      if (url === "/api/client/conversations") return { conversations: [{ id: "chat", type: "group", name: "Chat", created_at: "2026-01-01T00:00:00Z", last_message_seq: seq }] }
+      const version = ++calls
+      await (version === 1 ? old : fresh)
+      return {
+        messages: [{ id: `m${version}`, conversation_id: "chat", seq: version, created_at: "2026-01-01T00:00:00Z", sender: { id: "user", type: "user" }, body: { type: "text", content: "hello" } }],
+        page: { has_more_before: false, has_more_after: false },
+      }
+    } } as never, "user", "User", () => undefined)
+    await manager.refreshSnapshot()
+    const oldOpen = manager.ensureLatestOnOpen("chat")
+    manager.removeEntity("chat")
+    seq = 2
+    await manager.refreshSnapshot()
+    const newOpen = manager.ensureLatestOnOpen("chat")
+    assert.equal(calls, 2)
+    releaseOld()
+    await oldOpen
+    const joined = manager.ensureLatestOnOpen("chat")
+    assert.equal(calls, 2)
+    releaseNew()
+    await Promise.all([newOpen, joined])
+    assert.deepEqual(database.listMessages("chat", "user", 20).map((value) => value.seq), [2])
+  } finally { releaseOld(); releaseNew(); database.close() }
 })
 
 test("desktop stores messages and sync cursor together and never rewinds the cursor", () => {
