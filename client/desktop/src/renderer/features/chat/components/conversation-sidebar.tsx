@@ -316,6 +316,7 @@ function ConversationGroup({
                   )}
                   <ConversationListAvatar
                     conversation={conversation}
+                    selected={active}
                     targetId={targetId}
                     resolvedTheme={resolvedTheme}
                   />
@@ -407,16 +408,18 @@ function ConversationGroup({
 
 function ConversationListAvatar({
   conversation,
+  selected,
   targetId,
   resolvedTheme,
 }: {
   conversation: DesktopConversation
+  selected: boolean
   targetId: string
   resolvedTheme: "light" | "dark"
 }) {
   const isTopic = conversation.type === "topic"
   const sourceSender = isTopic ? conversation.topic?.sourceSender : undefined
-  const unreadIndicator = conversationUnreadIndicator(conversation)
+  const unreadIndicator = conversationUnreadIndicator(conversation, selected)
   return (
     <div
       className={cn("flex shrink-0 items-center justify-center", isTopic ? "size-7" : "size-10")}

@@ -42,12 +42,14 @@ export function XGUIBadge({
       style={[
         styles.badge,
         dot ? styles.dot : size === "large" ? styles.largeBadge : null,
+        !dot && count > 99 ? size === "large" ? styles.largeOverflowBadge : styles.overflowBadge : null,
         { backgroundColor: backgroundColor ?? colors.destructive },
         style,
       ]}
     >
       {dot ? null : (
         <Text
+          numberOfLines={1}
           style={[
             styles.text,
             size === "large" ? styles.largeText : null,
@@ -78,6 +80,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingVertical: 0,
   },
+  // Absolute badges can otherwise inherit the tab icon’s 30dp width constraint.
+  overflowBadge: { minWidth: 34 },
+  largeOverflowBadge: { minWidth: 40 },
   largeBadge: {
     borderRadius: 22,
     minHeight: 22,

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 import {
   conversationUnreadIndicator,
@@ -32,6 +33,36 @@ test("免打扰会话有未读时只显示红点", () => {
     label: "有未读消息",
     text: null,
   })
+})
+
+test("选中会话始终隐藏未读徽标，新消息增加数量时也不闪现", () => {
+  for (const notificationMuted of [false, true]) {
+    for (const unreadCount of [0, 1, 2, 99, 100, 999]) {
+      assert.equal(conversationUnreadIndicator({ unreadCount, notificationMuted }, true), null)
+    }
+  }
+})
+
+test("隐藏只影响列表显示，取消选中恢复徽标且不修改未读统计", () => {
+  const conversation = Object.freeze({ unreadCount: 3, notificationMuted: false })
+  assert.equal(conversationUnreadIndicator(conversation, true), null)
+  const afterMessage = Object.freeze({ ...conversation, unreadCount: 4 })
+  assert.equal(conversationUnreadIndicator(afterMessage, true), null)
+  assert.deepEqual(conversationUnreadIndicator(afterMessage, false), {
+    label: "4 条未读消息", text: "4",
+  })
+  assert.equal(conversation.unreadCount, 3)
+  assert.equal(unmutedUnreadCount([afterMessage]), 4)
+  assert.equal(hasUnmutedUnreadConversations([afterMessage]), true)
+  assert.deepEqual(conversationUnreadIndicator({ ...afterMessage, notificationMuted: true }, false), {
+    label: "有未读消息", text: null,
+  })
+})
+
+test("对话列表将当前选中状态传给头像徽标显示规则", () => {
+  const source = readFileSync(new URL("../src/renderer/features/chat/components/conversation-sidebar.tsx", import.meta.url), "utf8")
+  assert.match(source, /<ConversationListAvatar\b[^>]*\bselected=\{active\}/)
+  assert.match(source, /conversationUnreadIndicator\(conversation, selected\)/)
 })
 
 test("只有未读消息包含针对自己的提及时显示提及标记", () => {
