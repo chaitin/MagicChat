@@ -45,7 +45,6 @@ import {
   type MessageMentionLabelResolver,
   type PresentedMessage,
 } from "@/domain/messages/message-presenter"
-import { shouldShowMessageChoiceResponseCounts } from "@/domain/messages/message-choices"
 import {
   MessageComposer,
   type MessageComposerHandle,
@@ -652,9 +651,6 @@ export function ConversationScreen() {
               resolveMentionLabel={resolveMentionLabel}
               resourceStates={displayedResourceStates}
               server={session}
-              showChoiceResponseCounts={
-                shouldShowMessageChoiceResponseCounts(conversation)
-              }
               />
               {topicArchived ? (
                 <View style={{ alignItems: "center", backgroundColor: colors.background1, padding: 18 }}>

@@ -15,7 +15,7 @@ import {
 } from "@/domain/messages/message-choices"
 import { MarkdownMessage } from "@/features/conversation/messages/markdown-message"
 import { MessageMentionText } from "@/features/conversation/messages/message-mention-text"
-import { XGUIBadge, XGUIButton, useXGUITheme, useXGUIToast } from "@/xgui"
+import { XGUIButton, useXGUITheme, useXGUIToast } from "@/xgui"
 
 export function MessageChoice({
   body,
@@ -27,7 +27,6 @@ export function MessageChoice({
   onRespond,
   resolveMentionLabel,
   serverUrl,
-  showResponseCounts,
 }: {
   body: ClientChoiceMessageBody
   canRespond: boolean
@@ -38,7 +37,6 @@ export function MessageChoice({
   onRespond?: (optionIds: string[]) => Promise<void>
   resolveMentionLabel: MessageMentionLabelResolver
   serverUrl: string
-  showResponseCounts: boolean
 }) {
   const toast = useXGUIToast()
   const { colors } = useXGUITheme()
@@ -52,9 +50,6 @@ export function MessageChoice({
   const disabled = !canRespond || answered || submitting
   const hasSubmittableSelection =
     canRespond && Boolean(onRespond) && selectedOptionIds.length > 0
-  const countsByOptionId = new Map(
-    choice?.options.map((option) => [option.id, option.responseCount]) ?? []
-  )
 
   function selectSingle(optionId: string) {
     if (didLongPressRef.current) {
@@ -133,7 +128,6 @@ export function MessageChoice({
       <View style={[styles.options, { borderColor: colors.separator }]}>
         {body.options.map((option, index) => (
           <ChoiceOptionRow
-            count={countsByOptionId.get(option.id) ?? 0}
             disabled={disabled}
             key={option.id}
             label={option.label}
@@ -151,7 +145,6 @@ export function MessageChoice({
             }}
             selected={selectedOptionIds.includes(option.id)}
             separator={index > 0}
-            showResponseCount={showResponseCounts}
             type={body.selection === "single" ? "radio" : "checkbox"}
           />
         ))}
@@ -183,7 +176,6 @@ export function MessageChoice({
 }
 
 function ChoiceOptionRow({
-  count,
   disabled,
   label,
   onLongPress,
@@ -191,10 +183,8 @@ function ChoiceOptionRow({
   onPressIn,
   selected,
   separator,
-  showResponseCount,
   type,
 }: {
-  count: number
   disabled: boolean
   label: string
   onLongPress: () => void
@@ -202,7 +192,6 @@ function ChoiceOptionRow({
   onPressIn: () => void
   selected: boolean
   separator: boolean
-  showResponseCount: boolean
   type: "checkbox" | "radio"
 }) {
   const { colors } = useXGUITheme()
@@ -239,15 +228,6 @@ function ChoiceOptionRow({
           <Text style={[styles.optionLabel, { color: colors.textPrimary }]}>
             {label}
           </Text>
-          {showResponseCount ? (
-            <XGUIBadge
-              accessibilityLabel={`${count} 人选择`}
-              backgroundColor={colors.foreground4}
-              count={count}
-              style={styles.optionCount}
-              textColor={colors.foreground0Half}
-            />
-          ) : null}
         </View>
       )}
     </Pressable>
@@ -291,16 +271,13 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   submit: { gap: 13 },
-  optionCount: {
-    marginLeft: 12,
-  },
   optionDisabled: {
     opacity: 0.45,
   },
   optionLabel: {
     flex: 1,
-    fontSize: 14,
-    lineHeight: 22,
+    fontSize: 12,
+    lineHeight: 18,
     minWidth: 0,
   },
   optionPressable: {
@@ -327,12 +304,12 @@ const styles = StyleSheet.create({
   },
   selectionControl: {
     alignItems: "center",
-    borderRadius: 8,
+    borderRadius: 9,
     borderWidth: 0,
-    height: 16,
+    height: 18,
     justifyContent: "center",
     marginRight: 8,
-    width: 16,
+    width: 18,
   },
   submitButton: {
     height: 40,

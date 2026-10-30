@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
+import { runInNewContext } from "node:vm"
 
 import { normalizeClientMessage } from "../src/data/messages/message-normalizer.ts"
 import { DATABASE_VERSION } from "../src/data/database/database-version.ts"
@@ -24,7 +26,6 @@ import {
   applyMessageChoiceSnapshot,
   applyMessageChoiceState,
   isMessageChoiceAnswered,
-  shouldShowMessageChoiceResponseCounts,
   updateMessageChoiceDraft,
 } from "../src/domain/messages/message-choices.ts"
 import { preserveNewerMessageState } from "../src/domain/messages/message-reactions.ts"
@@ -98,6 +99,34 @@ function conversation(type: ClientConversation["type"]): ClientConversation {
     visibility: "private",
   }
 }
+
+test("choice typography keeps compact option text and 18-point controls without changing other badges", () => {
+  function componentStyles(relativePath: string) {
+    const source = readFileSync(new URL(relativePath, import.meta.url), "utf8")
+    const start = source.indexOf("const styles = StyleSheet.create(")
+    assert.notEqual(start, -1)
+    return runInNewContext(`${source.slice(start)}\nstyles`, {
+      StyleSheet: { create: (value: unknown) => value, hairlineWidth: 1 },
+    })
+  }
+  const choice = componentStyles(
+    "../src/features/conversation/messages/message-choice.tsx"
+  )
+  const badge = componentStyles("../src/xgui/components/xgui-badge.tsx")
+  assert.equal(choice.optionLabel.fontSize, 12)
+  assert.equal(choice.optionLabel.lineHeight, 18)
+  assert.equal(choice.optionCount, undefined)
+  assert.equal(choice.optionCountText, undefined)
+  assert.equal(badge.badge.minHeight, 18)
+  assert.equal(badge.badge.minWidth, 18)
+  assert.equal(badge.text.fontSize, 12)
+  assert.equal(badge.text.lineHeight, 14)
+  assert.equal(choice.selectionControl.width, 18)
+  assert.equal(choice.selectionControl.height, 18)
+  assert.equal(choice.selectionControl.borderRadius, 9)
+  assert.equal(choice.radioDot.width, 5)
+  assert.equal(choice.radioDot.height, 5)
+})
 
 test("normalizes valid choice bodies and legacy null answers", () => {
   const message = normalizeClientMessage({
@@ -327,35 +356,25 @@ test("tombstones block stale HTTP messages from reviving choices", () => {
   clearConversationMessageTombstones(target, active.conversationId)
 })
 
-test("shows counts only for group conversations and group topics", () => {
-  assert.equal(
-    shouldShowMessageChoiceResponseCounts(conversation("group")),
-    true
-  )
-  assert.equal(
-    shouldShowMessageChoiceResponseCounts(conversation("direct")),
-    false
-  )
-  assert.equal(
-    shouldShowMessageChoiceResponseCounts(conversation("app")),
-    false
-  )
-  assert.equal(
-    shouldShowMessageChoiceResponseCounts({
-      ...conversation("topic"),
-      topic: {
-        archived: false,
-        parentConversationId: "group",
-        parentConversationName: "Group",
-        parentConversationType: "group",
-        participating: true,
-        sourceMessageId: "source",
-        sourceMessageSeq: 1,
-        sourceSender: { avatar: "", id: "app", name: "App", type: "app" },
-      },
-    }),
-    true
-  )
+test("mobile choice options never render response-count badges", () => {
+  const choice = readFileSync(new URL(
+    "../src/features/conversation/messages/message-choice.tsx",
+    import.meta.url
+  ), "utf8")
+  assert.doesNotMatch(choice, /\b(?:XGUIBadge|responseCount|showResponseCounts?)\b/)
+  assert.match(choice, /accessibilityState=\{\{ checked: selected, disabled \}\}/)
+  assert.match(choice, /await onRespond\(selectedOptionIds\)/)
+  for (const path of [
+    "../src/features/conversation/conversation-screen.tsx",
+    "../src/features/conversation/messages/message-list.tsx",
+    "../src/features/conversation/messages/message-bubble.tsx",
+    "../src/features/chat-records/chat-record-screen.tsx",
+  ]) {
+    assert.doesNotMatch(
+      readFileSync(new URL(path, import.meta.url), "utf8"),
+      /showChoiceResponseCounts|shouldShowMessageChoiceResponseCounts/
+    )
+  }
 })
 
 test("choice unread wins mention ties and removes duplicate choice prefix", () => {

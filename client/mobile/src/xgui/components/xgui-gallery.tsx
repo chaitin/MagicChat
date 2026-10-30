@@ -14,6 +14,8 @@ import {
   Gesture,
   GestureDetector,
   GestureHandlerRootView,
+  type GestureStateManager,
+  type GestureTouchEvent,
 } from "react-native-gesture-handler"
 import Animated, {
   runOnJS,
@@ -69,6 +71,8 @@ export function XGUIGallery({
   const translateY = useSharedValue(0)
   const savedX = useSharedValue(0)
   const savedY = useSharedValue(0)
+  const tapBlocked = useSharedValue(false)
+  const hadMultiplePointers = useSharedValue(false)
 
   useEffect(() => {
     if (open) {
@@ -83,7 +87,23 @@ export function XGUIGallery({
     }
   }, [opacity, open, savedScale, savedX, savedY, scale, translateX, translateY])
 
+  const rejectMultiTouchTap = (
+    event: GestureTouchEvent,
+    stateManager: GestureStateManager
+  ) => {
+    "worklet"
+    if (event.numberOfTouches > 1) {
+      tapBlocked.value = true
+      hadMultiplePointers.value = true
+      stateManager.fail()
+    }
+  }
+
   const pinch = Gesture.Pinch()
+    .onStart(() => {
+      tapBlocked.value = true
+      hadMultiplePointers.value = true
+    })
     .onUpdate((event) => {
       scale.value = Math.min(maxScale, Math.max(1, savedScale.value * event.scale))
     })
@@ -99,16 +119,36 @@ export function XGUIGallery({
 
   const pan = Gesture.Pan()
     .minPointers(1)
+    .minDistance(8)
+    .onBegin((event) => {
+      // 只在新一轮触摸开始时重置，缩放松开一指时不能恢复点击。
+      hadMultiplePointers.value = event.numberOfPointers > 1
+      tapBlocked.value = hadMultiplePointers.value
+    })
+    .onTouchesDown((event) => {
+      if (event.numberOfTouches > 1) {
+        hadMultiplePointers.value = true
+        tapBlocked.value = true
+      }
+    })
+    .onStart(() => {
+      tapBlocked.value = true
+    })
     .onUpdate((event) => {
       if (scale.value > 1) {
         translateX.value = savedX.value + event.translationX
         translateY.value = savedY.value + event.translationY
       }
     })
-    .onEnd((event) => {
+    .onEnd((event, success) => {
+      if (!success) return
       if (scale.value <= 1) {
-        if (event.translationX <= -60 && onSwipeLeft) runOnJS(onSwipeLeft)()
-        if (event.translationX >= 60 && onSwipeRight) runOnJS(onSwipeRight)()
+        const horizontal =
+          Math.abs(event.translationX) > Math.abs(event.translationY)
+        if (!hadMultiplePointers.value && horizontal) {
+          if (event.translationX <= -60 && onSwipeLeft) runOnJS(onSwipeLeft)()
+          if (event.translationX >= 60 && onSwipeRight) runOnJS(onSwipeRight)()
+        }
         translateX.value = 0
         translateY.value = 0
         return
@@ -120,8 +160,12 @@ export function XGUIGallery({
   const doubleTap = Gesture.Tap()
     .numberOfTaps(2)
     .maxDuration(250)
+    .maxDelay(250)
+    .maxDistance(8)
+    .onTouchesDown(rejectMultiTouchTap)
     .onEnd((_event, success) => {
-      if (!success) return
+      if (!success || tapBlocked.value) return
+      tapBlocked.value = true
       const next = scale.value > 1 ? 1 : Math.min(2, maxScale)
       scale.value = withTiming(next)
       savedScale.value = next
@@ -135,8 +179,11 @@ export function XGUIGallery({
 
   const singleTap = Gesture.Tap()
     .numberOfTaps(1)
+    .maxDuration(250)
+    .maxDistance(8)
+    .onTouchesDown(rejectMultiTouchTap)
     .onEnd((_event, success) => {
-      if (success) runOnJS(onOpenChange)(false)
+      if (success && !tapBlocked.value) runOnJS(onOpenChange)(false)
     })
 
   const imageStyle = useAnimatedStyle(() => ({
@@ -147,10 +194,10 @@ export function XGUIGallery({
     ],
   }))
   const modalStyle = useAnimatedStyle(() => ({ opacity: opacity.value }))
-  const gesture = Gesture.Simultaneous(
-    pinch,
-    pan,
-    Gesture.Exclusive(doubleTap, singleTap)
+  const gesture = Gesture.Exclusive(
+    Gesture.Simultaneous(pinch, pan),
+    doubleTap,
+    singleTap
   )
 
   return (

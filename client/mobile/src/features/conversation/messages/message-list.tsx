@@ -64,7 +64,6 @@ export function MessageList({
   resolveMentionLabel,
   resourceStates,
   server,
-  showChoiceResponseCounts,
 }: {
   canAddReaction: boolean
   canCreateTopic: boolean
@@ -104,7 +103,6 @@ export function MessageList({
   resolveMentionLabel: MessageMentionLabelResolver
   resourceStates: ReadonlyMap<string, ResourceLoadState>
   server: ServerTarget
-  showChoiceResponseCounts: boolean
 }) {
   const { colors } = useXGUITheme()
   const listStyle = useMemo(
@@ -438,7 +436,6 @@ export function MessageList({
               resolveMentionLabel={resolveMentionLabel}
               resourceStates={resourceStates}
               server={server}
-              showChoiceResponseCounts={showChoiceResponseCounts}
             />
           )
         }

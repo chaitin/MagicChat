@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
   middleSeparator: { marginVertical: 13 },
   replies: { gap: 7 },
   reply: { alignItems: "center", flexDirection: "row", gap: 7, minWidth: 0 },
-  replyText: { flex: 1, fontSize: 14, lineHeight: 21, minWidth: 0 },
+  replyText: { flex: 1, fontSize: 12, lineHeight: 18, minWidth: 0 },
   footer: { alignItems: "center", flexDirection: "row", gap: 13, justifyContent: "space-between" },
   link: { alignItems: "center", flexDirection: "row", gap: 7 },
   footerText: { fontSize: 14, lineHeight: 21 },

@@ -327,7 +327,7 @@ function MessageImageThumbnail({
         captioned={captioned}
         error={state?.status === "error"}
         onLongPress={onLongPress}
-        onPress={state?.status === "error" ? onPress : undefined}
+        onPress={onPress}
         size={size}
       />
     )
@@ -367,8 +367,8 @@ function LoadedMessageImage({
 
   return (
     <Pressable
-      accessibilityLabel={status === "ready" ? "查看图片" : undefined}
-      disabled={status !== "ready"}
+      accessibilityLabel="查看图片"
+      accessibilityRole="button"
       onLongPress={() => {
         didLongPressRef.current = true
         onLongPress()
@@ -438,12 +438,28 @@ function MessageImageStatus({
   size: { height: number; width: number }
 }) {
   const { colors } = useXGUITheme()
+  const didLongPressRef = useRef(false)
 
   return (
     <Pressable
+      accessible={!absolute}
       accessibilityLabel={error ? "图片加载失败" : "图片正在加载"}
-      onLongPress={onLongPress}
-      onPress={onPress}
+      accessibilityRole="button"
+      onLongPress={() => {
+        didLongPressRef.current = true
+        onLongPress?.()
+      }}
+      onPress={() => {
+        if (didLongPressRef.current) {
+          didLongPressRef.current = false
+          return
+        }
+        onPress?.()
+      }}
+      onPressIn={() => {
+        didLongPressRef.current = false
+      }}
+      pointerEvents={absolute ? "none" : "auto"}
       style={{ alignItems: "center", backgroundColor: colors.background4, borderBottomLeftRadius: captioned ? 0 : 7, borderBottomRightRadius: captioned ? 0 : 7, borderTopLeftRadius: 7, borderTopRightRadius: 7, height: size.height, justifyContent: "center", left: absolute ? 0 : undefined, overflow: "hidden", position: absolute ? "absolute" : "relative", top: absolute ? 0 : undefined, width: size.width }}
     />
   )

@@ -109,7 +109,6 @@ export function ChatRecordScreen() {
               resolveMentionLabel={resolveMentionLabel}
               resourceStates={states}
               server={session}
-              showChoiceResponseCounts={false}
             />
           )}
           style={{ flex: 1 }}

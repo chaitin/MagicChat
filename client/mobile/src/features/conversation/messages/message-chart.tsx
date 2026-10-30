@@ -71,7 +71,7 @@ export const MessageChart = memo(function MessageChart({
       <View style={{ backgroundColor: palette.border, height: StyleSheet.hairlineWidth }} />
       <ChartBody chart={chart} palette={palette} />
       <View style={{ backgroundColor: palette.border, height: StyleSheet.hairlineWidth }} />
-      <Text style={{ color: palette.muted, fontSize: 15, lineHeight: 23 }}>{chart.description}</Text>
+      <Text style={{ color: palette.muted, fontSize: 12, lineHeight: 18 }}>{chart.description}</Text>
     </Pressable>
   )
 })

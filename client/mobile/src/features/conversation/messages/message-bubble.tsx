@@ -49,7 +49,6 @@ export const MessageBubble = memo(function MessageBubble({
   resolveMentionLabel,
   resourceStates,
   server,
-  showChoiceResponseCounts,
 }: {
   avatarType?: "app" | "user"
   canAddReaction: boolean
@@ -82,7 +81,6 @@ export const MessageBubble = memo(function MessageBubble({
   resolveMentionLabel: MessageMentionLabelResolver
   resourceStates: ReadonlyMap<string, ResourceLoadState>
   server: ServerTarget
-  showChoiceResponseCounts: boolean
 }) {
   const { colors } = useXGUITheme()
   const didLongPressAvatarRef = useRef(false)
@@ -295,7 +293,6 @@ export const MessageBubble = memo(function MessageBubble({
                 }
                 resolveMentionLabel={resolveMentionLabel}
                 serverUrl={server.url}
-                showResponseCounts={showChoiceResponseCounts}
               />
             ) : (
               <MessageBody

@@ -1,6 +1,5 @@
 import type {
   ClientChoiceMessageBody,
-  ClientConversation,
   ClientMessage,
   ClientMessageChoiceState,
   MessageChoiceSnapshot,
@@ -26,15 +25,6 @@ export function updateMessageChoiceDraft(
     : body.options
         .map((option) => option.id)
         .filter((id) => id === optionId || current.includes(id))
-}
-
-export function shouldShowMessageChoiceResponseCounts(
-  conversation: ClientConversation
-) {
-  return (
-    conversation.type === "group" ||
-    conversation.topic?.parentConversationType === "group"
-  )
 }
 
 export function isMessageChoiceStateValidForBody(
