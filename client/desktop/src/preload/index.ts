@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron"
-import { ACCOUNT_DATA_CHANNELS } from "../shared/account-data"
+import { ACCOUNT_DATA_CHANNELS, type AccountDataChangedEvent } from "../shared/account-data"
 import { DESKTOP_CHANNELS, type DesktopBridge, type UpdateProgress } from "../shared/desktop"
 import { AUTH_CHANNELS } from "../shared/auth"
 import { MEDIA_CHANNELS, type MediaDownloadProgress } from "../shared/media"
@@ -8,6 +8,7 @@ import {
   type TaskWindowBridge,
   type TaskWindowChange,
 } from "../shared/task-window"
+import { createSubscriptionMultiplexer } from "./subscription-multiplexer"
 
 const platform =
   process.platform === "darwin" ? "macos" : process.platform === "win32" ? "windows" : "linux"
@@ -23,6 +24,10 @@ function subscribe<T>(channel: string, callback: (value: T) => void) {
     }
   }
 }
+
+const subscribeAccountDataChanged = createSubscriptionMultiplexer<AccountDataChangedEvent>(
+  (dispatch) => subscribe(ACCOUNT_DATA_CHANNELS.changed, dispatch),
+)
 
 const bridge: DesktopBridge = {
   taskWindows: {
@@ -221,7 +226,7 @@ const bridge: DesktopBridge = {
     getAvatar: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getAvatar, input),
     invalidateAvatar: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.invalidateAvatar, input),
     onSyncStateChange: (callback) => subscribe(ACCOUNT_DATA_CHANNELS.syncStateChanged, callback),
-    onChanged: (callback) => subscribe(ACCOUNT_DATA_CHANNELS.changed, callback),
+    onChanged: subscribeAccountDataChanged,
     onConversationPresenceChanged: (callback) =>
       subscribe(ACCOUNT_DATA_CHANNELS.conversationPresenceChanged, callback),
   },

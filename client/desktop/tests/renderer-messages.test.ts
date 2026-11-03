@@ -6,6 +6,7 @@ import { runInNewContext } from "node:vm"
 import type { BrowserWindow } from "electron"
 import ts from "typescript"
 import { MainWindowMessages, sendToRenderer } from "../src/main/renderer-messages.ts"
+import { createSubscriptionMultiplexer } from "../src/preload/subscription-multiplexer.ts"
 
 function fixture() {
   const sent: unknown[][] = []
@@ -168,6 +169,50 @@ test("preload先注册监听再确认就绪；多个订阅只在最后一个注�
   assert.equal(acks.length, 2)
   second()
   assert.deepEqual(acks[2], ["ready", "changed", false, 0])
+})
+
+test("多个账号数据订阅共用一个 IPC 监听，并保留首末订阅的就绪通知", () => {
+  const source = readFileSync(new URL("../src/preload/index.ts", import.meta.url), "utf8")
+  const ast = ts.createSourceFile("preload.ts", source, ts.ScriptTarget.Latest, true)
+  const subscribe = ast.statements.find(
+    (node) => ts.isFunctionDeclaration(node) && node.name?.text === "subscribe",
+  )!
+  const multiplexed = ast.statements.find(
+    (node) =>
+      ts.isVariableStatement(node) &&
+      node.declarationList.declarations.some(
+        (declaration) => declaration.name.getText(ast) === "subscribeAccountDataChanged",
+      ),
+  )!
+  const compiled = ts.transpileModule(
+    `${subscribe.getText(ast)}\n${multiplexed.getText(ast)}\nexports.subscribe = subscribeAccountDataChanged`,
+    { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+  ).outputText
+  const acks: unknown[][] = []
+  const emitter = Object.assign(new EventEmitter(), {
+    send: (...args: unknown[]) => acks.push([...args, emitter.listenerCount("changed")]),
+  })
+  const exports: any = {}
+  runInNewContext(compiled, {
+    exports,
+    ipcRenderer: emitter,
+    createSubscriptionMultiplexer,
+    DESKTOP_CHANNELS: { rendererReady: "ready" },
+    ACCOUNT_DATA_CHANNELS: { changed: "changed" },
+  })
+  let received = 0
+  const unsubscribers = Array.from({ length: 20 }, () => exports.subscribe(() => received++))
+  assert.equal(emitter.listenerCount("changed"), 1)
+  assert.deepEqual(acks, [["ready", "changed", true, 1]])
+  emitter.emit("changed", {}, { revision: 1 })
+  assert.equal(received, 20)
+  for (const unsubscribe of unsubscribers.slice(0, -1)) unsubscribe()
+  assert.equal(acks.length, 1)
+  emitter.emit("changed", {}, { revision: 2 })
+  assert.equal(received, 21)
+  unsubscribers.at(-1)()
+  assert.deepEqual(acks[1], ["ready", "changed", false, 0])
+  assert.equal(emitter.listenerCount("changed"), 0)
 })
 
 test("主窗口生命周期接入保护，后台数据订阅仍先于初始快照读取，防止刷新遗漏数据", () => {
