@@ -36,26 +36,26 @@ type ClientVersion = {
 
 type ClientVersionManifest = Record<string, ClientVersion | undefined>
 
-const VERSION_MANIFEST_URL = "https://jiying.chat/releases/version.json"
+const VERSION_MANIFEST_URL = "https://assets.jiying.chat/releases/version.json"
 const IOS_APP_STORE_URL =
   "https://apps.apple.com/us/app/%E5%8D%B3%E5%BA%94-ai/id6793547066"
 
 const fallbackDownloads: Record<string, ClientDownload[]> = {
-  android: [{ url: "https://jiying.chat/releases/jiying.apk" }],
+  android: [{ url: "https://assets.jiying.chat/releases/jiying.apk" }],
   "linux-amd": [
     {
       label: "x64 / AMD64",
-      url: "https://jiying.chat/releases/jiying.amd.AppImage",
+      url: "https://assets.jiying.chat/releases/jiying.amd.AppImage",
     },
   ],
   "linux-arm": [
     {
       label: "ARM64",
-      url: "https://jiying.chat/releases/jiying.arm.AppImage",
+      url: "https://assets.jiying.chat/releases/jiying.arm.AppImage",
     },
   ],
-  macos: [{ url: "https://jiying.chat/releases/jiying.dmg" }],
-  windows: [{ url: "https://jiying.chat/releases/jiying.exe" }],
+  macos: [{ url: "https://assets.jiying.chat/releases/jiying.dmg" }],
+  windows: [{ url: "https://assets.jiying.chat/releases/jiying.exe" }],
 }
 
 function WindowsIcon(props: SVGProps<SVGSVGElement>) {

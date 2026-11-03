@@ -6,7 +6,7 @@ const manifest = {
   windows: {
     build: 21,
     version: "2.0.1",
-    url: "https://jiying.chat/releases/jiying.exe",
+    url: "https://assets.jiying.chat/releases/jiying.exe",
   },
 }
 
@@ -28,7 +28,7 @@ test("selects the current OS and compares its build ID", () => {
 })
 
 test("optional platform feed can move within trusted release directories", () => {
-  const feed = "https://jiying.chat/releases/desktop/2.0.1/"
+  const feed = "https://assets.jiying.chat/releases/desktop/2.0.1/"
   const info = parseUpdateInfo(
     { windows: { ...manifest.windows, updateFeed: feed } },
     "windows",
@@ -46,9 +46,9 @@ test("optional platform feed can move within trusted release directories", () =>
   )
   for (const invalid of [
     "https://other.example/releases/desktop/",
-    "http://jiying.chat/releases/desktop/",
-    "https://jiying.chat/releases/desktop/latest.yml",
-    "https://jiying.chat/releases/%2e%2e/desktop/",
+    "http://assets.jiying.chat/releases/desktop/",
+    "https://assets.jiying.chat/releases/desktop/latest.yml",
+    "https://assets.jiying.chat/releases/%2e%2e/desktop/",
   ]) {
     assert.throws(() =>
       parseUpdateInfo(
@@ -62,6 +62,21 @@ test("optional platform feed can move within trusted release directories", () =>
   assert.throws(() =>
     parseUpdateInfo({ windows: { ...manifest.windows, updateFeed: null } }, "windows", "2.0.0", 20),
   )
+})
+
+test("只信任新的资源域名，拒绝旧发布源和伪装子域", () => {
+  for (const url of [
+    "https://jiying.chat/releases/jiying.exe",
+    "https://assets.jiying.chat.evil.example/releases/jiying.exe",
+  ]) {
+    assert.throws(() => parseUpdateInfo(
+      { windows: { ...manifest.windows, url } }, "windows", "2.0.0", 20,
+    ))
+  }
+  assert.throws(() => parseUpdateInfo(
+    { windows: { ...manifest.windows, updateFeed: "https://jiying.chat/releases/desktop/" } },
+    "windows", "2.0.0", 20,
+  ))
 })
 
 test("older builds do not trigger an update", () => {
@@ -78,7 +93,7 @@ test("new builds require only build, version and a trusted platform URL", () => 
   const invalid = (patch: Record<string, unknown>) =>
     parseUpdateInfo({ windows: { ...manifest.windows, ...patch } }, "windows", "2.0.0", 20)
   assert.throws(() => invalid({ version: "" }))
-  assert.throws(() => invalid({ url: "https://jiying.chat/releases/update.dmg" }))
-  assert.throws(() => invalid({ url: "https://jiying.chat/releases/jiying.exe?url=evil" }))
+  assert.throws(() => invalid({ url: "https://assets.jiying.chat/releases/update.dmg" }))
+  assert.throws(() => invalid({ url: "https://assets.jiying.chat/releases/jiying.exe?url=evil" }))
   assert.throws(() => invalid({ url: "https://other.example/releases/jiying.exe" }))
 })

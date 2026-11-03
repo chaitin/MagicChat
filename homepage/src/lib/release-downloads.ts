@@ -6,7 +6,7 @@ type ReleaseManifestEntry = {
 
 type ReleaseManifest = Partial<Record<ReleasePlatform, ReleaseManifestEntry>>;
 
-const RELEASE_MANIFEST_URL = "https://jiying.chat/releases/version.json";
+const RELEASE_MANIFEST_URL = "https://assets.jiying.chat/releases/version.json";
 const RELEASE_LINK_SELECTOR = "a[data-release-platform]";
 const OFFICIAL_RELEASE_PATHS: Readonly<Record<ReleasePlatform, string>> = {
   android: "/releases/jiying.apk",
@@ -54,7 +54,7 @@ export function releaseUrl(
     ) {
       return undefined;
     }
-    if (url.origin === "https://jiying.chat") {
+    if (url.origin === "https://assets.jiying.chat") {
       return url.pathname === OFFICIAL_RELEASE_PATHS[platform]
         ? url.href
         : undefined;

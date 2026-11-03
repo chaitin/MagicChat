@@ -12,11 +12,12 @@ const current = {
 test("reads a normal version manifest", async () => {
   const result = await fetchUpdateInfo({
     ...current,
-    fetcher: async (_url, init) => {
+    fetcher: async (url, init) => {
+      assert.equal(url, "https://assets.jiying.chat/releases/version.json")
       assert.equal(init.redirect, "error")
       return new Response(
         JSON.stringify({
-          windows: { build: 21, version: "2.0.1", url: "https://jiying.chat/releases/jiying.exe" },
+          windows: { build: 21, version: "2.0.1", url: "https://assets.jiying.chat/releases/jiying.exe" },
         }),
       )
     },

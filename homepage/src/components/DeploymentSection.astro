@@ -4,7 +4,7 @@ import { CopyCommandButton } from './CopyCommandButton';
 import SectionTitle from './SectionTitle.astro';
 import '../styles/deployment.css';
 
-const command = 'bash -c "$(curl -sSLk https://jiying.chat/releases/install.sh)"';
+const command = 'bash -c "$(curl -fsSL https://assets.jiying.chat/releases/install.sh)"';
 const benefits = [
   ['hugeicons:security-check', '数据由你管理', '将团队的消息、文档与项目保存在自己的服务器上，自主安排访问权限、数据备份与保留策略。'],
   ['hugeicons:server-stack-01', '独立的运行环境', '在自己的基础设施中运行，按团队的节奏安排升级和维护，掌握服务的配置与运行状态。'],

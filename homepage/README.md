@@ -122,7 +122,9 @@ echo "$GHCR_TOKEN" | docker login ghcr.io -u USERNAME --password-stdin
 - `data/caddy/data`：证书、私钥、ACME 账户和续期状态
 - `data/caddy/config`：Caddy 运行配置
 - `data/caddy/logs`：`access.log` 与 `error.log`
-- `data/releases`：通过 `https://jiying.chat/releases/<文件名>` 发布的静态文件
+- `data/releases`：供当前 Caddy `/releases/*` 路由使用的本地静态文件目录
+
+客户端更新、官网和 Web 下载入口统一使用 `https://assets.jiying.chat/releases/`，由该域名的静态资源服务提供 `version.json`、安装包和 `install.sh`。`version.json` 需允许官网和 Web 客户端跨域读取；本 Compose 不会自动部署或配置 `assets.jiying.chat`。
 
 `data/releases` 以只读方式挂载进容器。默认不启用目录列表，只允许访问明确的文件路径。容器健康检查会通过 Caddy 实际读取构建后的首页文件；建议另外使用外部监控定期请求 `https://jiying.chat/healthz`，覆盖 DNS、网络和证书状态。
 

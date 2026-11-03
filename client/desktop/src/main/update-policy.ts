@@ -20,7 +20,7 @@ export function isTrustedReleaseUrl(input: string): boolean {
     const url = new URL(input)
     return (
       url.protocol === "https:" &&
-      url.hostname === "jiying.chat" &&
+      url.hostname === "assets.jiying.chat" &&
       url.port === "" &&
       url.username === "" &&
       url.password === "" &&

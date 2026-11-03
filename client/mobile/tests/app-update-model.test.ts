@@ -1,22 +1,27 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import { appConfig } from "../src/config/app-config.ts"
 
 import {
   hasNewAppVersion,
   readPlatformRelease,
 } from "../src/features/updates/app-update-model.ts"
 
+test("版本清单固定使用资源域名", () => {
+  assert.equal(appConfig.releaseManifestUrl, "https://assets.jiying.chat/releases/version.json")
+})
+
 test("reads the selected platform from the release manifest", () => {
   const release = readPlatformRelease(
     {
       android: {
         build: 2,
-        url: "https://jiying.chat/releases/jiying.apk",
+        url: "https://assets.jiying.chat/releases/jiying.apk",
         version: "1.0.1",
       },
       ios: {
         build: 5,
-        url: "https://jiying.chat/releases/jiying.ipa",
+        url: "https://assets.jiying.chat/releases/jiying.ipa",
         version: "1.0.1",
       },
     },
@@ -25,7 +30,7 @@ test("reads the selected platform from the release manifest", () => {
 
   assert.deepEqual(release, {
     build: 2,
-    url: "https://jiying.chat/releases/jiying.apk",
+    url: "https://assets.jiying.chat/releases/jiying.apk",
     version: "1.0.1",
   })
 })
@@ -33,7 +38,7 @@ test("reads the selected platform from the release manifest", () => {
 test("compares releases by their numeric build", () => {
   const release = {
     build: 2,
-    url: "https://jiying.chat/releases/jiying.apk",
+    url: "https://assets.jiying.chat/releases/jiying.apk",
     version: "1.0.1",
   }
 
@@ -49,7 +54,7 @@ test("rejects malformed or insecure platform releases", () => {
         {
           android: {
             build: "2",
-            url: "http://jiying.chat/releases/jiying.apk",
+            url: "http://assets.jiying.chat/releases/jiying.apk",
             version: "1.0.1",
           },
         },

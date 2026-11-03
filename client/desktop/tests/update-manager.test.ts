@@ -52,8 +52,8 @@ function createManager(failure?: Error) {
     currentBuildId: 30,
     latestVersion: "2.6.1",
     latestBuildId: 31,
-    downloadUrl: "https://jiying.chat/releases/update.dmg",
-    updateFeed: "https://jiying.chat/releases/",
+    downloadUrl: "https://assets.jiying.chat/releases/update.dmg",
+    updateFeed: "https://assets.jiying.chat/releases/",
     updateAvailable: true,
   }
   const factory = new Function(

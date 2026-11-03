@@ -2,7 +2,7 @@ import { AuthFailure } from "../shared/auth.ts"
 import type { ReleasePlatform, UpdateInfo } from "../shared/desktop"
 import { parseUpdateInfo } from "./update-policy.ts"
 
-const VERSION_URL = "https://jiying.chat/releases/version.json"
+const VERSION_URL = "https://assets.jiying.chat/releases/version.json"
 const MAX_VERSION_RESPONSE_BYTES = 64 * 1024
 
 export async function fetchUpdateInfo({

@@ -10,7 +10,7 @@ directories:
   buildResources: resources
 publish:
   provider: generic
-  url: https://jiying.chat/releases/desktop/
+  url: https://assets.jiying.chat/releases/desktop/
 files:
   - out/**/*
   - package.json

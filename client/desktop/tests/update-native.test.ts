@@ -16,8 +16,8 @@ const update: UpdateInfo = {
   currentBuildId: 26,
   latestVersion: "2.3.2",
   latestBuildId: 27,
-  downloadUrl: "https://jiying.chat/releases/setup.exe",
-  updateFeed: "https://jiying.chat/releases/desktop/2.3.2/",
+  downloadUrl: "https://assets.jiying.chat/releases/setup.exe",
+  updateFeed: "https://assets.jiying.chat/releases/desktop/2.3.2/",
   updateAvailable: true,
 }
 
