@@ -25,6 +25,7 @@ function fixture(focused = true) {
   const readCalls: number[] = []
   const readAttempts: number[] = []
   let nativeFocused = true
+  let inactiveReadResponse: Promise<void> | null = null
   let revision = 0
   const listeners = new Set<(event: unknown) => void>()
   const frames = new Map<number, () => void>()
@@ -203,8 +204,12 @@ function fixture(focused = true) {
       upToSeq: number
     }) => {
       readAttempts.push(upToSeq)
-      if (!nativeFocused)
+      if (!nativeFocused) {
+        const response = inactiveReadResponse
+        inactiveReadResponse = null
+        if (response) await response
         return { ok: false, error: { code: "window_inactive", message: "窗口尚未就绪" } }
+      }
       return { ok: true, data: await mark.call(runtime, conversationId, upToSeq) }
     },
   }
@@ -235,6 +240,11 @@ function fixture(focused = true) {
     messageRequests,
     nativeFocus: (value: boolean) => {
       nativeFocused = value
+    },
+    deferInactiveRead() {
+      let release!: () => void
+      inactiveReadResponse = new Promise<void>((resolve) => { release = resolve })
+      return release
     },
     async frame() {
       const pending = [...frames.values()]
@@ -404,6 +414,45 @@ test("首次窗口焦点未就绪不算已读成功，下一帧重检即可清�
   await f.frame()
   await f.lists()
   assert.deepEqual(f.readCalls, [3])
+  assert.equal(f.data.selected.unreadCount, 0)
+})
+
+test("完整生命周期：请求期间错过下一帧检查，失败返回后自动重试并清除未读", async (t) => {
+  const f = fixture(false)
+  t.after(f.cleanup)
+  await f.enter()
+  f.nativeFocus(false)
+  const release = f.deferInactiveRead()
+  await f.messages()
+  assert.deepEqual(f.readAttempts, [3])
+  assert.deepEqual(f.readCalls, [])
+  f.nativeFocus(true)
+  await f.frame()
+  assert.deepEqual(f.readCalls, [])
+  release()
+  await f.flush()
+  await f.lists()
+  assert.deepEqual(f.readAttempts, [3, 3])
+  assert.deepEqual(f.readCalls, [3])
+  assert.equal(f.data.selected.unreadCount, 0)
+})
+
+test("完整生命周期：通知目标等待新消息窗口，不被已读旧缓存提前消耗", async (t) => {
+  const f = fixture(false)
+  t.after(f.cleanup)
+  await f.enter()
+  await f.messages()
+  await f.lists()
+  assert.deepEqual(f.readCalls, [3])
+  f.nativeFocus(false)
+  await f.receive(4)
+  f.data.setSelectedId("room", { readMessageId: "m4" })
+  await f.flush()
+  assert.deepEqual(f.readCalls, [3])
+  f.nativeFocus(true)
+  await f.messages()
+  await f.lists()
+  assert.deepEqual(f.readCalls, [3, 4])
   assert.equal(f.data.selected.unreadCount, 0)
 })
 

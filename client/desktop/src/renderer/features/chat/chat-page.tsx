@@ -239,13 +239,28 @@ export function ChatPage({
   }, [activeSection, selected?.id, targetId])
   useEffect(() => {
     if (!notificationTarget || notificationTarget.targetId !== targetId) return
-    setActiveSection("chat")
-    setSelectedId(notificationTarget.conversationId)
-    setSearchMessageTarget({
-      conversationId: notificationTarget.conversationId,
-      messageId: notificationTarget.messageId,
-    })
-    onNotificationHandled()
+    let handled = false
+    const openNotificationConversation = () => {
+      if (handled || document.visibilityState !== "visible") return
+      handled = true
+      setActiveSection("chat")
+      setSelectedId(notificationTarget.conversationId, {
+        readMessageId: notificationTarget.messageId,
+      })
+      setSearchMessageTarget({
+        conversationId: notificationTarget.conversationId,
+        messageId: notificationTarget.messageId,
+      })
+      onNotificationHandled()
+    }
+    document.addEventListener("visibilitychange", openNotificationConversation)
+    window.addEventListener("focus", openNotificationConversation)
+    openNotificationConversation()
+    return () => {
+      handled = true
+      document.removeEventListener("visibilitychange", openNotificationConversation)
+      window.removeEventListener("focus", openNotificationConversation)
+    }
   }, [notificationTarget, targetId, setSelectedId, onNotificationHandled])
   const groupProfileConversationId = selected?.type === "group" || selected?.type === "topic" ? selected.id : ""
   useEffect(() => {

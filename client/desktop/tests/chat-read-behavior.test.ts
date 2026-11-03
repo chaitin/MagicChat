@@ -7,7 +7,8 @@ import type { DesktopConversation, DesktopMessage } from "../src/shared/account-
 
 const hooks = "../src/renderer/features/chat/hooks/use-chat-data.ts"
 const ipc = "../src/main/ipc/register-account-data-ipc.ts"
-type OpenReadIntent = { targetId: string; conversationId: string } | null
+const chatPage = "../src/renderer/features/chat/chat-page.tsx"
+type OpenReadIntent = { targetId: string; conversationId: string; messageId?: string } | null
 
 function callback(file: string, name: string, scope: Record<string, unknown>): Function {
   const source = ts.createSourceFile(
@@ -30,7 +31,8 @@ function callback(file: string, name: string, scope: Record<string, unknown>): F
       const body = node.arguments[0]?.getText(source) ?? ""
       if (
         (name === "read" && body.includes(".markConversationRead(")) ||
-        (name === "focus" && body.includes('addEventListener("visibilitychange"'))
+        (name === "focus" && body.includes('addEventListener("visibilitychange"')) ||
+        (name === "notification" && body.includes("onNotificationHandled()"))
       )
         text = body
     }
@@ -67,6 +69,8 @@ const room = (id: string) =>
 
 function fixture(focused = false) {
   const calls: Array<{ targetId: string; conversationId: string; upToSeq: number }> = []
+  const attempts: typeof calls = []
+  let notificationsHandled = 0
   let nativeFocused = true
   const document = Object.assign(new EventTarget(), {
     visibilityState: "visible",
@@ -91,6 +95,7 @@ function fixture(focused = false) {
     desktop: {
       accountData: {
         markConversationRead: async (input: (typeof calls)[number]) => {
+          attempts.push(input)
           await submitRead(input)
           return { ok: true }
         },
@@ -114,12 +119,16 @@ function fixture(focused = false) {
     setOpenReadIntent: (value: OpenReadIntent | ((current: OpenReadIntent) => OpenReadIntent)) => {
       scope.openReadIntent = typeof value === "function" ? value(scope.openReadIntent) : value
     },
+    focusRevision: 0,
+    focusRevisionRef: { current: 0 },
     readInFlightRef: { current: new Set<string>() },
     acknowledgedReadSeqRef: { current: new Map<string, number>() },
     shouldReloadConversationListForSelection: () => false,
     setTransientConversation: () => {},
     setConversationRevision: () => {},
-    setFocusRevision: () => {},
+    setFocusRevision: (value: (revision: number) => number) => {
+      scope.focusRevision = value(scope.focusRevision)
+    },
     setSelectedIdState: (id: string | null) => {
       scope.selectedId = id
       scope.selectedIdRef.current = id
@@ -127,11 +136,26 @@ function fixture(focused = false) {
     },
   }
   const cleanup = callback(hooks, "focus", scope)() as () => void
+  const select = (id: string | null = "room", options?: { readMessageId: string }) =>
+    callback(hooks, "setSelectedId", scope)(id, options)
   return {
     scope,
     calls,
+    attempts,
     cleanup,
-    select: (id: string | null = "room") => callback(hooks, "setSelectedId", scope)(id),
+    select,
+    get notificationsHandled() { return notificationsHandled },
+    notify: (conversationId = "room", messageId = "notice", targetId = scope.targetId) =>
+      callback(chatPage, "notification", {
+        window,
+        document,
+        notificationTarget: { targetId, conversationId, messageId },
+        targetId: scope.targetId,
+        setActiveSection: (section: string) => { scope.activeSection = section },
+        setSelectedId: select,
+        setSearchMessageTarget: () => {},
+        onNotificationHandled: () => { notificationsHandled++ },
+      })() as (() => void) | undefined,
     read: () => callback(hooks, "read", scope)(),
     focus: () => {
       nativeFocused = true
@@ -153,6 +177,172 @@ function fixture(focused = false) {
 const flush = async () => {
   for (let i = 0; i < 4; i++) await Promise.resolve()
 }
+
+test("通知在窗口隐藏时到达，等待页面可见后导航并标记已加载的通知消息", async (t) => {
+  const f = fixture()
+  t.after(f.cleanup)
+  f.blur()
+  f.hide()
+  f.scope.activeSection = "contacts"
+  const cleanup = f.notify("other")
+  t.after(() => cleanup?.())
+  assert.equal(f.scope.selectedId, "room")
+  assert.equal(f.notificationsHandled, 0)
+
+  f.scope.document.visibilityState = "visible"
+  f.scope.document.dispatchEvent(new Event("visibilitychange"))
+  f.focus()
+  f.scope.document.hasFocus = () => false
+  assert.equal(f.scope.activeSection, "chat")
+  assert.equal(f.scope.selectedId, "other")
+  assert.equal(f.notificationsHandled, 1)
+  assert.equal(f.scope.openReadIntent?.messageId, "notice")
+  f.scope.loadedConversationIdRef.current = "other"
+  f.scope.loadedConversationTargetRef.current = "account"
+  f.scope.messages = [message("other", 100, { id: "notice" })]
+  f.read()
+  await flush()
+  assert.deepEqual(f.calls, [{ targetId: "account", conversationId: "other", upToSeq: 100 }])
+  f.focus()
+  assert.equal(f.notificationsHandled, 1)
+})
+
+test("通知等待期间取消或切换账号，不在后续窗口恢复时执行旧导航", (t) => {
+  const f = fixture()
+  t.after(f.cleanup)
+  f.hide()
+  const cleanup = f.notify("other")
+  cleanup?.()
+  const wrongAccount = f.notify("other", "notice", "another-account")
+  wrongAccount?.()
+  f.scope.document.visibilityState = "visible"
+  f.scope.document.dispatchEvent(new Event("visibilitychange"))
+  f.focus()
+  assert.equal(f.scope.selectedId, "room")
+  assert.equal(f.notificationsHandled, 0)
+  assert.equal(f.calls.length, 0)
+})
+
+test("通知打开已选会话，旧的已读缓存不提前消耗目标消息的阅读意图", async (t) => {
+  const f = fixture()
+  t.after(f.cleanup)
+  f.scope.conversations[0].lastReadSeq = 100
+  f.scope.conversations[0].unreadCount = 0
+  const cleanup = f.notify()
+  t.after(() => cleanup?.())
+  f.read()
+  assert.equal(f.calls.length, 0)
+  assert.equal(f.scope.openReadIntent?.messageId, "notice")
+  f.scope.messages.push(
+    message("other", 999, { id: "notice" }),
+    message("room", 200, { id: "notice", virtualType: "topic_source" }),
+    message("room", 300, { id: "notice", deliveryStatus: "sending" }),
+  )
+  f.read()
+  assert.equal(f.calls.length, 0)
+  f.scope.messages.push(message("room", 101, { id: "notice" }))
+  f.read()
+  await flush()
+  assert.deepEqual(f.calls, [{ targetId: "account", conversationId: "room", upToSeq: 101 }])
+  assert.equal(f.scope.openReadIntent, null)
+})
+
+test("通知目标尚未加载或不存在时，不阻止前台正常消息推进已读", (t) => {
+  const f = fixture(true)
+  t.after(f.cleanup)
+  const cleanup = f.notify()
+  t.after(() => cleanup?.())
+  f.read()
+  assert.equal(f.calls.length, 1)
+  assert.equal(f.calls[0].upToSeq, 100)
+})
+
+test("通知已读被窗口激活保护拒绝时，补做请求期间错过的焦点检查", async (t) => {
+  const f = fixture()
+  t.after(f.cleanup)
+  const original = f.scope.window.desktop.accountData.markConversationRead
+  let release!: () => void
+  const responseReady = new Promise<void>((resolve) => { release = resolve })
+  f.scope.window.desktop.accountData.markConversationRead = async (input) => {
+    const result = await original(input).catch(() => ({ ok: false }))
+    await responseReady
+    return result
+  }
+  f.blur()
+  const cleanup = f.notify()
+  t.after(() => cleanup?.())
+  f.scope.messages[2].id = "notice"
+  f.read()
+  await flush()
+  f.focus()
+  f.read()
+  const revisionAtFocus = f.scope.focusRevision
+  assert.equal(f.scope.readInFlightRef.current.size, 1)
+  assert.equal(f.calls.length, 0)
+  release()
+  await flush()
+  await flush()
+  assert.equal(f.scope.readInFlightRef.current.size, 0)
+  assert.equal(f.scope.focusRevision, revisionAtFocus + 1)
+  f.scope.window.desktop.accountData.markConversationRead = original
+  f.read()
+  await flush()
+  assert.equal(f.calls.length, 1)
+  assert.equal(f.scope.openReadIntent, null)
+})
+
+test("已读IPC异常也会补做错过的焦点检查", async (t) => {
+  const f = fixture()
+  t.after(f.cleanup)
+  const original = f.scope.window.desktop.accountData.markConversationRead
+  let reject!: (error: Error) => void
+  const response = new Promise<{ ok: boolean }>((_resolve, fail) => { reject = fail })
+  f.scope.window.desktop.accountData.markConversationRead = () => response
+  f.select()
+  f.read()
+  f.focus()
+  f.read()
+  const revisionAtFocus = f.scope.focusRevision
+  reject(new Error("IPC failed"))
+  await flush()
+  assert.equal(f.scope.focusRevision, revisionAtFocus + 1)
+  f.scope.window.desktop.accountData.markConversationRead = original
+  f.read()
+  await flush()
+  assert.equal(f.calls.length, 1)
+})
+
+test("没有新的焦点检查时，后台已读失败不会循环重试", async (t) => {
+  const f = fixture()
+  t.after(f.cleanup)
+  f.blur()
+  f.select()
+  f.read()
+  await flush()
+  assert.equal(f.attempts.length, 1)
+  assert.equal(f.calls.length, 0)
+  assert.equal(f.scope.focusRevision, 0)
+  assert.equal(f.scope.readInFlightRef.current.size, 0)
+  f.scope.window.dispatchEvent(new Event("focus"))
+  const revisionAtFocus = f.scope.focusRevision
+  f.read()
+  await flush()
+  assert.equal(f.attempts.length, 2)
+  assert.equal(f.calls.length, 0)
+  assert.equal(f.scope.focusRevision, revisionAtFocus)
+})
+
+test("通知消息加载期间再次隐藏窗口，不清除后台未读", (t) => {
+  const f = fixture()
+  t.after(f.cleanup)
+  const cleanup = f.notify()
+  t.after(() => cleanup?.())
+  f.hide()
+  f.scope.messages[2].id = "notice"
+  f.read()
+  assert.equal(f.calls.length, 0)
+  assert.equal(f.scope.openReadIntent, null)
+})
 
 test("主动进入会话后不受瞬时文档焦点影响，只标记已展示序号而非服务端最新序号", async (t) => {
   const f = fixture()

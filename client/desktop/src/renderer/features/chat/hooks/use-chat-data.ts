@@ -56,9 +56,14 @@ export function useChatData({
   const [messageRevision, setMessageRevision] = useState(0)
   const [contactRevision, setContactRevision] = useState(0)
   const [focusRevision, setFocusRevision] = useState(0)
+  const focusRevisionRef = useRef(0)
   const readInFlightRef = useRef(new Set<string>())
   const acknowledgedReadSeqRef = useRef(new Map<string, number>())
-  const [openReadIntent, setOpenReadIntent] = useState<{ targetId: string; conversationId: string } | null>(null)
+  const [openReadIntent, setOpenReadIntent] = useState<{
+    targetId: string
+    conversationId: string
+    messageId?: string
+  } | null>(null)
   const [mentionLabels, setMentionLabels] = useState<Map<string, string>>(new Map())
   const [resolvedUserNames, setResolvedUserNames] = useState<{
     targetId: string
@@ -108,6 +113,7 @@ export function useChatData({
   useEffect(() => {
     const refreshFocus = () => {
       if (document.visibilityState !== "visible") setOpenReadIntent(null)
+      focusRevisionRef.current++
       setFocusRevision((revision) => revision + 1)
     }
     document.addEventListener("visibilitychange", refreshFocus)
@@ -120,15 +126,25 @@ export function useChatData({
 
   useEffect(() => {
     if (!openReadIntent) return
-    const frame = window.requestAnimationFrame(() => setFocusRevision((revision) => revision + 1))
+    const frame = window.requestAnimationFrame(() => {
+      focusRevisionRef.current++
+      setFocusRevision((revision) => revision + 1)
+    })
     return () => window.cancelAnimationFrame(frame)
   }, [openReadIntent])
 
   useEffect(() => {
     const clearOpenRead = () => setOpenReadIntent((current) => current === openReadIntent ? null : current)
-    const explicitlyOpened = openReadIntent?.targetId === targetId && openReadIntent.conversationId === selectedId
+    const matchesOpenReadIntent = openReadIntent?.targetId === targetId && openReadIntent.conversationId === selectedId
+    const openReadMessageId = matchesOpenReadIntent ? openReadIntent.messageId : undefined
+    const explicitlyOpened = matchesOpenReadIntent && (
+      !openReadMessageId || messages.some((message) =>
+        message.conversationId === selectedId && message.id === openReadMessageId &&
+        !message.virtualType && !message.deliveryStatus,
+      )
+    )
     if (openReadIntent && (
-      !explicitlyOpened || activeSection !== "chat" || document.visibilityState !== "visible"
+      !matchesOpenReadIntent || activeSection !== "chat" || document.visibilityState !== "visible"
     )) clearOpenRead()
     const readKey = `${targetId}:${selectedId}`
     if (
@@ -165,11 +181,19 @@ export function useChatData({
     }
     const requestIntent = explicitlyOpened ? openReadIntent : null
     const conversationId = selectedId
+    const requestFocusRevision = focusRevisionRef.current
     readInFlightRef.current.add(readKey)
+    const finishRead = (retryAfterFocus: boolean) => {
+      readInFlightRef.current.delete(readKey)
+      // Replay a focus/visibility check skipped while IPC was in flight, without polling.
+      if (retryAfterFocus && focusRevisionRef.current !== requestFocusRevision) {
+        setFocusRevision((revision) => revision + 1)
+      }
+    }
     void window.desktop.accountData
       .markConversationRead({ targetId, conversationId, upToSeq })
       .then((result) => {
-        readInFlightRef.current.delete(readKey)
+        finishRead(!result.ok)
         if (result.ok) {
           acknowledgedReadSeqRef.current.set(readKey, Math.max(acknowledgedReadSeqRef.current.get(readKey) ?? 0, upToSeq))
           // 列表快照可晚于IPC确认到达，不能据旧未读数重复提交同一序号。
@@ -177,9 +201,7 @@ export function useChatData({
           setFocusRevision((revision) => revision + 1)
         }
       })
-      .catch(() => {
-        readInFlightRef.current.delete(readKey)
-      })
+      .catch(() => finishRead(true))
   }, [
     activeSection,
     focusRevision,
@@ -195,7 +217,7 @@ export function useChatData({
   ])
 
   const setSelectedId = useCallback(
-    (conversationId: string | null) => {
+    (conversationId: string | null, options?: { readMessageId: string }) => {
       if (
         shouldReloadConversationListForSelection(
           conversations,
@@ -211,7 +233,7 @@ export function useChatData({
         loadedConversationTargetRef.current = null
       }
       setOpenReadIntent(conversationId && document.visibilityState === "visible"
-        ? { targetId, conversationId }
+        ? { targetId, conversationId, messageId: options?.readMessageId }
         : null)
       setTransientConversation(null)
       setSelectedIdState(conversationId)
