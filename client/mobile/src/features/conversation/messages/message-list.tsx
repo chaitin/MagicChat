@@ -26,6 +26,7 @@ import {
   shouldShowMessageTimeMarker,
 } from "@/domain/messages/message-presenter"
 import type { ServerTarget } from "@/core/server-target"
+import type { ClientVideoMessageBody } from "@/core/models"
 import type { ResourceLoadState } from "@/data/resources"
 import { XGUIButton, XGUILoadmore, useXGUITheme } from "@/xgui"
 
@@ -59,6 +60,7 @@ export function MessageList({
   onRespondChoice,
   onSetReaction,
   onVoiceResourcePress,
+  onVideoPress,
   onMentionPress,
   onOpenTopic,
   resolveMentionLabel,
@@ -98,6 +100,7 @@ export function MessageList({
     reacted: boolean
   ) => Promise<void>
   onVoiceResourcePress: (fileId: string) => void
+  onVideoPress: (video: ClientVideoMessageBody) => void
   onMentionPress: (target: EntityReference) => void
   onOpenTopic: (conversationId: string) => void
   resolveMentionLabel: MessageMentionLabelResolver
@@ -433,6 +436,7 @@ export function MessageList({
                   : onSetReaction
               }
               onVoiceResourcePress={onVoiceResourcePress}
+              onVideoPress={onVideoPress}
               resolveMentionLabel={resolveMentionLabel}
               resourceStates={resourceStates}
               server={server}

@@ -35,9 +35,12 @@ function repository(cached: ResolvedResource | null) {
       createResourceCacheTarget: async () => ({ temporaryFile: {} }),
       commitResourceCacheTarget: async () => { cached = { ...fresh, source: "cache" }; return fresh },
     },
-    "@/data/resources/resource-downloader": { downloadResource: () => new Promise((resolve, reject) => downloads.push({ resolve: () => resolve({ sizeBytes: 10 }), reject })) },
+    "@/data/resources/resource-downloader": { throwIfAborted: (signal?: AbortSignal) => { assert.equal(signal, undefined) }, downloadResource: () => new Promise((resolve, reject) => downloads.push({ resolve: () => resolve({ sizeBytes: 10 }), reject })) },
     "@/data/resources/resource-file-extension": {},
     "@/data/resources/resource-request-pool": {},
+    "@/data/resources/resource-read-url-api": {
+      fetchResourceReadUrls() { throw new Error("头像测试不应请求视频地址") },
+    },
     "@/data/resources/shared-task-pool": { SharedTaskPool },
     "@/lib/server-asset-url": { resolveServerAssetUrl: (_base: string, avatar: string) => avatar },
   })

@@ -18,6 +18,7 @@ import { useChatRecordStore } from "@/features/chat-records/chat-record-provider
 import { MessageBubble } from "@/features/conversation/messages/message-bubble"
 import { buildEntityDetailHref } from "@/navigation/entity-details"
 import { buildAttachmentImagePreviewHref } from "@/navigation/image-preview"
+import { useOpenVideoPreview } from "@/features/video-preview/use-open-video-preview"
 import { useAuthenticatedSession } from "@/providers/auth-provider"
 import { useClientData } from "@/providers/client-data-provider"
 import { XGUIActionSheet, useXGUITheme, useXGUIToast } from "@/xgui"
@@ -31,6 +32,7 @@ export function ChatRecordScreen() {
   const store = useChatRecordStore()
   const record = store.get(recordId)
   const session = useAuthenticatedSession()
+  const openVideoPreview = useOpenVideoPreview()
   const { contacts, currentUser } = useClientData()
   const { colors } = useXGUITheme()
   const toast = useXGUIToast()
@@ -100,6 +102,7 @@ export function ChatRecordScreen() {
               messageActionsEnabled={false}
               onAvatarPress={ignoreAction}
               onImagePress={(fileId) => router.push(buildAttachmentImagePreviewHref(fileId))}
+              onVideoPress={openVideoPreview}
               onMentionPress={(target) => router.push(buildEntityDetailHref(target))}
               onMessageLongPress={openCopySheet}
               onOpenTopic={ignoreAction}

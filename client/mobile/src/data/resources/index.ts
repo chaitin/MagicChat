@@ -23,6 +23,7 @@ export type {
   AttachmentResourceReference,
   AvatarResourceReference,
   ResourceLoadState,
+  ResourceDownloadProgress,
   ResourceReference,
   ResolvedResource,
 } from "@/core/resource-models"

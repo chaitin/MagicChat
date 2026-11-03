@@ -8,6 +8,7 @@ import { Text } from "@/components/mi-sans-text"
 import { AppAvatar } from "@/components/avatar/app-avatar"
 import type { EntityReference } from "@/domain/entities/entity-profile"
 import type { ServerTarget } from "@/core/server-target"
+import type { ClientVideoMessageBody } from "@/core/models"
 import type { ResourceLoadState } from "@/data/resources"
 import { MessageBody } from "@/features/conversation/messages/message-body"
 import { MessageChoice } from "@/features/conversation/messages/message-choice"
@@ -46,6 +47,7 @@ export const MessageBubble = memo(function MessageBubble({
   onRespondChoice,
   onSetReaction,
   onVoiceResourcePress,
+  onVideoPress,
   resolveMentionLabel,
   resourceStates,
   server,
@@ -78,6 +80,7 @@ export const MessageBubble = memo(function MessageBubble({
     reacted: boolean
   ) => Promise<void>
   onVoiceResourcePress: (fileId: string) => void
+  onVideoPress: (video: ClientVideoMessageBody) => void
   resolveMentionLabel: MessageMentionLabelResolver
   resourceStates: ReadonlyMap<string, ResourceLoadState>
   server: ServerTarget
@@ -306,6 +309,7 @@ export const MessageBubble = memo(function MessageBubble({
                 onResourceError={onResourceError}
                 onResourcePress={onResourcePress}
                 onVoiceResourcePress={onVoiceResourcePress}
+                onVideoPress={onVideoPress}
                 resolveMentionLabel={resolveMentionLabel}
                 resourceStates={resourceStates}
                 roundVideoBottom={roundVideoBottom}

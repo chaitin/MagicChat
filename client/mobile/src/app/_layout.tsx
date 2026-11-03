@@ -45,6 +45,10 @@ export default function RootLayout() {
           name="image-preview"
           options={{ animation: "fade", presentation: "fullScreenModal" }}
         />
+        <Stack.Screen
+          name="video-preview"
+          options={{ animation: "fade", presentation: "fullScreenModal" }}
+        />
       </Stack> : null}
     </AppProviders>
   )

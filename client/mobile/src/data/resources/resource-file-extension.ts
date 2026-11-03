@@ -5,6 +5,7 @@ export function getAttachmentCacheExtension(
   sourceUrl: string
 ) {
   if (reference.kind === "image") return ".webp"
+  if (reference.kind === "video") return reference.mimeType === "video/webm" ? ".webm" : ".mp4"
   if (reference.kind === "voice") {
     if (reference.mimeType === "audio/mp4") return ".m4a"
     if (reference.mimeType === "audio/webm") return ".webm"

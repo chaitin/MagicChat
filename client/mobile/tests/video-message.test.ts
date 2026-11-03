@@ -41,7 +41,7 @@ test("标准化视频消息并生成说明摘要", () => {
   )
 })
 
-test("视频消息注册为流式视频资源", () => {
+test("视频消息注册为按需加载的视频资源", () => {
   assert.deepEqual(collectMessageResources([message]), [
     {
       expectedSizeBytes: 1024,

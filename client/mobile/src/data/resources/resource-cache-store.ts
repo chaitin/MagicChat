@@ -7,7 +7,7 @@ import type { ResolvedResource } from "@/core/resource-models"
 
 const CACHE_INDEX_KEY = "@magicchat/resource-cache/v1"
 const CACHE_ROOT_NAME = "magicchat-resources-v1"
-const MAX_CACHE_SIZE_BYTES = 512 * 1024 * 1024
+export const MAX_CACHE_SIZE_BYTES = 512 * 1024 * 1024
 
 type CacheEntry = {
   checkedAt?: number
@@ -158,7 +158,7 @@ export async function commitResourceCacheTarget(
       try { if (file.exists) file.delete() } catch { /* The new entry remains authoritative. */ }
     }
   })
-  await pruneResourceCache()
+  await pruneResourceCache(target.cacheId)
 
   return createResolvedResource(
     target.identity,
@@ -210,7 +210,7 @@ export async function removeCachedResource(
   await removeCacheEntry(cacheId, file)
 }
 
-async function pruneResourceCache() {
+async function pruneResourceCache(protectedCacheId: string) {
   await mutateCacheIndex(async (index) => {
     const root = getCacheRoot()
     const entries = Object.entries(index.entries)
@@ -226,6 +226,8 @@ async function pruneResourceCache() {
 
     for (const [cacheId, entry] of oldestFirst) {
       if (totalSizeBytes <= MAX_CACHE_SIZE_BYTES) break
+      // A large video must remain available to the player immediately after download.
+      if (cacheId === protectedCacheId) continue
       const file = new File(root, entry.serverKey, "files", entry.fileName)
       try {
         if (file.exists) file.delete()

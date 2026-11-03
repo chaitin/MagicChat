@@ -4,7 +4,7 @@ import { memo, useRef, useState } from "react"
 import { Alert, Image, Linking, Pressable, View } from "react-native"
 import { Text } from "@/components/mi-sans-text"
 
-import type { ClientMessageBody } from "@/core/models"
+import type { ClientMessageBody, ClientVideoMessageBody } from "@/core/models"
 import type { ResourceLoadState } from "@/data/resources"
 import {
   forgetLoadedAttachmentImage,
@@ -39,6 +39,7 @@ export const MessageBody = memo(function MessageBody({
   onResourceError,
   onResourcePress,
   onVoiceResourcePress,
+  onVideoPress,
   resolveMentionLabel,
   roundVideoBottom,
   resourceStates,
@@ -54,6 +55,7 @@ export const MessageBody = memo(function MessageBody({
   onResourceError: (fileId: string) => void
   onResourcePress: (fileId: string) => void
   onVoiceResourcePress: (fileId: string) => void
+  onVideoPress: (video: ClientVideoMessageBody) => void
   resolveMentionLabel: MessageMentionLabelResolver
   roundVideoBottom: boolean
   resourceStates: ReadonlyMap<string, ResourceLoadState>
@@ -226,9 +228,8 @@ export const MessageBody = memo(function MessageBody({
     const video = (
       <MessageVideo
         onLongPress={onMessageLongPress}
-        onReload={() => onResourceError(body.fileId)}
+        onPress={() => onVideoPress(body)}
         roundedBottom={roundVideoBottom}
-        state={resourceStates.get(body.fileId)}
       />
     )
     if (!body.caption) return video

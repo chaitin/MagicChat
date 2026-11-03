@@ -27,6 +27,11 @@ export type ResolvedResource = {
   uri: string
 }
 
+export type ResourceDownloadProgress = {
+  bytesWritten: number
+  totalBytes?: number
+}
+
 export type ResourceLoadState = {
   error: Error | null
   resource: ResolvedResource | null

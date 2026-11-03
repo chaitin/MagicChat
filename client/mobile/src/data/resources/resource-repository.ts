@@ -16,17 +16,20 @@ import {
   getCachedResource,
   removeCachedResource,
   removeServerResourceCache as removeServerResourceCacheStore,
+  MAX_CACHE_SIZE_BYTES,
 } from "@/data/resources/resource-cache-store"
-import { downloadResource } from "@/data/resources/resource-downloader"
+import { downloadResource, downloadResourceBlob, throwIfAborted } from "@/data/resources/resource-downloader"
 import {
   getAttachmentCacheExtension,
   hasExpectedVoiceCacheExtension,
 } from "@/data/resources/resource-file-extension"
 import { requestResourceReadUrl } from "@/data/resources/resource-request-pool"
+import { fetchResourceReadUrls } from "@/data/resources/resource-read-url-api"
 import type {
   AttachmentResourceReference,
   AvatarResourceReference,
   ResolvedResource,
+  ResourceDownloadProgress,
 } from "@/core/resource-models"
 import { SharedTaskPool } from "@/data/resources/shared-task-pool"
 import { resolveServerAssetUrl } from "@/lib/server-asset-url"
@@ -34,12 +37,31 @@ import { resolveServerAssetUrl } from "@/lib/server-asset-url"
 const AVATAR_MAX_AGE_MS = 24 * 60 * 60 * 1_000
 
 const downloadTasks = new SharedTaskPool<ResolvedResource>()
+let videoDownloadId = 0
+const webVideoCache = new Map<string, ResolvedResource>()
+
+export type AttachmentResourceOptions = {
+  signal?: AbortSignal
+  onPrepare?: () => void
+  onDownloadStart?: () => void
+  onProgress?: (progress: ResourceDownloadProgress) => void
+}
 
 export async function getCachedAttachmentResource(
-  server: ServerTarget,
+  server: AuthenticatedTarget,
   reference: AttachmentResourceReference
 ) {
-  if (Platform.OS !== "web") {
+  if (Platform.OS === "web" && reference.kind === "video") {
+    const key = `${createDownloadTaskPrefix(server)}${getAttachmentResourceIdentity(server, reference)}`
+    const cached = webVideoCache.get(key)
+    if (cached) {
+      webVideoCache.delete(key)
+      webVideoCache.set(key, cached)
+      return { ...cached, source: "cache" as const }
+    }
+    return null
+  }
+  if (Platform.OS !== "web" && reference.kind !== "video") {
     const remembered = getRememberedAttachmentResource(
       server,
       reference.fileId
@@ -47,7 +69,7 @@ export async function getCachedAttachmentResource(
     if (remembered) return withMimeType(remembered, reference.mimeType)
   }
 
-  const identity = getAttachmentIdentity(reference.fileId)
+  const identity = getAttachmentResourceIdentity(server, reference)
   const resource = await getCachedResource(server, identity)
   if (!resource) return null
   if (!hasExpectedVoiceCacheExtension(reference, resource.uri)) {
@@ -55,7 +77,7 @@ export async function getCachedAttachmentResource(
     return null
   }
   const resolved = withMimeType(resource, reference.mimeType)
-  if (Platform.OS !== "web") {
+  if (Platform.OS !== "web" && reference.kind !== "video") {
     rememberAttachmentResource(server, reference.fileId, resolved)
   }
   return resolved
@@ -64,17 +86,63 @@ export async function getCachedAttachmentResource(
 export async function ensureAttachmentResource(
   session: AuthenticatedTarget,
   reference: AttachmentResourceReference,
-  options: { signal?: AbortSignal } = {}
+  options: AttachmentResourceOptions = {}
 ) {
-  const identity = getAttachmentIdentity(reference.fileId)
+  const identity = getAttachmentResourceIdentity(session, reference)
   if (reference.kind === "video") {
-    const readUrl = await requestResourceReadUrl(session, reference.fileId)
-    return createRemoteResource(
-      identity,
-      readUrl.url,
-      readUrl.sizeBytes ?? reference.expectedSizeBytes ?? 0,
-      reference.mimeType
-    )
+    // Each preview owns its cancellation; keep it tracked by cache-clear barriers.
+    const taskKey = `${createDownloadTaskPrefix(session)}${identity}:preview:${++videoDownloadId}`
+    return downloadTasks.run(taskKey, async () => {
+      throwIfAborted(options.signal)
+      options.onPrepare?.()
+      const cached = await getCachedAttachmentResource(session, reference)
+      throwIfAborted(options.signal)
+      if (cached) return cached
+
+      const readUrls = await fetchResourceReadUrls(session, [reference.fileId], { signal: options.signal })
+      throwIfAborted(options.signal)
+      const readUrl = readUrls.find((value) => value.fileId === reference.fileId)
+      if (!readUrl) throw new Error("无法获取视频下载地址")
+      options.onDownloadStart?.()
+      if (Platform.OS === "web") {
+        const downloaded = await downloadResourceBlob({
+          expectedSizeBytes: readUrl.sizeBytes ?? reference.expectedSizeBytes,
+          mimeType: reference.mimeType,
+          sourceUrl: readUrl.url,
+          signal: options.signal,
+          onProgress: options.onProgress,
+        })
+        if (options.signal?.aborted) {
+          URL.revokeObjectURL(downloaded.uri)
+          throwIfAborted(options.signal)
+        }
+        const resource = createRemoteResource(identity, downloaded.uri, downloaded.sizeBytes, reference.mimeType)
+        const key = `${createDownloadTaskPrefix(session)}${identity}`
+        const previous = webVideoCache.get(key)
+        if (previous) URL.revokeObjectURL(previous.uri)
+        webVideoCache.delete(key)
+        webVideoCache.set(key, resource)
+        let total = getWebVideoCacheSize()
+        for (const [cacheKey, cached] of webVideoCache) {
+          if (total <= MAX_CACHE_SIZE_BYTES || cacheKey === key) break
+          total -= cached.sizeBytes
+          URL.revokeObjectURL(cached.uri)
+          webVideoCache.delete(cacheKey)
+        }
+        return resource
+      }
+      const resource = await downloadToCache({
+        expectedSizeBytes: readUrl.sizeBytes ?? reference.expectedSizeBytes,
+        extension: getAttachmentCacheExtension(reference, readUrl.url),
+        identity,
+        server: session,
+        sourceUrl: readUrl.url,
+        versioned: true,
+        signal: options.signal,
+        onProgress: options.onProgress,
+      })
+      return withMimeType(resource, reference.mimeType)
+    })
   }
   const cached = await getCachedAttachmentResource(session, reference)
   if (cached) return cached
@@ -115,11 +183,13 @@ export async function ensureAttachmentResource(
 }
 
 export function invalidateAttachmentResource(
-  server: ServerTarget,
+  server: AuthenticatedTarget,
   reference: AttachmentResourceReference
 ) {
   forgetAttachmentResource(server, reference.fileId)
-  return removeCachedResource(server, getAttachmentIdentity(reference.fileId))
+  const identity = getAttachmentResourceIdentity(server, reference)
+  clearWebVideoCache(`${createDownloadTaskPrefix(server)}${identity}`, true)
+  return removeCachedResource(server, identity)
 }
 
 export function resolveAvatarResourceUrl(
@@ -242,12 +312,13 @@ export function invalidateImageUrlResource(
 }
 
 export function getResourceCacheSize() {
-  return getResourceCacheSizeStore()
+  return Platform.OS === "web" ? Promise.resolve(getWebVideoCacheSize()) : getResourceCacheSizeStore()
 }
 
 export function clearResourceCache() {
   return downloadTasks.runExclusive(async () => {
     await clearResourceCacheStore()
+    clearWebVideoCache()
     clearAttachmentResourceMemory()
   })
 }
@@ -258,6 +329,7 @@ export async function removeServerResourceCache(server: ServerTarget) {
 
   await Promise.allSettled(activeTasks)
   await removeServerResourceCacheStore(server)
+  clearWebVideoCache(taskPrefix)
   forgetServerAttachmentResources(server)
 }
 
@@ -268,6 +340,8 @@ async function downloadToCache({
   server,
   sourceUrl,
   versioned = false,
+  signal,
+  onProgress,
 }: {
   expectedSizeBytes?: number
   extension: string
@@ -275,14 +349,29 @@ async function downloadToCache({
   server: ServerTarget
   sourceUrl: string
   versioned?: boolean
+  signal?: AbortSignal
+  onProgress?: (progress: ResourceDownloadProgress) => void
 }) {
+  throwIfAborted(signal)
   const target = await createResourceCacheTarget(server, identity, extension, { versioned })
-  const downloaded = await downloadResource({
-    expectedSizeBytes,
-    sourceUrl,
-    temporaryFile: target.temporaryFile,
-  })
-  return commitResourceCacheTarget(target, downloaded.sizeBytes)
+  try {
+    const downloaded = await downloadResource({
+      expectedSizeBytes,
+      onProgress,
+      signal,
+      sourceUrl,
+      temporaryFile: target.temporaryFile,
+    })
+    throwIfAborted(signal)
+    return await commitResourceCacheTarget(target, downloaded.sizeBytes)
+  } catch (error) {
+    try {
+      if (target.temporaryFile.exists) target.temporaryFile.delete()
+    } catch {
+      // Keep the original download or cancellation error.
+    }
+    throw error
+  }
 }
 
 function runDownloadOnce(
@@ -293,6 +382,18 @@ function runDownloadOnce(
 ) {
   const taskKey = `${createDownloadTaskPrefix(server)}${identity}`
   return downloadTasks.run(taskKey, operation, signal)
+}
+
+function getWebVideoCacheSize() {
+  return Array.from(webVideoCache.values()).reduce((sum, resource) => sum + resource.sizeBytes, 0)
+}
+
+function clearWebVideoCache(prefix = "", exact = false) {
+  for (const [key, resource] of webVideoCache) {
+    if (exact ? key !== prefix : !key.startsWith(prefix)) continue
+    URL.revokeObjectURL(resource.uri)
+    webVideoCache.delete(key)
+  }
 }
 
 function createDownloadTaskPrefix(server: ServerTarget) {
@@ -316,6 +417,15 @@ function createRemoteResource(
 
 function withMimeType(resource: ResolvedResource, mimeType?: string) {
   return mimeType ? { ...resource, mimeType } : resource
+}
+
+function getAttachmentResourceIdentity(
+  session: AuthenticatedTarget,
+  reference: AttachmentResourceReference
+) {
+  return reference.kind === "video"
+    ? `video:${JSON.stringify([session.userId, reference.fileId])}`
+    : getAttachmentIdentity(reference.fileId)
 }
 
 function getAttachmentIdentity(fileId: string) {

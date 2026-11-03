@@ -69,6 +69,7 @@ import {
 } from "@/navigation/conversations"
 import { buildEntityDetailHref } from "@/navigation/entity-details"
 import { buildAttachmentImagePreviewHref } from "@/navigation/image-preview"
+import { useOpenVideoPreview } from "@/features/video-preview/use-open-video-preview"
 import { buildSendTargetHref } from "@/navigation/send-target"
 import {
   hydrateClientConversationUsers,
@@ -111,6 +112,7 @@ export function ConversationScreen() {
   const { invalidateSession, generation } = useAuth()
   const { activateConversation, refreshGroupProfile, ready: realtimeReady } = useRealtime()
   const session = useAuthenticatedSession()
+  const openVideoPreview = useOpenVideoPreview()
   const messageLocationScope = JSON.stringify([session.id, session.url, session.userId, conversationId, routeTargetMessageId])
   const [replyLocation, setReplyLocation] = useState<{ scope: string; messageId: string; requestKey: number } | null>(null)
   const activeReplyLocation = replyLocation?.scope === messageLocationScope ? replyLocation : null
@@ -639,6 +641,7 @@ export function ConversationScreen() {
                 Keyboard.dismiss()
               }}
               onImagePress={handleImagePress}
+              onVideoPress={openVideoPreview}
               onLoadOlder={handleLoadOlder}
               onMessageLongPress={handleMessageLongPress}
               onLocateReplyMessage={handleLocateReplyMessage}
