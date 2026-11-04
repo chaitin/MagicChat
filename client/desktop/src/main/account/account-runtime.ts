@@ -388,7 +388,7 @@ export class AccountRuntime {
     try {
       await this.conversationManager!.ensureLatestOnOpen(conversationId)
     } catch (error) {
-      if (!(error instanceof AuthFailure && error.code === "network")) throw error
+      if (!(error instanceof AuthFailure && (error.code === "network" || error.code === "timeout"))) throw error
     }
     return this.conversationManager!.listMessages(conversationId, latestLimit)
   }
@@ -783,7 +783,7 @@ export class AccountRuntime {
         client,
         this.input.userId,
         this.input.userName,
-        (conversationId) => this.notifyChanged(["conversations", "messages"], [conversationId]),
+        (conversationId, failure) => this.notifyChanged(["conversations", "messages"], [conversationId], undefined, failure),
         (conversationId) => this.notifyChanged(["conversations"], [conversationId]),
       )
       this.contactManager = new ContactManager(this.database, client)
@@ -979,6 +979,7 @@ export class AccountRuntime {
     domains: AccountDataDomain[],
     conversationIds: string[],
     avatarChange?: AccountDataChangedEvent["avatarChange"] | AccountDataChangedEvent["avatarChanges"],
+    messageSendFailure?: AccountDataChangedEvent["messageSendFailure"],
   ) {
     this.revision += 1
     this.input.onDataChanged({
@@ -986,6 +987,7 @@ export class AccountRuntime {
       revision: this.revision,
       domains,
       conversationIds,
+      ...(messageSendFailure ? { messageSendFailure } : {}),
       ...(Array.isArray(avatarChange)
         ? { avatarChanges: avatarChange, ...(avatarChange.length === 1 ? { avatarChange: avatarChange[0] } : {}) }
         : avatarChange ? { avatarChange } : {}),

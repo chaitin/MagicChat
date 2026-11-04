@@ -9,6 +9,7 @@ import type {
   ForwardMessagesResult,
   ManageGroupInput,
   MessageReactionUsersInput,
+  MessageSendFailure,
   SendRichMessageInput,
   SetMessageReactionInput,
   SubmitChoiceResponseInput,
@@ -58,7 +59,7 @@ export class ConversationManager {
     private readonly client: AuthenticatedClient,
     private readonly currentUserId: string,
     currentUserName: string,
-    onMessagesChanged: (conversationId: string) => void,
+    onMessagesChanged: (conversationId: string, failure?: MessageSendFailure) => void,
     onReadChanged: (conversationId: string) => void = onMessagesChanged,
   ) {
     this.outgoingMessages = new OutgoingMessageService(

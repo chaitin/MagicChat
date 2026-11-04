@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { rm } from "node:fs/promises"
-import type { DesktopMessage, DesktopMessageReplyTarget } from "../../shared/account-data"
+import type { DesktopMessage, DesktopMessageReplyTarget, MessageSendFailure } from "../../shared/account-data"
 import { AuthFailure, isRecord } from "../../shared/auth"
 import { normalizeSingleLinkMessageURL } from "../../shared/message-link"
 import { createLocalFileResponse } from "../local-file-response"
@@ -8,6 +8,7 @@ import { AccountDatabase } from "./account-database"
 import { AuthenticatedClient } from "./authenticated-client"
 import { parseMessage } from "./conversation-parser"
 import { createOutgoingTextMessageRequest } from "./outgoing-message-payload"
+import { messageSendErrorMessage } from "./message-send-error"
 
 export class OutgoingMessageService {
   private readonly sending = new Set<string>()
@@ -18,7 +19,7 @@ export class OutgoingMessageService {
     private readonly client: AuthenticatedClient,
     private readonly currentUserId: string,
     private readonly currentUserName: string,
-    private readonly onMessagesChanged: (conversationId: string) => void,
+    private readonly onMessagesChanged: (conversationId: string, failure?: MessageSendFailure) => void,
   ) {}
 
   sendTextMessage(
@@ -300,13 +301,7 @@ export class OutgoingMessageService {
         this.database.upsertMessages([parseMessage(data.message, conversationId)])
         this.onMessagesChanged(conversationId)
       })
-      .catch(() => {
-        this.sending.delete(clientMessageId)
-        if (this.closed) return
-        if (this.database.setOutgoingMessageStatus(conversationId, clientMessageId, "failed")) {
-          this.onMessagesChanged(conversationId)
-        }
-      })
+      .catch((error: unknown) => this.failMessage(conversationId, clientMessageId, error))
       .finally(() => {
         this.sending.delete(clientMessageId)
       })
@@ -384,13 +379,7 @@ export class OutgoingMessageService {
           cleanup.unref()
         }
       })
-      .catch(() => {
-        this.sending.delete(clientMessageId)
-        if (this.closed) return
-        if (this.database.setOutgoingMessageStatus(conversationId, clientMessageId, "failed")) {
-          this.onMessagesChanged(conversationId)
-        }
-      })
+      .catch((error: unknown) => this.failMessage(conversationId, clientMessageId, error))
       .finally(() => {
         this.sending.delete(clientMessageId)
       })
@@ -437,16 +426,22 @@ export class OutgoingMessageService {
           cleanup.unref()
         }
       })
-      .catch(() => {
-        this.sending.delete(clientMessageId)
-        if (this.closed) return
-        if (this.database.setOutgoingMessageStatus(conversationId, clientMessageId, "failed")) {
-          this.onMessagesChanged(conversationId)
-        }
-      })
+      .catch((error: unknown) => this.failMessage(conversationId, clientMessageId, error))
       .finally(() => {
         this.sending.delete(clientMessageId)
       })
+  }
+
+  private failMessage(conversationId: string, clientMessageId: string, error: unknown) {
+    this.sending.delete(clientMessageId)
+    if (this.closed) return
+    let message = messageSendErrorMessage(error)
+    try {
+      if (!this.database.setOutgoingMessageStatus(conversationId, clientMessageId, "failed")) return
+    } catch {
+      message = "本地消息状态保存失败，请检查存储空间后重试"
+    }
+    this.onMessagesChanged(conversationId, { conversationId, clientMessageId, message })
   }
 
   private assertConversationId(conversationId: string) {

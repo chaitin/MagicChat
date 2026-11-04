@@ -81,6 +81,11 @@ export function useChatData({
   const [revokingMessageIds, setRevokingMessageIds] = useState<Set<string>>(new Set())
   const [newMessageCount, setNewMessageCount] = useState(0)
   const realtimeRevisionRef = useRef(0)
+  const realtimeTargetRef = useRef(targetId)
+  if (realtimeTargetRef.current !== targetId) {
+    realtimeTargetRef.current = targetId
+    realtimeRevisionRef.current = 0
+  }
   const conversationListLoaderRef = useRef<ReturnType<
     typeof createCoalescedConversationListLoader
   > | null>(null)
@@ -275,8 +280,18 @@ export function useChatData({
   useEffect(() => {
     if (!window.desktop) return
     return window.desktop.accountData.onChanged((event) => {
-      if (event.targetId !== targetId || event.revision <= realtimeRevisionRef.current) return
+      if (
+        event.targetId !== targetId || event.targetId !== realtimeTargetRef.current ||
+        event.revision <= realtimeRevisionRef.current
+      ) return
       realtimeRevisionRef.current = event.revision
+      if (event.messageSendFailure) {
+        showToast({
+          status: "error",
+          title: "发送消息失败",
+          description: event.messageSendFailure.message,
+        })
+      }
       if (event.domains.includes("conversations")) {
         setConversationRevision((revision) => revision + 1)
       }
@@ -291,7 +306,7 @@ export function useChatData({
         setMessageRevision((revision) => revision + 1)
       }
     })
-  }, [selectedId, targetId])
+  }, [selectedId, showToast, targetId])
 
   useEffect(() => {
     if (!window.desktop || !targetId) return

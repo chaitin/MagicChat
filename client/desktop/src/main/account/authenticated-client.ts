@@ -53,6 +53,7 @@ export class AuthenticatedClient {
         file.fieldName ?? "file",
         "path" in file
           ? await openAsBlob(file.path, file.contentType ? { type: file.contentType } : undefined)
+              .catch(() => { throw new AuthFailure("file_unavailable", "附件无法读取，请重新选择文件") })
           : new Blob([file.bytes], { type: file.contentType }),
         file.name,
       )
@@ -85,7 +86,7 @@ export class AuthenticatedClient {
     } catch (error) {
       if (error instanceof AuthFailure) throw error
       throw new AuthFailure(
-        "network",
+        error instanceof Error && error.name === "TimeoutError" ? "timeout" : "network",
         error instanceof Error && error.name === "TimeoutError" ? "发送文件超时" : "发送文件失败",
       )
     }
@@ -182,7 +183,7 @@ export class AuthenticatedClient {
     } catch (error) {
       if (error instanceof AuthFailure) throw error
       throw new AuthFailure(
-        "network",
+        error instanceof Error && error.name === "TimeoutError" ? "timeout" : "network",
         error instanceof Error && error.name === "TimeoutError"
           ? "账号数据请求超时"
           : "无法连接账号数据服务",

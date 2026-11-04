@@ -89,6 +89,11 @@ export type AccountDataSyncEvent = {
   targetId: string
   state: "loading" | "ready"
 }
+export type MessageSendFailure = {
+  conversationId: string
+  clientMessageId: string
+  message: string
+}
 export type AccountDataChangedEvent = {
   targetId: string
   revision: number
@@ -96,6 +101,7 @@ export type AccountDataChangedEvent = {
   conversationIds: string[]
   avatarChange?: { type: "user" | "group" | "app"; id: string }
   avatarChanges?: { type: "user" | "group" | "app"; id: string }[]
+  messageSendFailure?: MessageSendFailure
 }
 
 export type ConversationPresenceSender = {
