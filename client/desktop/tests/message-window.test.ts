@@ -56,6 +56,51 @@ test("历史窗口与当前窗口重叠时去重且不留下缺口", () => {
   )
 })
 
+for (const status of ["sending", "failed"] as const) {
+  test(`${status}临时序号与正式消息重叠，不截断连续历史且保留临时消息`, () => {
+    const pending = { ...messages(82)[0], id: "pending", deliveryStatus: status }
+    const rows = [...messages(1, 2, 81), pending, ...messages(82, 83)]
+    assert.deepEqual(
+      contiguousMessageSuffix(rows).map((message) => message.id),
+      ["message-81", "pending", "message-82", "message-83"],
+    )
+  })
+
+  test(`${status}不影响完整本地页，也不能冒充缺失的正式消息`, () => {
+    const pending = { ...messages(90)[0], id: "pending", deliveryStatus: status }
+    const full = messages(...range(81, 100))
+    assert.equal(
+      isCompleteLocalPage(
+        [...full, pending].sort((a, b) => a.seq - b.seq),
+        101,
+      ),
+      true,
+    )
+    assert.equal(
+      isCompleteLocalPage(
+        full.map((message) => (message.seq === 90 ? pending : message)),
+        101,
+      ),
+      false,
+    )
+  })
+
+  test(`${status}的估计序号不创建或填平历史缺口`, () => {
+    const pending = { ...messages(151)[0], id: "pending", deliveryStatus: status }
+    assert.deepEqual(mergeLocalMessageWindows([...messages(50), pending], messages(101)).gap, {
+      afterSeq: 50,
+      beforeSeq: 101,
+    })
+    assert.deepEqual(
+      advanceLocalMessageGap({ afterSeq: 50, beforeSeq: 151 }, [
+        ...messages(...range(51, 100)),
+        pending,
+      ]),
+      { afterSeq: 100, beforeSeq: 151 },
+    )
+  })
+}
+
 function messages(...sequences: number[]) {
   return sequences.map(
     (seq) =>

@@ -2,6 +2,7 @@ import type { DesktopMessage } from "../../../shared/account-data"
 import {
   MAX_VISIBLE_MESSAGES,
   contiguousMessageSuffix,
+  isConfirmedMessage,
   mergeLocalMessageWindows,
   type MessageGap,
 } from "../../../shared/message-window.ts"
@@ -26,10 +27,9 @@ export function boundMessageWindow(messages: DesktopMessage[], direction: "older
 }
 
 export function hasEarlierMessages(current: DesktopMessage[], next: DesktopMessage[]) {
-  const oldest = current.find((message) => !message.virtualType && message.seq > 0)
+  const oldest = current.find(isConfirmedMessage)
   return Boolean(
-    oldest &&
-    next.some((message) => !message.virtualType && message.seq > 0 && message.seq < oldest.seq),
+    oldest && next.some((message) => isConfirmedMessage(message) && message.seq < oldest.seq),
   )
 }
 
@@ -69,8 +69,8 @@ export function retainMessageWindow(next: DesktopMessage[], current: DesktopMess
 
 export function visibleMessageGap(gap: MessageGap | null, messages: DesktopMessage[]) {
   return gap &&
-    messages.some((message) => message.seq === gap.afterSeq) &&
-    messages.some((message) => message.seq === gap.beforeSeq)
+    messages.some((message) => isConfirmedMessage(message) && message.seq === gap.afterSeq) &&
+    messages.some((message) => isConfirmedMessage(message) && message.seq === gap.beforeSeq)
     ? gap
     : null
 }

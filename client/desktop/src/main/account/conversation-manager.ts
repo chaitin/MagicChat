@@ -33,7 +33,7 @@ import { topicOpenMode } from "./conversation-topic"
 import {
   contiguousMessageSuffix,
   isCompleteLocalPage,
-  MAX_VISIBLE_MESSAGES,
+  mergeLocalMessageWindows,
   MESSAGE_PAGE_SIZE,
 } from "../../shared/message-window"
 import { normalizeOutgoingRichMessageBody } from "./rich-message-input"
@@ -1182,31 +1182,48 @@ export class ConversationManager {
       this.currentUserId,
       MESSAGE_PAGE_SIZE,
       beforeSeq,
+      undefined,
+      "confirmed",
     )
+    // The renderer merges history pages into its bounded window, not the latest tail.
     if (isCompleteLocalPage(localMessages, beforeSeq)) {
       return {
-        messages:
-          loadedCount >= MAX_VISIBLE_MESSAGES
-            ? localMessages
-            : this.listMessages(conversationId, loadedCount + localMessages.length),
+        messages: this.withPendingHistoryMessages(conversationId, beforeSeq, localMessages),
         hasMoreBefore: localMessages[0].seq > 1,
       }
     }
     const page = await retryNetworkAction(() => this.fetchMessagePage(conversationId, beforeSeq))
     const storedMessages = this.captureVirtualMessages(conversationId, page.messages)
     this.database.upsertMessages(storedMessages)
+    const confirmed = this.database.listMessages(
+      conversationId,
+      this.currentUserId,
+      MESSAGE_PAGE_SIZE,
+      beforeSeq,
+      undefined,
+      "confirmed",
+    )
     return {
-      messages:
-        loadedCount >= MAX_VISIBLE_MESSAGES
-          ? this.database.listMessages(
-              conversationId,
-              this.currentUserId,
-              MESSAGE_PAGE_SIZE,
-              beforeSeq,
-            )
-          : this.listMessages(conversationId, loadedCount + storedMessages.length),
+      messages: this.withPendingHistoryMessages(conversationId, beforeSeq, confirmed),
       hasMoreBefore: page.hasMoreBefore,
     }
+  }
+
+  private withPendingHistoryMessages(
+    conversationId: string,
+    beforeSeq: number,
+    confirmed: DesktopMessage[],
+  ) {
+    if (!confirmed.length) return []
+    const pending = this.database.listMessages(
+      conversationId,
+      this.currentUserId,
+      MESSAGE_PAGE_SIZE,
+      beforeSeq,
+      confirmed[0].seq - 1,
+      "pending",
+    )
+    return mergeLocalMessageWindows(confirmed, pending).messages
   }
 
   private canSendMessages(conversation: DesktopConversation) {

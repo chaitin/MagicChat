@@ -208,11 +208,18 @@ export class MessageRepository {
     latestLimit?: number,
     beforeSeq?: number,
     afterSeq?: number,
+    delivery?: "confirmed" | "pending",
   ): DesktopMessage[] {
     const limit =
       Number.isSafeInteger(latestLimit) && Number(latestLimit) > 0 ? latestLimit : undefined
     const before = Number.isSafeInteger(beforeSeq) && Number(beforeSeq) > 0 ? beforeSeq : undefined
     const after = Number.isSafeInteger(afterSeq) && Number(afterSeq) > 0 ? afterSeq : undefined
+    const deliveryFilter =
+      delivery === "confirmed"
+        ? "AND messages.delivery_status = ''"
+        : delivery === "pending"
+          ? "AND messages.delivery_status IN ('sending', 'failed')"
+          : ""
     const parameters: Array<string | number> = [conversationId]
     if (before !== undefined) parameters.push(before)
     if (after !== undefined) parameters.push(after)
@@ -241,6 +248,7 @@ export class MessageRepository {
          LEFT JOIN contact_apps
            ON messages.sender_type = 'app' AND contact_apps.id = messages.sender_id
          WHERE messages.conversation_id = ?
+           ${deliveryFilter}
            ${before !== undefined ? "AND messages.seq < ?" : ""}
            ${after !== undefined ? "AND messages.seq > ?" : ""}
            ${
@@ -248,6 +256,7 @@ export class MessageRepository {
                ? `AND messages.id IN (
                     SELECT id FROM messages
                     WHERE conversation_id = ?
+                    ${deliveryFilter}
                     ${before !== undefined ? "AND seq < ?" : ""}
                     ${after !== undefined ? "AND seq > ?" : ""}
                     ORDER BY seq ${after !== undefined ? "ASC" : "DESC"}, created_at ${after !== undefined ? "ASC" : "DESC"}, id ${after !== undefined ? "ASC" : "DESC"}

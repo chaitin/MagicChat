@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { DesktopConversation, DesktopMessage } from "../../../../shared/account-data"
 import {
   advanceLocalMessageGap,
+  isConfirmedMessage,
   mergeLocalMessageWindows,
   type MessageGap,
 } from "../../../../shared/message-window"
@@ -755,7 +756,7 @@ export function useChatData({
           loadedConversationTargetRef.current = targetId
           loadedMessageRevisionRef.current = messageRevision
           setMessages(bounded.messages)
-          const oldestMessage = bounded.messages.find((message) => !message.virtualType)
+          const oldestMessage = bounded.messages.find(isConfirmedMessage)
           setHasMoreBeforeMessages(Boolean(oldestMessage && oldestMessage.seq > 1))
           setHasMoreAfterMessages(bounded.removedAfter)
           setMessageGap(null)
@@ -1022,7 +1023,7 @@ export function useChatData({
 
   const loadBeforeMessages = useCallback(async () => {
     const currentMessages = messagesRef.current
-    const oldestMessage = currentMessages.find((message) => !message.virtualType && message.seq > 0)
+    const oldestMessage = currentMessages.find(isConfirmedMessage)
     if (
       !window.desktop ||
       !selectedId ||
@@ -1048,7 +1049,7 @@ export function useChatData({
         targetId,
         conversationId,
         beforeSeq: oldestMessage.seq,
-        loadedCount: currentMessages.filter((message) => !message.virtualType).length,
+        loadedCount: currentMessages.filter(isConfirmedMessage).length,
       })
       if (selectedIdRef.current !== conversationId || messageWindowRevisionRef.current !== revision)
         return

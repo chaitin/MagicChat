@@ -35,7 +35,7 @@ const { ConversationManager } = await import("../src/main/account/conversation-m
 const { parseConversation, parseMessage } =
   await import("../src/main/account/conversation-parser.ts")
 const { mergeLocalMessageWindows } = await import("../src/shared/message-window.ts")
-const { boundMessageWindow, mergeRefreshedMessages, retainMessageWindow } =
+const { boundMessageWindow, hasEarlierMessages, mergeRefreshedMessages, retainMessageWindow } =
   await import("../src/renderer/features/chat/bounded-message-window.ts")
 
 for (const type of ["group", "topic"] as const) {
@@ -292,6 +292,167 @@ function createTopicFixture({ read = false, viewOnly = false } = {}) {
   )
   return { database, manager, topicPayload }
 }
+
+function createPendingHistoryFixture({
+  status = "failed" as "sending" | "failed",
+  cached = true,
+  pendingStart = 60,
+  pendingCount = 1,
+  total = 100,
+} = {}) {
+  const database = new AccountDatabase(":memory:")
+  const records = Array.from({ length: total }, (_, index) => ({
+    id: `history-${index + 1}`,
+    conversation_id: "room",
+    seq: index + 1,
+    created_at: index + 1 < pendingStart ? "2026-01-01T00:00:00Z" : "2099-01-01T00:00:00Z",
+    sender: { id: "other", type: "user", name: "Other" },
+    body: { type: "text", text: "历史消息" },
+  }))
+  let requests = 0
+  database.upsertCurrentConversations([
+    parseConversation(
+      {
+        id: "room",
+        type: "group",
+        name: "Room",
+        created_at: "2026-01-01T00:00:00Z",
+        last_message_seq: total,
+        unread_count: 0,
+      },
+      "user",
+    ),
+  ])
+  database.upsertMessages(
+    records
+      .filter((row) => row.seq < pendingStart && (cached || row.seq >= pendingStart - 10))
+      .map((row) => parseMessage(row, "room")),
+  )
+  const manager = new ConversationManager(
+    database,
+    {
+      get: async (path: string) => {
+        requests++
+        const before = Number(new URL(path, "https://example.test").searchParams.get("before_seq"))
+        const messages = records.filter((row) => row.seq < before).slice(-20)
+        return {
+          messages,
+          page: {
+            has_more_before: Boolean(messages[0] && messages[0].seq > 1),
+            has_more_after: false,
+          },
+        }
+      },
+    } as never,
+    "user",
+    "User",
+    () => {},
+  )
+  for (let i = 0; i < pendingCount; i++) {
+    const clientMessageId = `pending-${i}`
+    database.createOptimisticMessage({
+      conversationId: "room",
+      clientMessageId,
+      content: "未确认的消息",
+      bodyType: "text",
+      senderId: "user",
+      senderName: "User",
+    })
+    if (status === "failed") database.setOutgoingMessageStatus("room", clientMessageId, "failed")
+  }
+  database.upsertMessages(
+    records.filter((row) => row.seq >= pendingStart).map((row) => parseMessage(row, "room")),
+  )
+  return {
+    database,
+    manager,
+    requests: () => requests,
+    close() {
+      manager.close()
+      database.close()
+    },
+  }
+}
+
+for (const status of ["sending", "failed"] as const) {
+  for (const cached of [true, false]) {
+    test(`${status}序号重叠：${cached ? "完整本地缓存" : "远端补页"}仍持续加载历史并保留重试项`, async (t) => {
+      const f = createPendingHistoryFixture({ status, cached })
+      t.after(f.close)
+      let current = f.manager.listMessages("room", 50)
+      assert.ok(
+        current.some((row) => row.clientMessageId === "pending-0" && row.deliveryStatus === status),
+      )
+      let hasMore = true
+      for (let step = 0; hasMore && step < 10; step++) {
+        const confirmed = current.filter((row) => !row.deliveryStatus && !row.virtualType)
+        const cursor = confirmed[0].seq
+        const page = await f.manager.loadBeforeMessages("room", cursor, confirmed.length)
+        assert.ok(
+          page.messages.filter((row) => !row.deliveryStatus).every((row) => row.seq < cursor),
+        )
+        const next = boundMessageWindow(
+          mergeLocalMessageWindows(page.messages, current).messages,
+          "older",
+        ).messages
+        assert.equal(hasEarlierMessages(current, next), true, "不能再次返回同一个最新尾段")
+        assert.ok(
+          next.some((row) => row.clientMessageId === "pending-0" && row.deliveryStatus === status),
+        )
+        current = next
+        hasMore = page.hasMoreBefore
+      }
+      assert.equal(hasMore, false)
+      assert.equal(current.find((row) => !row.deliveryStatus && !row.virtualType)?.seq, 1)
+      assert.equal(cached ? f.requests() === 0 : f.requests() > 0, true)
+    })
+  }
+}
+
+test("失败记录在新加载页里时不会丢失，也不占正式消息的20条分页配额", async (t) => {
+  const f = createPendingHistoryFixture({ pendingStart: 31, pendingCount: 20 })
+  t.after(f.close)
+  const current = f.manager.listMessages("room", 50)
+  assert.equal(current[0].seq, 51)
+  const page = await f.manager.loadBeforeMessages("room", 51, 50)
+  assert.equal(page.messages.filter((row) => !row.deliveryStatus).length, 20)
+  assert.equal(page.messages.filter((row) => row.deliveryStatus === "failed").length, 20)
+  assert.equal(f.requests(), 0, "完整正式缓存不应被失败项误判为缺页而访问网络")
+  const merged = mergeLocalMessageWindows(page.messages, current).messages
+  assert.equal(hasEarlierMessages(current, merged), true)
+})
+
+test("200条窗口含失败消息时仍只返回更早页，不因正式计数199而重取最新尾段", async (t) => {
+  const f = createPendingHistoryFixture({ pendingStart: 220, total: 250 })
+  t.after(f.close)
+  const current = f.manager.listMessages("room", 200)
+  const confirmed = current.filter((row) => !row.deliveryStatus && !row.virtualType)
+  assert.equal(confirmed.length, 199)
+  const page = await f.manager.loadBeforeMessages("room", confirmed[0].seq, confirmed.length)
+  assert.ok(page.messages.every((row) => row.seq < confirmed[0].seq))
+  const next = boundMessageWindow(
+    mergeLocalMessageWindows(page.messages, current).messages,
+    "older",
+  )
+  assert.equal(next.messages.length, 200)
+  assert.equal(next.removedAfter, true)
+  assert.equal(hasEarlierMessages(current, next.messages), true)
+  assert.ok(next.messages.some((row) => row.clientMessageId === "pending-0"))
+})
+
+test("定位旧消息后仍可继续加载末尾的失败消息以供重试", (t) => {
+  const f = createPendingHistoryFixture({ pendingStart: 101 })
+  t.after(f.close)
+  const context = f.manager.getLocalMessageContext("room", "history-80")
+  assert.equal(context.messages.at(-1)?.seq, 100)
+  assert.equal(context.hasMoreAfter, true)
+  const page = f.manager.listLocalMessagesAfter("room", 100)
+  assert.ok(
+    page.messages.some(
+      (row) => row.clientMessageId === "pending-0" && row.deliveryStatus === "failed",
+    ),
+  )
+})
 
 test("窗口到达 200 条后继续上翻只返回游标之前的消息", async () => {
   const database = new AccountDatabase(":memory:")
