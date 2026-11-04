@@ -5,7 +5,11 @@ import path from "node:path"
 import test from "node:test"
 import { runInNewContext } from "node:vm"
 import ts from "typescript"
-import type { DesktopConversation, DesktopMessage } from "../src/shared/account-data.ts"
+import type {
+  DesktopConversation,
+  DesktopLocalMessageWindow,
+  DesktopMessage,
+} from "../src/shared/account-data.ts"
 
 const require = createRequire(import.meta.url)
 const renderer = path.resolve(import.meta.dirname, "../src/renderer")
@@ -24,6 +28,7 @@ function fixture(focused = true) {
   let data: any
   const readCalls: number[] = []
   const readAttempts: number[] = []
+  const readTargets: string[] = []
   let nativeFocused = true
   let inactiveReadResponse: Promise<void> | null = null
   let revision = 0
@@ -143,6 +148,7 @@ function fixture(focused = true) {
   let rows = [row(1), row(2), row(3)]
   const conversationRequests: Pending<DesktopConversation[]>[] = []
   const messageRequests: Pending<DesktopMessage[]>[] = []
+  const contextRequests: Pending<DesktopLocalMessageWindow>[] = []
   const emit = (domains = ["conversations", "messages"]) => {
     const event = {
       targetId: props.targetId,
@@ -194,16 +200,21 @@ function fixture(focused = true) {
       new Promise((resolve) => conversationRequests.push({ input, resolve })),
     listMessages: (input: unknown) =>
       new Promise((resolve) => messageRequests.push({ input, resolve })),
+    getLocalMessageContext: (input: unknown) =>
+      new Promise((resolve) => contextRequests.push({ input, resolve })),
     getContacts: async () => ({ ok: true, data: { users: [], apps: [], groups: [] } }),
     resolveUserNames: async () => ({ ok: true, data: [] }),
     markConversationRead: async ({
+      targetId,
       conversationId,
       upToSeq,
     }: {
+      targetId: string
       conversationId: string
       upToSeq: number
     }) => {
       readAttempts.push(upToSeq)
+      readTargets.push(targetId)
       if (!nativeFocused) {
         const response = inactiveReadResponse
         inactiveReadResponse = null
@@ -233,17 +244,26 @@ function fixture(focused = true) {
     conversations,
     readCalls,
     readAttempts,
+    readTargets,
     get data() {
       return data
     },
     conversationRequests,
     messageRequests,
+    contextRequests,
+    async switchAccount(targetId: string) {
+      props.targetId = targetId
+      dirty = true
+      await flush()
+    },
     nativeFocus: (value: boolean) => {
       nativeFocused = value
     },
     deferInactiveRead() {
       let release!: () => void
-      inactiveReadResponse = new Promise<void>((resolve) => { release = resolve })
+      inactiveReadResponse = new Promise<void>((resolve) => {
+        release = resolve
+      })
       return release
     },
     async frame() {
@@ -252,15 +272,26 @@ function fixture(focused = true) {
       for (const fn of pending) fn()
       await flush()
     },
-    async enter(conversationId = "room") {
+    async enter(conversationId = "room", options?: { readMessageId: string }) {
       await flush()
       conversationRequests.shift()!.resolve({ ok: true, data: structuredClone(conversations) })
       await flush()
-      data.setSelectedId(conversationId)
+      data.setSelectedId(conversationId, options)
       await flush()
     },
     async messages(index = messageRequests.length - 1, value = rows) {
       messageRequests.splice(index, 1)[0].resolve({ ok: true, data: structuredClone(value) })
+      await flush()
+    },
+    async context(
+      index = contextRequests.length - 1,
+      value: DesktopLocalMessageWindow = {
+        messages: rows,
+        hasMoreBefore: false,
+        hasMoreAfter: false,
+      },
+    ) {
+      contextRequests.splice(index, 1)[0].resolve({ ok: true, data: structuredClone(value) })
       await flush()
     },
     async lists() {
@@ -453,6 +484,143 @@ test("完整生命周期：通知目标等待新消息窗口，不被已读旧�
   await f.messages()
   await f.lists()
   assert.deepEqual(f.readCalls, [3, 4])
+  assert.equal(f.data.selected.unreadCount, 0)
+})
+
+for (const initialFirst of [true, false]) {
+  for (const contextFirst of [true, false]) {
+    test(`通知定位竞态：${initialFirst ? "首次读取先返回" : "定位先完成"}，${contextFirst ? "上下文先返回" : "最新窗口先返回"}仍清未读并保留定位窗口`, async (t) => {
+      const f = fixture(false)
+      t.after(f.cleanup)
+      await f.enter("room", { readMessageId: "m3" })
+      const locating = f.data.jumpToLocalMessage("m3")
+      if (initialFirst) await f.messages(0, [])
+      assert.deepEqual(f.readCalls, [])
+      if (contextFirst) {
+        await f.context()
+        assert.deepEqual(f.readCalls, [])
+        await f.messages()
+      } else {
+        await f.messages()
+        assert.deepEqual(f.readCalls, [])
+        await f.context()
+      }
+      assert.equal(await locating, true)
+      assert.equal(f.data.loadingMessages, false)
+      assert.deepEqual(f.readCalls, [3], "不能依赖已失效的首次读取返回后才清未读")
+      if (!initialFirst) await f.messages(0, [])
+      await f.frame()
+      await f.lists()
+      assert.equal(f.data.selected.unreadCount, 0)
+      assert.ok(f.data.messages.some((message: DesktopMessage) => message.id === "m3"))
+      assert.deepEqual(f.readCalls, [3])
+      assert.equal(f.messageRequests.length, 0)
+    })
+  }
+}
+
+test("通知定位完成但原生窗口未聚焦时不清未读，恢复焦点后正常确认", async (t) => {
+  const f = fixture(false)
+  t.after(f.cleanup)
+  await f.enter("room", { readMessageId: "m3" })
+  f.nativeFocus(false)
+  const locating = f.data.jumpToLocalMessage("m3")
+  await f.context()
+  await f.messages()
+  assert.equal(await locating, true)
+  assert.deepEqual(f.readAttempts, [3])
+  assert.deepEqual(f.readCalls, [])
+  f.nativeFocus(true)
+  await f.frame()
+  await f.messages(0, [])
+  await f.lists()
+  assert.deepEqual(f.readCalls, [3])
+  assert.equal(f.data.selected.unreadCount, 0)
+})
+
+test("切换账号后同名会话的迟到定位不能写入消息或已读状态", async (t) => {
+  const f = fixture(false)
+  t.after(f.cleanup)
+  await f.enter("room", { readMessageId: "m3" })
+  const locating = f.data.jumpToLocalMessage("m3")
+  await f.switchAccount("next-target")
+  f.data.setSelectedId("room", { readMessageId: "m3" })
+  await f.flush()
+  await f.context()
+  await f.messages(1)
+  assert.equal(await locating, false)
+  assert.deepEqual(f.readCalls, [])
+  assert.ok(!f.data.messages.some((message: DesktopMessage) => message.id === "m3"))
+  await f.messages(0, [])
+  await f.messages()
+  await f.lists()
+  assert.deepEqual(f.readCalls, [3])
+  assert.deepEqual(f.readTargets, ["next-target"])
+  assert.equal(f.data.selected.unreadCount, 0)
+})
+
+test("切换会话后的迟到定位不能交接加载状态或清未读", async (t) => {
+  const f = fixture(false)
+  t.after(f.cleanup)
+  await f.enter("room", { readMessageId: "m3" })
+  const locating = f.data.jumpToLocalMessage("m3")
+  f.data.setSelectedId("other")
+  await f.flush()
+  await f.context()
+  await f.messages(1)
+  assert.equal(await locating, false)
+  assert.equal(f.data.selectedId, "other")
+  assert.deepEqual(f.readCalls, [])
+  assert.ok(!f.data.messages.some((message: DesktopMessage) => message.id === "m3"))
+})
+
+test("已取消的通知定位不能提交加载状态或清未读", async (t) => {
+  const f = fixture(false)
+  t.after(f.cleanup)
+  await f.enter("room", { readMessageId: "m3" })
+  let active = true
+  const locating = f.data.jumpToLocalMessage("m3", undefined, () => active)
+  active = false
+  await f.context()
+  await f.messages()
+  assert.equal(await locating, false)
+  assert.deepEqual(f.readCalls, [])
+  assert.ok(!f.data.messages.some((message: DesktopMessage) => message.id === "m3"))
+})
+
+test("定位的最新窗口读取失败时不能假装已加载或清未读", async (t) => {
+  const f = fixture(false)
+  t.after(f.cleanup)
+  await f.enter("room", { readMessageId: "m3" })
+  const locating = f.data.jumpToLocalMessage("m3")
+  const rejected = assert.rejects(locating, /读取失败/)
+  await f.context()
+  f.messageRequests.pop()!.resolve({
+    ok: false,
+    error: { code: "network", message: "读取失败" },
+  } as any)
+  await f.flush()
+  await rejected
+  assert.deepEqual(f.readCalls, [])
+  assert.ok(!f.data.messages.some((message: DesktopMessage) => message.id === "m3"))
+})
+
+test("新定位成功后旧定位不能覆盖加载状态、消息窗口或重复已读", async (t) => {
+  const f = fixture(false)
+  t.after(f.cleanup)
+  await f.enter("room", { readMessageId: "m3" })
+  const first = f.data.jumpToLocalMessage("m2")
+  const second = f.data.jumpToLocalMessage("m3")
+  await f.context()
+  await f.messages()
+  assert.equal(await second, true)
+  await f.context()
+  await f.messages()
+  assert.equal(await first, false)
+  await f.messages(0, [])
+  await f.lists()
+  assert.ok(f.data.messages.some((message: DesktopMessage) => message.id === "m3"))
+  assert.deepEqual(f.readCalls, [3])
   assert.equal(f.data.selected.unreadCount, 0)
 })
 

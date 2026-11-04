@@ -800,6 +800,7 @@ export function useChatData({
       const revision = ++messageWindowRevisionRef.current
       locatingWindowRef.current = revision
       const isActive = () =>
+        realtimeTargetRef.current === targetId &&
         selectedIdRef.current === conversationId &&
         messageWindowRevisionRef.current === revision &&
         (isCurrent?.() ?? true)
@@ -832,10 +833,14 @@ export function useChatData({
         isAtBottomRef.current = false
         scrollSnapshotRef.current = null
         setNewMessageCount(0)
+        // 定位已接管窗口，不能再等已失效的首次读取提交就绪状态。
+        loadedConversationIdRef.current = conversationId
+        loadedConversationTargetRef.current = targetId
         setMessages(bounded.messages)
         setMessageGap(visibleMessageGap(gap, bounded.messages))
         setHasMoreBeforeMessages(context.hasMoreBefore)
         setHasMoreAfterMessages(context.hasMoreAfter || bounded.removedAfter)
+        setLoadingMessages(false)
         return true
       } finally {
         if (locatingWindowRef.current === revision) locatingWindowRef.current = null
