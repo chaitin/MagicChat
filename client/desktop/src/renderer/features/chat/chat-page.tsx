@@ -155,6 +155,7 @@ export function ChatPage({
   const [forwardOperation, setForwardOperation] = useState<ForwardOperation | null>(null)
   const [creatingTopic, setCreatingTopic] = useState(false)
   const composerRef = useRef<HTMLTextAreaElement>(null)
+  const conversationListRef = useRef<HTMLDivElement>(null)
   const pendingComposerCursorRef = useRef<number | null>(null)
   const draftsRef = useRef(new Map<string, ConversationDraft>())
   const previousDraftKeyRef = useRef<string | null>(null)
@@ -770,6 +771,28 @@ export function ChatPage({
   const reachBottom = useCallback(() => {
     if (!searchMessageTarget) void loadAfterMessages()
   }, [loadAfterMessages, searchMessageTarget])
+  const selectSection = useCallback(
+    (section: AppSection) => {
+      if (section === "chat" && activeSection === "chat") {
+        const viewport = conversationListRef.current
+        const unread = viewport?.querySelector<HTMLButtonElement>(
+          "button[data-unread-conversation]",
+        )
+        if (viewport && unread) {
+          viewport.scrollTo({
+            top:
+              viewport.scrollTop +
+              unread.getBoundingClientRect().top -
+              viewport.getBoundingClientRect().top,
+            behavior: "smooth",
+          })
+        }
+        return
+      }
+      setActiveSection(section)
+    },
+    [activeSection],
+  )
   const selectConversation = useCallback(
     (conversationId: string) => {
       if (conversationId === selectedId) {
@@ -820,7 +843,7 @@ export function ChatPage({
         isPreview={isPreview}
         activeSection={activeSection}
         hasUnreadMessages={hasUnreadMessages}
-        onSectionChange={setActiveSection}
+        onSectionChange={selectSection}
         onSignOut={onSignOut}
         onUserUpdated={onUserUpdated}
         onRequestQuit={onRequestQuit}
@@ -830,6 +853,7 @@ export function ChatPage({
       {activeSection === "chat" ? (
         <div className="grid min-w-0 flex-1 grid-cols-[19rem_minmax(0,1fr)]">
           <ConversationSidebar
+            viewportRef={conversationListRef}
             conversations={conversations}
             currentUserId={userId}
             draftConversationIds={draftConversationIds}

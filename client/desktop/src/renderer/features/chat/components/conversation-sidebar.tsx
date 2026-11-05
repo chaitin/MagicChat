@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react"
+import { memo, useMemo, useState, type Ref } from "react"
 import {
   ArrowMoveDownRightIcon,
   Delete02Icon,
@@ -40,6 +40,7 @@ import { canPinConversation } from "../conversation-action-policy"
 import { conversationUnreadIndicator, hasUnreadMention } from "../conversation-unread"
 
 export const ConversationSidebar = memo(function ConversationSidebar({
+  viewportRef,
   conversations,
   currentUserId,
   draftConversationIds,
@@ -59,6 +60,7 @@ export const ConversationSidebar = memo(function ConversationSidebar({
   onSetMuted,
   onDismiss,
 }: {
+  viewportRef: Ref<HTMLDivElement>
   conversations: DesktopConversation[]
   currentUserId: string
   draftConversationIds: ReadonlySet<string>
@@ -156,6 +158,7 @@ export const ConversationSidebar = memo(function ConversationSidebar({
         />
 
         <ScrollArea
+          viewportRef={viewportRef}
           type="hover"
           scrollHideDelay={200}
           className="min-h-0 min-w-0 flex-1 overflow-hidden bg-xgui-background-1"
@@ -304,6 +307,9 @@ function ConversationGroup({
               >
                 <button
                   type="button"
+                  data-unread-conversation={
+                    conversationUnreadIndicator(conversation, active) ? "" : undefined
+                  }
                   aria-current={active ? "page" : undefined}
                   onClick={() => onSelect(conversation.id)}
                 >
