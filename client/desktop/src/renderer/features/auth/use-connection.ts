@@ -30,15 +30,21 @@ const preview: Connection = {
     thirdPartyProviders: [{ key: "oidc", name: "通用 OIDC" }],
   },
 }
-const bridgeError: AuthProblem = { code: "bridge", message: "桌面服务暂不可用，请重启客户端后再试" }
+const bridgeError: AuthProblem = { code: "bridge", message: "桌面服务暂不可用，请稍后重试" }
 
 export function useConnection() {
-  const [catalog, setCatalog] = useState<ServerCatalog>(previewCatalog)
+  const [catalog, setCatalog] = useState<ServerCatalog>(() =>
+    window.desktop ? { activeServerId: OFFICIAL_SERVER_ID, servers: [] } : previewCatalog,
+  )
   const [server, setServer] = useState<ServerProfile>(official)
   const [connection, setConnection] = useState<Connection | null>(null)
   const [error, setError] = useState<AuthProblem | null>(null)
   const [loading, setLoading] = useState(true)
-  const initial = useRef<Promise<AuthResult<RestoredSession>> | null>(null)
+  const initial = useRef<{
+    catalog: Promise<AuthResult<ServerCatalog>>
+    session: Promise<AuthResult<RestoredSession>>
+  } | null>(null)
+  const catalogRequest = useRef<Promise<AuthResult<ServerCatalog>> | null>(null)
   const connecting = useRef(false)
   const isPreview = !window.desktop
 
@@ -64,31 +70,76 @@ export function useConnection() {
     )
   }, [])
 
+  const readCatalog = useCallback((): Promise<AuthResult<ServerCatalog>> => {
+    catalogRequest.current ??= (async () => {
+      for (let attempt = 0; ; attempt++) {
+        let result: AuthResult<ServerCatalog>
+        try {
+          result = window.desktop
+            ? await window.desktop.auth.getServers()
+            : { ok: true, data: previewCatalog }
+        } catch {
+          result = { ok: false, error: bridgeError }
+        }
+        if (result.ok || attempt >= 2 || !["bridge", "busy"].includes(result.error.code)) {
+          return result
+        }
+        await new Promise((resolve) => setTimeout(resolve, 250))
+      }
+    })().finally(() => {
+      catalogRequest.current = null
+    })
+    return catalogRequest.current
+  }, [])
+
   useEffect(() => {
     let cancelled = false
-    // StrictMode 的 effect 会重放，复用同一个启动请求，避免重复读取配置。
-    initial.current ??= (
-      window.desktop
-        ? window.desktop.auth.restoreLastSession()
-        : Promise.resolve({
-            ok: true,
-            data: { catalog: previewCatalog, connection: null },
-          } as const)
-    ).catch(() => ({ ok: false, error: bridgeError }) as const)
-    void initial.current.then((result) => {
+    // StrictMode 重放共享启动请求；本地列表不能依赖联网恢复成功。
+    const requests = (initial.current ??= {
+      catalog: readCatalog(),
+      session: Promise.resolve()
+        .then(() =>
+          window.desktop
+            ? window.desktop.auth.restoreLastSession()
+            : ({ ok: true, data: { catalog: previewCatalog, connection: null } } as const),
+        )
+        .catch(() => ({ ok: false, error: bridgeError }) as const),
+    })
+    void requests.catalog.then((result) => {
+      if (!cancelled && result.ok) acceptCatalog(result.data)
+    })
+    void Promise.all([requests.catalog, requests.session]).then(([local, restored]) => {
       if (cancelled) return
       setLoading(false)
-      if (!result.ok) {
-        setError(result.error)
+      if (!restored.ok) {
+        setError(local.ok ? restored.error : local.error)
         return
       }
-      acceptCatalog(result.data.catalog)
-      if (result.data.connection) accept(result.data.connection)
+      // 恢复结果可能更新当前服务器，必须在本地快照之后提交。
+      acceptCatalog(restored.data.catalog)
+      if (restored.data.connection) accept(restored.data.connection)
+      else setError(null)
     })
     return () => {
       cancelled = true
     }
-  }, [accept, acceptCatalog])
+  }, [accept, acceptCatalog, readCatalog])
+
+  const reloadCatalog = useCallback(async (): Promise<AuthResult<ServerCatalog>> => {
+    if (connecting.current) {
+      return { ok: false, error: { code: "busy", message: "正在连接服务器，请稍候" } }
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      const result = await readCatalog()
+      if (result.ok) acceptCatalog(result.data)
+      else setError(result.error)
+      return result
+    } finally {
+      setLoading(false)
+    }
+  }, [acceptCatalog, readCatalog])
 
   const connect = useCallback(
     async (serverId: string): Promise<AuthResult<Connection>> => {
@@ -145,6 +196,7 @@ export function useConnection() {
     accept,
     acceptUser,
     acceptCatalog,
+    reloadCatalog,
     connect,
     clearError,
     retry,

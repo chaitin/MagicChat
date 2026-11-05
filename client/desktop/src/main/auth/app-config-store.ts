@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { setTimeout as delay } from "node:timers/promises"
 import {
   AuthFailure,
   OFFICIAL_SERVER_ID,
@@ -93,9 +94,22 @@ export class AppConfigStore {
   async load(): Promise<AppConfig> {
     const fallback = createDefaultAppConfig()
     try {
-      const stored: unknown = JSON.parse(await readFile(this.filePath, "utf8"))
+      let source: string
+      for (let attempt = 0; ; attempt++) {
+        try {
+          source = await readFile(this.filePath, "utf8")
+          break
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException)?.code
+          if (attempt >= 2 || !["EBUSY", "EACCES", "EPERM", "EAGAIN"].includes(code ?? "")) {
+            throw error
+          }
+          await delay(100 * (attempt + 1))
+        }
+      }
+      const stored: unknown = JSON.parse(source)
       if (!isRecord(stored) || stored.version !== 1 || !Array.isArray(stored.servers)) {
-        return fallback
+        throw new AuthFailure("storage", "本地配置格式不正确，无法读取服务器列表")
       }
 
       const servers: ServerProfile[] = [officialServer]
@@ -232,7 +246,11 @@ export class AppConfigStore {
       return config
     } catch (error) {
       if (error instanceof AuthFailure) throw error
-      return fallback
+      if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return fallback
+      if (error instanceof SyntaxError) {
+        throw new AuthFailure("storage", "本地配置文件损坏，无法读取服务器列表")
+      }
+      throw new AuthFailure("storage", "无法读取本地配置，请重试或检查用户数据目录权限")
     }
   }
 

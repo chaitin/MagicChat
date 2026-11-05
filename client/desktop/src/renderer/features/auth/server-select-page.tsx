@@ -5,6 +5,7 @@ import {
   ArrowRight01Icon,
   EnergyIcon,
   Loading03Icon,
+  RefreshIcon,
 } from "@hugeicons/core-free-icons"
 import { useEffect, useRef, useState } from "react"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
@@ -63,6 +64,7 @@ export function ServerSelectPage({
   theme,
   onThemeChange,
   onCatalogChange,
+  onReloadCatalog,
   onSelect,
 }: {
   catalog: ServerCatalog
@@ -72,6 +74,7 @@ export function ServerSelectPage({
   theme: ThemePreference
   onThemeChange: (theme: ThemePreference) => void
   onCatalogChange: (catalog: ServerCatalog) => void
+  onReloadCatalog: () => Promise<AuthResult<ServerCatalog>>
   onSelect: (serverId: string) => Promise<AuthResult<Connection>>
 }) {
   const { showToast } = useAnimatedToast()
@@ -82,10 +85,18 @@ export function ServerSelectPage({
   const serverKey = catalog.servers.map((server) => `${server.id}:${server.url}`).join("|")
 
   useEffect(() => {
-    if (!initialError || shownInitialError.current === initialError) return
+    if (!initialError) {
+      shownInitialError.current = ""
+      return
+    }
+    if (shownInitialError.current === initialError) return
     shownInitialError.current = initialError
-    showToast({ status: "error", title: "无法加载服务器", description: initialError })
-  }, [initialError, showToast])
+    showToast({
+      status: "error",
+      title: catalog.servers.length ? "自动连接未完成" : "无法加载服务器列表",
+      description: initialError,
+    })
+  }, [catalog.servers.length, initialError, showToast])
 
   useEffect(() => {
     if (loading || !serverKey) return
@@ -189,7 +200,7 @@ export function ServerSelectPage({
               <SettingsDialog
                 theme={theme}
                 catalog={catalog}
-                disabled={Boolean(selectedId) || loading || isPreview}
+                disabled={Boolean(selectedId) || loading || isPreview || !catalog.servers.length}
                 onThemeChange={onThemeChange}
                 onCatalogChange={onCatalogChange}
               />
@@ -201,6 +212,21 @@ export function ServerSelectPage({
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {initialError && (
+                  <div className="space-y-2" role="alert">
+                    <p className="text-sm text-destructive">{initialError}</p>
+                    <BeButton
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      disabled={loading || Boolean(selectedId) || isPreview}
+                      onClick={() => void onReloadCatalog()}
+                    >
+                      <HugeiconsIcon icon={RefreshIcon} className="size-4" aria-hidden />
+                      重新加载服务器列表
+                    </BeButton>
+                  </div>
+                )}
                 <div className="space-y-3">
                   <div className="max-h-72 overflow-y-auto pr-1">
                     <ItemGroup className="gap-3" aria-label="可选服务器">
@@ -223,7 +249,7 @@ export function ServerSelectPage({
                     variant="outline"
                     size="md"
                     className="w-full"
-                    disabled={loading || Boolean(selectedId)}
+                    disabled={loading || Boolean(selectedId) || !catalog.servers.length}
                     onClick={() => setSettingsOpen(true)}
                   >
                     <HugeiconsIcon icon={Add01Icon} className="size-4" aria-hidden />
@@ -235,7 +261,7 @@ export function ServerSelectPage({
             <SettingsDialog
               theme={theme}
               catalog={catalog}
-              disabled={Boolean(selectedId) || loading || isPreview}
+              disabled={Boolean(selectedId) || loading || isPreview || !catalog.servers.length}
               defaultSection="servers"
               open={settingsOpen}
               onOpenChange={setSettingsOpen}

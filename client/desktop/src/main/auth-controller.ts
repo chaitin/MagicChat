@@ -67,7 +67,7 @@ const NATIVE_SESSION_VERSION = "2"
 
 export class AuthController {
   private readonly configStore: AppConfigStore
-  private readonly initialized: Promise<void>
+  private initialization: Promise<void> | null = null
   private config: AppConfig = createDefaultAppConfig()
   private active?: ActiveConnection
   private accountRuntime?: AccountRuntime
@@ -117,14 +117,24 @@ export class AuthController {
         this.config = config
       },
     )
-    this.initialized = this.configStore.load().then((config) => {
-      this.config = config
-    })
     this.accountData = new AccountDataFacade(
       () => this.initialized,
       (targetId) => void this.requireTarget(targetId),
       () => this.requireAccountRuntime(),
     )
+  }
+
+  private get initialized(): Promise<void> {
+    this.initialization ??= this.configStore
+      .load()
+      .then((config) => {
+        this.config = config
+      })
+      .catch((error) => {
+        this.initialization = null
+        throw error
+      })
+    return this.initialization
   }
 
   async getServer(): Promise<ServerProfile> {

@@ -51,6 +51,7 @@ export function LoginPage({
     accept,
     acceptUser,
     acceptCatalog,
+    reloadCatalog,
     connect,
     clearError,
     retry,
@@ -182,7 +183,7 @@ export function LoginPage({
     <SettingsDialog
       theme={theme}
       catalog={catalog}
-      disabled={busy || isPreview}
+      disabled={busy || loading || isPreview || !catalog.servers.length}
       onThemeChange={onThemeChange}
       onCatalogChange={acceptCatalog}
       open={settingsOpen}
@@ -249,6 +250,7 @@ export function LoginPage({
             theme={theme}
             onThemeChange={onThemeChange}
             onCatalogChange={acceptCatalog}
+            onReloadCatalog={reloadCatalog}
             onSelect={async (serverId) => {
               const result = await connect(serverId)
               if (result.ok) setScreen(result.data.user ? "signing-in" : "login")

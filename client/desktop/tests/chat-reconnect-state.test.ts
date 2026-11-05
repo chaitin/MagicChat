@@ -46,7 +46,12 @@ function fixture(initialScreen: Screen = "chat") {
   }
   const connection = {
     targetId: "target",
-    server: { url: "https://example.test" },
+    server: {
+      id: "saved",
+      name: "测试服务器",
+      url: "https://example.test",
+      builtin: false,
+    },
     info: { organizationName: "组织" },
     user: { id: "user", name: "用户" },
   }
@@ -101,12 +106,13 @@ function fixture(initialScreen: Screen = "chat") {
         return {
           useConnection: () => ({
             connection,
-            catalog: {},
+            catalog: { activeServerId: connection.server.id, servers: [connection.server] },
             loading: false,
             isPreview: false,
             accept: (value: unknown) => accepted.push(value),
             acceptUser: noop,
             acceptCatalog: noop,
+            reloadCatalog: noop,
             connect: noop,
             clearError: noop,
             retry: noop,
