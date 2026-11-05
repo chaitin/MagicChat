@@ -2,6 +2,7 @@ import { Suspense, lazy } from "react"
 import { MotionConfig } from "motion/react"
 import { AnimatedToastProvider } from "./components/motion/animated-toast-provider"
 import { NotificationPermissionProvider } from "./notification-permission-provider"
+import { TaskWindowLoading } from "./task-window-startup"
 
 const App = lazy(() => import("./App").then(({ App }) => ({ default: App })))
 const MediaPreviewPage = lazy(() =>
@@ -24,7 +25,7 @@ export function AppPages({
 }) {
   return (
     <MotionConfig reducedMotion="user">
-      <Suspense fallback={null}>
+      <Suspense fallback={taskWindowMode ? <TaskWindowLoading /> : null}>
         {taskWindowMode ? (
           <AnimatedToastProvider>
             <ProjectTaskWindowPage />

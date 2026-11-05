@@ -87,6 +87,7 @@ export function ProjectTaskDialog({
   projectId,
   task: initialTask,
   members,
+  membersDisabled = false,
   resolvedTheme,
   onClose,
   onChanged,
@@ -96,6 +97,7 @@ export function ProjectTaskDialog({
   projectId: string
   task: DesktopProjectTask | null
   members: ProjectTaskAssignee[]
+  membersDisabled?: boolean
   resolvedTheme: "light" | "dark"
   onClose: () => void
   onChanged: () => Promise<void>
@@ -283,6 +285,7 @@ export function ProjectTaskDialog({
                   <TaskPropertyFields
                     targetId={targetId}
                     members={members}
+                    membersDisabled={membersDisabled}
                     values={taskPropertyValues(task)}
                     task={task}
                     theme={resolvedTheme}
@@ -352,6 +355,7 @@ export function ProjectTaskDialog({
                   <TaskPropertyFields
                     targetId={targetId}
                     members={members}
+                    membersDisabled={membersDisabled}
                     values={form}
                     task={details}
                     theme={resolvedTheme}
@@ -461,6 +465,7 @@ function TaskPropertyFields({
   theme,
   disabled,
   hideEmpty = false,
+  membersDisabled = false,
   onChange,
 }: {
   targetId: string
@@ -470,6 +475,7 @@ function TaskPropertyFields({
   theme: "light" | "dark"
   disabled: boolean
   hideEmpty?: boolean
+  membersDisabled?: boolean
   onChange: <K extends keyof TaskPropertyValues>(key: K, value: TaskPropertyValues[K]) => void
 }) {
   const assigneeName =
@@ -543,7 +549,7 @@ function TaskPropertyFields({
             value={values.assigneeUserId}
             name={assigneeName}
             theme={theme}
-            disabled={disabled}
+            disabled={disabled || membersDisabled}
             onChange={(id) => onChange("assigneeUserId", id)}
           />
         </Field>

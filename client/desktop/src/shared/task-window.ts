@@ -2,7 +2,13 @@ import type { AccountDataBridge } from "./account-data"
 import type { AuthResult } from "./auth"
 import type { DesktopBridge, ThemePreference } from "./desktop"
 
-export type TaskWindowContext = { targetId: string; projectId: string; taskId: string | null }
+export type TaskWindowContext = {
+  targetId: string
+  projectId: string
+  taskId: string | null
+  view?: "project"
+  projectName?: string
+}
 export type TaskWindowOpenInput = Omit<TaskWindowContext, "taskId"> & { taskId?: string }
 export type TaskWindowChange = Pick<TaskWindowContext, "targetId" | "projectId">
 
@@ -45,5 +51,6 @@ export interface TaskWindowBridge {
 
 export interface TaskWindowOpener {
   open(input: TaskWindowOpenInput): Promise<AuthResult<null>>
+  notifyChanged(change: TaskWindowChange): Promise<void>
   onChanged(callback: (change: TaskWindowChange) => void): () => void
 }

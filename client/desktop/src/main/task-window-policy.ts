@@ -1,6 +1,11 @@
 import { ACCOUNT_DATA_CHANNELS } from "../shared/account-data.ts"
 import { AuthFailure, isRecord } from "../shared/auth.ts"
-import type { TaskWindowContext, TaskWindowOpenInput } from "../shared/task-window"
+import {
+  TASK_WINDOW_CHANNELS,
+  type TaskWindowChange,
+  type TaskWindowContext,
+  type TaskWindowOpenInput,
+} from "../shared/task-window.ts"
 
 const validId = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0 && value.length <= 128
@@ -10,7 +15,11 @@ export function parseTaskWindowOpenInput(input: unknown): TaskWindowContext {
     !isRecord(input) ||
     !validId(input.targetId) ||
     !validId(input.projectId) ||
-    (input.taskId !== undefined && !validId(input.taskId))
+    (input.taskId !== undefined && !validId(input.taskId)) ||
+    (input.view !== undefined && input.view !== "project") ||
+    (input.view === "project" && input.taskId !== undefined) ||
+    (input.projectName !== undefined &&
+      (typeof input.projectName !== "string" || input.projectName.length > 256))
   ) {
     throw new AuthFailure("invalid_task_window", "任务窗口参数不正确")
   }
@@ -18,7 +27,19 @@ export function parseTaskWindowOpenInput(input: unknown): TaskWindowContext {
     targetId: input.targetId,
     projectId: input.projectId,
     taskId: (input as TaskWindowOpenInput).taskId ?? null,
+    ...(input.view === "project"
+      ? {
+          view: "project" as const,
+          projectName: typeof input.projectName === "string" ? input.projectName.trim() : "",
+        }
+      : {}),
   }
+}
+
+export function parseTaskWindowChange(input: unknown): TaskWindowChange {
+  if (!isRecord(input) || !validId(input.targetId) || !validId(input.projectId))
+    throw new AuthFailure("invalid_task_window", "项目任务参数不正确")
+  return { targetId: input.targetId, projectId: input.projectId }
 }
 
 const projectOperations = new Set<string>([
@@ -97,6 +118,18 @@ export function assertTaskWindowAccountRequest(
   }
   if (input.projectId !== context.projectId) {
     throw new AuthFailure("untrusted_sender", "任务窗口请求来源不受信任")
+  }
+  if (context.view === "project") {
+    if (channel === TASK_WINDOW_CHANNELS.open) {
+      if (parseTaskWindowOpenInput(input).view)
+        throw new AuthFailure("untrusted_sender", "项目任务窗口只能打开当前项目的任务详情")
+      return
+    }
+    if (
+      channel === ACCOUNT_DATA_CHANNELS.listProjectTasks ||
+      channel === ACCOUNT_DATA_CHANNELS.updateProjectTask
+    )
+      return
   }
   if (
     channel === ACCOUNT_DATA_CHANNELS.uploadProjectTaskImage ||

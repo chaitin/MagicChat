@@ -1,6 +1,7 @@
 import { StrictMode, Suspense, lazy } from "react"
 import { createRoot } from "react-dom/client"
 import { ScreenshotOverlay } from "./screenshot-overlay"
+import { TaskWindowLoading, TaskWindowStartupBoundary } from "./task-window-startup"
 import "./styles.css"
 
 const AppPages = lazy(() => import("./app-pages").then(({ AppPages }) => ({ default: AppPages })))
@@ -12,14 +13,20 @@ const screenshotMode = window.location.hash === "#/screenshot"
 const mediaPreviewMode = window.location.hash === "#/media-preview"
 const taskWindowMode = window.location.hash === "#/task-window"
 
+const pages = (
+  <Suspense fallback={taskWindowMode ? <TaskWindowLoading /> : null}>
+    <AppPages mediaPreviewMode={mediaPreviewMode} taskWindowMode={taskWindowMode} />
+  </Suspense>
+)
+
 createRoot(root).render(
   <StrictMode>
     {screenshotMode ? (
       <ScreenshotOverlay />
+    ) : taskWindowMode ? (
+      <TaskWindowStartupBoundary>{pages}</TaskWindowStartupBoundary>
     ) : (
-      <Suspense fallback={null}>
-        <AppPages mediaPreviewMode={mediaPreviewMode} taskWindowMode={taskWindowMode} />
-      </Suspense>
+      pages
     )}
   </StrictMode>,
 )

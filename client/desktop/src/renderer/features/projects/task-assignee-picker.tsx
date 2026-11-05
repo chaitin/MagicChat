@@ -24,7 +24,9 @@ export function TaskAssigneePicker({
   name,
   theme,
   disabled = false,
+  toggleOnReselect = false,
   emptyLabel = "未分配",
+  showEmptyOption = true,
   ariaLabel = "负责人",
   className,
   contentClassName,
@@ -36,7 +38,9 @@ export function TaskAssigneePicker({
   name: string
   theme: "light" | "dark"
   disabled?: boolean
+  toggleOnReselect?: boolean
   emptyLabel?: string
+  showEmptyOption?: boolean
   ariaLabel?: string
   className?: string
   contentClassName?: string
@@ -49,27 +53,29 @@ export function TaskAssigneePicker({
       label: string,
       fields: Parameters<typeof createUserSearchIndex>[0],
     ) => ({ id, name: label, searchIndex: createUserSearchIndex(fields) })
-    const items = [
-      createOption("", emptyLabel, {
-        displayName: emptyLabel,
-        name: "",
-        nickname: "",
-        email: "",
-        phone: "",
-      }),
-      ...members
-        .filter((member) => member.status === "active")
-        .map((member) => createOption(member.id, member.displayName, member)),
-    ]
+    const items = members
+      .filter((member) => member.status === "active")
+      .map((member) => createOption(member.id, member.displayName, member))
+    if (showEmptyOption) {
+      items.unshift(
+        createOption("", emptyLabel, {
+          displayName: emptyLabel,
+          name: "",
+          nickname: "",
+          email: "",
+          phone: "",
+        }),
+      )
+    }
     if (value && !items.some((option) => option.id === value)) {
       items.splice(
-        1,
+        showEmptyOption ? 1 : 0,
         0,
         createOption(value, name, { displayName: name, name, nickname: "", email: "", phone: "" }),
       )
     }
     return items
-  }, [members, value, name, emptyLabel])
+  }, [members, value, name, emptyLabel, showEmptyOption])
 
   return (
     <Combobox
@@ -77,8 +83,11 @@ export function TaskAssigneePicker({
       filter={(option: { searchIndex: UserSearchIndex }, input) =>
         matchesUserSearch(option.searchIndex, input)
       }
-      value={options.find((option) => option.id === value)}
-      onValueChange={(option) => onChange(option?.id ?? "")}
+      value={options.find((option) => option.id === value) ?? null}
+      onValueChange={(option, details) => {
+        const id = option?.id ?? ""
+        onChange(toggleOnReselect && details.reason === "item-press" && id === value ? "" : id)
+      }}
       itemToStringLabel={(option) => option.name}
       itemToStringValue={(option) => option.id}
       isItemEqualToValue={(option, selected) => option.id === selected.id}

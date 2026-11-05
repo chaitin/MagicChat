@@ -56,7 +56,7 @@ import {
 } from "./protocols/resource-protocols"
 import { ScreenshotManager } from "./screenshot-manager"
 import { ShortcutManager } from "./shortcut-manager"
-import { assertTaskWindowAccountRequest } from "./task-window-policy"
+import { assertTaskWindowAccountRequest, parseTaskWindowChange } from "./task-window-policy"
 import { TaskWindows } from "./task-windows"
 import { isTrustedReleaseUrl } from "./update-service"
 import { UpdateManager, updateCacheDirectory } from "./update-manager"
@@ -568,13 +568,24 @@ void app.whenReady().then(async () => {
     if (event.senderFrame !== event.sender.mainFrame) {
       throw new AuthFailure("untrusted_sender", "任务窗口请求来源不受信任")
     }
-    return taskWindows.getContext(event.sender)
+    return taskWindows.initialize(event.sender)
   })
-  ipcMain.handle(TASK_WINDOW_CHANNELS.notifyChanged, (event) => {
+  ipcMain.handle(TASK_WINDOW_CHANNELS.notifyChanged, (event, input: unknown) => {
     if (event.senderFrame !== event.sender.mainFrame) {
       throw new AuthFailure("untrusted_sender", "任务窗口请求来源不受信任")
     }
-    taskWindows.notifyChanged(event.sender)
+    if (taskWindows.ownsSender(event.sender)) {
+      const context = taskWindows.getContext(event.sender)
+      if (input !== undefined) {
+        const change = parseTaskWindowChange(input)
+        if (change.targetId !== context.targetId || change.projectId !== context.projectId)
+          throw new AuthFailure("untrusted_sender", "任务窗口请求来源不受信任")
+      }
+      taskWindows.notifyChanged(event.sender)
+    } else {
+      assertTrustedSender(event)
+      taskWindows.notifyProjectChanged(parseTaskWindowChange(input), event.sender)
+    }
   })
   ipcMain.handle(TASK_WINDOW_CHANNELS.getTheme, (event) => {
     if (event.senderFrame !== event.sender.mainFrame) {

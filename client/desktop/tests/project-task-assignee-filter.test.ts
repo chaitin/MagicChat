@@ -4,7 +4,7 @@ import test from "node:test"
 import ts from "typescript"
 import type { ListProjectTasksInput, ProjectTaskAssignee } from "../src/shared/account-data.ts"
 
-const path = new URL("../src/renderer/features/projects/project-tasks-page.tsx", import.meta.url)
+const path = new URL("../src/renderer/features/projects/project-task-panel.tsx", import.meta.url)
 const source = ts.createSourceFile(
   path.pathname,
   readFileSync(path, "utf8"),
@@ -33,6 +33,73 @@ function pageFunction(name: string, scope: Record<string, unknown> = {}): Functi
     ...Object.values(context),
   )
 }
+
+function pageDefaultFilters() {
+  const declaration = source.statements
+    .filter(ts.isVariableStatement)
+    .flatMap((statement) => [...statement.declarationList.declarations])
+    .find((node) => node.name.getText(source) === "defaultFilters")
+  assert.ok(declaration?.initializer, "未找到任务页默认筛选")
+  return new Function("return (" + declaration.initializer.getText(source) + ")")()
+}
+
+test("进入项目任务页默认仅勾选待办和进行中，并立即应用", () => {
+  assert.deepEqual(pageDefaultFilters(), {
+    assigneeUserIds: [],
+    keyword: "",
+    labels: [],
+    statuses: ["todo", "in_progress"],
+    priorities: [],
+  })
+  assert.match(
+    source.text,
+    /const \[filters, setFilters\] = useState<TaskFilters>\(defaultFilters\)/,
+  )
+  assert.match(
+    source.text,
+    /const \[appliedFilters, setAppliedFilters\] = useState<TaskFilters>\(defaultFilters\)/,
+  )
+})
+
+test("默认任务请求携带两种未完成状态，且不复用全部状态或终态缓存", async () => {
+  const request = { targetId: "account", projectId: "project", ...pageDefaultFilters() }
+  const calls: unknown[] = []
+  const load = pageFunction("loadAllTasks", {
+    window: {
+      desktop: {
+        accountData: {
+          listProjectTasks: async (input: unknown) => {
+            calls.push(input)
+            return { ok: true, data: { items: [], nextCursor: null } }
+          },
+        },
+      },
+    },
+  })
+  await load(request, () => {})
+  assert.deepEqual(calls, [{ ...request, limit: 100 }])
+  const key = pageFunction("taskCacheKey")
+  for (const statuses of [[], ["done"], ["canceled"]]) {
+    assert.notEqual(key(request), key({ ...request, statuses }))
+  }
+})
+
+test("默认状态不限制用户手动查看已完成、已取消或全部任务", () => {
+  const filters = pageDefaultFilters()
+  for (const statuses of [["done"], ["canceled"], ["done", "canceled"], []]) {
+    let applied: unknown
+    const change = pageFunction("changeFilter", {
+      filters,
+      setFilters: () => {},
+      setAppliedFilters: (next: unknown) => {
+        applied = next
+      },
+    })
+    change("statuses", statuses)
+    assert.deepEqual(applied, { ...filters, statuses })
+    assert.deepEqual(filters.statuses, ["todo", "in_progress"])
+  }
+})
 
 const input: ListProjectTasksInput = {
   targetId: "account",

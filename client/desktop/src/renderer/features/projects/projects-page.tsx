@@ -144,6 +144,7 @@ function AccountProjectsPage({
             key={selectedId}
             targetId={targetId}
             projectId={selectedId}
+            projectName={list?.projects.find((project) => project.id === selectedId)?.name}
             resolvedTheme={resolvedTheme}
           />
         ) : (

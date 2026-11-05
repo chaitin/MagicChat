@@ -32,6 +32,7 @@ const subscribeAccountDataChanged = createSubscriptionMultiplexer<AccountDataCha
 const bridge: DesktopBridge = {
   taskWindows: {
     open: (input) => ipcRenderer.invoke(TASK_WINDOW_CHANNELS.open, input),
+    notifyChanged: (change) => ipcRenderer.invoke(TASK_WINDOW_CHANNELS.notifyChanged, change),
     onChanged: (callback) => subscribe<TaskWindowChange>(TASK_WINDOW_CHANNELS.changed, callback),
   },
   openHomepage: () => ipcRenderer.invoke(DESKTOP_CHANNELS.openHomepage),
@@ -106,7 +107,8 @@ const bridge: DesktopBridge = {
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getLocalMessageContext, input),
     listLocalMessagesAfter: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.listLocalMessagesAfter, input),
-    refreshGroupProfile: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.refreshGroupProfile, input),
+    refreshGroupProfile: (input) =>
+      ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.refreshGroupProfile, input),
     getConversationInfo: (input) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getConversationInfo, input),
     addGroupMembers: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.addGroupMembers, input),
