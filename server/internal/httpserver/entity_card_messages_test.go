@@ -76,12 +76,12 @@ func TestResolveEntityCardMessageBodyUsesFixedTemplates(t *testing.T) {
 		wantTitle       string
 		wantURL         string
 	}{
-		{owner.ID, entityCardTypeUser, "姓名: 项目负责人\n昵称: 老板\n邮箱: owner@example.com", "联系人 - 老板", "jiying://contact/" + owner.ID},
+		{owner.ID, entityCardTypeUser, "owner@example.com", "联系人 - 老板", "jiying://contact/" + owner.ID},
 		{app.ID, entityCardTypeApp, "智能 设计应用", "应用 - 设计助手", "jiying://app/" + app.ID},
 		{group.ID, entityCardTypeGroup, "2 位成员", "群聊 - 设计群", "jiying://group/" + group.ID},
 		{project.ID, entityCardTypeProject, "官网 改版项目", "项目 - 官网项目", "/projects/" + project.ID},
 		{emptyProject.ID, entityCardTypeProject, "暂无描述", "项目 - 空项目", "/projects/" + emptyProject.ID},
-		{task.ID, entityCardTypeTask, "状态: 进行中\n负责人: 张三\n截止日期: 2026-07-20", "任务 - 完成首页改版", "jiying://task/" + project.ID + "/" + task.ID},
+		{task.ID, entityCardTypeTask, "状态: 进行中\n负责人: 张三\n截止日期: 2026-07-20\n优先级: 中优先级", "任务 - 完成首页改版", "jiying://task/" + project.ID + "/" + task.ID},
 	} {
 		t.Run(testCase.entityType, func(t *testing.T) {
 			raw, err := json.Marshal(entityCardMessageBody{
@@ -195,7 +195,7 @@ func TestCreateConversationEntityCardStoresGeneratedTaskCard(t *testing.T) {
 	if card["type"] != messageTypeCard || card["title"] != "任务 - "+task.Title || card["url"] != "jiying://task/"+project.ID+"/"+task.ID {
 		t.Fatalf("message body = %#v", card)
 	}
-	if card["description"] != "状态: 待办" {
+	if card["description"] != "状态: 待办\n优先级: 中优先级" {
 		t.Fatalf("description = %q", card["description"])
 	}
 
@@ -274,7 +274,7 @@ func TestAppReplyEntityCardUsesAuthorizedUserAndStoresAppCard(t *testing.T) {
 	payload := requireAppSendMessageResponsePayload(t, response)
 	message := payload["message"].(map[string]any)
 	body := message["body"].(map[string]any)
-	if body["type"] != messageTypeCard || body["title"] != "任务 - "+task.Title || body["description"] != "状态: 已完成" {
+	if body["type"] != messageTypeCard || body["title"] != "任务 - "+task.Title || body["description"] != "状态: 已完成\n优先级: 中优先级" {
 		t.Fatalf("message body = %#v", body)
 	}
 	sender := message["sender"].(map[string]any)

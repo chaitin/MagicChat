@@ -6,6 +6,66 @@ import { MessageCard } from "@/components/message-card"
 import type { ClientCardMessageBody } from "@/lib/client-data-api"
 
 describe("MessageCard", () => {
+  it("renders task status, dot icon and priority without assignee or due date", () => {
+    const id = "550e8400-e29b-41d4-a716-446655440000"
+    const { container } = renderCard({
+      ...createCard("jiying://task/" + id + "/" + id),
+      title: "任务 - 发布",
+      description:
+        "状态: 进行中\n优先级: 高优先级\n负责人: 张三\n截止日期: 2026-07-20",
+    })
+    expect(screen.getByText("发布")).toBeInTheDocument()
+    expect(screen.getByText("进行中")).toBeInTheDocument()
+    expect(screen.getByText("高优先级")).toBeInTheDocument()
+    expect(container.querySelectorAll("svg")).toHaveLength(2)
+    expect(screen.queryByText(/张三/)).not.toBeInTheDocument()
+    expect(screen.getByRole("link")).toHaveClass("flex", "items-center")
+  })
+  it.each([
+    [
+      "姓名: 王明\n昵称: 小王\n手机号: 13800138000\n邮箱: user@example.com",
+      "user@example.com",
+    ],
+    ["姓名: 王明\n昵称: 小王\n手机号: 13800138000", "13800138000"],
+    ["姓名: 王明\n昵称: 小王", "小王"],
+    ["姓名: 王明", "王明"],
+  ])("renders one-line contact summary %s", (description, expected) => {
+    const { container } = renderCard({
+      ...createCard("jiying://contact/550e8400-e29b-41d4-a716-446655440000"),
+      description,
+    })
+    expect(screen.getByText(expected)).toHaveClass("truncate")
+    expect(container.querySelectorAll("svg")).toHaveLength(1)
+  })
+  it("uses fallback for blank app descriptions", () => {
+    renderCard({
+      ...createCard("jiying://app/550e8400-e29b-41d4-a716-446655440000"),
+      description: " ",
+    })
+    expect(screen.getByText("暂无说明")).toHaveClass("truncate")
+  })
+  it("does not invent priority for old task cards", () => {
+    const id = "550e8400-e29b-41d4-a716-446655440000"
+    const { container } = renderCard({
+      ...createCard("jiying://task/" + id + "/" + id),
+      description: "状态: 待办",
+    })
+    expect(screen.getByText("待办")).toBeInTheDocument()
+    expect(container.querySelectorAll("svg")).toHaveLength(1)
+  })
+
+  it.each([
+    ["jiying://task/a/b", "任务"],
+    ["jiying://contact/a", "联系人"],
+    ["jiying://app/a", "应用"],
+    ["jiying://group/a", "群聊"],
+    ["/projects/project-1", "项目"],
+  ])("hides entity title prefix for %s", (url, label) => {
+    renderCard({ ...createCard(url), title: label + " - 示例" })
+    expect(screen.getByText("示例")).toBeInTheDocument()
+    expect(screen.queryByText(label + " - 示例")).not.toBeInTheDocument()
+  })
+
   it.each([
     ["contact", "user"],
     ["app", "app"],

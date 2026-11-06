@@ -87,13 +87,22 @@ func (s *Service) resolveUser(ctx context.Context, entityID string) (Card, error
 	}
 	return newCard(
 		Title("联系人", titleName),
-		Details(
-			Detail{Label: "姓名", Value: user.Name},
-			Detail{Label: "昵称", Value: user.Nickname},
-			Detail{Label: "邮箱", Value: user.Email},
-		),
+		userCardDescription(user),
 		"jiying://contact/"+user.ID,
 	), nil
+}
+
+func userCardDescription(user store.User) string {
+	phone := ""
+	if user.Phone != nil {
+		phone = *user.Phone
+	}
+	for _, value := range []string{user.Email, phone, user.Nickname, user.Name} {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (s *Service) resolveApp(ctx context.Context, accountID, entityID string) (Card, error) {
@@ -166,7 +175,7 @@ func (s *Service) resolveTask(ctx context.Context, accountID, entityID string) (
 	}
 	return newCard(
 		Title("任务", task.Title),
-		TaskDetails(task.Status, assignee, task.DueDate),
+		TaskDetails(task.Status, assignee, task.DueDate)+"\n"+Details(Detail{Label: "优先级", Value: taskPriorityLabel(task.Priority)}),
 		fmt.Sprintf("jiying://task/%s/%s", project.ID, task.ID),
 	), nil
 }
@@ -224,6 +233,19 @@ func (s *Service) plainTextExcerpt(source string, limit int) string {
 		return plainText
 	}
 	return strings.TrimSpace(string(characters[:limit])) + "…"
+}
+
+func taskPriorityLabel(priority int16) string {
+	switch priority {
+	case store.TaskPriorityLow:
+		return "低优先级"
+	case store.TaskPriorityMedium:
+		return "中优先级"
+	case store.TaskPriorityHigh:
+		return "高优先级"
+	default:
+		return ""
+	}
 }
 
 func taskStatusLabel(status string) string {

@@ -1,5 +1,8 @@
+import { cardSummary } from "../../../../../shared/card-summary"
+import { cardDisplayTitle } from "../../../../../shared/card-title"
 import * as Clipboard from "expo-clipboard"
 import { parseContactLink } from "../../../../../shared/contact-links"
+import { parseTaskLink } from "../../../../../shared/task-links"
 import { memo, useRef, useState } from "react"
 import { Alert, Image, Linking, Pressable, View } from "react-native"
 import { Text } from "@/components/mi-sans-text"
@@ -62,6 +65,7 @@ export const MessageBody = memo(function MessageBody({
   serverUrl: string
 }) {
   const { colors } = useXGUITheme()
+  const toast = useXGUIToast()
   const retriedImageIds = useRef(new Set<string>())
   const didLongPressResourceRef = useRef(false)
 
@@ -114,15 +118,20 @@ export const MessageBody = memo(function MessageBody({
   if (body.type === "card") {
     return (
       <MessageLinkCard
+        url={body.url}
         description={body.description}
         onLongPress={onMessageLongPress}
         onPress={body.url.trim() ? () => {
+          if (parseTaskLink(body.url)) {
+            toast.show({ message: "暂不支持查看任务", modal: false, type: "text", duration: 1_000 })
+            return
+          }
           const target = parseContactLink(body.url)
           if (target) onMentionPress(target)
           else if (body.url.startsWith("jiying:")) Alert.alert("无法打开", "名片链接格式不正确。")
           else void openExternalUrl(body.url)
         } : undefined}
-        title={body.title}
+        title={cardDisplayTitle(body.title, body.url)}
       />
     )
   }
@@ -524,17 +533,23 @@ function MessageLinkBody({ title, url, onLongPress, onPress }: {
 }
 
 function MessageLinkCard({
+  url,
   description,
   onLongPress,
   onPress,
   title,
 }: {
+  url: string
   description: string
   onLongPress: () => void
   onPress?: () => void
   title: string
 }) {
   const { colors } = useXGUITheme()
+  const task = parseTaskLink(url)
+  const contact = parseContactLink(url)
+  const compact = Boolean(task || contact)
+  const details = cardSummary(description, task ? "task" : (contact?.type ?? "group"))
   const didLongPressRef = useRef(false)
 
   return (
@@ -555,16 +570,83 @@ function MessageLinkCard({
       onPressIn={() => {
         didLongPressRef.current = false
       }}
-      style={{ backgroundColor: "transparent", gap: 8, width: "100%" }}
+      style={{
+        backgroundColor: "transparent",
+        gap: compact ? 12 : 8,
+        width: "100%",
+        flexDirection: compact ? "row" : "column",
+        alignItems: compact ? "center" : undefined,
+      }}
     >
-      <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: "500", lineHeight: 23 }}>
-        {title}
-      </Text>
-      {description.trim() ? (
-        <Text numberOfLines={3} style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 21 }}>
-          {description}
+      {compact && (
+        <View style={{ flexShrink: 0 }}>
+          <MessageContentIcon
+            kind={task ? "task" : "contact"}
+            color={colors.textPrimary}
+            size={28}
+          />
+        </View>
+      )}
+      <View style={compact ? { flex: 1, minWidth: 0 } : { gap: 8 }}>
+        <Text
+          numberOfLines={compact ? 1 : undefined}
+          style={{
+            color: colors.textPrimary,
+            fontSize: 15,
+            fontWeight: "500",
+            lineHeight: 23,
+          }}
+        >
+          {title}
         </Text>
-      ) : null}
+        {task ? (
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            {!!details.status && (
+              <Text
+                numberOfLines={1}
+                style={{
+                  color: colors.textSecondary,
+                  fontSize: 12,
+                  flexShrink: 1,
+                }}
+              >
+                {details.status}
+              </Text>
+            )}
+            {!!details.status && !!details.priority && (
+              <MessageContentIcon
+                kind="dot"
+                color={colors.textSecondary}
+                size={16}
+                strokeWidth={1.5}
+              />
+            )}
+            {!!details.priority && (
+              <Text
+                numberOfLines={1}
+                style={{
+                  color: colors.textSecondary,
+                  fontSize: 12,
+                  flexShrink: 1,
+                }}
+              >
+                {details.priority}
+              </Text>
+            )}
+          </View>
+        ) : details.summary.trim() ? (
+          <Text
+            numberOfLines={compact ? 1 : 3}
+            style={{
+              color: colors.textSecondary,
+              fontSize: compact ? 12 : 14,
+              lineHeight: 21,
+            }}
+          >
+            {details.summary}
+          </Text>
+        ) : null}
+      </View>
     </Pressable>
   )
 }

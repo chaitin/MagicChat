@@ -1,3 +1,6 @@
+import { MessageContentIcon } from "@/components/message-content-icon"
+import { cardSummary } from "../../../shared/card-summary"
+import { cardDisplayTitle } from "../../../shared/card-title"
 import { Link } from "react-router"
 import { parseContactLink } from "../../../shared/contact-links"
 import { parseTaskLink } from "../../../shared/task-links"
@@ -12,14 +15,16 @@ export function MessageCard({
   interactive?: boolean
 }) {
   const target = interactive ? getCardTarget(card.url) : null
+  const compact = Boolean(parseTaskLink(card.url) || parseContactLink(card.url))
   const className =
-    "grid w-80 max-w-full gap-2 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+    (compact ? "flex items-center gap-3 overflow-hidden " : "grid gap-2 ") +
+    "w-80 max-w-full rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
   const content = <CardContent card={card} />
 
   if (target?.type === "internal") {
     return (
       <Link
-        aria-label={`${card.title}，查看详情`}
+        aria-label={`${cardDisplayTitle(card.title, card.url)}，查看详情`}
         className={className}
         data-slot="message-card"
         to={target.href}
@@ -32,7 +37,7 @@ export function MessageCard({
   if (target?.type === "external") {
     return (
       <a
-        aria-label={`${card.title}，查看详情`}
+        aria-label={`${cardDisplayTitle(card.title, card.url)}，查看详情`}
         className={className}
         data-slot="message-card"
         href={target.href}
@@ -52,9 +57,54 @@ export function MessageCard({
 }
 
 function CardContent({ card }: { card: ClientCardMessageBody }) {
+  const task = parseTaskLink(card.url)
+  const contact = parseContactLink(card.url)
+  if (task || contact) {
+    const details = cardSummary(card.description, task ? "task" : contact!.type)
+    return (
+      <>
+        <MessageContentIcon
+          kind={task ? "task" : "contact"}
+          className="size-7 shrink-0 text-foreground"
+          strokeWidth={1.5}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm">
+            {cardDisplayTitle(card.title, card.url)}
+          </div>
+          {task ? (
+            <div className="flex items-center text-xs text-muted-foreground">
+              {details.status && (
+                <span className="truncate">{details.status}</span>
+              )}
+              {details.status && details.priority && (
+                <MessageContentIcon
+                  kind="dot"
+                  className="size-4 shrink-0"
+                  strokeWidth={1.5}
+                />
+              )}
+              {details.priority && (
+                <span className="truncate">{details.priority}</span>
+              )}
+            </div>
+          ) : (
+            <div
+              className="truncate text-xs text-muted-foreground"
+              title={details.summary}
+            >
+              {details.summary}
+            </div>
+          )}
+        </div>
+      </>
+    )
+  }
   return (
     <>
-      <div className="truncate text-sm">{card.title}</div>
+      <div className="truncate text-sm">
+        {cardDisplayTitle(card.title, card.url)}
+      </div>
       {card.description.trim() && (
         <div className="line-clamp-3 text-xs leading-relaxed break-all whitespace-pre-wrap text-muted-foreground">
           {card.description}

@@ -1,3 +1,4 @@
+import { cardDisplayTitle } from "../../shared/card-title.ts"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
@@ -28,11 +29,19 @@ test("桌面端三类名片派发当前账号的资料导航，不打开浏览�
   const exports = {} as { CardBody: (input: unknown) => { props: { onClick: () => void } } }
   runInNewContext(code, {
     exports,
+    cardDisplayTitle,
     parseContactLink,
     parseTaskLink,
+    HugeiconsIcon: "HugeiconsIcon",
+    ContactIcon: "ContactIcon",
     openContactEvent: "open-contact",
     useAnimatedToast: () => ({ showToast: (error: unknown) => errors.push(error) }),
-    React: { createElement: (_tag: unknown, props: unknown) => ({ props }) },
+    React: {
+      createElement: (type: unknown, props: any, ...children: unknown[]) => ({
+        type,
+        props: { ...props, children },
+      }),
+    },
     CustomEvent: class {
       type: string
       detail: unknown

@@ -1,3 +1,6 @@
+import CalendarCheckIcon from "@hugeicons/core-free-icons/dist/esm/CalendarCheckIcon"
+import ContactIcon from "@hugeicons/core-free-icons/dist/esm/ContactIcon"
+import DotIcon from "@hugeicons/core-free-icons/dist/esm/DotIcon"
 import * as React from "react"
 import Copy01Icon from "@hugeicons/core-free-icons/dist/esm/Copy01Icon"
 import DocumentAttachmentIcon from "@hugeicons/core-free-icons/dist/esm/DocumentAttachmentIcon"
@@ -10,6 +13,9 @@ import PlayCircle02Icon from "@hugeicons/core-free-icons/dist/esm/PlayCircle02Ic
 import Volume02Icon from "@hugeicons/core-free-icons/dist/esm/Volume02Icon"
 
 const icons = {
+  task: CalendarCheckIcon,
+  contact: ContactIcon,
+  dot: DotIcon,
   attachment: DocumentAttachmentIcon,
   copy: Copy01Icon,
   download: Download01Icon,
@@ -21,14 +27,27 @@ const icons = {
   pause: PauseCircleIcon,
 }
 
-export function MessageContentIcon({ kind, strokeWidth = 2, ...props }: React.SVGProps<SVGSVGElement> & { kind: keyof typeof icons }) {
+export function MessageContentIcon({
+  kind,
+  strokeWidth = 2,
+  ...props
+}: React.SVGProps<SVGSVGElement> & { kind: keyof typeof icons }) {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" width={24} height={24} fill="none" {...props}>
-      {icons[kind].map(([tag, attributes]) => React.createElement(tag, {
-        ...attributes,
-        key: attributes.key,
-        strokeWidth,
-      }))}
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      width={24}
+      height={24}
+      fill="none"
+      {...props}
+    >
+      {icons[kind].map(([tag, attributes]) =>
+        React.createElement(tag, {
+          ...attributes,
+          key: attributes.key,
+          strokeWidth,
+        })
+      )}
     </svg>
   )
 }

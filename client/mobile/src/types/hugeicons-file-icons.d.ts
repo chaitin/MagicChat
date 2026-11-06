@@ -16,6 +16,21 @@ declare module "@hugeicons/core-free-icons/dist/esm/ArrowMoveDownRightIcon" {
   export default icon
 }
 
+declare module "@hugeicons/core-free-icons/dist/esm/CalendarCheckIcon" {
+  const icon: HugeiconsMessageIconData
+  export default icon
+}
+
+declare module "@hugeicons/core-free-icons/dist/esm/ContactIcon" {
+  const icon: HugeiconsMessageIconData
+  export default icon
+}
+
+declare module "@hugeicons/core-free-icons/dist/esm/DotIcon" {
+  const icon: HugeiconsMessageIconData
+  export default icon
+}
+
 declare module "@hugeicons/core-free-icons/dist/esm/Copy01Icon" {
   const icon: HugeiconsMessageIconData
   export default icon

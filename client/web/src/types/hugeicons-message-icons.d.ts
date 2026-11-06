@@ -1,5 +1,23 @@
 // Hugeicons 4.3.2 ships individual JS modules without their declaration files.
-type WebMessageIconData = readonly (readonly ["path" | "circle", Record<string, string>])[]
+type WebMessageIconData = readonly (readonly [
+  "path" | "circle",
+  Record<string, string>,
+])[]
+
+declare module "@hugeicons/core-free-icons/dist/esm/CalendarCheckIcon" {
+  const icon: WebMessageIconData
+  export default icon
+}
+
+declare module "@hugeicons/core-free-icons/dist/esm/ContactIcon" {
+  const icon: WebMessageIconData
+  export default icon
+}
+
+declare module "@hugeicons/core-free-icons/dist/esm/DotIcon" {
+  const icon: WebMessageIconData
+  export default icon
+}
 
 declare module "@hugeicons/core-free-icons/dist/esm/Copy01Icon" {
   const icon: WebMessageIconData

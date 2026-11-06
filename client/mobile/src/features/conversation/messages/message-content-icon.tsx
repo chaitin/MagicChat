@@ -1,3 +1,6 @@
+import CalendarCheckIcon from "@hugeicons/core-free-icons/dist/esm/CalendarCheckIcon"
+import ContactIcon from "@hugeicons/core-free-icons/dist/esm/ContactIcon"
+import DotIcon from "@hugeicons/core-free-icons/dist/esm/DotIcon"
 import ArrowMoveDownRightIcon from "@hugeicons/core-free-icons/dist/esm/ArrowMoveDownRightIcon"
 import Copy01Icon from "@hugeicons/core-free-icons/dist/esm/Copy01Icon"
 import DocumentAttachmentIcon from "@hugeicons/core-free-icons/dist/esm/DocumentAttachmentIcon"
@@ -15,6 +18,9 @@ import Svg, { Circle, Path } from "react-native-svg"
 
 // Individual imports keep the rest of the icon catalog out of the mobile bundle.
 const icons = {
+  task: CalendarCheckIcon,
+  contact: ContactIcon,
+  dot: DotIcon,
   "topic-arrow": ArrowMoveDownRightIcon,
   attachment: DocumentAttachmentIcon,
   copy: Copy01Icon,

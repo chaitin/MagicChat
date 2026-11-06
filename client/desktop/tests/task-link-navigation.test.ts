@@ -1,3 +1,4 @@
+import { cardDisplayTitle } from "../../shared/card-title.ts"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
@@ -55,8 +56,11 @@ test("桌面端任务卡片使用消息所属账号开窗，新旧地址均不�
   const exports = {} as any
   runInNewContext(code, {
     exports,
+    cardDisplayTitle,
     parseContactLink,
     parseTaskLink,
+    HugeiconsIcon: "HugeiconsIcon",
+    CalendarCheckIcon: "CalendarCheckIcon",
     openContactEvent: "open-contact",
     useAnimatedToast: () => ({ showToast: (value: any) => errors.push(value) }),
     React: { createElement: (_type: any, props: any) => ({ props }) },

@@ -1,8 +1,16 @@
 import { useId, useState, type ReactNode } from "react"
 import { parseContactLink } from "../../../../../../shared/contact-links"
+import { cardDisplayTitle } from "../../../../../../shared/card-title"
 import { parseTaskLink } from "../../../../../../shared/task-links"
 import { openContactEvent } from "@/components/send-namecard-button"
-import { Copy01Icon, ExternalLinkIcon, Loading03Icon } from "@hugeicons/core-free-icons"
+import {
+  CalendarCheckIcon,
+  Copy01Icon,
+  ExternalLinkIcon,
+  ContactIcon,
+  DotIcon,
+  Loading03Icon,
+} from "@hugeicons/core-free-icons"
 import type { DesktopMessageBody, DesktopMessageChoiceState } from "../../../../shared/account-data"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { useAnimatedToast } from "@/components/motion/animated-toast-provider"
@@ -112,6 +120,30 @@ export function CardBody({
     }
   }
 
+  const contact = parseContactLink(url)
+  const task = parseTaskLink(url)
+  const displayTitle = cardDisplayTitle(title, url)
+  const fields = new Map(
+    description.split("\n").flatMap((line) => {
+      const match = /^(姓名|昵称|邮箱|手机号|手机|电话|状态|优先级)[:：]\s*(.*)$/.exec(line.trim())
+      return match ? [[match[1], match[2].trim()] as const] : []
+    }),
+  )
+  const taskStatus = fields.get("状态")
+  const taskPriority = fields.get("优先级")
+  const summary =
+    contact?.type === "user"
+      ? fields.get("邮箱") ||
+        fields.get("手机号") ||
+        fields.get("手机") ||
+        fields.get("电话") ||
+        fields.get("昵称") ||
+        fields.get("姓名") ||
+        description
+      : contact?.type === "app" && !description.trim()
+        ? "暂无说明"
+        : description
+
   async function openTask(projectId: string, taskId: string) {
     try {
       const result = await window.desktop!.taskWindows.open({ targetId, projectId, taskId })
@@ -127,9 +159,12 @@ export function CardBody({
   return (
     <button
       type="button"
-      className="grid w-80 max-w-full cursor-pointer gap-2 text-left"
+      className={
+        contact || task
+          ? "flex w-80 max-w-full cursor-pointer items-center gap-3 overflow-hidden text-left"
+          : "grid w-80 max-w-full cursor-pointer gap-2 text-left"
+      }
       onClick={() => {
-        const task = parseTaskLink(url)
         if (task) {
           void openTask(task.projectId, task.taskId)
           return
@@ -141,10 +176,44 @@ export function CardBody({
         else showToast({ status: "error", title: "卡片链接格式不正确" })
       }}
     >
-      <span className="font-medium">{title}</span>
-      <span className="line-clamp-3 break-all whitespace-pre-wrap text-muted-foreground">
-        {description}
-      </span>
+      {contact || task ? (
+        <>
+          <HugeiconsIcon
+            icon={task ? CalendarCheckIcon : ContactIcon}
+            className="size-7 shrink-0 text-foreground"
+            strokeWidth={1.5}
+            aria-hidden
+          />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate">{displayTitle}</span>
+            {task ? (
+              <span className="flex items-center text-xs text-muted-foreground">
+                {taskStatus && <span className="truncate">{taskStatus}</span>}
+                {taskStatus && taskPriority && (
+                  <HugeiconsIcon
+                    icon={DotIcon}
+                    className="size-4 shrink-0"
+                    strokeWidth={1.5}
+                    aria-hidden
+                  />
+                )}
+                {taskPriority && <span className="truncate">{taskPriority}</span>}
+              </span>
+            ) : (
+              <span className="block truncate text-xs text-muted-foreground" title={summary}>
+                {summary}
+              </span>
+            )}
+          </span>
+        </>
+      ) : (
+        <>
+          <span className="font-medium">{displayTitle}</span>
+          <span className="line-clamp-3 break-all whitespace-pre-wrap text-muted-foreground">
+            {description}
+          </span>
+        </>
+      )}
     </button>
   )
 }
