@@ -42,6 +42,30 @@ test("密码和邮箱验证码登录协商 Mobile Session，且匿名请求不�
   }
 })
 
+test("验证码登录在慢连接上等待响应，不在默认 5 秒时中止已消费验证码的请求", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] })
+  let finish!: (response: Response) => void
+  let requests = 0
+  let signal: AbortSignal | null | undefined
+  const pending = loginWithEmailCode(
+    "https://example.com",
+    { email: "alice@example.com", code: "01234567" },
+    { fetcher: async (_url, init) => {
+      requests++
+      assert.deepEqual(JSON.parse(String(init?.body)), {
+        email: "alice@example.com", code: "01234567",
+      })
+      signal = init?.signal
+      return new Promise<Response>((resolve) => { finish = resolve })
+    } }
+  )
+  t.mock.timers.tick(6_000)
+  finish(json(validLogin))
+  assert.equal((await pending).id, "user-1")
+  assert.equal(signal?.aborted, false)
+  assert.equal(requests, 1)
+})
+
 test("登录严格拒绝缺失、损坏和过期 mobile_session", async () => {
   const cases = [
     { ...validLogin, data: { ...validLogin.data, mobile_session: undefined } },

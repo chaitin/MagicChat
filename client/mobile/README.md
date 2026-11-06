@@ -27,6 +27,12 @@ pnpm ios
 pnpm web
 ```
 
+### iOS 模拟器构建
+
+使用 `pnpm ios`，或使用 `pnpm ios --configuration Release` 验证包含本地 JS Bundle 的版本。
+
+模拟器包也需要保留 Xcode 签名和 `application-identifier` 权限。手动调用 `xcodebuild` 时不要设置 `CODE_SIGNING_ALLOWED=NO`；本地模拟器可使用 `CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM=<Apple Team ID>`，由 Xcode 生成模拟器权限。关闭签名会使 SecureStore 的钥匙串访问报 `-34018`，导致验证码已验证成功后仍无法保存会话。
+
 ## 检查
 
 ```bash

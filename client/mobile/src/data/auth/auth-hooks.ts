@@ -31,6 +31,7 @@ export function useLoginMutation(server: ServerTarget) {
   const { installAndActivate } = useAuth()
 
   return useMutation({
+    retry: false,
     mutationFn: (input: { account: string; password: string }) => {
       let credential: Parameters<typeof installAndActivate>[2] | undefined
       return login(server.url, input, { onMobileSession: (value) => { credential = value } })
@@ -54,6 +55,7 @@ export function useEmailCodeLoginMutation(server: ServerTarget) {
   const { installAndActivate } = useAuth()
 
   return useMutation({
+    retry: false,
     mutationFn: (input: { code: string; email: string }) => {
       let credential: Parameters<typeof installAndActivate>[2] | undefined
       return loginWithEmailCode(server.url, input, { onMobileSession: (value) => { credential = value } })
@@ -74,6 +76,7 @@ export function useEmailCodeLoginMutation(server: ServerTarget) {
 
 export function useRequestEmailCodeMutation(server: ServerTarget) {
   return useMutation({
+    retry: false,
     mutationFn: (email: string) => requestEmailLoginCode(server.url, email),
   })
 }

@@ -179,7 +179,9 @@ export function XGUIGallery({
 
   const singleTap = Gesture.Tap()
     .numberOfTaps(1)
-    .maxDuration(250)
+    // UIKit can keep this recognizer pending until doubleTap fails. Its
+    // timeout must outlast doubleTap's 250 ms window, or a valid tap fails.
+    .maxDuration(500)
     .maxDistance(8)
     .onTouchesDown(rejectMultiTouchTap)
     .onEnd((_event, success) => {

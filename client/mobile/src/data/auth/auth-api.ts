@@ -7,6 +7,9 @@ import type { AuthenticatedUser } from "@/core/models"
 
 export const MOBILE_SESSION_HEADER = "X-Dianbao-Mobile-Session"
 export const MOBILE_SESSION_VERSION = "2"
+// Login can create a Session and consume a one-time code before the response
+// arrives. Allow slow connections time to finish instead of replaying a login.
+const LOGIN_TIMEOUT_MS = 30_000
 
 export type MobileSessionCredential = Readonly<{
   token: string; expiresAt: string; refreshToken: string
@@ -45,6 +48,7 @@ export async function login(serverUrl: string, input: { account: string; passwor
     errorMessage: "登录失败",
     headers: { "Content-Type": "application/json", [MOBILE_SESSION_HEADER]: MOBILE_SESSION_VERSION },
     method: "POST",
+    timeoutMs: LOGIN_TIMEOUT_MS,
   })
   return consumeLoginResponse(serverUrl, data, options)
 }
@@ -70,6 +74,7 @@ export async function loginWithEmailCode(serverUrl: string, input: { code: strin
     errorMessage: "登录失败",
     headers: { "Content-Type": "application/json", [MOBILE_SESSION_HEADER]: MOBILE_SESSION_VERSION },
     method: "POST",
+    timeoutMs: LOGIN_TIMEOUT_MS,
   })
   return consumeLoginResponse(serverUrl, data, options)
 }

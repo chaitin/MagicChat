@@ -124,7 +124,7 @@ function drag(view: ReturnType<typeof renderer>, x: number, y: number, success =
   view.pan.handlers.onEnd(event, success)
 }
 
-test("缩放和拖动同时工作，但优先于双击和单击，轻点具有时间及位移限制", () => {
+test("缩放和拖动优先于轻点，单击超时晚于双击以避免 iOS 等待期间被取消", () => {
   const view = renderer()
   assert.equal(view.gesture.kind, "Exclusive")
   assert.equal(view.gesture.children[0].kind, "Simultaneous")
@@ -132,7 +132,7 @@ test("缩放和拖动同时工作，但优先于双击和单击，轻点具有�
   assert.equal(view.gesture.children[0].children[1], view.pan)
   assert.equal(view.gesture.children[1], view.double)
   assert.equal(view.gesture.children[2], view.single)
-  assert.equal(view.single.config.maxDuration, 250)
+  assert.equal(view.single.config.maxDuration, 500)
   assert.equal(view.single.config.maxDistance, 8)
   assert.equal(view.double.config.maxDuration, 250)
   assert.equal(view.double.config.maxDelay, 250)

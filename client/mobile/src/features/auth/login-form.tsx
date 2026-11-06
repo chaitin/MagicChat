@@ -19,7 +19,6 @@ import {
 import { Text } from "@/components/mi-sans-text"
 
 import { ApiRequestError } from "@/data/api-client"
-import { MobileSessionCompatibilityError } from "@/data/auth/auth-api"
 import {
   loadAccountLoginAssistance,
   loadLoginCredentials,
@@ -95,6 +94,7 @@ export function LoginForm({
   const accountInputRef = useRef<NativeTextInput>(null)
   const emailCodeInputRef = useRef<NativeTextInput>(null)
   const passwordInputRef = useRef<NativeTextInput>(null)
+  const submissionInFlightRef = useRef(false)
   const serverKey = `${server.id}\n${server.url}`
   const [formState, setFormState] = useState<LoginFormState>({
     account: "",
@@ -230,7 +230,7 @@ export function LoginForm({
   }
 
   async function handleRequestEmailCode() {
-    if (isFormUnavailable || retryCodeAfter > 0) return
+    if (submissionInFlightRef.current || isFormUnavailable || retryCodeAfter > 0) return
 
     const email = account.trim()
     if (!email) {
@@ -239,6 +239,7 @@ export function LoginForm({
       return
     }
 
+    submissionInFlightRef.current = true
     toast.hide()
 
     try {
@@ -260,11 +261,14 @@ export function LoginForm({
         modal: false,
         type: "error",
       })
+    } finally {
+      submissionInFlightRef.current = false
     }
   }
 
   async function handleSignIn(method: LoginMethod) {
     if (
+      submissionInFlightRef.current ||
       !connectionReady ||
       !canSignIn ||
       isPending ||
@@ -281,6 +285,7 @@ export function LoginForm({
       return
     }
 
+    submissionInFlightRef.current = true
     toast.show({
       duration: 0,
       message: "正在登录",
@@ -292,19 +297,17 @@ export function LoginForm({
     try {
       let user: AuthenticatedUser
       if (method === "password") {
-        user = await attemptLoginRequest(() =>
-          passwordLoginMutation.mutateAsync({ account, password })
-        )
+        user = await passwordLoginMutation.mutateAsync({ account, password })
         await saveLoginCredentials(server, { account, password }).catch(() => {
           // A successful login must not be blocked by local credential storage.
         })
       } else {
-        user = await attemptLoginRequest(() =>
-          emailCodeLoginMutation.mutateAsync({
-            code: emailCode,
-            email: account,
-          })
-        )
+        // The server consumes a code once. A timeout or a local Session failure
+        // must not replay the login and replace the original error with invalid_code.
+        user = await emailCodeLoginMutation.mutateAsync({
+          code: emailCode,
+          email: account,
+        })
         await saveLoginAccount(server, account).catch(() => {
           // A successful login must not be blocked by local credential storage.
         })
@@ -319,6 +322,7 @@ export function LoginForm({
           : message
       )
     } finally {
+      submissionInFlightRef.current = false
       setIsLoginInitializing(false)
     }
   }
@@ -497,29 +501,6 @@ export function LoginForm({
         </View>
     </View>
   )
-}
-
-async function attemptLoginRequest<T>(operation: () => Promise<T>) {
-  let lastError: unknown
-
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      return await operation()
-    } catch (error: unknown) {
-      lastError = error
-      if (error instanceof MobileSessionCompatibilityError) throw error
-      if (
-        error instanceof ApiRequestError &&
-        error.status !== undefined &&
-        error.status < 500 &&
-        error.status !== 429
-      ) {
-        throw error
-      }
-    }
-  }
-
-  throw lastError
 }
 
 function LegalConsent({
