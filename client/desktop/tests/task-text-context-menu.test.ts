@@ -354,7 +354,7 @@ test("文本IPC只允许任务窗口主frame，且仅对发送窗口执行四种
 test("标题、描述与预览均接入同款菜单，保持详情文字可选中和编辑器图片粘贴", () => {
   for (const [path, count] of [
     ["../src/renderer/features/projects/project-task-dialog.tsx", 1],
-    ["../src/renderer/features/projects/project-task-detail-view.tsx", 2],
+    ["../src/renderer/features/projects/project-task-detail-view.tsx", 3],
     ["../src/renderer/features/projects/task-description-editor.tsx", 2],
   ] as const) {
     const source = sourceFile(path)

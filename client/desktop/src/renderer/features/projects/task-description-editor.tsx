@@ -51,10 +51,16 @@ export function TaskDescriptionEditor({
   taskId,
   value,
   disabled,
+  label = "详细说明",
+  hideLabel = false,
+  footer,
   onChange,
 }: ProjectTaskImageContextInput & {
   value: string
   disabled: boolean
+  label?: string
+  hideLabel?: boolean
+  footer?: ReactNode
   onChange: (update: (current: string) => string) => void
 }) {
   const id = useId()
@@ -177,7 +183,7 @@ export function TaskDescriptionEditor({
       taskImageMarkdown(upload.file.name, taskImageUploadSource(upload.id)),
     )
     const inserted = insertTaskImages(input.value, start, end, markdown)
-    if (inserted.text.length > 10000) return setError("详细说明不能超过 10000 个字符")
+    if (inserted.text.length > 10000) return setError(label + "不能超过 10000 个字符")
     selection.current = { text: inserted.text, start: inserted.caret, end: inserted.caret }
     for (const upload of added) uploadsRef.current.set(upload.id, upload)
     setUploads([...uploadsRef.current.values()])
@@ -269,12 +275,12 @@ export function TaskDescriptionEditor({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-col text-sm">
-      <label htmlFor={id} className="mb-1 text-xs text-muted-foreground">
-        详细说明
+      <label htmlFor={id} className={hideLabel ? "sr-only" : "mb-1 text-xs text-muted-foreground"}>
+        {label}
       </label>
       <div
         className="flex min-h-9 items-center justify-between gap-2 rounded-t-md rounded-b-none border border-input border-b-0 bg-transparent px-1.5 py-1 shadow-xs dark:bg-input/30"
-        aria-label="详细说明工具栏"
+        aria-label={label + "工具栏"}
       >
         <div
           className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
@@ -297,7 +303,7 @@ export function TaskDescriptionEditor({
             insertMarkdown("| 列 1 | 列 2 |\n| --- | --- |\n| 内容 | 内容 |"),
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-1" aria-label="说明显示模式">
+        <div className="flex shrink-0 items-center gap-1" aria-label={label + "显示模式"}>
           <Button
             type="button"
             variant={preview ? "ghost" : "secondary"}
@@ -322,43 +328,61 @@ export function TaskDescriptionEditor({
           </Button>
         </div>
       </div>
-      {preview ? (
-        <TaskTextContextMenu>
-          <div
-            role="region"
-            aria-label="详细说明预览"
-            className="min-h-24 flex-1 overflow-auto rounded-t-none rounded-b-md border border-input p-3 select-text"
-          >
-            {value ? (
-              <MessageMarkdown
-                content={value}
-                currentUserId=""
-                mentionLabelResolver={noMentionLabel}
-                renderAttachmentImage={renderAttachment}
-              />
-            ) : (
-              <p className="text-muted-foreground">暂无详细说明</p>
-            )}
-          </div>
-        </TaskTextContextMenu>
-      ) : (
-        <TaskTextContextMenu editable disabled={disabled}>
-          <Textarea
-            id={id}
-            ref={textarea}
-            className="min-h-24 flex-1 resize-none rounded-t-none field-sizing-fixed font-mono"
-            placeholder="支持 markdown 语法，可直接粘贴图片"
-            value={value}
-            maxLength={10000}
-            disabled={disabled}
-            onPaste={pasteImages}
-            onChange={(event) => {
-              const next = event.target.value
-              onChange(() => next)
-            }}
-          />
-        </TaskTextContextMenu>
-      )}
+      <div
+        className={
+          footer
+            ? "flex min-h-0 flex-1 flex-col rounded-b-md border border-input bg-transparent shadow-xs focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30"
+            : "flex min-h-0 flex-1 flex-col"
+        }
+      >
+        {preview ? (
+          <TaskTextContextMenu>
+            <div
+              role="region"
+              aria-label={label + "预览"}
+              className={
+                footer
+                  ? "min-h-24 flex-1 overflow-auto p-3 select-text"
+                  : "min-h-24 flex-1 overflow-auto rounded-t-none rounded-b-md border border-input p-3 select-text"
+              }
+            >
+              {value ? (
+                <MessageMarkdown
+                  content={value}
+                  currentUserId=""
+                  mentionLabelResolver={noMentionLabel}
+                  renderAttachmentImage={renderAttachment}
+                />
+              ) : (
+                <p className="text-muted-foreground">暂无{label}</p>
+              )}
+            </div>
+          </TaskTextContextMenu>
+        ) : (
+          <TaskTextContextMenu editable disabled={disabled}>
+            <Textarea
+              id={id}
+              aria-label={label}
+              ref={textarea}
+              className={
+                footer
+                  ? "min-h-24 flex-1 resize-none rounded-none border-0 bg-transparent field-sizing-fixed font-mono shadow-none focus-visible:ring-0 dark:bg-transparent"
+                  : "min-h-24 flex-1 resize-none rounded-t-none field-sizing-fixed font-mono"
+              }
+              placeholder="支持 markdown 语法，可直接粘贴图片"
+              value={value}
+              maxLength={10000}
+              disabled={disabled}
+              onPaste={pasteImages}
+              onChange={(event) => {
+                const next = event.target.value
+                onChange(() => next)
+              }}
+            />
+          </TaskTextContextMenu>
+        )}
+        {footer && <div className="flex shrink-0 justify-end px-2 pb-2">{footer}</div>}
+      </div>
       {(error || uploads.length > 0) && (
         <div
           className="mt-1 grid max-h-28 shrink-0 gap-1 overflow-y-auto pt-1 text-xs"

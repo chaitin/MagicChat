@@ -25,7 +25,7 @@ import type {
 } from "../../shared/account-data"
 import type { AuthenticatedClient } from "./authenticated-client"
 import { detectAvatarContentType } from "./avatar-content-type.ts"
-import { taskImageValidationError } from "../../shared/task-image.ts"
+import { hasTaskImageUpload, taskImageValidationError } from "../../shared/task-image.ts"
 import { markdownAttachmentSource } from "../../../../shared/markdown-attachment.ts"
 
 const statuses = new Set(["todo", "in_progress", "done", "canceled"])
@@ -180,8 +180,8 @@ export class ProjectTaskManager {
 
   async addComment(input: AddProjectTaskCommentInput): Promise<ProjectTaskActivity> {
     const path = taskItemPath(input)
-    const content = checkedText(input.content, "评论", 5000).trim()
-    if (!content) invalidInput()
+    const content = checkedText(input.content, "评论", 10000).trim()
+    if (!content || hasTaskImageUpload(content)) invalidInput()
     return this.hydrateActivity(
       parseActivity(await this.client.post(`${path}/comments`, { content }), input),
     )

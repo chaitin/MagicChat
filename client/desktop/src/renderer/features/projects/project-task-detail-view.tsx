@@ -7,6 +7,7 @@ import type {
   ProjectTaskTargetInput,
   ProjectTaskUser,
 } from "../../../shared/account-data"
+import { hasTaskImageUpload } from "../../../shared/task-image"
 import { EntityAvatar } from "@/components/avatar/entity-avatar"
 import { MessageMarkdown } from "@/components/message-markdown"
 import { Badge } from "@/components/ui/badge"
@@ -17,13 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupTextarea,
-} from "@/components/ui/input-group"
-import { TaskAttachmentImage } from "./task-description-editor"
+import { TaskAttachmentImage, TaskDescriptionEditor } from "./task-description-editor"
 import { TaskTextContextMenu } from "./task-text-context-menu"
 import { taskActivityChangeText } from "./task-activity-format"
 import { TaskSendDialog } from "./task-send-dialog"
@@ -153,6 +148,7 @@ export function ProjectTaskDetailView({
           members={members}
           onChanged={onChanged}
           revision={activityRevision}
+          renderAttachmentImage={renderAttachment}
         />
       </div>
       <div className="grid min-w-0 content-start gap-3 md:col-start-2 md:row-start-2">
@@ -242,8 +238,10 @@ function TaskActivitySection({
   members,
   onChanged,
   revision,
+  renderAttachmentImage,
 }: ProjectTaskTargetInput & {
   revision: number
+  renderAttachmentImage: (fileId: string, alt: string) => ReactNode
   members: ProjectTaskAssignee[]
   onChanged: () => Promise<void>
 }) {
@@ -254,6 +252,7 @@ function TaskActivitySection({
   const [reload, setReload] = useState(0)
   const [comment, setComment] = useState("")
   const [commenting, setCommenting] = useState(false)
+  const [commentEditorKey, setCommentEditorKey] = useState(0)
   const userNames = new Map(
     members
       .filter((member) => member.displayName && member.displayName !== member.id)
@@ -323,7 +322,11 @@ function TaskActivitySection({
 
   async function addComment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (commenting || !comment.trim()) return
+    if (commenting || !comment.trim() || hasTaskImageUpload(comment)) return
+    if (comment.length > 10000) {
+      setError("评论不能超过 10000 个字符")
+      return
+    }
     setCommenting(true)
     setError("")
     try {
@@ -336,6 +339,7 @@ function TaskActivitySection({
       if (!active.current) return
       if (!result.ok) throw new Error(result.error.message)
       setComment("")
+      setCommentEditorKey((value) => value + 1)
       setReload((value) => value + 1)
       await onChanged()
     } catch (reason) {
@@ -362,17 +366,28 @@ function TaskActivitySection({
             <time dateTime={activity.createdAt} className="ml-2 text-muted-foreground">
               {displayTime(activity.createdAt)}
             </time>
-            <p className="mt-1 whitespace-pre-wrap break-words">
-              {activity.type === "commented"
-                ? activity.content
-                : activity.type === "created"
+            {activity.type === "commented" ? (
+              <TaskTextContextMenu>
+                <div className="mt-1 min-w-0 text-sm select-text">
+                  <MessageMarkdown
+                    content={activity.content}
+                    currentUserId=""
+                    mentionLabelResolver={noMentionLabel}
+                    renderAttachmentImage={renderAttachmentImage}
+                  />
+                </div>
+              </TaskTextContextMenu>
+            ) : (
+              <p className="mt-1 whitespace-pre-wrap break-words">
+                {activity.type === "created"
                   ? "创建了任务"
                   : activity.changes.length
                     ? activity.changes
                         .map((change) => taskActivityChangeText(change, userNames))
                         .join("；")
                     : "更新了任务"}
-            </p>
+              </p>
+            )}
           </article>
         ))}
       </div>
@@ -404,29 +419,31 @@ function TaskActivitySection({
           {loading ? "加载中…" : "加载更多动态"}
         </Button>
       )}
-      <form onSubmit={(event) => void addComment(event)}>
-        <InputGroup data-disabled={commenting} aria-label="评论输入框">
-          <InputGroupTextarea
-            aria-label="评论内容"
-            placeholder="添加评论"
-            value={comment}
-            disabled={commenting}
-            maxLength={10000}
-            rows={1}
-            className="min-h-10"
-            onChange={(event) => setComment(event.target.value)}
-          />
-          <InputGroupAddon align="block-end" className="justify-end">
-            <InputGroupButton
+      <form
+        aria-label="评论输入框"
+        className="grid gap-2"
+        onSubmit={(event) => void addComment(event)}
+      >
+        <TaskDescriptionEditor
+          key={commentEditorKey}
+          targetId={targetId}
+          projectId={projectId}
+          taskId={taskId}
+          label="评论内容"
+          hideLabel
+          value={comment}
+          disabled={commenting}
+          onChange={setComment}
+          footer={
+            <Button
               type="submit"
-              variant="default"
               size="sm"
-              disabled={commenting || !comment.trim()}
+              disabled={commenting || !comment.trim() || hasTaskImageUpload(comment)}
             >
               {commenting ? "发送中…" : "发送"}
-            </InputGroupButton>
-          </InputGroupAddon>
-        </InputGroup>
+            </Button>
+          }
+        />
       </form>
     </section>
   )
