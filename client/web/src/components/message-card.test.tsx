@@ -28,6 +28,25 @@ describe("MessageCard", () => {
     expect(screen.queryByRole("link")).not.toBeInTheDocument()
   })
 
+  it.each([
+    "jiying://task/550e8400-e29b-41d4-a716-446655440000/550e8400-e29b-41d4-a716-446655440001",
+    "/projects/550e8400-e29b-41d4-a716-446655440000?taskId=550e8400-e29b-41d4-a716-446655440001",
+  ])("routes task card %s to project details", (url) => {
+    renderCard(createCard(url))
+    expect(screen.getByRole("link", { name: /查看详情/ })).toHaveAttribute(
+      "href",
+      "/projects/550e8400-e29b-41d4-a716-446655440000?taskId=550e8400-e29b-41d4-a716-446655440001"
+    )
+  })
+
+  it.each([
+    "jiying://task/550e8400-e29b-41d4-a716-446655440000/550e8400-e29b-41d4-a716-446655440001?server=other",
+    "jiying://task/550e8400-e29b-41d4-a716-446655440000/550e8400-e29b-41d4-a716-446655440001/extra",
+  ])("rejects malformed task card %s", (url) => {
+    renderCard(createCard(url))
+    expect(screen.queryByRole("link")).not.toBeInTheDocument()
+  })
+
   it("renders an internal action as a router link", () => {
     renderCard(createCard("/projects/project-1?taskId=task-1"))
 

@@ -362,6 +362,8 @@ func (cardHandler) Summary(raw json.RawMessage) (string, error) {
 
 var contactCardURLPattern = regexp.MustCompile(`^jiying://(contact|app|group)/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
+var taskCardURLPattern = regexp.MustCompile(`^jiying://task/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
 func normalizeCardURL(rawURL string) (string, error) {
 	cardURL := strings.TrimSpace(rawURL)
 	if cardURL == "" {
@@ -374,7 +376,7 @@ func normalizeCardURL(rawURL string) (string, error) {
 		return "", errors.New("链接格式错误")
 	}
 	if strings.HasPrefix(cardURL, "jiying:") {
-		if !contactCardURLPattern.MatchString(cardURL) {
+		if !contactCardURLPattern.MatchString(cardURL) && !taskCardURLPattern.MatchString(cardURL) {
 			return "", errors.New("名片链接格式错误")
 		}
 		return cardURL, nil

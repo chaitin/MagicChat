@@ -4,6 +4,7 @@ import test from "node:test"
 import { runInNewContext } from "node:vm"
 import ts from "typescript"
 import { parseContactLink } from "../../shared/contact-links.ts"
+import { parseTaskLink } from "../../shared/task-links.ts"
 
 test("桌面端三类名片派发当前账号的资料导航，不打开浏览器", () => {
   const text = readFileSync(
@@ -28,6 +29,7 @@ test("桌面端三类名片派发当前账号的资料导航，不打开浏览�
   runInNewContext(code, {
     exports,
     parseContactLink,
+    parseTaskLink,
     openContactEvent: "open-contact",
     useAnimatedToast: () => ({ showToast: (error: unknown) => errors.push(error) }),
     React: { createElement: (_tag: unknown, props: unknown) => ({ props }) },

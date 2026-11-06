@@ -1,5 +1,6 @@
 import { Link } from "react-router"
 import { parseContactLink } from "../../../shared/contact-links"
+import { parseTaskLink } from "../../../shared/task-links"
 
 import type { ClientCardMessageBody } from "@/lib/client-data-api"
 
@@ -65,6 +66,12 @@ function CardContent({ card }: { card: ClientCardMessageBody }) {
 
 function getCardTarget(url: string) {
   const value = url.trim()
+  const task = parseTaskLink(value)
+  if (task)
+    return {
+      href: `/projects/${task.projectId}?taskId=${task.taskId}`,
+      type: "internal" as const,
+    }
   const contact = parseContactLink(value)
   if (contact)
     return {

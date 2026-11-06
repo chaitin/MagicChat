@@ -167,7 +167,7 @@ func (s *Service) resolveTask(ctx context.Context, accountID, entityID string) (
 	return newCard(
 		Title("任务", task.Title),
 		TaskDetails(task.Status, assignee, task.DueDate),
-		fmt.Sprintf("/projects/%s?taskId=%s", project.ID, task.ID),
+		fmt.Sprintf("jiying://task/%s/%s", project.ID, task.ID),
 	), nil
 }
 

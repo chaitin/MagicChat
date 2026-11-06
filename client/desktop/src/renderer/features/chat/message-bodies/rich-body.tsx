@@ -1,5 +1,6 @@
 import { useId, useState, type ReactNode } from "react"
 import { parseContactLink } from "../../../../../../shared/contact-links"
+import { parseTaskLink } from "../../../../../../shared/task-links"
 import { openContactEvent } from "@/components/send-namecard-button"
 import { Copy01Icon, ExternalLinkIcon, Loading03Icon } from "@hugeicons/core-free-icons"
 import type { DesktopMessageBody, DesktopMessageChoiceState } from "../../../../shared/account-data"
@@ -111,20 +112,39 @@ export function CardBody({
     }
   }
 
+  async function openTask(projectId: string, taskId: string) {
+    try {
+      const result = await window.desktop!.taskWindows.open({ targetId, projectId, taskId })
+      if (!result.ok) throw new Error(result.error.message)
+    } catch (reason) {
+      showToast({
+        status: "error",
+        title: reason instanceof Error ? reason.message : "打开任务窗口失败",
+      })
+    }
+  }
+
   return (
     <button
       type="button"
       className="grid w-80 max-w-full cursor-pointer gap-2 text-left"
       onClick={() => {
+        const task = parseTaskLink(url)
+        if (task) {
+          void openTask(task.projectId, task.taskId)
+          return
+        }
         const target = parseContactLink(url)
         if (target)
           window.dispatchEvent(new CustomEvent(openContactEvent, { detail: { targetId, target } }))
         else if (!url.startsWith("jiying:")) void openLink()
-        else showToast({ status: "error", title: "名片链接格式不正确" })
+        else showToast({ status: "error", title: "卡片链接格式不正确" })
       }}
     >
       <span className="font-medium">{title}</span>
-      <span className="line-clamp-3 break-all whitespace-pre-wrap text-muted-foreground">{description}</span>
+      <span className="line-clamp-3 break-all whitespace-pre-wrap text-muted-foreground">
+        {description}
+      </span>
     </button>
   )
 }

@@ -85,7 +85,7 @@ func TestChoiceMessageValidation(t *testing.T) {
 
 func TestServiceResolvesEntityCardsAndMapsErrors(t *testing.T) {
 	resolver := &messageContentEntityResolver{card: entitycardapp.Card{
-		Title: "任务 - 整理需求", Description: "状态: 待办", URL: "/projects/p?taskId=t",
+		Title: "任务 - 整理需求", Description: "状态: 待办", URL: "jiying://task/10000000-0000-0000-0000-000000000003/10000000-0000-0000-0000-000000000002",
 	}}
 	service := NewService(Dependencies{EntityCards: resolver})
 	accountID := "10000000-0000-0000-0000-000000000001"
@@ -100,7 +100,7 @@ func TestServiceResolvesEntityCardsAndMapsErrors(t *testing.T) {
 		t.Fatalf("resolve command = %#v", resolver.command)
 	}
 	var body cardBody
-	if err := json.Unmarshal(prepared, &body); err != nil || body.Type != TypeCard || body.Title != resolver.card.Title {
+	if err := json.Unmarshal(prepared, &body); err != nil || body.Type != TypeCard || body.Title != resolver.card.Title || body.URL != resolver.card.URL {
 		t.Fatalf("prepared body = %s, decoded = %#v, err = %v", prepared, body, err)
 	}
 
