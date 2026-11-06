@@ -81,7 +81,7 @@ func TestResolveEntityCardMessageBodyUsesFixedTemplates(t *testing.T) {
 		{group.ID, entityCardTypeGroup, "2 位成员", "群聊 - 设计群", "jiying://group/" + group.ID},
 		{project.ID, entityCardTypeProject, "官网 改版项目", "项目 - 官网项目", "/projects/" + project.ID},
 		{emptyProject.ID, entityCardTypeProject, "暂无描述", "项目 - 空项目", "/projects/" + emptyProject.ID},
-		{task.ID, entityCardTypeTask, "状态: 进行中\n负责人: 张三\n截止日期: 2026-07-20", "任务 - 完成首页改版", "/projects/" + project.ID + "?taskId=" + task.ID},
+		{task.ID, entityCardTypeTask, "状态: 进行中\n负责人: 张三\n截止日期: 2026-07-20", "任务 - 完成首页改版", "jiying://task/" + project.ID + "/" + task.ID},
 	} {
 		t.Run(testCase.entityType, func(t *testing.T) {
 			raw, err := json.Marshal(entityCardMessageBody{
@@ -192,7 +192,7 @@ func TestCreateConversationEntityCardStoresGeneratedTaskCard(t *testing.T) {
 	}
 	message := requireSuccess(t, body)["message"].(map[string]any)
 	card := message["body"].(map[string]any)
-	if card["type"] != messageTypeCard || card["title"] != "任务 - "+task.Title || card["url"] != "/projects/"+project.ID+"?taskId="+task.ID {
+	if card["type"] != messageTypeCard || card["title"] != "任务 - "+task.Title || card["url"] != "jiying://task/"+project.ID+"/"+task.ID {
 		t.Fatalf("message body = %#v", card)
 	}
 	if card["description"] != "状态: 待办" {
