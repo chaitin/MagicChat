@@ -1,5 +1,4 @@
 import { readFile, stat } from "node:fs/promises"
-import path from "node:path"
 import { clipboard, shell } from "electron"
 import { AuthFailure } from "../../shared/auth"
 import {
@@ -71,8 +70,7 @@ export function registerMediaIpc({
       ? (await auth.getOutgoingMedia(value.targetId, value.cacheKey.slice("outgoing:".length)))
           .filePath
       : (await auth.getCachedMediaResource(value.targetId, value.cacheKey)).filePath
-    const error = await shell.openPath(path.dirname(filePath))
-    if (error) throw new AuthFailure("media_reveal_failed", "无法打开文件所在文件夹")
+    shell.showItemInFolder(filePath)
     return null
   })
   handle(MEDIA_CHANNELS.openPreview, async (input) => {
