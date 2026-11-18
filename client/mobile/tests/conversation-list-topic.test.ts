@@ -46,9 +46,9 @@ test("话题保留44px头像列，箭头在左，小头像靠右且文字列不�
 
 test("话题头像采用Desktop的24px主头像和12px来源角标，保留未读徽标", async () => {
   const avatar = await source("features/messages/conversation-avatar.tsx")
-  assert.match(avatar, /const size = compact \? 28 : 44/)
-  assert.match(avatar, /<BaseConversationAvatar[^>]*compact=\{compact\}/)
-  assert.match(avatar, /avatar=\{conversation\.avatar\}[\s\S]*?size=\{compact \? 24 : 44\}/)
+  assert.match(avatar, /size = compact \? 28 : 44/)
+  assert.match(avatar, /<BaseConversationAvatar[^>]*size=\{compact \? 24 : size\}/)
+  assert.match(avatar, /avatar=\{conversation\.avatar\}[^>]*size=\{size\}/)
   assert.match(avatar, /avatar=\{sourceSender\.avatar\} rounded server=\{server\} size=\{compact \? 12 : 18\}/)
   assert.match(avatar, /compact && styles\.compactTopicSource/)
   assert.match(avatar, /count=\{conversation\.unreadCount\}[\s\S]*?dot=\{conversation\.notificationMuted\}/)

@@ -53,13 +53,16 @@ test("链接标题右侧提供独立复制按钮，复制完整URL并显示结�
 test("普通卡片样式对齐Desktop，保留宽度与长按/点击交互", async () => {
   const body = await source("features/conversation/messages/message-body.tsx")
   const card = body.split("function MessageLinkCard(")[1].split("function ForwardBundleBody(")[0]
-  assert.match(card, /gap: 8, width: "100%"/)
-  assert.match(card, /color: colors\.textPrimary, fontSize: 15, fontWeight: "500", lineHeight: 23/)
-  assert.match(card, /numberOfLines=\{3\}.*color: colors\.textSecondary/)
-  assert.doesNotMatch(card, /ThemedIcon|accentColor|colors\.link|fontWeight: "600"|numberOfLines=\{[14]\}/)
+  assert.match(card, /gap: compact \? 12 : 8,[\s\S]*?width: "100%"/)
+  assert.match(card, /flexDirection: compact \? "row" : "column"/)
+  assert.match(card, /color: colors\.textPrimary,\s*fontSize: 15,\s*fontWeight: "500",\s*lineHeight: 23/)
+  assert.match(card, /numberOfLines=\{compact \? 1 : 3\}[\s\S]*?color: colors\.textSecondary/)
+  assert.doesNotMatch(card, /ThemedIcon|accentColor|colors\.link|fontWeight: "600"/)
   assert.match(card, /onLongPress\(\)/)
   assert.match(card, /if \(didLongPressRef\.current\)[\s\S]*?return[\s\S]*?onPress\?\.\(\)/)
-  assert.match(body, /onPress=\{body\.url\.trim\(\) \? \(\) => void openExternalUrl\(body\.url\) : undefined\}/)
+  const cardBody = body.split('if (body.type === "card")')[1].split('if (body.type === "chart")')[0]
+  assert.match(cardBody, /onPress=\{body\.url\.trim\(\) \? \(\) => \{/)
+  assert.match(cardBody, /else void openExternalUrl\(body\.url\)[\s\S]*?\} : undefined\}/)
 })
 
 test("共享图标正确保留Desktop圆形播放按钮的圆环和实心三角", async () => {

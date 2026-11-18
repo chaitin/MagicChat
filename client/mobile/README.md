@@ -40,6 +40,15 @@ pnpm typecheck
 pnpm lint
 ```
 
+全量测试包含原生版本及 iOS 相册权限配置校验。首次检出没有 `android/`、`ios/` 时，先生成真实原生工程，再执行测试：
+
+```bash
+pnpm exec expo prebuild --template ./node_modules/expo/template.tgz --no-install --skip-dependency-update react,react-native
+pnpm test
+```
+
+上述命令使用已安装 Expo 自带的模板，不安装 Android SDK、npm 依赖或 CocoaPods。原生目录是忽略提交的生成产物；配置测试通过不代表已完成安装包构建或真机验收。
+
 ## 视频预览
 
 聊天中的视频仅显示 `background4` 占位和 `background2` 播放按钮，不提前请求视频地址或下载。普通会话和合并聊天记录均点击进入独立播放页：先检查缓存，未命中时显示真实下载进度，完整下载并校验后自动播放。

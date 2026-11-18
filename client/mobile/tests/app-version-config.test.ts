@@ -19,8 +19,8 @@ test("原生平台版本与 Expo 配置保持一致", async () => {
   assert.equal(appConfig.expo.ios.buildNumber, "35")
   assert.match(androidGradle, /versionCode 35/)
   assert.match(androidGradle, /versionName "2\.9\.2"/)
-  assert.equal(iosProject.match(/CURRENT_PROJECT_VERSION = 35;/g)?.length, 2)
-  assert.equal(iosProject.match(/MARKETING_VERSION = 2\.9\.2;/g)?.length, 2)
+  // Expo writes literal versions to this plist; unused Xcode template defaults do not set the packaged version.
+  assert.match(iosProject, /INFOPLIST_FILE = app\/Info\.plist;/)
   assert.match(iosInfo, /<key>CFBundleShortVersionString<\/key>\s*<string>2\.9\.2<\/string>/)
   assert.match(iosInfo, /<key>CFBundleVersion<\/key>\s*<string>35<\/string>/)
 })
