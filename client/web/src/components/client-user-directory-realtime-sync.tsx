@@ -15,11 +15,22 @@ export function ClientUserDirectoryRealtimeSync() {
     updateUserPresence,
     usersById,
   } = useClientData()
-  const { subscribeRealtimeEvent } = useRealtime()
+  const { ready, subscribeRealtimeEvent } = useRealtime()
+  const connectedOnceRef = React.useRef(false)
+  const disconnectedAfterConnectRef = React.useRef(false)
   const usersByIdRef = React.useRef(usersById)
   React.useEffect(() => {
     usersByIdRef.current = usersById
   }, [usersById])
+
+  React.useEffect(() => {
+    if (!ready && connectedOnceRef.current) disconnectedAfterConnectRef.current = true
+    if (ready) {
+      if (disconnectedAfterConnectRef.current) void refreshContacts().catch(() => undefined)
+      connectedOnceRef.current = true
+      disconnectedAfterConnectRef.current = false
+    }
+  }, [ready, refreshContacts])
 
   React.useEffect(() => {
     const channel =
@@ -85,6 +96,10 @@ export function ClientUserDirectoryRealtimeSync() {
       for (const unsubscribe of unsubscribers) unsubscribe()
     }
   }, [location.pathname, refreshContacts, subscribeRealtimeEvent])
+
+  React.useEffect(() => subscribeRealtimeEvent("organization.updated", () => {
+    void refreshContacts().catch(() => undefined)
+  }), [refreshContacts, subscribeRealtimeEvent])
 
   return null
 }

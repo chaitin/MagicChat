@@ -192,7 +192,8 @@ func (a *ContactAPI) resolveUsers(c echo.Context) error {
 	if err := c.Bind(&request); err != nil {
 		return writeFailure(c, http.StatusBadRequest, string(contactapp.CodeInvalidRequest), "请求格式错误")
 	}
-	result, err := a.contacts.ResolveUsers(c.Request().Context(), contactapp.ResolveUsersCommand{UserIDs: request.UserIDs})
+	current, _ := CurrentAccount(c)
+	result, err := a.contacts.ResolveUsers(c.Request().Context(), contactapp.ResolveUsersCommand{AccountID: current.ID, UserIDs: request.UserIDs})
 	if err != nil {
 		return writeContactError(c, err)
 	}

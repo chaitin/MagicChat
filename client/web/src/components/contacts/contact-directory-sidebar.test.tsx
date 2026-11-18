@@ -109,6 +109,59 @@ describe("ContactDirectorySidebar", () => {
     expect(organizationTrigger).toBeInTheDocument()
   })
 
+  it("selects organization nodes and leaves the members list to the main panel", async () => {
+    const user = userEvent.setup()
+    const onSelectDepartment = vi.fn()
+    render(
+      <SidebarProvider>
+        <ContactDirectorySidebar
+          {...createSidebarProps({
+            organizationName: "长亭科技",
+            organizationSnapshot: {
+              units: [
+                {
+                  id: "unit-1",
+                  parent_id: null,
+                  name: "长亭科技",
+                  kind: "group",
+                },
+              ],
+              departments: [
+                {
+                  id: "department-1",
+                  unit_id: "unit-1",
+                  parent_id: null,
+                  name: "长亭科技",
+                  is_root: true,
+                  leaders: [],
+                },
+              ],
+            },
+            onSelectDepartment,
+          })}
+        />
+      </SidebarProvider>
+    )
+
+    const tree = screen.getByRole("navigation", { name: "组织架构" })
+    const unit = within(tree).getByRole("button", { name: "长亭科技" })
+    expect(
+      within(tree).queryByRole("button", { name: "全部成员" })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "成员" })
+    ).not.toBeInTheDocument()
+    expect(
+      within(tree).queryByRole("button", { name: "直属成员" })
+    ).not.toBeInTheDocument()
+    await user.click(unit)
+    expect(unit).toHaveAttribute("aria-expanded", "false")
+    expect(onSelectDepartment).not.toHaveBeenCalled()
+    await user.click(unit)
+    expect(unit).toHaveAttribute("aria-expanded", "true")
+    expect(onSelectDepartment).toHaveBeenCalledWith("department-1")
+  })
+
   it("creates an application and shows its access information", async () => {
     const user = userEvent.setup()
     const onRefresh = vi.fn()

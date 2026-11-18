@@ -23,11 +23,18 @@ export default function Console() {
   const location = useLocation()
   const { page: currentPage } = getConsolePage(location.pathname)
   const { appName } = useProductInfo()
+  const fixedMembersLayout = location.pathname === "/members"
 
   return (
-    <SidebarProvider>
+    <SidebarProvider
+      className={
+        fixedMembersLayout ? "h-svh min-h-0 overflow-hidden" : undefined
+      }
+    >
       <AppSidebar appName={appName} />
-      <SidebarInset>
+      <SidebarInset
+        className={fixedMembersLayout ? "min-h-0 overflow-hidden" : undefined}
+      >
         <header className="flex h-16 shrink-0 items-center gap-2">
           <div className="flex w-full items-center gap-2 px-4">
             <SidebarTrigger className="-ml-1" />

@@ -442,6 +442,21 @@ export class AccountDataFacade {
     return this.requireRuntime().getContacts()
   }
 
+  async getOrganization(targetId: string) {
+    await this.ready(targetId)
+    return this.requireRuntime().getOrganization()
+  }
+
+  async getOrganizationMembers(input: { targetId: string; departmentId: string; page: number }) {
+    await this.ready(input.targetId)
+    return this.requireRuntime().getOrganizationMembers(input.departmentId, input.page)
+  }
+
+  async getOrganizationAssignments(input: { targetId: string; userId: string }) {
+    await this.ready(input.targetId)
+    return this.requireRuntime().getOrganizationAssignments(input.userId)
+  }
+
   async refreshContacts(targetId: string) {
     await this.ready(targetId)
     return this.requireRuntime().refreshContacts()

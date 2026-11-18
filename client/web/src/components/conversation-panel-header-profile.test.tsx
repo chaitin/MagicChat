@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router"
 import { describe, expect, it, vi } from "vitest"
 
 import { ConversationPanel } from "@/components/conversation-panel"
+import * as organizationAPI from "@/lib/client-api/organization"
 import type {
   ClientConversation,
   ClientConversationMember,
@@ -47,6 +48,7 @@ describe("ConversationPanel header profile", () => {
 
     expect(await screen.findByText("用户资料")).toBeInTheDocument()
     expect(screen.getByRole("dialog")).toHaveClass(
+      "w-96",
       "max-w-[calc(100vw-2rem)]",
       "overflow-hidden"
     )
@@ -61,6 +63,105 @@ describe("ConversationPanel header profile", () => {
     expect(
       await screen.findByRole("dialog", { name: "李四头像预览" })
     ).toBeInTheDocument()
+  })
+
+  it("shows organization assignments and reporting in the chat user profile", async () => {
+    const user = userEvent.setup()
+    const snapshot = vi
+      .spyOn(organizationAPI, "getClientOrganization")
+      .mockResolvedValue({
+        units: [
+          {
+            id: "unit-a",
+            parent_id: null,
+            name: "A子公司",
+            kind: "subsidiary",
+          },
+          {
+            id: "unit-b",
+            parent_id: null,
+            name: "B子公司",
+            kind: "subsidiary",
+          },
+        ],
+        departments: [
+          {
+            id: "dept-a",
+            unit_id: "unit-a",
+            parent_id: null,
+            name: "研发部",
+            is_root: false,
+            leaders: [],
+          },
+          {
+            id: "dept-b",
+            unit_id: "unit-b",
+            parent_id: null,
+            name: "设计部",
+            is_root: false,
+            leaders: [],
+          },
+        ],
+      })
+    const assignments = vi
+      .spyOn(organizationAPI, "getClientOrganizationAssignments")
+      .mockResolvedValue({
+        assignments: [
+          {
+            id: "assign-b",
+            user_id: "user-2",
+            unit_id: "unit-b",
+            department_id: "dept-b",
+            title: "顾问",
+            is_primary: false,
+          },
+          {
+            id: "assign-a",
+            user_id: "user-2",
+            unit_id: "unit-a",
+            department_id: "dept-a",
+            title: "工程师",
+            is_primary: true,
+          },
+        ],
+        reporting: {
+          direct_manager_user_id: "user-3",
+          dotted_manager_user_ids: ["user-4"],
+        },
+      })
+    try {
+      const member = createMember({ id: "user-2", name: "李四" })
+      renderConversationHeader(
+        createConversation({
+          members: [createMember(), member],
+          name: member.name,
+        }),
+        {
+          contactDirectoryMode: "organization",
+          contacts: [
+            member,
+            createMember({ id: "user-3", name: "主管" }),
+            createMember({ id: "user-4", name: "项目经理" }),
+          ].map((contact) => ({
+            ...contact,
+            lastOnlineAt: null,
+            online: true,
+            type: "user" as const,
+          })),
+        }
+      )
+      await user.click(screen.getByRole("button", { name: "李四资料" }))
+      expect(await screen.findByText("A子公司 / 研发部")).toBeInTheDocument()
+      expect(screen.getByText("B子公司 / 设计部")).toBeInTheDocument()
+      expect(screen.getByText("工程师")).toBeInTheDocument()
+      expect(screen.getByText("主管")).toBeInTheDocument()
+      expect(screen.getByText("项目经理")).toBeInTheDocument()
+      expect(screen.getByText("直属上级")).toHaveClass("whitespace-nowrap")
+      expect(assignments).toHaveBeenCalledWith("user-2")
+    } finally {
+      snapshot.mockRestore()
+      assignments.mockRestore()
+    }
   })
 
   it("opens the application profile from an app conversation header", async () => {

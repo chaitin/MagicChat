@@ -37,9 +37,10 @@ import type {
 } from "@/lib/client-data-api"
 import { formatContactPhone } from "@/lib/contact-format"
 import { cn } from "@/lib/utils"
+import { type buildOrganizationMemberships } from "../../../../shared/organization-memberships"
 
 const CONTACT_DETAIL_PANEL_CLASS =
-  "mt-30 w-full min-w-0 max-w-sm overflow-hidden"
+  "my-8 w-full min-w-0 max-w-md overflow-hidden sm:my-12"
 
 export function AppDetailPanel({
   app,
@@ -308,6 +309,7 @@ export function ContactDetailPanel({
   addingFriend = false,
   canStartConversation,
   contact,
+  organizationDetails,
   onAddFriend,
   onStartConversation,
   startingConversation,
@@ -316,6 +318,12 @@ export function ContactDetailPanel({
   addingFriend?: boolean
   canStartConversation: boolean
   contact: ContactUser
+  organizationDetails?: {
+    memberships: ReturnType<typeof buildOrganizationMemberships>
+    title: string
+    manager: string
+    dottedManagers: string
+  }
   onAddFriend?: () => void
   onStartConversation: () => void
   startingConversation: boolean
@@ -328,7 +336,7 @@ export function ContactDetailPanel({
       data-testid="contact-detail-panel"
     >
       <div className="flex min-w-0 flex-col gap-5">
-        <div className="flex min-w-0 flex-col items-center text-center">
+        <div className="flex min-w-0 items-center gap-4 border-b border-border/60 pb-5">
           <Avatar
             className="size-20 rounded-sm bg-muted after:rounded-sm"
             data-testid="contact-detail-avatar"
@@ -344,14 +352,34 @@ export function ContactDetailPanel({
               {getContactInitial(displayName)}
             </AvatarFallback>
           </Avatar>
+          <div className="min-w-0 flex-1">
+            <h2
+              className="min-w-0 flex-1 truncate text-lg font-semibold"
+              title={displayName}
+            >
+              {displayName}
+            </h2>
+            <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "size-1.5 rounded-full",
+                  contact.online ? "bg-emerald-500" : "bg-muted-foreground/40"
+                )}
+              />
+              {contact.online ? "在线" : "离线"}
+            </div>
+          </div>
         </div>
 
-        <div className="grid gap-1 text-sm">
-          <ContactDetailRow
-            icon={<UserRound className="size-4 text-muted-foreground" />}
-            label="姓名"
-            value={contact.name}
-          />
+        <div className="grid text-sm">
+          {displayName !== contact.name && (
+            <ContactDetailRow
+              icon={<UserRound className="size-4 text-muted-foreground" />}
+              label="姓名"
+              value={contact.name}
+            />
+          )}
           <ContactDetailRow
             icon={<UserPen className="size-4 text-muted-foreground" />}
             label="昵称"
@@ -367,8 +395,56 @@ export function ContactDetailPanel({
             label="手机"
             value={contact.phone ? formatContactPhone(contact.phone) : ""}
           />
+          {organizationDetails && (
+            <>
+              <ContactDetailRow
+                icon={<UsersRound className="size-4 text-muted-foreground" />}
+                label="组织"
+                value={
+                  organizationDetails.memberships.length ? (
+                    <div className="grid gap-2">
+                      {organizationDetails.memberships.map((membership) => (
+                        <div
+                          key={membership.departmentID}
+                          className="leading-5 break-words whitespace-normal"
+                        >
+                          {[membership.unit, membership.department]
+                            .filter(Boolean)
+                            .join(" / ")}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    ""
+                  )
+                }
+              />
+              <ContactDetailRow
+                icon={<UserRound className="size-4 text-muted-foreground" />}
+                label="职务"
+                value={organizationDetails.title}
+              />
+              <ContactDetailRow
+                icon={<UserRound className="size-4 text-muted-foreground" />}
+                label="直属上级"
+                value={organizationDetails.manager}
+              />
+              {organizationDetails.dottedManagers && (
+                <ContactDetailRow
+                  icon={<UserRound className="size-4 text-muted-foreground" />}
+                  label="虚线上级"
+                  value={organizationDetails.dottedManagers}
+                />
+              )}
+            </>
+          )}
         </div>
-        <div className="grid w-full gap-2">
+        <div
+          className={cn(
+            "grid w-full gap-2 border-t border-border/60 pt-5",
+            (addFriendLabel || canStartConversation) && "grid-cols-2"
+          )}
+        >
           {addFriendLabel ? (
             <Button
               className="w-full"
@@ -407,7 +483,15 @@ export function ContactEmptyState() {
       className="flex flex-1 items-center justify-center self-stretch text-sm text-muted-foreground"
       data-testid="contact-empty-state"
     >
-      选择一个联系人查看详情
+      <div className="flex flex-col items-center gap-4">
+        <div className="flex size-16 items-center justify-center rounded-2xl bg-muted/70">
+          <UsersRound
+            aria-hidden="true"
+            className="size-7 text-muted-foreground/60"
+          />
+        </div>
+        <p>选择一个联系人查看详情</p>
+      </div>
     </div>
   )
 }
@@ -425,12 +509,14 @@ function ContactDetailRow({
   const displayValue = hasValue ? value : "未设置"
 
   return (
-    <div className="flex min-w-0 items-center gap-3 border-b py-2 last:border-b-0">
-      <span className="shrink-0">{icon}</span>
-      <span className="w-16 shrink-0 text-muted-foreground">{label}</span>
+    <div className="grid min-w-0 grid-cols-[1rem_4rem_minmax(0,1fr)] items-baseline gap-x-3 py-2.5">
+      <span className="flex h-5 items-center self-start opacity-65">
+        {icon}
+      </span>
+      <span className="leading-5 text-muted-foreground">{label}</span>
       <span
         className={cn(
-          "min-w-0 flex-1 truncate",
+          "min-w-0 truncate leading-5",
           !hasValue && "text-muted-foreground"
         )}
       >

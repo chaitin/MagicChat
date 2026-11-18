@@ -319,6 +319,9 @@ export function registerAccountDataIpc({
     auth.resolveContact(input as Parameters<AuthController["resolveContact"]>[0]),
   )
   handle(ACCOUNT_DATA_CHANNELS.getContacts, (input) => auth.getContacts(input as string))
+  handle(ACCOUNT_DATA_CHANNELS.getOrganization, (input) => auth.getOrganization(input as string))
+  handle(ACCOUNT_DATA_CHANNELS.getOrganizationMembers, (input) => auth.getOrganizationMembers(input as { targetId: string; departmentId: string; page: number }))
+  handle(ACCOUNT_DATA_CHANNELS.getOrganizationAssignments, (input) => auth.getOrganizationAssignments(input as { targetId: string; userId: string }))
   handle(ACCOUNT_DATA_CHANNELS.getAvatar, (input) => auth.getAvatar(input as AvatarRequest))
   handle(ACCOUNT_DATA_CHANNELS.invalidateAvatar, (input) =>
     auth.invalidateAvatar(input as Omit<AvatarRequest, "theme">),

@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   ready: false,
   invalidateUsers: vi.fn(),
   postMessage: vi.fn(),
+  refreshContacts: vi.fn().mockResolvedValue(undefined),
   refreshMe: vi.fn().mockResolvedValue(undefined),
   updateUserPresence: vi.fn(),
 }))
@@ -16,7 +17,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/client-data-context", () => ({
   useClientData: () => ({
     invalidateUsers: mocks.invalidateUsers,
-    refreshContacts: vi.fn().mockResolvedValue(undefined),
+    refreshContacts: mocks.refreshContacts,
     refreshFriendRequests: vi.fn().mockResolvedValue(undefined),
     refreshMe: mocks.refreshMe,
     updateUserPresence: mocks.updateUserPresence,
@@ -45,6 +46,7 @@ describe("ClientUserDirectoryRealtimeSync", () => {
     mocks.ready = false
     mocks.invalidateUsers.mockReset()
     mocks.postMessage.mockReset()
+    mocks.refreshContacts.mockReset().mockResolvedValue(undefined)
     mocks.refreshMe.mockReset().mockResolvedValue(undefined)
     mocks.updateUserPresence.mockReset()
     vi.stubGlobal(
@@ -64,6 +66,20 @@ describe("ClientUserDirectoryRealtimeSync", () => {
     mocks.ready = true
     view.rerender(<MemoryRouter><ClientUserDirectoryRealtimeSync /></MemoryRouter>)
     expect(mocks.invalidateUsers).not.toHaveBeenCalled()
+    expect(mocks.refreshContacts).not.toHaveBeenCalled()
+  })
+
+  it("组织变更和断线重连后刷新通讯录", () => {
+    const view = render(<MemoryRouter><ClientUserDirectoryRealtimeSync /></MemoryRouter>)
+    act(() => mocks.handlers.get("organization.updated")?.({}))
+    expect(mocks.refreshContacts).toHaveBeenCalledTimes(1)
+    mocks.ready = true
+    view.rerender(<MemoryRouter><ClientUserDirectoryRealtimeSync /></MemoryRouter>)
+    mocks.ready = false
+    view.rerender(<MemoryRouter><ClientUserDirectoryRealtimeSync /></MemoryRouter>)
+    mocks.ready = true
+    view.rerender(<MemoryRouter><ClientUserDirectoryRealtimeSync /></MemoryRouter>)
+    expect(mocks.refreshContacts).toHaveBeenCalledTimes(2)
   })
 
   it("invalidates profiles with the event version and broadcasts it", () => {

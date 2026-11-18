@@ -51,7 +51,7 @@ func TestPostgresMessagePartitionsRouteRetainAndDownMigrate(t *testing.T) {
 		Avatar: DefaultUserAvatar, PasswordHash: "hash", Status: UserStatusActive,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	if err := db.Create(&user).Error; err != nil {
+	if err := db.Omit("JobTitle").Create(&user).Error; err != nil {
 		t.Fatalf("create user: %v", err)
 	}
 	conversation := Conversation{
@@ -59,7 +59,7 @@ func TestPostgresMessagePartitionsRouteRetainAndDownMigrate(t *testing.T) {
 		CreatedByUserID: user.ID, Status: ConversationStatusActive, PostingPolicy: ConversationPostingPolicyOpen,
 		Visibility: ConversationVisibilityPrivate, CreatedAt: now, UpdatedAt: now,
 	}
-	if err := db.Create(&conversation).Error; err != nil {
+	if err := db.Omit("Announcement", "CreatedByAppID").Create(&conversation).Error; err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
 	oldClientMessageID := "old-partitioned-message"

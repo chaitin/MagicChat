@@ -12,7 +12,7 @@ describe("console pages", () => {
     expect(consolePages.map((page) => page.path)).toContain("/settings")
     expect(consolePages.map((page) => page.label)).toEqual([
       "仪表盘",
-      "成员",
+      "成员与部门",
       "应用",
       "举报记录",
       "设置",

@@ -52,7 +52,10 @@ import type {
   ContactUser,
 } from "@/lib/client-data-api"
 import type { ClientAppCredentials } from "@/lib/client-api/apps"
+import type { ClientOrganizationSnapshot } from "@/lib/client-api/organization"
 import { cn } from "@/lib/utils"
+import { OrganizationTree } from "./organization-tree"
+import { OrganizationNodeMembers } from "./organization-node-members"
 
 export function ContactDirectorySidebar({
   activeKeyword,
@@ -65,6 +68,12 @@ export function ContactDirectorySidebar({
   groups,
   pendingFriendRequestCount = 0,
   organizationName,
+  organizationSnapshot,
+  selectedDepartmentId,
+  onSelectDepartment,
+  hasMoreDepartmentMembers,
+  onLoadMoreDepartmentMembers,
+  organizationTreeVersion = 0,
   onActiveTabChange,
   onKeywordChange,
   onManageFriends,
@@ -85,6 +94,12 @@ export function ContactDirectorySidebar({
   groups: ContactGroup[]
   pendingFriendRequestCount?: number
   organizationName: string
+  organizationSnapshot?: ClientOrganizationSnapshot | null
+  selectedDepartmentId?: string | null
+  onSelectDepartment?: (id: string | null) => void
+  hasMoreDepartmentMembers?: boolean
+  onLoadMoreDepartmentMembers?: () => void
+  organizationTreeVersion?: number
   onActiveTabChange: (tab: DirectoryTab) => void
   onKeywordChange: (keyword: string) => void
   onManageFriends?: () => void
@@ -111,6 +126,20 @@ export function ContactDirectorySidebar({
   )
   const joinedGroups = groups.filter((group) => group.joined)
   const publicGroups = groups.filter((group) => group.visibility === "public")
+  const memberSectionTitle = organizationSnapshot ? "成员" : organizationName
+  const searchingMembers = Boolean(organizationSnapshot && activeKeyword.trim())
+  const renderContact = (contact: ContactUser) => (
+    <ContactListItem
+      key={contact.id}
+      contact={contact}
+      canStartConversation={false}
+      selected={isDirectorySelection(activeSelection, "user", contact.id)}
+      onSelect={() => onSelect({ id: contact.id, type: "user" })}
+      onStartConversation={() => onStartContactConversation(contact)}
+      startingConversation={false}
+      size="sm"
+    />
+  )
 
   return (
     <Sidebar className="border-r bg-background" collapsible="none">
@@ -133,7 +162,7 @@ export function ContactDirectorySidebar({
                   <span className="absolute top-0 right-0 z-10 translate-x-1/3 -translate-y-1/3">
                     <Badge
                       aria-label={`${pendingFriendRequestCount} 个新的好友申请`}
-                      className="h-4 bg-red-500 px-1 py-0 text-[10px] leading-4 font-normal text-white hover:bg-red-500 dark:bg-red-500"
+                      className="h-5 min-w-5 bg-red-500 px-1 py-0 text-xs leading-5 font-normal text-white hover:bg-red-500 dark:bg-red-500"
                       variant="destructive"
                     >
                       {pendingFriendRequestCount > 99
@@ -161,10 +190,18 @@ export function ContactDirectorySidebar({
           <div className="relative mt-3">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
             <SidebarInput
-              aria-label={`搜索${activeTabLabel}`}
+              aria-label={
+                organizationSnapshot && activeTab === "user"
+                  ? "搜索成员"
+                  : `搜索${activeTabLabel}`
+              }
               className="pl-8"
               onChange={(event) => onKeywordChange(event.target.value)}
-              placeholder={`搜索${activeTabLabel}`}
+              placeholder={
+                organizationSnapshot && activeTab === "user"
+                  ? "搜索成员"
+                  : `搜索${activeTabLabel}`
+              }
               type="search"
               value={activeKeyword}
             />
@@ -175,39 +212,86 @@ export function ContactDirectorySidebar({
           value="user"
         >
           <div className="flex flex-col gap-2">
-            <DirectorySectionCollapsible
-              defaultOpen={contacts.length > 0}
-              forceOpen={Boolean(activeKeyword.trim())}
-              count={contacts.length}
-              title={organizationName}
-            >
-              <DirectoryList ariaLabel={`${organizationName} 联系人列表`}>
-                {contacts.map((contact) => (
-                  <ContactListItem
-                    key={contact.id}
-                    contact={contact}
-                    canStartConversation={contact.id !== currentUserId}
-                    size="sm"
-                    selected={isDirectorySelection(
-                      activeSelection,
-                      "user",
-                      contact.id
-                    )}
-                    onSelect={() => onSelect({ id: contact.id, type: "user" })}
-                    onStartConversation={() =>
-                      onStartContactConversation(contact)
-                    }
-                    startingConversation={
-                      openingDirectoryItemKey ===
-                      directoryItemKey("user", contact.id)
-                    }
-                  />
-                ))}
-                {contacts.length === 0 && (
-                  <DirectoryEmptyState label={`${organizationName}联系人`} />
-                )}
-              </DirectoryList>
-            </DirectorySectionCollapsible>
+            {searchingMembers && (
+              <div className="mx-3">
+                <DirectoryList ariaLabel="成员搜索结果" compact>
+                  {contacts.map(renderContact)}
+                  {contacts.length === 0 && (
+                    <SidebarMenuItem>
+                      <p className="px-2 py-8 text-center text-sm text-muted-foreground">
+                        没有匹配的成员
+                      </p>
+                    </SidebarMenuItem>
+                  )}
+                </DirectoryList>
+              </div>
+            )}
+            {organizationSnapshot && onSelectDepartment && (
+              <div hidden={searchingMembers}>
+                <OrganizationTree
+                  snapshot={organizationSnapshot}
+                  selectedDepartmentId={selectedDepartmentId ?? null}
+                  onSelect={onSelectDepartment}
+                  membersContent={(departmentId) => (
+                    <OrganizationNodeMembers
+                      key={`${departmentId}:${organizationTreeVersion}`}
+                      departmentId={departmentId}
+                      contacts={appGrantUsers}
+                      renderMember={renderContact}
+                    />
+                  )}
+                />
+              </div>
+            )}
+            {!organizationSnapshot && (
+              <DirectorySectionCollapsible
+                defaultOpen={contacts.length > 0}
+                forceOpen={Boolean(activeKeyword.trim())}
+                count={contacts.length}
+                title={memberSectionTitle}
+              >
+                <DirectoryList ariaLabel={`${memberSectionTitle} 联系人列表`}>
+                  {contacts.map((contact) => (
+                    <ContactListItem
+                      key={contact.id}
+                      contact={contact}
+                      canStartConversation={contact.id !== currentUserId}
+                      size="sm"
+                      selected={isDirectorySelection(
+                        activeSelection,
+                        "user",
+                        contact.id
+                      )}
+                      onSelect={() =>
+                        onSelect({ id: contact.id, type: "user" })
+                      }
+                      onStartConversation={() =>
+                        onStartContactConversation(contact)
+                      }
+                      startingConversation={
+                        openingDirectoryItemKey ===
+                        directoryItemKey("user", contact.id)
+                      }
+                    />
+                  ))}
+                  {contacts.length === 0 && (
+                    <DirectoryEmptyState label={memberSectionTitle} />
+                  )}
+                  {hasMoreDepartmentMembers && onLoadMoreDepartmentMembers && (
+                    <SidebarMenuItem>
+                      <Button
+                        className="w-full"
+                        onClick={onLoadMoreDepartmentMembers}
+                        type="button"
+                        variant="ghost"
+                      >
+                        加载更多成员
+                      </Button>
+                    </SidebarMenuItem>
+                  )}
+                </DirectoryList>
+              </DirectorySectionCollapsible>
+            )}
           </div>
         </TabsContent>
         <TabsContent
@@ -344,12 +428,18 @@ export function ContactDirectorySidebar({
 function DirectoryList({
   ariaLabel,
   children,
+  compact = false,
 }: {
   ariaLabel: string
   children: ReactNode
+  compact?: boolean
 }) {
   return (
-    <SidebarMenu aria-label={ariaLabel} className="px-2 pb-3" role="listbox">
+    <SidebarMenu
+      aria-label={ariaLabel}
+      className={cn("gap-1", compact ? "px-0 pb-0" : "px-2 pb-3")}
+      role="listbox"
+    >
       {children}
     </SidebarMenu>
   )
@@ -388,7 +478,7 @@ function DirectorySectionCollapsible({
 
   return (
     <Collapsible
-      className="mx-4 overflow-hidden rounded-md border"
+      className="mx-3 overflow-hidden"
       onOpenChange={(nextOpen) => {
         if (!forceOpen) {
           setOpen(nextOpen)
@@ -399,8 +489,8 @@ function DirectorySectionCollapsible({
       <CollapsibleTrigger asChild>
         <Button
           aria-label={title}
-          className="w-full justify-between rounded-none px-4 hover:bg-transparent aria-expanded:bg-transparent dark:hover:bg-transparent"
-          size="lg"
+          className="h-9 w-full justify-between rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-muted/50 aria-expanded:bg-transparent dark:hover:bg-muted/50"
+          size="sm"
           type="button"
           variant="ghost"
         >
@@ -413,7 +503,9 @@ function DirectorySectionCollapsible({
             />
             <span className="truncate">{title}</span>
           </span>
-          <Badge variant="secondary">{count}</Badge>
+          <span className="text-xs font-normal text-muted-foreground tabular-nums">
+            {count}
+          </span>
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent>{children}</CollapsibleContent>
@@ -600,7 +692,7 @@ function ContactListItem({
       actionLoading={startingConversation}
       media={
         <Avatar
-          className="rounded-sm bg-muted after:rounded-sm"
+          className="size-6 rounded-sm bg-muted text-xs after:rounded-sm"
           data-testid="contact-avatar"
         >
           {contact.avatar && (
@@ -659,9 +751,9 @@ function DirectoryListItem({
         aria-label={title}
         aria-selected={selected}
         className={cn(
-          "gap-2.5 data-active:bg-(--weui-brand-1) data-active:hover:bg-(--weui-brand-1)",
+          "gap-2.5 rounded-md px-2.5 py-0 transition-colors hover:bg-muted/70 data-active:bg-accent data-active:font-medium data-active:text-accent-foreground data-active:hover:bg-accent",
           onAction && "pr-8",
-          size === "sm" ? "h-11" : "h-12"
+          size === "sm" ? "h-9" : "h-12"
         )}
         isActive={selected}
         onClick={onSelect}

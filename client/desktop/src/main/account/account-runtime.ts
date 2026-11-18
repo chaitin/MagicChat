@@ -619,6 +619,21 @@ export class AccountRuntime {
     return this.contactManager!.getDirectory()
   }
 
+  getOrganization() {
+    this.assertInitialized()
+    return this.contactManager!.getOrganization()
+  }
+
+  getOrganizationMembers(departmentId: string, page: number) {
+    this.assertInitialized()
+    return this.contactManager!.getOrganizationMembers(departmentId, page)
+  }
+
+  getOrganizationAssignments(userId: string) {
+    this.assertInitialized()
+    return this.contactManager!.getOrganizationAssignments(userId)
+  }
+
   async refreshContacts() {
     this.assertInitialized()
     const directory = await this.contactManager!.refreshAndGetDirectory()
@@ -893,7 +908,7 @@ export class AccountRuntime {
     const failure = results.find((result) => result.status === "rejected")
     if (this.closed) throw new AuthFailure("account_closed", "账号数据已关闭")
     // 部分任务失败不撤销其他任务已落库的数据，也不能漏掉它们的变更通知。
-    this.notifyChanged(["conversations", "messages", "contacts"], [])
+    this.notifyChanged(["conversations", "messages", "contacts", "organization"], [])
     if (failure?.status === "rejected") throw failure.reason
   }
 
@@ -912,6 +927,11 @@ export class AccountRuntime {
 
   private async applyRealtimeEvent(event: RealtimeEvent) {
     if (this.entitySync?.notify(event.name, event.payload)) return
+    if (event.name === "organization.updated") {
+      await this.contactManager!.refresh()
+      if (!this.closed) this.notifyChanged(["contacts", "organization"], [])
+      return
+    }
     if (event.name === "conversation.removed") this.entitySync?.forget(conversationIdFromEvent(event.payload))
     if (event.name === "conversation.status") return
 

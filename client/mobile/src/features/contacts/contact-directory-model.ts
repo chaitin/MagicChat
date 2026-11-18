@@ -12,6 +12,7 @@ import {
 export type DirectoryTab = "user" | "app" | "group"
 
 export type DirectoryCategory =
+  | "organization"
   | "all-apps"
   | "joined-groups"
   | "my-apps"
@@ -19,6 +20,7 @@ export type DirectoryCategory =
   | "public-groups"
 
 export const DIRECTORY_CATEGORY_TITLES: Record<DirectoryCategory, string> = {
+  organization: "组织架构",
   "all-apps": "所有应用",
   "joined-groups": "我加入的群组",
   "my-apps": "我的应用",
@@ -205,7 +207,7 @@ export function buildDirectoryCategorySections({
   contacts: ClientContacts
   currentUserId: string
 }): DirectorySection[] {
-  if (category === "new-friends") return []
+  if (category === "new-friends" || category === "organization") return []
 
   if (category === "my-apps" || category === "all-apps") {
     const normalizedCurrentUserId = currentUserId.toLocaleLowerCase()

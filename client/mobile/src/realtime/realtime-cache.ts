@@ -13,10 +13,23 @@ import { projectRealtimeTopicEvent } from "./topic-projector"
 
 export { createRealtimeSynchronization, refreshClientDataOnForeground, synchronizeRealtimeData } from "./realtime-sync"
 
+export async function refreshOrganizationQueries(queryClient: QueryClient, server: AuthenticatedTarget) {
+  const scope = [server.id, server.url, server.userId]
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["organization", ...scope] }),
+    queryClient.invalidateQueries({ queryKey: ["organization-members", ...scope] }),
+    queryClient.invalidateQueries({ queryKey: ["organization-assignments", ...scope] }),
+  ])
+}
+
 /** Compatibility facade routing protocol events to domain projectors. */
 export async function applyRealtimeEvent(queryClient: QueryClient, server: AuthenticatedTarget, event: string, payload: unknown, options: { activeConversationId?: string; visible?: boolean; isCurrent?: () => boolean } = {}): Promise<{ message?: ClientMessage; notificationMuted?: boolean }> {
   const isCurrent = options.isCurrent ?? (() => true)
   if (!isCurrent()) return {}
+  if (event === realtimeEvents.organizationUpdated) {
+    await Promise.all([contactManager.refresh(server), refreshOrganizationQueries(queryClient, server)])
+    return {}
+  }
   if (event === realtimeEvents.userNicknamePolicyUpdated) {
     const contacts = await contactManager.getSnapshot(server)
     await Promise.all([

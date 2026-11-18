@@ -112,6 +112,9 @@ func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (Settings, erro
 	if s.notifications != nil && newSettings(stored).ContactDirectoryMode != contactDirectoryMode {
 		s.notifications.PublishContactDirectoryModeUpdated(ctx, contactDirectoryMode)
 	}
+	if s.notifications != nil && (stored.OrganizationName != updated.OrganizationName || newSettings(stored).ContactDirectoryMode != contactDirectoryMode) {
+		s.notifications.PublishOrganizationUpdated(ctx)
+	}
 	if s.notifications != nil && stored.AllowUserNicknameEditing != updated.AllowUserNicknameEditing {
 		s.notifications.PublishUserNicknamePolicyUpdated(ctx, updated.AllowUserNicknameEditing, updatedAt)
 	}

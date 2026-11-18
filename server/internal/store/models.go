@@ -86,6 +86,7 @@ const (
 )
 
 type User struct {
+	JobTitle     string  `gorm:"size:160;not null;default:''"`
 	ID           string  `gorm:"type:uuid;primaryKey"`
 	Email        string  `gorm:"size:320;not null;uniqueIndex"`
 	Name         string  `gorm:"size:120;not null"`

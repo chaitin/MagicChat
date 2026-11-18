@@ -1,65 +1,73 @@
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router"
-import { useCallback, useMemo, useState } from "react"
-import { Alert, ScrollView, StyleSheet, View } from "react-native"
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
+import { Alert, ScrollView, StyleSheet, View } from "react-native";
 
-import { ContentState } from "@/components/feedback/content-state"
-import { isSvgUrl } from "@/components/avatar/cached-avatar-image"
-import { AppHeader } from "@/components/navigation/app-header"
-import { ApiRequestError } from "@/data/api-client"
-import { AppButton } from "@/components/forms/app-button"
-import { useEntityProfileLookup } from "./use-entity-profile-lookup"
-import { useOpenEntityConversation } from "@/data/conversations/conversation-hooks"
-import type { ServerTarget } from "@/core/server-target"
+import { ContentState } from "@/components/feedback/content-state";
+import { isSvgUrl } from "@/components/avatar/cached-avatar-image";
+import { AppHeader } from "@/components/navigation/app-header";
+import {
+  buildOrganizationMemberships,
+  formatOrganizationMembership,
+} from "../../../../shared/organization-memberships";
+import { ApiRequestError } from "@/data/api-client";
+import {
+  fetchOrganizationAssignments,
+  fetchOrganizationSnapshot,
+  ORGANIZATION_FALLBACK_INTERVAL_MS,
+} from "@/data/contacts/organization-api";
+import { AppButton } from "@/components/forms/app-button";
+import { useEntityProfileLookup } from "./use-entity-profile-lookup";
+import { useOpenEntityConversation } from "@/data/conversations/conversation-hooks";
+import type { ServerTarget } from "@/core/server-target";
 import {
   isEntityType,
   resolveEntityProfile,
   type EntityProfile,
   type EntityType,
-} from "@/domain/entities/entity-profile"
-import { useAuthenticatedSession } from "@/providers/auth-provider"
-import { EntityDetailAction } from "@/features/entity-details/entity-detail-action"
-import { EntityDetailAvatar } from "@/features/entity-details/entity-detail-avatar"
-import { EntityDetailFields } from "@/features/entity-details/entity-detail-fields"
-import { useClientData } from "@/providers/client-data-provider"
+} from "@/domain/entities/entity-profile";
+import { useAuthenticatedSession } from "@/providers/auth-provider";
+import { EntityDetailAction } from "@/features/entity-details/entity-detail-action";
+import { EntityDetailAvatar } from "@/features/entity-details/entity-detail-avatar";
+import { EntityDetailFields, type ProfileField } from "@/features/entity-details/entity-detail-fields";
+import { useClientData } from "@/providers/client-data-provider";
 import {
   MediaLibraryPermissionError,
   saveImageToMediaLibrary,
   useCachedAvatar,
-} from "@/data/resources"
-import { buildConversationHref } from "@/navigation/conversations"
+} from "@/data/resources";
+import { buildConversationHref } from "@/navigation/conversations";
 import {
   XGUIGallery,
   XGUIList,
   XGUIListItem,
   useXGUITheme,
   useXGUIToast,
-} from "@/xgui"
+} from "@/xgui";
 
 export function EntityDetailScreen() {
   const params = useLocalSearchParams<{
-    entityId: string
-    entityType: string
-  }>()
-  const router = useRouter()
-  const { colors } = useXGUITheme()
-  const toast = useXGUIToast()
-  const session = useAuthenticatedSession()
-  const {
-    contacts,
-    conversations,
-    currentUser,
-    isReady,
-    usersById,
-  } = useClientData()
-  const openConversationMutation = useOpenEntityConversation(session)
-  const entityId = getFirstParam(params.entityId)
-  const entityTypeParam = getFirstParam(params.entityType)
-  const entityType = isEntityType(entityTypeParam) ? entityTypeParam : null
-  const reference = useMemo(() => entityId && entityType ? { type: entityType, id: entityId } : null, [entityId, entityType])
+    entityId: string;
+    entityType: string;
+  }>();
+  const router = useRouter();
+  const { colors } = useXGUITheme();
+  const toast = useXGUIToast();
+  const session = useAuthenticatedSession();
+  const { contacts, conversations, currentUser, isReady, usersById } =
+    useClientData();
+  const openConversationMutation = useOpenEntityConversation(session);
+  const entityId = getFirstParam(params.entityId);
+  const entityTypeParam = getFirstParam(params.entityType);
+  const entityType = isEntityType(entityTypeParam) ? entityTypeParam : null;
+  const reference = useMemo(
+    () => (entityId && entityType ? { type: entityType, id: entityId } : null),
+    [entityId, entityType],
+  );
   const profileContacts = useMemo(
     () => ({ ...contacts, users: Object.values(usersById) }),
-    [contacts, usersById]
-  )
+    [contacts, usersById],
+  );
   const cachedProfile = useMemo(
     () =>
       entityType && entityId
@@ -70,24 +78,104 @@ export function EntityDetailScreen() {
             reference: { id: entityId, type: entityType },
           })
         : null,
-    [conversations, currentUser, entityId, entityType, profileContacts]
-  )
-  const cachedRecord = entityType === "user" ? profileContacts.users.find((item) => item.id === entityId)
-    : entityType === "app" ? profileContacts.apps.find((item) => item.id === entityId)
-    : profileContacts.groups.find((item) => item.id === entityId)
-  const cachedRevision = cachedRecord?.entityRevision ?? conversations.find((item) => item.id === entityId)?.entityRevision ?? 0
-  const lookup = useEntityProfileLookup({ target: session, reference, cached: cachedProfile, revision: cachedRevision })
-  const profile = lookup.profile
+    [conversations, currentUser, entityId, entityType, profileContacts],
+  );
+  const cachedRecord =
+    entityType === "user"
+      ? profileContacts.users.find((item) => item.id === entityId)
+      : entityType === "app"
+        ? profileContacts.apps.find((item) => item.id === entityId)
+        : profileContacts.groups.find((item) => item.id === entityId);
+  const cachedRevision =
+    cachedRecord?.entityRevision ??
+    conversations.find((item) => item.id === entityId)?.entityRevision ??
+    0;
+  const lookup = useEntityProfileLookup({
+    target: session,
+    reference,
+    cached: cachedProfile,
+    revision: cachedRevision,
+  });
+  const profile = lookup.profile;
+  const organization = useQuery({
+    queryKey: ["organization", session.id, session.url, session.userId],
+    queryFn: () => fetchOrganizationSnapshot(session),
+    enabled: entityType === "user",
+    refetchInterval: ORGANIZATION_FALLBACK_INTERVAL_MS,
+  });
+  const assignments = useQuery({
+    queryKey: [
+      "organization-assignments",
+      session.id,
+      session.url,
+      session.userId,
+      entityId,
+    ],
+    queryFn: () => fetchOrganizationAssignments(session, entityId),
+    enabled:
+      entityType === "user" &&
+      Boolean(entityId) &&
+      Boolean(organization.data?.units.length),
+    refetchInterval: ORGANIZATION_FALLBACK_INTERVAL_MS,
+  });
+  const primaryAssignment =
+    assignments.data?.assignments.find((item) => item.is_primary) ??
+    assignments.data?.assignments[0];
+  const organizationSnapshot = organization.data;
+  const organizationFields: ProfileField[] =
+    primaryAssignment &&
+    organizationSnapshot?.units.length &&
+    !assignments.isError
+      ? [
+          {
+            label: "组织",
+            memberships: buildOrganizationMemberships(organizationSnapshot, assignments.data?.assignments ?? []),
+            value: buildOrganizationMemberships(
+              organizationSnapshot,
+              assignments.data?.assignments ?? [],
+            )
+              .map(formatOrganizationMembership)
+              .join("\n"),
+          },
+          { label: "职务", value: primaryAssignment.title },
+          {
+            label: "直属上级",
+            value:
+              profileContacts.users.find(
+                (item) =>
+                  item.id ===
+                  assignments.data?.reporting.direct_manager_user_id,
+              )?.name ?? "",
+          },
+          ...((assignments.data?.reporting.dotted_manager_user_ids ?? []).length
+            ? [
+                {
+                  label: "虚线上级",
+                  value: (
+                    assignments.data?.reporting.dotted_manager_user_ids ?? []
+                  )
+                    .map(
+                      (id) =>
+                        profileContacts.users.find((user) => user.id === id)
+                          ?.name ?? "",
+                    )
+                    .filter(Boolean)
+                    .join("、"),
+                },
+              ]
+            : []),
+        ]
+      : [];
 
   async function handlePrimaryAction() {
-    if (!profile || openConversationMutation.isPending) return
+    if (!profile || openConversationMutation.isPending) return;
 
     const hasListedGroupConversation =
       profile.type === "group" &&
-      conversations.some((conversation) => conversation.id === profile.id)
+      conversations.some((conversation) => conversation.id === profile.id);
     if (profile.type === "group" && profile.joined && hasListedGroupConversation) {
-      router.push(buildConversationHref(profile.id))
-      return
+      router.push(buildConversationHref(profile.id));
+      return;
     }
 
     toast.show({
@@ -99,22 +187,22 @@ export function EntityDetailScreen() {
             : "正在加入群聊"
           : "正在发起会话",
       type: "loading",
-    })
+    });
 
     try {
       const conversation = await openConversationMutation.mutateAsync({
         id: profile.id,
         joined: profile.type === "group" ? profile.joined : undefined,
         type: profile.type,
-      })
-      toast.hide()
-      router.push(buildConversationHref(conversation.id))
+      });
+      toast.hide();
+      router.push(buildConversationHref(conversation.id));
     } catch (error: unknown) {
-      toast.hide()
+      toast.hide();
       Alert.alert(
         getActionErrorTitle(profile),
-        error instanceof ApiRequestError ? error.message : "操作失败，请重试。"
-      )
+        error instanceof ApiRequestError ? error.message : "操作失败，请重试。",
+      );
     }
   }
 
@@ -129,15 +217,23 @@ export function EntityDetailScreen() {
         <ContentState loading message="正在加载资料" />
       ) : profile ? (
         <>
-          {lookup.error && <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
-            <AppButton accessibilityLabel="重试加载资料" onPress={lookup.retry} theme="gray" variant="outlined">
-              刷新失败，正在显示缓存资料，点击重试
-            </AppButton>
-          </View>}
+          {lookup.error && (
+            <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
+              <AppButton
+                accessibilityLabel="重试加载资料"
+                onPress={lookup.retry}
+                theme="gray"
+                variant="outlined"
+              >
+                刷新失败，正在显示缓存资料，点击重试
+              </AppButton>
+            </View>
+          )}
           <EntityProfileContent
             currentUserId={currentUser?.id ?? null}
             isActionPending={openConversationMutation.isPending}
             onActionPress={() => void handlePrimaryAction()}
+            organizationFields={organizationFields}
             profile={profile}
             server={session}
           />
@@ -145,78 +241,110 @@ export function EntityDetailScreen() {
       ) : lookup.loading ? (
         <ContentState loading message="正在加载资料" />
       ) : (
-        <ContentState message={lookup.unavailable ? "资料不存在或已不可访问" : lookup.error ? "资料加载失败，请检查网络后重试" : "资料不存在或已不可访问"}>
-          {lookup.error && <AppButton accessibilityLabel="重试加载资料" onPress={lookup.retry} theme="gray" variant="outlined">点击重试</AppButton>}
+        <ContentState
+          message={
+            lookup.unavailable
+              ? "资料不存在或已不可访问"
+              : lookup.error
+                ? "资料加载失败，请检查网络后重试"
+                : "资料不存在或已不可访问"
+          }
+        >
+          {lookup.error && (
+            <AppButton
+              accessibilityLabel="重试加载资料"
+              onPress={lookup.retry}
+              theme="gray"
+              variant="outlined"
+            >
+              点击重试
+            </AppButton>
+          )}
         </ContentState>
       )}
     </View>
-  )
+  );
 }
 
 function EntityProfileContent({
   currentUserId,
   isActionPending,
   onActionPress,
+  organizationFields,
   profile,
   server,
 }: {
-  currentUserId: string | null
-  isActionPending: boolean
-  onActionPress: () => void
-  profile: EntityProfile
-  server: ServerTarget
+  currentUserId: string | null;
+  isActionPending: boolean;
+  onActionPress: () => void;
+  organizationFields: ProfileField[];
+  profile: EntityProfile;
+  server: ServerTarget;
 }) {
-  const { colors } = useXGUITheme()
-  const toast = useXGUIToast()
-  const [galleryOpen, setGalleryOpen] = useState(false)
-  const [isSavingAvatar, setIsSavingAvatar] = useState(false)
-  const [isRefreshingAvatar, setIsRefreshingAvatar] = useState(false)
-  const avatarResource = useCachedAvatar(server, profile.avatar)
-  const refreshAvatar = avatarResource.refetch
+  const { colors } = useXGUITheme();
+  const toast = useXGUIToast();
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [isSavingAvatar, setIsSavingAvatar] = useState(false);
+  const [isRefreshingAvatar, setIsRefreshingAvatar] = useState(false);
+  const avatarResource = useCachedAvatar(server, profile.avatar);
+  const refreshAvatar = avatarResource.refetch;
   const [previewResource, setPreviewResource] = useState<{
-    avatar: string
-    resource: NonNullable<typeof avatarResource.resource>
-  } | null>(null)
+    avatar: string;
+    resource: NonNullable<typeof avatarResource.resource>;
+  } | null>(null);
   const displayedAvatarResource =
     previewResource?.avatar === profile.avatar
       ? previewResource.resource
-      : avatarResource.resource
-  const canPreviewAvatar = Boolean(profile.avatar.trim())
-  useFocusEffect(useCallback(() => {
-    if (profile.avatar.trim()) void refreshAvatar().catch(() => undefined)
-  }, [profile.avatar, refreshAvatar]))
+      : avatarResource.resource;
+  const canPreviewAvatar = Boolean(profile.avatar.trim());
+  useFocusEffect(
+    useCallback(() => {
+      if (profile.avatar.trim()) void refreshAvatar().catch(() => undefined);
+    }, [profile.avatar, refreshAvatar]),
+  );
 
   async function handleAvatarPreview() {
-    if (!canPreviewAvatar || isRefreshingAvatar) return
-    setIsRefreshingAvatar(true)
+    if (!canPreviewAvatar || isRefreshingAvatar) return;
+    setIsRefreshingAvatar(true);
     try {
-      const refreshed = await refreshAvatar()
-      const resource = refreshed.data ?? avatarResource.resource
+      const refreshed = await refreshAvatar();
+      const resource = refreshed.data ?? avatarResource.resource;
       if (!resource) {
-        toast.show({ duration: 1_000, message: "暂无可预览的头像", modal: false, type: "text" })
-        return
+        toast.show({
+          duration: 1_000,
+          message: "暂无可预览的头像",
+          modal: false,
+          type: "text",
+        });
+        return;
       }
-      setPreviewResource({ avatar: profile.avatar, resource })
-      setGalleryOpen(true)
+      setPreviewResource({ avatar: profile.avatar, resource });
+      setGalleryOpen(true);
     } catch (error: unknown) {
-      toast.show({ duration: 1_000, message: error instanceof Error ? error.message : "头像加载失败，请稍后重试", modal: false, type: "error" })
+      toast.show({
+        duration: 1_000,
+        message:
+          error instanceof Error ? error.message : "头像加载失败，请稍后重试",
+        modal: false,
+        type: "error",
+      });
     } finally {
-      setIsRefreshingAvatar(false)
+      setIsRefreshingAvatar(false);
     }
   }
 
   async function handleSaveAvatar() {
-    if (!displayedAvatarResource || isSavingAvatar) return
-    setIsSavingAvatar(true)
+    if (!displayedAvatarResource || isSavingAvatar) return;
+    setIsSavingAvatar(true);
 
     try {
-      await saveImageToMediaLibrary(displayedAvatarResource)
+      await saveImageToMediaLibrary(displayedAvatarResource);
       toast.show({
         duration: 1_000,
         message: "头像已保存到系统相册",
         modal: false,
         type: "text",
-      })
+      });
     } catch (error: unknown) {
       toast.show({
         duration: 1_000,
@@ -228,46 +356,53 @@ function EntityProfileContent({
               : "头像保存失败，请稍后重试",
         modal: false,
         type: "text",
-      })
+      });
     } finally {
-      setIsSavingAvatar(false)
+      setIsSavingAvatar(false);
     }
   }
 
   return (
     <>
       <ScrollView
-      contentContainerStyle={styles.scrollContent}
-      style={{ backgroundColor: colors.background0 }}
-    >
-      <View style={styles.content}>
-        <XGUIList>
-          <XGUIListItem
-            description={getProfileDescription(profile)}
-            descriptionFontSize={16}
-            descriptionNumberOfLines={3}
-            leading={
-            <EntityDetailAvatar
-              onPress={canPreviewAvatar ? () => void handleAvatarPreview() : undefined}
-              profile={profile}
-              server={server}
+        contentContainerStyle={styles.scrollContent}
+        style={{ backgroundColor: colors.background0 }}
+      >
+        <View style={styles.content}>
+          <XGUIList>
+            <XGUIListItem
+              description={getProfileDescription(profile)}
+              descriptionFontSize={16}
+              descriptionNumberOfLines={3}
+              leading={
+                <EntityDetailAvatar
+                  onPress={
+                    canPreviewAvatar
+                      ? () => void handleAvatarPreview()
+                      : undefined
+                  }
+                  profile={profile}
+                  server={server}
+                />
+              }
+              minHeight={60}
+              title={profile.displayName}
+              titleFontSize={18}
+              titleNumberOfLines={2}
             />
-            }
-            minHeight={60}
-            title={profile.displayName}
-            titleFontSize={18}
-            titleNumberOfLines={2}
-          />
-        </XGUIList>
+          </XGUIList>
 
-        <EntityDetailFields profile={profile} />
-        <EntityDetailAction
-          currentUserId={currentUserId}
-          isPending={isActionPending}
-          onPress={onActionPress}
-          profile={profile}
-        />
-      </View>
+          <EntityDetailFields
+            organizationFields={organizationFields}
+            profile={profile}
+          />
+          <EntityDetailAction
+            currentUserId={currentUserId}
+            isPending={isActionPending}
+            onPress={onActionPress}
+            profile={profile}
+          />
+        </View>
       </ScrollView>
       {displayedAvatarResource?.uri ? (
         <XGUIGallery
@@ -283,7 +418,7 @@ function EntityProfileContent({
         />
       ) : null}
     </>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -295,26 +430,26 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 24,
   },
-})
+});
 
 function getProfileDescription(profile: EntityProfile) {
-  if (profile.type === "user") return "用户资料"
-  if (profile.type === "group") return "群聊资料"
-  return profile.description.trim() || "应用资料"
+  if (profile.type === "user") return "用户资料";
+  if (profile.type === "group") return "群聊资料";
+  return profile.description.trim() || "应用资料";
 }
 
 function getPageTitle(type: EntityType | null) {
-  if (type === "app") return "应用详情"
-  if (type === "group") return "群组详情"
-  return "联系人详情"
+  if (type === "app") return "应用详情";
+  if (type === "group") return "群组详情";
+  return "联系人详情";
 }
 
 function getActionErrorTitle(profile: EntityProfile) {
-  if (profile.type === "user") return "无法发起私聊"
-  if (profile.type === "app") return "无法发起应用会话"
-  return profile.joined ? "无法打开群聊" : "无法加入群聊"
+  if (profile.type === "user") return "无法发起私聊";
+  if (profile.type === "app") return "无法发起应用会话";
+  return profile.joined ? "无法打开群聊" : "无法加入群聊";
 }
 
 function getFirstParam(value: string | string[] | undefined) {
-  return Array.isArray(value) ? (value[0] ?? "") : (value ?? "")
+  return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
 }

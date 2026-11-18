@@ -3,6 +3,8 @@ package usermanagement
 import (
 	"context"
 	"time"
+
+	"app/internal/application/organization"
 )
 
 const (
@@ -10,7 +12,15 @@ const (
 	StatusDisabled = "disabled"
 )
 
+type UserOrganization struct {
+	UnitName       string
+	DepartmentName string
+	Title          string
+}
+
 type User struct {
+	JobTitle     string
+	Organization *UserOrganization
 	ID           string
 	Avatar       string
 	Email        string
@@ -24,12 +34,15 @@ type User struct {
 }
 
 type ListCommand struct {
-	Keyword  string
-	Online   string
-	Page     string
-	PageSize string
-	Sort     string
-	Order    string
+	UserIDs             string
+	IncludeOrganization bool
+	DepartmentIDs       string
+	Keyword             string
+	Online              string
+	Page                string
+	PageSize            string
+	Sort                string
+	Order               string
 }
 
 type ListResult struct {
@@ -42,14 +55,30 @@ type ListResult struct {
 }
 
 type CreateCommand struct {
-	Email string
-	Name  string
-	Phone string
+	Assignments  *[]organization.AssignmentInput
+	JobTitle     string
+	Actor        string
+	DepartmentID string
+	Email        string
+	Name         string
+	Phone        string
 }
 
 type CreateResult struct {
 	User            User
 	InitialPassword string
+}
+
+type UpdateCommand struct {
+	JobTitle    *string
+	Actor       string
+	Assignments *[]organization.AssignmentInput
+	Reporting   *organization.Reporting
+	UserID      string
+	Email       string
+	Name        string
+	Nickname    string
+	Phone       string
 }
 
 type SetStatusCommand struct {
@@ -63,8 +92,10 @@ type ResetPasswordResult struct {
 }
 
 type AdminService interface {
+	JobTitles(context.Context, string) ([]string, error)
 	List(context.Context, ListCommand) (ListResult, error)
 	Create(context.Context, CreateCommand) (CreateResult, error)
+	Update(context.Context, UpdateCommand) (User, error)
 	SetStatus(context.Context, SetStatusCommand) (User, error)
 	ResetPassword(context.Context, string) (ResetPasswordResult, error)
 }

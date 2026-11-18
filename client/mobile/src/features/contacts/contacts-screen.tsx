@@ -1,4 +1,5 @@
 import { useRouter, type Href } from "expo-router"
+import { useQuery } from "@tanstack/react-query"
 import { useMemo } from "react"
 
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
@@ -16,11 +17,17 @@ import { buildEntityDetailHref } from "@/navigation/entity-details"
 import { useAuthenticatedSession } from "@/providers/auth-provider"
 import { useClientContacts } from "@/providers/client-data-provider"
 import { useXGUITheme } from "@/xgui"
+import { fetchOrganizationSnapshot, ORGANIZATION_FALLBACK_INTERVAL_MS } from "@/data/contacts/organization-api"
 
 export function ContactsScreen() {
   const { colors } = useXGUITheme()
   const router = useRouter()
   const session = useAuthenticatedSession()
+  const organization = useQuery({
+    queryKey: ["organization", session.id, session.url, session.userId],
+    queryFn: () => fetchOrganizationSnapshot(session),
+    refetchInterval: ORGANIZATION_FALLBACK_INTERVAL_MS,
+  })
   const {
     contacts,
     contactsError,
@@ -37,6 +44,11 @@ export function ContactsScreen() {
   )
   const entries = useMemo<ContactDirectoryHomeEntry[]>(
     () => [
+      ...(organization.data?.units.length ? [{
+        category: "organization",
+        memberCount: organization.data.units.find((unit) => !unit.parent_id)?.member_count,
+        label: organization.data.units.find((unit) => !unit.parent_id)?.name ?? "组织架构",
+      } as const] : []),
       {
         category: "new-friends",
         count: 0,
@@ -69,7 +81,7 @@ export function ContactsScreen() {
         label: "公开群组",
       },
     ],
-    [contacts.apps, contacts.groups, session.userId]
+    [contacts.apps, contacts.groups, contacts.users.length, organization.data, session.userId]
   )
 
   function handleItemPress(item: DirectoryItem) {
@@ -79,6 +91,10 @@ export function ContactsScreen() {
   }
 
   function handleEntryPress(category: DirectoryCategory) {
+    if (category === "organization") {
+      router.push("/(app)/contacts/organization" as Href)
+      return
+    }
     router.push({
       params: { category },
       pathname: "/(app)/contacts/[category]",

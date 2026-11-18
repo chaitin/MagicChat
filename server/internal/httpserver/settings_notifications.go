@@ -9,6 +9,7 @@ import (
 
 const (
 	contactDirectoryModeUpdatedEvent = "contact.directory.mode.updated"
+	organizationUpdatedEvent         = "organization.updated"
 	userNicknamePolicyUpdatedEvent   = "user.nickname.policy.updated"
 )
 
@@ -23,6 +24,14 @@ type userNicknamePolicyUpdatedEventResponse struct {
 
 func (s *Server) PublishContactDirectoryModeUpdated(_ context.Context, mode string) {
 	s.realtime.Broadcast(realtime.NewEvent(contactDirectoryModeUpdatedEvent, contactDirectoryModeUpdatedEventResponse{Mode: mode}))
+}
+
+func (s *Server) publishOrganizationUpdated() {
+	s.realtime.Broadcast(realtime.NewEvent(organizationUpdatedEvent, struct{}{}))
+}
+
+func (s *Server) PublishOrganizationUpdated(_ context.Context) {
+	s.publishOrganizationUpdated()
 }
 
 func (s *Server) PublishUserNicknamePolicyUpdated(_ context.Context, allowUserNicknameEditing bool, updatedAt time.Time) {
