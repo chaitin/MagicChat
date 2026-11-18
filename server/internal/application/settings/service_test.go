@@ -49,6 +49,9 @@ func TestServiceCreatesDefaultsAndUpdatesSettings(t *testing.T) {
 	if notifications.mode != ContactDirectoryModeFriends {
 		t.Fatalf("notified directory mode = %q", notifications.mode)
 	}
+	if notifications.organizationUpdates != 1 {
+		t.Fatalf("organization updates = %d", notifications.organizationUpdates)
+	}
 	if notifications.allowUserNicknameEditing || !notifications.nicknamePolicyUpdatedAt.Equal(now) {
 		t.Fatalf("nickname policy notification = %#v", notifications)
 	}
@@ -67,6 +70,31 @@ func TestServiceCreatesDefaultsAndUpdatesSettings(t *testing.T) {
 
 	if _, err := service.Update(context.Background(), UpdateCommand{OrganizationName: "长亭科技"}); ErrorCodeOf(err) != CodeInvalidRequest {
 		t.Fatalf("empty app name error = %v, code = %q", err, ErrorCodeOf(err))
+	}
+}
+
+func TestOrganizationNotificationFollowsNameAndDirectoryMode(t *testing.T) {
+	db := openSettingsTestDB(t)
+	notifications := &settingsNotificationRecorder{}
+	service := NewService(Dependencies{DB: db, Notifications: notifications})
+	if _, err := service.Get(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range []struct {
+		command UpdateCommand
+		want    int
+	}{
+		{UpdateCommand{AppName: "Renamed app", OrganizationName: store.DefaultOrganizationName, ContactDirectoryMode: ContactDirectoryModeOrganization}, 0},
+		{UpdateCommand{AppName: "Renamed app", OrganizationName: "Renamed organization", ContactDirectoryMode: ContactDirectoryModeOrganization}, 1},
+		{UpdateCommand{AppName: "Renamed app", OrganizationName: "Renamed organization", ContactDirectoryMode: ContactDirectoryModeFriends}, 2},
+		{UpdateCommand{AppName: "Renamed app", OrganizationName: "Renamed organization", ContactDirectoryMode: ContactDirectoryModeFriends}, 2},
+	} {
+		if _, err := service.Update(context.Background(), step.command); err != nil {
+			t.Fatal(err)
+		}
+		if notifications.organizationUpdates != step.want {
+			t.Fatalf("organization updates = %d, want %d", notifications.organizationUpdates, step.want)
+		}
 	}
 }
 
@@ -193,12 +221,17 @@ func openSettingsTestDB(t *testing.T) *gorm.DB {
 
 type settingsNotificationRecorder struct {
 	mode                     string
+	organizationUpdates      int
 	allowUserNicknameEditing bool
 	nicknamePolicyUpdatedAt  time.Time
 }
 
 func (r *settingsNotificationRecorder) PublishContactDirectoryModeUpdated(_ context.Context, mode string) {
 	r.mode = mode
+}
+
+func (r *settingsNotificationRecorder) PublishOrganizationUpdated(context.Context) {
+	r.organizationUpdates++
 }
 
 func (r *settingsNotificationRecorder) PublishUserNicknamePolicyUpdated(_ context.Context, allowed bool, updatedAt time.Time) {

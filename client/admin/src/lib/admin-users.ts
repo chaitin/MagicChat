@@ -1,4 +1,8 @@
 import { adminFetch } from "@/lib/auth"
+import type {
+  OrganizationAssignmentInput,
+  OrganizationReporting,
+} from "@/lib/admin-organization"
 
 type AdminUsersFetch = (
   input: RequestInfo | URL,
@@ -18,7 +22,15 @@ type AdminUsersErrorEnvelope = {
   success?: boolean
 }
 
+export type AdminUserOrganization = {
+  unitName: string
+  departmentName: string
+  title: string
+}
+
 type AdminUserResponse = {
+  job_title?: string
+  organization?: { unit_name: string; department_name: string; title: string }
   avatar?: string
   created_at?: string
   email?: string
@@ -55,6 +67,8 @@ type UpdateAdminUserStatusResponse = {
 }
 
 export type AdminUser = {
+  jobTitle: string
+  organization?: AdminUserOrganization
   avatar: string
   createdAt: string
   email: string
@@ -71,12 +85,18 @@ export type AdminUsersSort = "created_at" | "email" | "status"
 export type AdminUsersSortOrder = "asc" | "desc"
 
 export type CreateAdminUserInput = {
+  jobTitle?: string
+  assignments?: OrganizationAssignmentInput[]
+  departmentId?: string
   email: string
   name: string
   phone?: string
 }
 
 export type ListAdminUsersInput = {
+  userIds?: string[]
+  includeOrganization?: boolean
+  departmentIds?: string[]
   keyword?: string
   online?: boolean
   order?: AdminUsersSortOrder
@@ -101,6 +121,13 @@ export async function listAdminUsers(
 ) {
   const params = new URLSearchParams()
   const keyword = input.keyword?.trim()
+  if (input.userIds?.length) params.set("user_ids", input.userIds.join(","))
+
+  if (input.includeOrganization) params.set("include_organization", "true")
+
+  if (input.departmentIds?.length) {
+    params.set("department_ids", input.departmentIds.join(","))
+  }
 
   if (keyword) {
     params.set("keyword", keyword)
@@ -169,6 +196,13 @@ export async function createAdminUser(
       email: input.email.trim(),
       name: input.name.trim(),
       phone: input.phone?.trim() ?? "",
+      ...(input.departmentId ? { department_id: input.departmentId } : {}),
+      ...(input.jobTitle !== undefined
+        ? { job_title: input.jobTitle.trim() }
+        : {}),
+      ...(input.assignments !== undefined
+        ? { assignments: input.assignments }
+        : {}),
     }),
     credentials: "include",
     headers: {
@@ -197,6 +231,55 @@ export async function createAdminUser(
     initialPassword: data?.initial_password ?? "",
     user: normalizeAdminUser(user),
   }
+}
+
+export type UpdateAdminUserInput = {
+  jobTitle?: string
+  assignments?: OrganizationAssignmentInput[]
+  reporting?: OrganizationReporting
+  name: string
+  email: string
+  phone: string
+  nickname: string
+}
+
+export async function updateAdminUser(
+  id: string,
+  input: UpdateAdminUserInput,
+  fetcher: AdminUsersFetch = adminFetch
+) {
+  const response = await fetcher(`/api/admin/users/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: input.name.trim(),
+      email: input.email.trim(),
+      phone: input.phone.trim(),
+      nickname: input.nickname.trim(),
+      ...(input.jobTitle !== undefined
+        ? { job_title: input.jobTitle.trim() }
+        : {}),
+      ...(input.assignments !== undefined
+        ? { assignments: input.assignments }
+        : {}),
+      ...(input.reporting !== undefined ? { reporting: input.reporting } : {}),
+    }),
+  })
+  const payload = await readJson<
+    | AdminUsersErrorEnvelope
+    | AdminUsersSuccessEnvelope<UpdateAdminUserStatusResponse>
+  >(response)
+  if (!response.ok || payload?.success === false) {
+    throw createRequestError(payload, response, "保存成员资料失败")
+  }
+  const user = (
+    payload as
+      | AdminUsersSuccessEnvelope<UpdateAdminUserStatusResponse>
+      | undefined
+  )?.data?.user
+  if (!user) throw new AdminUserRequestError("成员资料响应格式不正确")
+  return normalizeAdminUser(user)
 }
 
 export async function resetAdminUserPassword(
@@ -295,6 +378,16 @@ function normalizeAdminUser(user: AdminUserResponse): AdminUser {
   }
 
   return {
+    ...(user.organization
+      ? {
+          organization: {
+            unitName: user.organization.unit_name,
+            departmentName: user.organization.department_name,
+            title: user.organization.title,
+          },
+        }
+      : {}),
+    jobTitle: user.job_title ?? "",
     avatar: user.avatar ?? "",
     createdAt: user.created_at,
     email: user.email ?? "",

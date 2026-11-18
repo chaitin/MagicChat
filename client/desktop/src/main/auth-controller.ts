@@ -533,6 +533,18 @@ export class AuthController {
     return this.accountData.getContacts(...args)
   }
 
+  getOrganization(...args: Parameters<AccountDataFacade["getOrganization"]>) {
+    return this.accountData.getOrganization(...args)
+  }
+
+  getOrganizationMembers(...args: Parameters<AccountDataFacade["getOrganizationMembers"]>) {
+    return this.accountData.getOrganizationMembers(...args)
+  }
+
+  getOrganizationAssignments(...args: Parameters<AccountDataFacade["getOrganizationAssignments"]>) {
+    return this.accountData.getOrganizationAssignments(...args)
+  }
+
   refreshContacts(...args: Parameters<AccountDataFacade["refreshContacts"]>) {
     return this.accountData.refreshContacts(...args)
   }

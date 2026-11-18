@@ -41,6 +41,7 @@ export type XGUIListItemProps = {
   titleNumberOfLines?: number
   trailing?: ReactNode
   value?: string
+  valueNumberOfLines?: number
   valuePlaceholder?: boolean
 }
 
@@ -125,6 +126,7 @@ export function XGUIListItem({
   titleNumberOfLines = 1,
   trailing,
   value,
+  valueNumberOfLines = 1,
   valuePlaceholder = false,
 }: XGUIListItemProps) {
   const { colors } = useXGUITheme()
@@ -230,7 +232,7 @@ export function XGUIListItem({
           {value ? (
             <Text
               ellipsizeMode="tail"
-              numberOfLines={1}
+              numberOfLines={valueNumberOfLines}
               style={[
                 styles.value,
                 large && styles.largeValue,
@@ -364,5 +366,6 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     marginLeft: 16,
     maxWidth: "60%",
+    textAlign: "right",
   },
 })

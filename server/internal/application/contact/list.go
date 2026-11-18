@@ -90,9 +90,30 @@ func (s *Service) ResolveUsers(ctx context.Context, cmd ResolveUsersCommand) (Re
 		online = s.userPresence.OnlineStatus(presenceIDs)
 	}
 	users := make([]User, 0, len(values))
+	var visibleIDs map[string]bool
+	if s.organization != nil && cmd.AccountID != "" {
+		ids, scopeErr := s.organization.VisibleUserIDs(ctx, cmd.AccountID)
+		if scopeErr != nil {
+			return ResolveUsersResult{}, internalError(scopeErr)
+		}
+		if ids != nil {
+			visibleIDs = map[string]bool{}
+			for _, id := range ids {
+				visibleIDs[id] = true
+			}
+		}
+	}
 	for _, id := range ids {
 		if value, exists := valuesByID[id]; exists {
-			users = append(users, newUser(value, online[id]))
+			user := newUser(value, online[id])
+			hiddenUser := visibleIDs != nil && !visibleIDs[id]
+			if hiddenUser {
+				user.Email = ""
+			}
+			if hiddenUser {
+				user.Phone = ""
+			}
+			users = append(users, user)
 		}
 	}
 	return ResolveUsersResult{Users: users}, nil
@@ -123,7 +144,14 @@ func (s *Service) directoryUserScope(ctx context.Context, accountID string) (str
 		return "", nil, internalError(err)
 	}
 	if mode != DirectoryModeFriends {
-		return DirectoryModeOrganization, nil, nil
+		if s.organization == nil {
+			return DirectoryModeOrganization, nil, nil
+		}
+		ids, err := s.organization.VisibleUserIDs(ctx, accountID)
+		if err != nil {
+			return "", nil, internalError(err)
+		}
+		return DirectoryModeOrganization, ids, nil
 	}
 	var friendships []store.UserFriendship
 	if err := s.db.WithContext(ctx).
@@ -154,11 +182,15 @@ func (s *Service) listUsers(db *gorm.DB, keyword string, userIDs []string) ([]Us
 		if err != nil {
 			return nil, err
 		}
+		conditions := []string{"LOWER(name) LIKE ?"}
+		args := []any{like}
 		if allowNicknameSearch {
-			query = query.Where("LOWER(email) LIKE ? OR LOWER(name) LIKE ? OR LOWER(nickname) LIKE ? OR phone LIKE ?", like, like, like, like)
-		} else {
-			query = query.Where("LOWER(email) LIKE ? OR LOWER(name) LIKE ? OR phone LIKE ?", like, like, like)
+			conditions = append(conditions, "LOWER(nickname) LIKE ?")
+			args = append(args, like)
 		}
+		conditions = append(conditions, "LOWER(email) LIKE ?", "phone LIKE ?")
+		args = append(args, like, like)
+		query = query.Where(strings.Join(conditions, " OR "), args...)
 	}
 	var values []store.User
 	if err := query.Order("name ASC").Order("email ASC").Order("id ASC").Find(&values).Error; err != nil {
@@ -174,7 +206,8 @@ func (s *Service) listUsers(db *gorm.DB, keyword string, userIDs []string) ([]Us
 	}
 	result := make([]User, 0, len(values))
 	for _, value := range values {
-		result = append(result, newUser(value, online[value.ID]))
+		user := newUser(value, online[value.ID])
+		result = append(result, user)
 	}
 	return result, nil
 }

@@ -92,7 +92,8 @@ type ListUsersResult struct {
 }
 
 type ResolveUsersCommand struct {
-	UserIDs []string
+	AccountID string
+	UserIDs   []string
 }
 
 type ResolveUsersResult struct {

@@ -23,7 +23,7 @@ type XGUIFilledSearchBarButtonProps = XGUIFilledSearchBarBaseProps & {
 
 type XGUIFilledSearchBarInputProps = XGUIFilledSearchBarBaseProps & {
   autoFocus?: boolean
-  onCancel: () => void
+  onCancel?: () => void
   onChangeText: (value: string) => void
   onPress?: never
   onSubmitEditing?: (
@@ -84,14 +84,16 @@ export function XGUIFilledSearchBar(props: XGUIFilledSearchBarProps) {
             </Pressable>
           ) : null}
         </View>
-        <Pressable
-          accessibilityLabel="取消搜索"
-          accessibilityRole="button"
-          hitSlop={6}
-          onPress={props.onCancel}
-        >
-          <Text style={[styles.cancel, { color: colors.textPrimary }]}>取消</Text>
-        </Pressable>
+        {props.onCancel ? (
+          <Pressable
+            accessibilityLabel="取消搜索"
+            accessibilityRole="button"
+            hitSlop={6}
+            onPress={props.onCancel}
+          >
+            <Text style={[styles.cancel, { color: colors.textPrimary }]}>取消</Text>
+          </Pressable>
+        ) : null}
       </View>
     )
   }

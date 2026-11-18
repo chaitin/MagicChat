@@ -184,6 +184,21 @@ func (s *Service) SearchUsers(ctx context.Context, cmd SearchUsersCommand) (Sear
 	} else {
 		db = db.Where("phone = ?", query)
 	}
+	if s.organization != nil && s.settings != nil {
+		mode, err := s.settings.ContactDirectoryMode(ctx)
+		if err != nil {
+			return SearchUsersResult{}, internalError(err)
+		}
+		if mode == DirectoryModeOrganization {
+			ids, err := s.organization.VisibleUserIDs(ctx, cmd.AccountID)
+			if err != nil {
+				return SearchUsersResult{}, internalError(err)
+			}
+			if ids != nil {
+				db = db.Where("id IN ?", ids)
+			}
+		}
+	}
 	if err := db.Limit(10).Find(&values).Error; err != nil {
 		return SearchUsersResult{}, internalError(err)
 	}

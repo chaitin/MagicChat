@@ -24,15 +24,23 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
+import {
+  buildOrganizationMemberships,
+  formatOrganizationMembership,
+} from "../../../../../shared/organization-memberships"
 import type {
   DesktopClientAppCredentials,
   DesktopContactApp,
   DesktopContactDirectory,
   DesktopContactGroup,
   DesktopContactUser,
+  DesktopOrganizationSnapshot,
+  DesktopOrganizationAssignment,
+  DesktopOrganizationReporting,
   LocalSearchResult,
 } from "../../../shared/account-data"
 import { ClientAppDialog } from "./client-app-dialog"
+import { OrganizationDirectory } from "./organization-directory"
 import {
   CONTACT_ITEM_HEIGHT,
   CONTACT_ROW_HEIGHT,
@@ -75,11 +83,21 @@ export function ContactsPage({
 }) {
   const { showToast } = useAnimatedToast()
   const [directory, setDirectory] = useState<DesktopContactDirectory | null>(null)
+  const [organization, setOrganization] = useState<DesktopOrganizationSnapshot | null>(null)
+  const [organizationRevision, setOrganizationRevision] = useState(0)
+  const [organizationTreeVersion, setOrganizationTreeVersion] = useState(0)
+  const [assignmentResult, setAssignmentResult] = useState<{
+    userID: string
+    assignments: DesktopOrganizationAssignment[]
+    reporting: DesktopOrganizationReporting
+  } | null>(null)
   const activeTargetRef = useRef(targetId)
   activeTargetRef.current = targetId
   const [loading, setLoading] = useState(true)
+  const [memberKeyword, setMemberKeyword] = useState("")
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set())
   const viewportRef = useRef<HTMLDivElement>(null)
+  const knownUserIDsRef = useRef<string | null>(null)
   const [viewport, setViewport] = useState({ scrollTop: 0, height: 0 })
   const [selection, setSelection] = useState<Selection | null>(null)
   const [busyKey, setBusyKey] = useState("")
@@ -155,6 +173,17 @@ export function ContactsPage({
           const result = await window.desktop!.accountData.getContacts(targetId)
           if (!disposed && !dirty && activeTargetRef.current === targetId) {
             if (result.ok) {
+              const userIDs =
+                targetId +
+                ":" +
+                result.data.users
+                  .map((user) => user.id)
+                  .sort()
+                  .join(",")
+              if (knownUserIDsRef.current !== null && knownUserIDsRef.current !== userIDs) {
+                setOrganizationTreeVersion((value) => value + 1)
+              }
+              knownUserIDsRef.current = userIDs
               setDirectory(result.data)
               setSelection((current) =>
                 current &&
@@ -177,6 +206,8 @@ export function ContactsPage({
     }
     void read()
     const unsubscribe = window.desktop.accountData.onChanged((event) => {
+      if (event.targetId === targetId && event.domains.includes("organization"))
+        setOrganizationRevision((value) => value + 1)
       if (event.targetId === targetId && event.domains.includes("contacts")) void read()
     })
     return () => {
@@ -184,6 +215,68 @@ export function ContactsPage({
       unsubscribe()
     }
   }, [showToast, targetId])
+
+  useEffect(() => {
+    const desktop = window.desktop
+    if (!desktop || directory?.mode !== "organization") return
+    let active = true
+    const refreshOrganization = () => {
+      void desktop.accountData.refreshContacts(targetId).catch(() => undefined)
+      void desktop.accountData.getOrganization(targetId).then((result) => {
+        if (!active || !result.ok) return
+        setOrganizationTreeVersion((value) => value + 1)
+        setAssignmentResult(null)
+        setOrganization(result.data)
+      })
+    }
+    refreshOrganization()
+    const interval = window.setInterval(refreshOrganization, 15 * 60_000)
+    return () => {
+      active = false
+      window.clearInterval(interval)
+    }
+  }, [directory?.mode, targetId, organizationRevision])
+
+  useEffect(() => {
+    if (!window.desktop || selection?.type !== "user" || directory?.mode !== "organization") return
+    let active = true
+    void window.desktop.accountData
+      .getOrganizationAssignments({ targetId, userId: selection.id })
+      .then((result) => {
+        if (active && result.ok)
+          setAssignmentResult({
+            userID: selection.id,
+            assignments: result.data.assignments,
+            reporting: result.data.reporting,
+          })
+      })
+    return () => {
+      active = false
+    }
+  }, [directory?.mode, selection?.id, selection?.type, targetId, organization])
+
+  const visibleOrganization = directory?.mode === "organization" ? organization : null
+  const activeAssignments =
+    selection?.type === "user" && assignmentResult?.userID === selection.id
+      ? assignmentResult.assignments
+      : []
+  const primaryAssignment =
+    activeAssignments.find((item) => item.is_primary) ?? activeAssignments[0]
+  const organizationDetails =
+    primaryAssignment && visibleOrganization
+      ? {
+          memberships: buildOrganizationMemberships(visibleOrganization, activeAssignments),
+          title: primaryAssignment.title,
+          manager:
+            directory?.users.find(
+              (user) => user.id === assignmentResult?.reporting.direct_manager_user_id,
+            )?.name ?? "",
+          dottedManagers: (assignmentResult?.reporting.dotted_manager_user_ids ?? [])
+            .map((id) => directory?.users.find((user) => user.id === id)?.name ?? "")
+            .filter(Boolean)
+            .join("、"),
+        }
+      : undefined
 
   const sections = useMemo(() => {
     if (!directory) return []
@@ -199,7 +292,10 @@ export function ContactsPage({
     return [
       {
         key: "users",
-        label: directory.mode === "friends" ? "我的好友" : organizationName,
+        label:
+          directory.mode === "friends"
+            ? "我的好友"
+            : visibleOrganization?.units[0]?.name || organizationName,
         type: "user" as const,
         entries: users,
       },
@@ -238,7 +334,7 @@ export function ContactsPage({
         entries: groups.filter((item) => item.visibility === "public"),
       },
     ]
-  }, [directory, organizationName, userId])
+  }, [directory, organizationName, userId, visibleOrganization])
 
   function updateViewport() {
     const element = viewportRef.current
@@ -265,7 +361,7 @@ export function ContactsPage({
   const visibleRanges = visibleContactRanges(
     sections.map((section) => ({
       key: section.key,
-      count: section.entries.length,
+      count: visibleOrganization && section.key === "users" ? 0 : section.entries.length,
       expanded: expandedSections.has(section.key),
     })),
     viewport.scrollTop,
@@ -309,7 +405,8 @@ export function ContactsPage({
     <section className="grid min-w-0 flex-1 grid-cols-[19rem_minmax(0,1fr)] bg-card">
       <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-sidebar">
         <SidebarSearchHeader
-          searchLabel="搜索通讯录"
+          searchLabel="搜索成员"
+          memberSearch={{ value: memberKeyword, onChange: setMemberKeyword }}
           targetId={targetId}
           theme={resolvedTheme}
           mentionLabelResolver={mentionLabelResolver}
@@ -329,118 +426,170 @@ export function ContactsPage({
           onViewportScroll={updateViewport}
         >
           <nav className="flex min-h-full flex-col" aria-label="通讯录列表">
-            {loading ? (
-              <p className="p-4 text-center text-sm text-muted-foreground">正在加载通讯录…</p>
-            ) : sections.every((section) => section.entries.length === 0) ? (
-              <p className="p-4 text-center text-sm text-muted-foreground">暂无通讯录内容</p>
-            ) : (
-              <div className="flex flex-col gap-1 bg-xgui-background-0 py-1">
-                {sections.map((section) => {
-                  if (section.entries.length === 0) return null
-                  const expanded = expandedSections.has(section.key)
-                  const range = visibleRanges.get(section.key)
-                  return (
-                    <section
-                      key={section.key}
-                      aria-label={section.label}
-                      className="flex flex-col gap-1"
-                    >
-                      <div className="px-2">
-                        <button
-                          type="button"
-                          className="flex h-10 w-full items-center gap-1 rounded-md px-2 text-left text-sm text-foreground transition-colors hover:bg-foreground/5"
-                          aria-expanded={expanded}
-                          onClick={() =>
-                            setExpandedSections((current) => {
-                              const next = new Set(current)
-                              if (next.has(section.key)) next.delete(section.key)
-                              else next.add(section.key)
-                              return next
-                            })
-                          }
-                        >
-                          <HugeiconsIcon
-                            icon={ArrowRight01Icon}
-                            className={cn("size-3 transition-transform", expanded && "rotate-90")}
-                            aria-hidden
-                          />
-                          <span className="min-w-0 flex-1 truncate">{section.label}</span>
-                          <Badge variant="secondary" className="text-muted-foreground">
-                            {section.entries.length}
-                          </Badge>
-                        </button>
-                      </div>
-                      {expanded && (
-                        <ItemGroup
-                          className="relative bg-xgui-background-1 px-2 py-1 has-data-[size=sm]:gap-1"
-                          style={{ height: section.entries.length * CONTACT_ROW_HEIGHT + 4 }}
-                        >
-                          {section.entries
-                            .slice(range?.start ?? 0, range?.end ?? 0)
-                            .map((entry, offset) => {
-                              const selected =
-                                selection?.type === section.type && selection.id === entry.id
-                              return (
-                                <Item
-                                  key={`${section.type}:${entry.id}`}
-                                  asChild
-                                  variant="default"
-                                  size="sm"
-                                  className={cn(
-                                    "absolute right-2 left-2 w-auto flex-nowrap border-transparent text-left hover:bg-foreground/5 hover:text-foreground",
-                                    selected &&
-                                      "bg-xgui-brand-1 text-sidebar-accent-foreground hover:bg-xgui-brand-1 hover:text-sidebar-accent-foreground",
-                                  )}
-                                  style={{
-                                    top: 4 + ((range?.start ?? 0) + offset) * CONTACT_ROW_HEIGHT,
-                                    height: CONTACT_ITEM_HEIGHT,
-                                  }}
-                                >
-                                  <button
-                                    type="button"
-                                    aria-current={selected ? "page" : undefined}
-                                    onClick={() =>
-                                      setSelection({ type: section.type, id: entry.id })
-                                    }
-                                  >
-                                    <Avatar className="size-10! rounded-sm after:hidden">
-                                      <EntityAvatar
-                                        key={`${entry.id}:${avatarRevision}`}
-                                        targetId={targetId}
-                                        type={entry.avatarType}
-                                        id={entry.avatarId}
-                                        theme={resolvedTheme}
-                                        label={entry.name}
-                                      />
-                                      {"online" in entry && (
-                                        <AvatarBadge
-                                          className={cn(
-                                            "size-2.5!",
-                                            entry.online ? "bg-xgui-brand" : "bg-muted-foreground",
-                                          )}
-                                          aria-label={entry.online ? "在线" : "离线"}
-                                        />
-                                      )}
-                                    </Avatar>
-                                    <ItemContent className="w-0 min-w-0">
-                                      <span className="block truncate text-sm leading-snug font-medium">
-                                        {entry.name}
-                                      </span>
-                                      <span className="block truncate text-xs text-muted-foreground">
-                                        {entrySummary(entry)}
-                                      </span>
-                                    </ItemContent>
-                                  </button>
-                                </Item>
-                              )
-                            })}
-                        </ItemGroup>
-                      )}
-                    </section>
-                  )
-                })}
-              </div>
+            {memberKeyword.trim() && (
+              <OrganizationDirectory
+                snapshot={visibleOrganization ?? { units: [], departments: [] }}
+                contacts={directory?.users ?? []}
+                targetId={targetId}
+                theme={resolvedTheme}
+                revision={organizationTreeVersion}
+                keyword={memberKeyword}
+                selectedUserId={selection?.type === "user" ? selection.id : undefined}
+                onSelect={(user) => {
+                  setDetailProfile({ targetId, entity: user })
+                  setSelection({ type: "user", id: user.id })
+                }}
+              />
             )}
+            <div hidden={Boolean(memberKeyword.trim())}>
+              {loading ? (
+                <p className="p-4 text-center text-sm text-muted-foreground">正在加载通讯录…</p>
+              ) : sections.every((section) => section.entries.length === 0) &&
+                !visibleOrganization?.units.length ? (
+                <p className="p-4 text-center text-sm text-muted-foreground">暂无通讯录内容</p>
+              ) : (
+                <div className="flex flex-col gap-1 bg-xgui-background-0 py-1">
+                  {sections.map((section) => {
+                    if (
+                      section.entries.length === 0 &&
+                      !(visibleOrganization && section.key === "users")
+                    )
+                      return null
+                    const expanded = expandedSections.has(section.key)
+                    const range = visibleRanges.get(section.key)
+                    return (
+                      <section
+                        key={section.key}
+                        aria-label={section.label}
+                        className="flex flex-col gap-1"
+                      >
+                        <div className="px-2">
+                          <button
+                            type="button"
+                            className="flex h-10 w-full items-center gap-1 rounded-md px-2 text-left text-sm text-foreground transition-colors hover:bg-foreground/5"
+                            aria-expanded={expanded}
+                            onClick={() =>
+                              setExpandedSections((current) => {
+                                const next = new Set(current)
+                                if (next.has(section.key)) next.delete(section.key)
+                                else next.add(section.key)
+                                return next
+                              })
+                            }
+                          >
+                            <HugeiconsIcon
+                              icon={ArrowRight01Icon}
+                              className={cn("size-3 transition-transform", expanded && "rotate-90")}
+                              aria-hidden
+                            />
+                            <span className="min-w-0 flex-1 truncate">{section.label}</span>
+                            {visibleOrganization && section.key === "users" ? (
+                              typeof visibleOrganization.units[0]?.member_count === "number" && (
+                                <Badge
+                                  variant="secondary"
+                                  className="text-muted-foreground"
+                                  title="含下级，按可见员工去重"
+                                >
+                                  {visibleOrganization.units[0].member_count}
+                                </Badge>
+                              )
+                            ) : (
+                              <Badge variant="secondary" className="text-muted-foreground">
+                                {section.entries.length}
+                              </Badge>
+                            )}
+                          </button>
+                        </div>
+                        {expanded && visibleOrganization && section.key === "users" && (
+                          <OrganizationDirectory
+                            key={targetId}
+                            snapshot={visibleOrganization}
+                            contacts={directory?.users ?? []}
+                            targetId={targetId}
+                            theme={resolvedTheme}
+                            revision={organizationTreeVersion}
+                            rootUnitId={visibleOrganization.units[0]?.id}
+                            selectedUserId={selection?.type === "user" ? selection.id : undefined}
+                            onSelect={(user) => {
+                              setDetailProfile({ targetId, entity: user })
+                              setSelection({ type: "user", id: user.id })
+                            }}
+                          />
+                        )}
+                        {expanded && !(visibleOrganization && section.key === "users") && (
+                          <ItemGroup
+                            className="relative bg-xgui-background-1 px-2 py-1 has-data-[size=sm]:gap-1"
+                            style={{ height: section.entries.length * CONTACT_ROW_HEIGHT + 4 }}
+                          >
+                            {section.entries
+                              .slice(range?.start ?? 0, range?.end ?? 0)
+                              .map((entry, offset) => {
+                                const selected =
+                                  selection?.type === section.type && selection.id === entry.id
+                                return (
+                                  <Item
+                                    key={`${section.type}:${entry.id}`}
+                                    asChild
+                                    variant="default"
+                                    size="sm"
+                                    className={cn(
+                                      "absolute right-2 left-2 w-auto flex-nowrap border-transparent text-left hover:bg-foreground/5 hover:text-foreground",
+                                      selected &&
+                                        "bg-xgui-brand-1 text-sidebar-accent-foreground hover:bg-xgui-brand-1 hover:text-sidebar-accent-foreground",
+                                    )}
+                                    style={{
+                                      top: 4 + ((range?.start ?? 0) + offset) * CONTACT_ROW_HEIGHT,
+                                      height: CONTACT_ITEM_HEIGHT,
+                                    }}
+                                  >
+                                    <button
+                                      type="button"
+                                      aria-current={selected ? "page" : undefined}
+                                      onClick={() =>
+                                        setSelection({ type: section.type, id: entry.id })
+                                      }
+                                    >
+                                      <Avatar className="size-10! rounded-sm after:hidden">
+                                        <EntityAvatar
+                                          key={`${entry.id}:${avatarRevision}`}
+                                          targetId={targetId}
+                                          type={entry.avatarType}
+                                          id={entry.avatarId}
+                                          theme={resolvedTheme}
+                                          label={entry.name}
+                                        />
+                                        {"online" in entry && (
+                                          <AvatarBadge
+                                            className={cn(
+                                              "size-2.5!",
+                                              entry.online
+                                                ? "bg-xgui-brand"
+                                                : "bg-muted-foreground",
+                                            )}
+                                            aria-label={entry.online ? "在线" : "离线"}
+                                          />
+                                        )}
+                                      </Avatar>
+                                      <ItemContent className="w-0 min-w-0">
+                                        <span className="block truncate text-sm leading-snug font-medium">
+                                          {entry.name}
+                                        </span>
+                                        <span className="block truncate text-xs text-muted-foreground">
+                                          {entrySummary(entry)}
+                                        </span>
+                                      </ItemContent>
+                                    </button>
+                                  </Item>
+                                )
+                              })}
+                          </ItemGroup>
+                        )}
+                      </section>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           </nav>
         </ScrollArea>
       </aside>
@@ -448,8 +597,9 @@ export function ContactsPage({
       <div className="min-w-0 overflow-y-auto bg-card px-6">
         {active ? (
           <ContactDetails
-            key={`${targetId}:${selection!.type}:${active.id}:${avatarRevision}`}
+            key={`${targetId}:${selection!.type}:${selection!.type === "user" ? "profile" : active.id}:${avatarRevision}`}
             entity={active}
+            organizationDetails={organizationDetails}
             targetId={targetId}
             userId={userId}
             theme={resolvedTheme}
@@ -563,6 +713,7 @@ export function ContactsPage({
 
 function ContactDetails({
   entity,
+  organizationDetails,
   targetId,
   userId,
   theme,
@@ -574,6 +725,12 @@ function ContactDetails({
   onAddFriend,
 }: {
   entity: DesktopContactUser | DesktopContactApp | DesktopContactGroup
+  organizationDetails?: {
+    memberships: ReturnType<typeof buildOrganizationMemberships>
+    title: string
+    manager: string
+    dottedManagers: string
+  }
   targetId: string
   userId: string
   theme: "light" | "dark"
@@ -623,6 +780,22 @@ function ContactDetails({
             <Detail label="昵称" value={(entity as DesktopContactUser).nickname || "未设置"} />
             <Detail label="邮箱" value={(entity as DesktopContactUser).email || "未设置"} />
             <Detail label="电话" value={(entity as DesktopContactUser).phone || "未设置"} />
+            {organizationDetails && (
+              <>
+                {organizationDetails.memberships.map((membership, index) => (
+                  <Detail
+                    key={membership.departmentID}
+                    label={index === 0 ? "组织" : ""}
+                    value={formatOrganizationMembership(membership)}
+                  />
+                ))}
+                <Detail label="职务" value={organizationDetails.title || "未设置"} />
+                <Detail label="直属上级" value={organizationDetails.manager || "未设置"} />
+                {organizationDetails.dottedManagers && (
+                  <Detail label="虚线上级" value={organizationDetails.dottedManagers} />
+                )}
+              </>
+            )}
             <Detail label="状态" value={(entity as DesktopContactUser).online ? "在线" : "离线"} />
           </>
         ) : isGroup ? (

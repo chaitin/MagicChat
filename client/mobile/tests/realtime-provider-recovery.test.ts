@@ -32,6 +32,8 @@ function fixture(options: { webOrigin?: string } = {}) {
   const entityEvents: { event: string; payload: unknown }[] = []
   const forgottenEntities: string[] = []
   const groupRefreshes: string[] = []
+  const contactRefreshes: unknown[] = []
+  const organizationRefreshes: unknown[] = []
   const startupPhases: string[] = []
   const queryClient = {}
   const markReauthRequired = () => undefined
@@ -85,6 +87,7 @@ function fixture(options: { webOrigin?: string } = {}) {
         return { auth: async () => ({ accountId, generation, token: "test-token" }), isCurrent }
       },
     } },
+    "@/data/contacts": { contactManager: { refresh: async (target: unknown) => { contactRefreshes.push(target) } } },
     "@/data/conversations": { conversationManager: { get: async (_target: unknown, id: string) =>
       id === "topic-1" ? { type: "topic", topic: { parentConversationType: "group", parentConversationId: "group-1" } } : { id, type: "group" } } },
     "@/data/database/database-service": { databaseService: {} },
@@ -100,6 +103,7 @@ function fixture(options: { webOrigin?: string } = {}) {
         return () => new Promise<void>((resolve, reject) => { synchronizations.push({ resolve, reject }) })
       },
       refreshClientDataOnForeground: async (_client: unknown, _target: unknown, options: { messagesAlreadySynchronizing: boolean }) => { foregroundRequests++; foregroundOptions.push(options) },
+      refreshOrganizationQueries: async (_client: unknown, target: unknown) => { organizationRefreshes.push(target) },
     },
     "@/diagnostics/mobile-startup": { traceMobileStartup: (phase: string) => startupPhases.push(phase) },
     "@/realtime/realtime-client": { RealtimeClient, buildRealtimeWebSocketUrl },
@@ -145,7 +149,7 @@ function fixture(options: { webOrigin?: string } = {}) {
     }
   }
   return {
-    render, runEffects, sockets, synchronizations, foregroundOptions, appliedEvents, entityEvents, forgottenEntities, groupRefreshes, startupPhases,
+    render, runEffects, sockets, synchronizations, foregroundOptions, appliedEvents, entityEvents, forgottenEntities, groupRefreshes, contactRefreshes, organizationRefreshes, startupPhases,
     synchronizationFactories: () => synchronizationFactories,
     foregroundRequests: () => foregroundRequests,
     switchAccount: (next: ReturnType<typeof account> | null) => { active = next },
@@ -212,12 +216,16 @@ test("健康连接从后台回前台只刷新数据，不重新显示连接标�
   f.sockets[0]!.open(); f.sockets[0]!.ready(); await flush()
   f.synchronizations[0]!.resolve(); await flush()
   assert.equal(f.render().isRecovering, false)
+  const previousRevision = f.render().organizationRevision
+  const previousOrganizationRefreshes = f.organizationRefreshes.length
   f.appState("background"); f.appState("active")
   assert.equal(f.render().isRecovering, false)
   await flush()
   assert.equal(f.render().isRecovering, false)
   assert.equal(f.foregroundRequests(), 1)
   assert.equal(f.foregroundOptions[0]?.messagesAlreadySynchronizing, false)
+  assert.equal(f.organizationRefreshes.length, previousOrganizationRefreshes + 1)
+  assert.equal(f.render().organizationRevision, previousRevision + 1)
   assert.equal(f.synchronizations.length, 1)
   assert.equal(f.sockets.length, 1)
 })
@@ -240,6 +248,21 @@ test("真实Socket断开后保持连接标题，新握手及其同步完成才�
   assert.equal(f.render().isRecovering, true)
   f.synchronizations[1]!.resolve(); await flush()
   assert.equal(f.render().isRecovering, false)
+  assert.equal(f.contactRefreshes.length, 2)
+  assert.equal(f.organizationRefreshes.length, 2)
+})
+
+test("组织变更事件通知页面刷新，并交给缓存同步器处理", async (t) => {
+  const f = fixture()
+  t.after(f.dispose)
+  f.render(); f.runEffects(); await flush()
+  f.sockets[0]!.open(); f.sockets[0]!.ready(); await flush()
+  f.synchronizations[0]!.resolve(); await flush()
+  const previousRevision = f.render().organizationRevision
+  f.sockets[0]!.event(realtimeEvents.organizationUpdated, {})
+  await flush()
+  assert.equal(f.render().organizationRevision, previousRevision + 1)
+  assert.equal(f.appliedEvents.at(-1)?.event, realtimeEvents.organizationUpdated)
 })
 
 test("握手后HTTP同步失败会重试同步，但不会额外重建Socket", async (t) => {
@@ -286,6 +309,7 @@ test("恢复尚未完成时回前台不启动第二轮消息同步，也不堵�
   assert.equal(f.foregroundRequests(), 1)
   assert.equal(f.foregroundOptions[0]?.messagesAlreadySynchronizing, true)
   assert.equal(f.synchronizations.length, 1)
+  assert.equal(f.organizationRefreshes.length, 1)
   assert.equal(f.render().isRecovering, true)
   f.synchronizations[0]!.resolve(); await flush()
   assert.equal(f.render().isRecovering, false)

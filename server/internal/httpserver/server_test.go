@@ -1174,6 +1174,34 @@ func TestClientWebSocketBroadcastsPresenceTransitions(t *testing.T) {
 	}
 }
 
+func TestOrganizationPolicyUpdateBroadcastsInvalidation(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+	if err := db.AutoMigrate(&store.OrganizationPolicy{}, &store.OrganizationAuditEvent{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&store.OrganizationPolicy{ID: 1, VisibilityScope: "all", UpdatedAt: time.Now().UTC()}).Error; err != nil {
+		t.Fatal(err)
+	}
+	user := insertTestUser(t, db, "organization-event@example.com", "Organization Event", store.UserStatusActive, time.Now().UTC())
+	conn := dialClientWebSocket(t, server, loginAsUser(t, server, user.Email))
+	defer conn.Close()
+	if ready := readRealtimeEvent(t, conn); ready.Event != realtime.EventSystemReady {
+		t.Fatalf("ready event = %s", ready.Event)
+	}
+	adminResp, adminBody := postJSON(t, server, "/api/admin/auth/login", map[string]any{"email": "admin", "password": "admin-secret"})
+	requireSuccess(t, adminBody)
+	resp, body := putJSON(t, server, "/api/admin/organization/policy", map[string]any{
+		"visibility_scope": "same_department",
+	}, requireAdminSessionCookie(t, adminResp))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("policy status = %d, body = %#v", resp.StatusCode, body)
+	}
+	if event := readRawRealtimeEvent(t, conn); event.Event != organizationUpdatedEvent {
+		t.Fatalf("organization event = %s", event.Event)
+	}
+}
+
 func TestAppWebSocketRequiresValidCredentials(t *testing.T) {
 	server, db := newTestRouter(t)
 	defer server.Close()

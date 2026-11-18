@@ -10,7 +10,8 @@ import IconUserCircle from "@tabler/icons-react-native/IconUserCircle"
 import IconUserPlus from "@tabler/icons-react-native/IconUserPlus"
 // eslint-disable-next-line import/no-unresolved
 import IconWorldMap from "@tabler/icons-react-native/IconWorldMap"
-import { Pressable, StyleSheet, View } from "react-native"
+import { Building2, ChevronRight } from "lucide-react-native"
+import { Pressable, StyleSheet, Text, View } from "react-native"
 
 import { ListItemContent } from "@/components/lists/list-item-content"
 import type { DirectoryCategory } from "@/features/contacts/contact-directory-model"
@@ -22,7 +23,8 @@ import {
 
 export type ContactDirectoryHomeEntry = {
   category: DirectoryCategory
-  count: number
+  count?: number
+  memberCount?: number
   label: string
 }
 
@@ -45,12 +47,12 @@ export function ContactDirectoryHomeHeader({
       />
       <View style={{ backgroundColor: colors.background2 }}>
         {entries.map((entry, index) => {
-          const Icon = getEntryIcon(entry.category)
+          const Icon = entry.category === "organization" ? Building2 : getEntryIcon(entry.category)
           const iconBackgroundColor = getEntryColor(entry.category, colors)
 
           return (
             <Pressable
-              accessibilityLabel={`打开${entry.label}`}
+              accessibilityLabel={`打开${entry.label}${entry.category === "organization" ? "组织架构" : ""}`}
               accessibilityRole="button"
               key={entry.category}
               onPress={() => onEntryPress(entry.category)}
@@ -79,10 +81,16 @@ export function ContactDirectoryHomeHeader({
               </View>
               <View style={styles.entryContent}>
                 <ListItemContent
-                  subtitle={`${entry.count} 个`}
+                  subtitle={entry.category === "organization" ? "组织架构" : `${entry.count} 个`}
                   title={entry.label}
                 />
               </View>
+              {entry.category === "organization" && typeof entry.memberCount === "number" ? (
+                <Text style={{ fontSize: 12, color: colors.textSecondary, flexShrink: 0 }}>
+                  ({entry.memberCount})
+                </Text>
+              ) : null}
+              <ChevronRight color={colors.textSecondary} size={18} />
               {index < entries.length - 1 ? (
                 <View
                   pointerEvents="none"

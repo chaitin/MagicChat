@@ -8,6 +8,7 @@ import type {
 
 export type RealtimeContextValue = RealtimeSnapshot & {
   isRecovering: boolean
+  organizationRevision: number
   refreshGroupProfile: (groupId: string) => Promise<void>
   activateConversation: (conversationId: string) => () => void
   waitUntilReady: (
@@ -33,6 +34,7 @@ export const DISCONNECTED_REALTIME_SNAPSHOT: RealtimeContextValue = {
   refreshGroupProfile: async () => undefined,
   ready: false,
   isRecovering: false,
+  organizationRevision: 0,
   status: "disconnected" satisfies RealtimeConnectionStatus,
   waitUntilReady: async () => {
     throw new Error("实时连接尚未初始化")

@@ -28,6 +28,7 @@ import (
 	messageapp "app/internal/application/message"
 	messagecontentapp "app/internal/application/messagecontent"
 	mobilepushapp "app/internal/application/mobilepush"
+	"app/internal/application/organization"
 	projectapp "app/internal/application/project"
 	reportapp "app/internal/application/report"
 	searchapp "app/internal/application/search"
@@ -71,6 +72,9 @@ type Server struct {
 	clientFiles         *clientapi.FileAPI
 	contacts            *contactapp.Service
 	clientContacts      *clientapi.ContactAPI
+	organization        *organization.Service
+	clientOrganization  *clientapi.OrganizationAPI
+	adminOrganization   *adminapi.OrganizationAPI
 	conversations       *conversationapp.Service
 	clientConversations *clientapi.ConversationAPI
 	messages            *messageapp.Service
@@ -236,6 +240,7 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 	server.adminDashboard = adminapi.NewDashboardAPI(server.dashboard)
 	server.userManagement = usermanagement.NewService(usermanagement.Dependencies{
 		DB: db, Presence: server.realtime, AppConnections: server.appConnections, ProfileNotifications: server, NicknamePolicy: server.settings,
+		OrganizationChanged: server.publishOrganizationUpdated,
 	})
 	server.adminUsers = adminapi.NewUserAPI(server.userManagement)
 	server.identityProviders = identityprovider.NewService(identityprovider.Dependencies{DB: db})
@@ -245,11 +250,14 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 		InvalidateProfile: server.accounts.InvalidateProfile,
 	})
 	server.clientExternalAuth = clientapi.NewExternalAuthAPI(server.externalAuth, cfg.Server.ClientOrigin())
+	server.organization = organization.NewService(db)
 	server.contacts = contactapp.NewService(contactapp.Dependencies{
 		DB: db, Apps: cfg.Apps, UserPresence: server.realtime, AppPresence: server.appConnections,
-		Settings: server.settings, NicknamePolicy: server.settings, Notifications: server, FriendshipMessages: server,
+		Settings: server.settings, Organization: server.organization, NicknamePolicy: server.settings, Notifications: server, FriendshipMessages: server,
 	})
 	server.clientContacts = clientapi.NewContactAPI(server.contacts)
+	server.clientOrganization = clientapi.NewOrganizationAPI(server.organization)
+	server.adminOrganization = adminapi.NewOrganizationAPI(server.organization, server.publishOrganizationUpdated)
 	server.entitySync = entitysync.NewService(entitysync.Dependencies{
 		DB: db, UserPresence: server.realtime, AppPresence: server.appConnections,
 	})
@@ -335,6 +343,7 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 	server.clientReports.RegisterRoutes(client)
 	server.clientUserBlocks.RegisterRoutes(client)
 	server.clientContacts.RegisterRoutes(client)
+	server.clientOrganization.RegisterRoutes(client)
 	clientapi.NewEntitySyncAPI(server.entitySync).RegisterRoutes(client)
 	server.clientMessages.RegisterRoutes(client)
 	server.clientPush.RegisterRoutes(client)
@@ -349,6 +358,7 @@ func newRouter(db *gorm.DB, cfg config.Config, realtimeOptions realtime.Options,
 	server.adminDashboard.RegisterRoutes(admin)
 	server.adminApps.RegisterRoutes(admin)
 	server.adminUsers.RegisterRoutes(admin)
+	server.adminOrganization.RegisterRoutes(admin)
 	server.adminReports.RegisterRoutes(admin)
 	server.adminProviders.RegisterRoutes(admin)
 	if workerContext != nil {

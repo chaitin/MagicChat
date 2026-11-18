@@ -78,6 +78,7 @@ type UpdateEmailLoginCommand struct {
 
 type Notifications interface {
 	PublishContactDirectoryModeUpdated(context.Context, string)
+	PublishOrganizationUpdated(context.Context)
 	PublishUserNicknamePolicyUpdated(context.Context, bool, time.Time)
 }
 

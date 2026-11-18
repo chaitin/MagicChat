@@ -59,6 +59,12 @@ func TestMigrationDirectoryContainsExpectedMigrations(t *testing.T) {
 		"00044_add_app_message_send_limits.sql",
 		"00045_add_push_presence_and_preferences.sql",
 		"00046_add_client_entity_changes.sql",
+		"00047_add_organization_structure.sql",
+		"00048_move_reporting_to_members.sql",
+		"00049_split_directory_contact_visibility.sql",
+		"00050_move_job_title_to_members.sql",
+		"00051_replace_organization_profile_visibility.sql",
+		"00052_remove_organization_profile_visibility.sql",
 	}
 	if len(matches) != len(want) {
 		t.Fatalf("migration file count = %d, want %d: %v", len(matches), len(want), matches)

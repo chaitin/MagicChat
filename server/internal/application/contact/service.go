@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"app/internal/application/organization"
 	"app/internal/config"
 
 	"gorm.io/gorm"
@@ -16,6 +17,7 @@ type Dependencies struct {
 	UserPresence       UserPresencePort
 	AppPresence        AppPresencePort
 	Settings           DirectorySettings
+	Organization       *organization.Service
 	NicknamePolicy     UserNicknamePolicy
 	Notifications      FriendNotifications
 	FriendshipMessages FriendshipMessageRecorder
@@ -28,6 +30,7 @@ type Service struct {
 	userPresence       UserPresencePort
 	appPresence        AppPresencePort
 	settings           DirectorySettings
+	organization       *organization.Service
 	nicknamePolicy     UserNicknamePolicy
 	notifications      FriendNotifications
 	friendshipMessages FriendshipMessageRecorder
@@ -42,7 +45,7 @@ func NewService(deps Dependencies) *Service {
 	return &Service{
 		db: deps.DB, apps: deps.Apps,
 		userPresence: deps.UserPresence, appPresence: deps.AppPresence,
-		settings: deps.Settings, notifications: deps.Notifications,
+		settings: deps.Settings, organization: deps.Organization, notifications: deps.Notifications,
 		nicknamePolicy:     deps.NicknamePolicy,
 		friendshipMessages: deps.FriendshipMessages, now: now,
 	}

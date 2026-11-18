@@ -8,6 +8,7 @@ import (
 
 	contactapp "app/internal/application/contact"
 	conversationapp "app/internal/application/conversation"
+	"app/internal/application/organization"
 	"app/internal/store"
 
 	"github.com/google/uuid"
@@ -49,6 +50,7 @@ func NewService(deps Dependencies) *Service {
 		db: deps.DB, userPresence: deps.UserPresence, appPresence: deps.AppPresence,
 		contacts: contactapp.NewService(contactapp.Dependencies{
 			DB: deps.DB, UserPresence: deps.UserPresence, AppPresence: deps.AppPresence,
+			Organization: organization.NewService(deps.DB),
 		}),
 		conversations: conversationapp.NewService(conversationapp.Dependencies{DB: deps.DB}),
 	}
@@ -102,7 +104,7 @@ func (s *Service) resolve(ctx context.Context, accountID string, entities []Enti
 	for _, change := range changes {
 		versions[change.Type+":"+change.EntityID] = change.Revision
 	}
-	users, err := s.contacts.ResolveUsers(ctx, contactapp.ResolveUsersCommand{UserIDs: ids["user"]})
+	users, err := s.contacts.ResolveUsers(ctx, contactapp.ResolveUsersCommand{AccountID: accountID, UserIDs: ids["user"]})
 	if err != nil {
 		return Snapshot{}, err
 	}

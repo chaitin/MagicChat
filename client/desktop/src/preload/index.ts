@@ -198,6 +198,9 @@ const bridge: DesktopBridge = {
     resolveUserNames: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.resolveUserNames, input),
     resolveContact: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.resolveContact, input),
     getContacts: (targetId) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getContacts, targetId),
+    getOrganization: (targetId) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getOrganization, targetId),
+    getOrganizationMembers: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getOrganizationMembers, input),
+    getOrganizationAssignments: (input) => ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.getOrganizationAssignments, input),
     refreshContacts: (targetId) =>
       ipcRenderer.invoke(ACCOUNT_DATA_CHANNELS.refreshContacts, targetId),
     searchContactUsers: (input) =>

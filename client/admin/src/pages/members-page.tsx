@@ -21,7 +21,9 @@ import {
   useMemo,
   useState,
   type FormEvent,
+  type ReactNode,
 } from "react"
+import { createPortal } from "react-dom"
 import { toast } from "sonner"
 
 import {
@@ -95,10 +97,19 @@ import {
   type AdminUser,
   updateAdminUserStatus,
 } from "@/lib/admin-users"
+import { MemberOrganizationMemberships } from "@/components/member-organization-memberships"
+import { MemberJobTitleInput } from "@/components/member-job-title-input"
+import type {
+  OrganizationAssignmentInput,
+  OrganizationLeader,
+  OrganizationSnapshot,
+} from "@/lib/admin-organization"
 import { formatRelativeTimeDistance } from "@/lib/relative-time"
 import { cn } from "@/lib/utils"
 
-type Member = {
+export type Member = {
+  jobTitle: string
+  organization?: AdminUser["organization"]
   avatar: string
   email: string
   id: string
@@ -135,7 +146,7 @@ const pageSizeOptions = [50, 100, 200, 500] as const
 type PageSize = (typeof pageSizeOptions)[number]
 type MemberOnlineFilter = "all" | "online" | "offline"
 const memberOnlineFilterLabels: Record<MemberOnlineFilter, string> = {
-  all: "全部",
+  all: "全部状态",
   online: "在线",
   offline: "不在线",
 }
@@ -150,6 +161,9 @@ type PaginationItemModel =
     }
 
 const columnLabels: Record<string, string> = {
+  unitName: "默认单位",
+  departmentName: "默认部门",
+  jobTitle: "职务",
   email: "邮箱",
   joinedAt: "加入时间",
   name: "名称",
@@ -217,14 +231,26 @@ export function getMemberActionConfirmation(
 }
 
 export function getColumns({
+  organizationLeaders,
   onResetPassword,
   onStatusChange,
+  onOpenMember,
   updatingMemberId,
 }: {
+  onOpenMember?: (member: Member) => void
   onResetPassword: (member: Member) => void
   onStatusChange: (member: Member, status: Member["status"]) => void
   updatingMemberId: string | null
+  organizationLeaders?: OrganizationLeader[]
 }): ColumnDef<Member>[] {
+  const leaderLabels = new Map(
+    organizationLeaders?.map((leader) => [
+      leader.user_id,
+      leader.is_primary && organizationLeaders.length > 1
+        ? "主负责人"
+        : "负责人",
+    ])
+  )
   return [
     {
       id: "select",
@@ -254,8 +280,35 @@ export function getColumns({
     {
       accessorKey: "name",
       header: "名称",
-      cell: ({ row }) => <MemberIdentity member={row.original} />,
+      cell: ({ row }) => (
+        <MemberIdentity
+          member={row.original}
+          leaderLabel={leaderLabels.get(row.original.id)}
+        />
+      ),
     },
+    ...(
+      [
+        ["unitName", "默认单位", "unitName"],
+        ["departmentName", "默认部门", "departmentName"],
+        ["jobTitle", "职务", "title"],
+      ] as const
+    ).map(
+      ([id, header, field]): ColumnDef<Member> => ({
+        id,
+        header,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <MemberOptionalText
+            value={
+              field === "title"
+                ? row.original.jobTitle
+                : (row.original.organization?.[field] ?? "")
+            }
+          />
+        ),
+      })
+    ),
     {
       accessorKey: "nickname",
       header: "昵称",
@@ -342,6 +395,7 @@ export function getColumns({
           <MemberActions
             isUpdating={updatingMemberId === row.original.id}
             member={row.original}
+            onEdit={onOpenMember}
             onResetPassword={onResetPassword}
             onStatusChange={onStatusChange}
           />
@@ -351,11 +405,38 @@ export function getColumns({
   ]
 }
 
-export default function MembersPage() {
+export default function MembersPage({
+  organization,
+  organizationLeaders,
+  defaultDepartmentID,
+  departmentIds,
+  organizationSearchActive = false,
+  scopeKey = "all",
+  reloadKey = 0,
+  onOpenMember,
+  onMembersChanged,
+  toolbarActions,
+  toolbarFilters,
+  toolbarContainer,
+}: {
+  organization?: OrganizationSnapshot | null
+  organizationLeaders?: OrganizationLeader[]
+  defaultDepartmentID?: string
+  departmentIds?: string[]
+  organizationSearchActive?: boolean
+  scopeKey?: string
+  reloadKey?: number
+  onOpenMember?: (member: Member) => void
+  onMembersChanged?: () => void
+  toolbarActions?: ReactNode
+  toolbarFilters?: ReactNode
+  toolbarContainer?: HTMLElement | null
+}) {
   const resetPasswordEmailId = useId()
   const resetPasswordValueId = useId()
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [isLoadingMembers, setIsLoadingMembers] = useState(true)
+  const [membersLoadFailed, setMembersLoadFailed] = useState(false)
   const [keyword, setKeyword] = useState("")
   const [memberTotal, setMemberTotal] = useState(0)
   const [members, setMembers] = useState<Member[]>([])
@@ -390,6 +471,11 @@ export default function MembersPage() {
   const columns = useMemo(
     () =>
       getColumns({
+        organizationLeaders:
+          keyword.trim() && !organizationSearchActive
+            ? undefined
+            : organizationLeaders,
+        onOpenMember,
         onResetPassword: handleRequestResetMemberPassword,
         onStatusChange: handleRequestMemberStatusChange,
         updatingMemberId,
@@ -398,6 +484,10 @@ export default function MembersPage() {
       handleRequestMemberStatusChange,
       handleRequestResetMemberPassword,
       updatingMemberId,
+      onOpenMember,
+      organizationLeaders,
+      keyword,
+      organizationSearchActive,
     ]
   )
   const serverPageCount = Math.max(
@@ -431,14 +521,31 @@ export default function MembersPage() {
   const visiblePaginationItems = getVisiblePaginationItems(page, pageCount)
 
   useEffect(() => {
+    setPagination((current) => ({ ...current, pageIndex: 0 }))
+    setRowSelection({})
+  }, [scopeKey])
+
+  useEffect(() => {
     let ignore = false
     const sortingParams = getAdminUsersSorting(sorting)
 
     async function loadMembers() {
       setIsLoadingMembers(true)
+      setMembersLoadFailed(false)
 
       try {
+        if (organizationSearchActive && departmentIds?.length === 0) {
+          setMemberTotal(0)
+          setMembers([])
+          setRowSelection({})
+          return
+        }
         const result = await listAdminUsers({
+          includeOrganization: true,
+          departmentIds:
+            keyword.trim() && !organizationSearchActive
+              ? undefined
+              : departmentIds,
           keyword,
           ...(onlineFilter === "all"
             ? {}
@@ -460,6 +567,7 @@ export default function MembersPage() {
           return
         }
 
+        setMembersLoadFailed(true)
         setMemberTotal(0)
         setMembers([])
         toast.error(
@@ -480,6 +588,9 @@ export default function MembersPage() {
       ignore = true
     }
   }, [
+    departmentIds,
+    organizationSearchActive,
+    reloadKey,
     keyword,
     membersReloadKey,
     onlineFilter,
@@ -539,6 +650,7 @@ export default function MembersPage() {
       pageIndex: 0,
     }))
     setMembersReloadKey((currentKey) => currentKey + 1)
+    onMembersChanged?.()
   }
 
   async function handleMemberStatusChange(
@@ -556,7 +668,9 @@ export default function MembersPage() {
 
       setMembers((currentMembers) =>
         currentMembers.map((currentMember) =>
-          currentMember.id === updatedMember.id ? updatedMember : currentMember
+          currentMember.id === updatedMember.id
+            ? { ...updatedMember, organization: currentMember.organization }
+            : currentMember
         )
       )
       toast.success(status === "enabled" ? "成员已启用" : "成员已禁用")
@@ -603,7 +717,9 @@ export default function MembersPage() {
 
       setMembers((currentMembers) =>
         currentMembers.map((currentMember) =>
-          currentMember.id === updatedMember.id ? updatedMember : currentMember
+          currentMember.id === updatedMember.id
+            ? { ...updatedMember, organization: currentMember.organization }
+            : currentMember
         )
       )
       setResetPasswordDialog(
@@ -619,149 +735,162 @@ export default function MembersPage() {
     }
   }
 
-  return (
-    <div className="flex min-w-0 flex-1 flex-col gap-4 p-4 pt-0">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 gap-2 sm:max-w-lg sm:flex-1">
-          <Select onValueChange={handleOnlineFilterChange} value={onlineFilter}>
-            <SelectTrigger aria-label="在线状态筛选" className="w-28 shrink-0">
-              <SelectValue>
-                {memberOnlineFilterLabels[onlineFilter]}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              <SelectGroup>
-                <SelectItem value="all">全部</SelectItem>
-                <SelectItem value="online">在线</SelectItem>
-                <SelectItem value="offline">不在线</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <Input
-            className="min-w-0 flex-1"
-            onChange={(event) => {
-              setKeyword(event.target.value)
-              setPagination((currentPagination) => ({
-                ...currentPagination,
-                pageIndex: 0,
-              }))
-            }}
-            placeholder="搜索用户"
-            value={keyword}
-          />
-        </div>
-        <div className="flex items-center justify-end gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="outline" />}>
-              选择列
-              <ChevronDownIcon data-icon="inline-end" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-40">
-              <DropdownMenuGroup>
-                {table
-                  .getAllColumns()
-                  .filter((column) => column.getCanHide())
-                  .map((column) => (
-                    <DropdownMenuCheckboxItem
-                      checked={column.getIsVisible()}
-                      key={column.id}
-                      onCheckedChange={(checked) =>
-                        column.toggleVisibility(checked)
-                      }
-                    >
-                      {getColumnLabel(column.id)}
-                    </DropdownMenuCheckboxItem>
-                  ))}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <AddMemberDialog onMemberCreated={handleMemberCreated} />
-
-          <Dialog
-            onOpenChange={handleResetPasswordOpenChange}
-            open={resetPasswordDialog.open}
-          >
-            <DialogContent showCloseButton={!resetPasswordDialog.isPending}>
-              <DialogHeader>
-                <DialogTitle>重置密码</DialogTitle>
-              </DialogHeader>
-              <div className="flex flex-col gap-6">
-                <FieldGroup className="gap-4">
-                  <Field>
-                    <FieldLabel htmlFor={resetPasswordEmailId}>邮箱</FieldLabel>
-                    <Input
-                      id={resetPasswordEmailId}
-                      readOnly
-                      value={resetPasswordDialog.member?.email ?? ""}
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor={resetPasswordValueId}>
-                      新密码
-                    </FieldLabel>
-                    <InputGroup>
-                      <InputGroupInput
-                        id={resetPasswordValueId}
-                        placeholder={
-                          resetPasswordDialog.isPending
-                            ? "正在重置密码"
-                            : undefined
-                        }
-                        readOnly
-                        value={resetPasswordDialog.newPassword}
-                      />
-                      {resetPasswordDialog.isPending && (
-                        <InputGroupAddon align="inline-end">
-                          <Spinner />
-                        </InputGroupAddon>
-                      )}
-                    </InputGroup>
-                  </Field>
-                </FieldGroup>
-                <DialogFooter>
-                  <Button
-                    disabled={resetPasswordDialog.isPending}
-                    onClick={() => handleResetPasswordOpenChange(false)}
-                    type="button"
-                  >
-                    {resetPasswordDialog.isPending && (
-                      <Spinner data-icon="inline-start" />
-                    )}
-                    {resetPasswordDialog.isPending ? "重置中" : "关闭"}
-                  </Button>
-                </DialogFooter>
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          <AlertDialog
-            onOpenChange={handleMemberActionConfirmationOpenChange}
-            open={memberActionConfirmation !== null}
-          >
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>
-                  {memberActionConfirmationCopy?.title}
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  {memberActionConfirmationCopy?.description}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>取消</AlertDialogCancel>
-                <AlertDialogAction onClick={handleConfirmMemberAction}>
-                  {memberActionConfirmationCopy?.confirmLabel}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
+  const toolbar = (
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
+      <div className="flex min-w-0 flex-[1_1_30rem] flex-wrap gap-2">
+        <Select onValueChange={handleOnlineFilterChange} value={onlineFilter}>
+          <SelectTrigger aria-label="在线状态筛选" className="w-28 shrink-0">
+            <SelectValue>{memberOnlineFilterLabels[onlineFilter]}</SelectValue>
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false}>
+            <SelectGroup>
+              <SelectItem value="all">全部状态</SelectItem>
+              <SelectItem value="online">在线</SelectItem>
+              <SelectItem value="offline">不在线</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        {toolbarFilters}
+        <Input
+          className="w-44 shrink-0"
+          onChange={(event) => {
+            setKeyword(event.target.value)
+            setRowSelection({})
+            setPagination((currentPagination) => ({
+              ...currentPagination,
+              pageIndex: 0,
+            }))
+          }}
+          aria-label="全局搜索成员"
+          placeholder="全局搜索成员"
+          value={keyword}
+        />
       </div>
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button variant="outline" />}>
+            选择列
+            <ChevronDownIcon data-icon="inline-end" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-40">
+            <DropdownMenuGroup>
+              {table
+                .getAllColumns()
+                .filter((column) => column.getCanHide())
+                .map((column) => (
+                  <DropdownMenuCheckboxItem
+                    checked={column.getIsVisible()}
+                    key={column.id}
+                    onCheckedChange={(checked) =>
+                      column.toggleVisibility(checked)
+                    }
+                  >
+                    {getColumnLabel(column.id)}
+                  </DropdownMenuCheckboxItem>
+                ))}
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {toolbarActions}
 
-      <div className={getMembersTableContainerClassName()}>
+        <AddMemberDialog
+          organization={organization}
+          defaultDepartmentID={defaultDepartmentID}
+          onMemberCreated={handleMemberCreated}
+        />
+
+        <Dialog
+          onOpenChange={handleResetPasswordOpenChange}
+          open={resetPasswordDialog.open}
+        >
+          <DialogContent showCloseButton={!resetPasswordDialog.isPending}>
+            <DialogHeader>
+              <DialogTitle>重置密码</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-6">
+              <FieldGroup className="gap-4">
+                <Field>
+                  <FieldLabel htmlFor={resetPasswordEmailId}>邮箱</FieldLabel>
+                  <Input
+                    id={resetPasswordEmailId}
+                    readOnly
+                    value={resetPasswordDialog.member?.email ?? ""}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor={resetPasswordValueId}>新密码</FieldLabel>
+                  <InputGroup>
+                    <InputGroupInput
+                      id={resetPasswordValueId}
+                      placeholder={
+                        resetPasswordDialog.isPending
+                          ? "正在重置密码"
+                          : undefined
+                      }
+                      readOnly
+                      value={resetPasswordDialog.newPassword}
+                    />
+                    {resetPasswordDialog.isPending && (
+                      <InputGroupAddon align="inline-end">
+                        <Spinner />
+                      </InputGroupAddon>
+                    )}
+                  </InputGroup>
+                </Field>
+              </FieldGroup>
+              <DialogFooter>
+                <Button
+                  disabled={resetPasswordDialog.isPending}
+                  onClick={() => handleResetPasswordOpenChange(false)}
+                  type="button"
+                >
+                  {resetPasswordDialog.isPending && (
+                    <Spinner data-icon="inline-start" />
+                  )}
+                  {resetPasswordDialog.isPending ? "重置中" : "关闭"}
+                </Button>
+              </DialogFooter>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <AlertDialog
+          onOpenChange={handleMemberActionConfirmationOpenChange}
+          open={memberActionConfirmation !== null}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {memberActionConfirmationCopy?.title}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {memberActionConfirmationCopy?.description}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>取消</AlertDialogCancel>
+              <AlertDialogAction onClick={handleConfirmMemberAction}>
+                {memberActionConfirmationCopy?.confirmLabel}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
+      {toolbarContainer ? createPortal(toolbar, toolbarContainer) : toolbar}
+
+      <div
+        className={cn(
+          getMembersTableContainerClassName(),
+          "min-h-0 flex-1 overflow-auto overscroll-contain [&>[data-slot=table-container]]:overflow-visible"
+        )}
+      >
         <Table className={getMembersTableClassName()}>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_0_var(--border)]">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
@@ -818,56 +947,86 @@ export default function MembersPage() {
         </Table>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Select onValueChange={setPageSize} value={String(pagination.pageSize)}>
-          <SelectTrigger className="w-32" size="sm">
-            <SelectValue>{`每页 ${pagination.pageSize} 条`}</SelectValue>
-          </SelectTrigger>
-          <SelectContent alignItemWithTrigger={false}>
-            <SelectGroup>
-              {pageSizeOptions.map((option) => (
-                <SelectItem key={option} value={String(option)}>
-                  {`每页 ${option} 条`}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <span
+            className="text-sm text-muted-foreground tabular-nums"
+            role="status"
+          >
+            {isLoadingMembers
+              ? "加载中…"
+              : membersLoadFailed
+                ? "人数暂不可用"
+                : `共 ${memberTotal} 人`}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-3 sm:ml-auto">
+          <Select
+            onValueChange={setPageSize}
+            value={String(pagination.pageSize)}
+          >
+            <SelectTrigger className="w-32" size="sm">
+              <SelectValue>{`每页 ${pagination.pageSize} 条`}</SelectValue>
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectGroup>
+                {pageSizeOptions.map((option) => (
+                  <SelectItem key={option} value={String(option)}>
+                    {`每页 ${option} 条`}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
 
-        <Pagination className="mx-0 w-auto justify-end">
-          <PaginationContent>
-            {visiblePaginationItems.map((item) =>
-              item.type === "ellipsis" ? (
-                <PaginationItem key={item.key}>
-                  <PaginationEllipsis />
-                </PaginationItem>
-              ) : (
-                <PaginationItem key={item.page}>
-                  <PaginationLink
-                    href="#"
-                    isActive={item.page === page}
-                    onClick={(event) => {
-                      event.preventDefault()
-                      table.setPageIndex(item.page - 1)
-                    }}
-                  >
-                    {item.page}
-                  </PaginationLink>
-                </PaginationItem>
-              )
-            )}
-          </PaginationContent>
-        </Pagination>
+          <Pagination className="mx-0 w-auto justify-end">
+            <PaginationContent>
+              {visiblePaginationItems.map((item) =>
+                item.type === "ellipsis" ? (
+                  <PaginationItem key={item.key}>
+                    <PaginationEllipsis />
+                  </PaginationItem>
+                ) : (
+                  <PaginationItem key={item.page}>
+                    <PaginationLink
+                      href="#"
+                      isActive={item.page === page}
+                      onClick={(event) => {
+                        event.preventDefault()
+                        table.setPageIndex(item.page - 1)
+                      }}
+                    >
+                      {item.page}
+                    </PaginationLink>
+                  </PaginationItem>
+                )
+              )}
+            </PaginationContent>
+          </Pagination>
+        </div>
       </div>
     </div>
   )
 }
 
-function AddMemberDialog({ onMemberCreated }: { onMemberCreated: () => void }) {
+function AddMemberDialog({
+  onMemberCreated,
+  organization,
+  defaultDepartmentID,
+}: {
+  onMemberCreated: () => void
+  organization?: OrganizationSnapshot | null
+  defaultDepartmentID?: string
+}) {
   const addMemberEmailId = useId()
   const addMemberNameId = useId()
   const addMemberPasswordId = useId()
   const addMemberPhoneId = useId()
+  const addMemberJobTitleId = useId()
+  const [addMemberJobTitle, setAddMemberJobTitle] = useState("")
+  const [addMemberAssignments, setAddMemberAssignments] = useState<
+    OrganizationAssignmentInput[]
+  >([])
   const [addMemberEmail, setAddMemberEmail] = useState("")
   const [addMemberInitialPassword, setAddMemberInitialPassword] = useState<
     string | null
@@ -877,12 +1036,58 @@ function AddMemberDialog({ onMemberCreated }: { onMemberCreated: () => void }) {
   const [addMemberPhone, setAddMemberPhone] = useState("")
   const [isAddingMember, setIsAddingMember] = useState(false)
   const isAddMemberComplete = addMemberInitialPassword !== null
+  const contextDepartment = organization?.departments.find(
+    (item) => item.id === defaultDepartmentID
+  )
+  const fixedDepartmentID =
+    contextDepartment && !contextDepartment.is_root
+      ? contextDepartment.id
+      : undefined
+  const fixedUnitID =
+    contextDepartment &&
+    organization?.units.some(
+      (unit) => unit.id === contextDepartment.unit_id && unit.kind !== "group"
+    )
+      ? contextDepartment.unit_id
+      : undefined
+  const memberOrganizationValid =
+    !organization ||
+    (addMemberAssignments.length > 0 &&
+      addMemberAssignments.filter((item) => item.is_primary).length === 1 &&
+      new Set(addMemberAssignments.map((item) => item.department_id)).size ===
+        addMemberAssignments.length &&
+      addMemberAssignments.every((item) =>
+        organization.departments.some(
+          (department) =>
+            department.id === item.department_id &&
+            organization.units.some(
+              (unit) => unit.id === department.unit_id && !unit.disabled_at
+            )
+        )
+      ))
 
   function resetAddMemberForm() {
     setAddMemberEmail("")
     setAddMemberInitialPassword(null)
     setAddMemberName("")
     setAddMemberPhone("")
+    setAddMemberJobTitle("")
+    const department =
+      organization?.departments.find(
+        (item) => item.id === defaultDepartmentID
+      ) ??
+      organization?.departments.find(
+        (item) =>
+          item.is_root &&
+          organization.units.some(
+            (unit) => unit.id === item.unit_id && unit.kind === "group"
+          )
+      )
+    setAddMemberAssignments(
+      department
+        ? [{ department_id: department.id, is_primary: true, sort_order: 0 }]
+        : []
+    )
   }
 
   function handleAddMemberOpenChange(open: boolean) {
@@ -895,6 +1100,7 @@ function AddMemberDialog({ onMemberCreated }: { onMemberCreated: () => void }) {
 
   async function handleAddMemberSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!memberOrganizationValid || organization === null) return
 
     setIsAddingMember(true)
 
@@ -903,6 +1109,8 @@ function AddMemberDialog({ onMemberCreated }: { onMemberCreated: () => void }) {
         email: addMemberEmail,
         name: addMemberName,
         phone: addMemberPhone,
+        jobTitle: addMemberJobTitle,
+        assignments: organization ? addMemberAssignments : undefined,
       })
 
       setAddMemberInitialPassword(created.initialPassword)
@@ -918,11 +1126,11 @@ function AddMemberDialog({ onMemberCreated }: { onMemberCreated: () => void }) {
 
   return (
     <Dialog onOpenChange={handleAddMemberOpenChange} open={addMemberOpen}>
-      <DialogTrigger render={<Button />}>
+      <DialogTrigger render={<Button disabled={organization === null} />}>
         <PlusIcon data-icon="inline-start" />
         添加成员
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>添加成员</DialogTitle>
         </DialogHeader>
@@ -964,6 +1172,26 @@ function AddMemberDialog({ onMemberCreated }: { onMemberCreated: () => void }) {
                 value={addMemberPhone}
               />
             </Field>
+            <Field>
+              <FieldLabel htmlFor={addMemberJobTitleId}>职务</FieldLabel>
+              <MemberJobTitleInput
+                id={addMemberJobTitleId}
+                disabled={isAddingMember}
+                readOnly={isAddMemberComplete}
+                value={addMemberJobTitle}
+                onChange={setAddMemberJobTitle}
+              />
+            </Field>
+            {organization && (
+              <MemberOrganizationMemberships
+                organization={organization}
+                value={addMemberAssignments}
+                fixedDepartmentID={fixedDepartmentID}
+                fixedUnitID={fixedUnitID}
+                onChange={setAddMemberAssignments}
+                disabled={isAddingMember || isAddMemberComplete}
+              />
+            )}
             {isAddMemberComplete && (
               <Field>
                 <FieldLabel htmlFor={addMemberPasswordId}>
@@ -986,7 +1214,14 @@ function AddMemberDialog({ onMemberCreated }: { onMemberCreated: () => void }) {
                 关闭
               </Button>
             ) : (
-              <Button disabled={isAddingMember} type="submit">
+              <Button
+                disabled={
+                  isAddingMember ||
+                  !memberOrganizationValid ||
+                  organization === null
+                }
+                type="submit"
+              >
                 {isAddingMember && <Spinner data-icon="inline-start" />}
                 提交
               </Button>
@@ -1001,11 +1236,13 @@ function AddMemberDialog({ onMemberCreated }: { onMemberCreated: () => void }) {
 function MemberActions({
   isUpdating,
   member,
+  onEdit,
   onResetPassword,
   onStatusChange,
 }: {
   isUpdating: boolean
   member: Member
+  onEdit?: (member: Member) => void
   onResetPassword: (member: Member) => void
   onStatusChange: (member: Member, status: Member["status"]) => void
 }) {
@@ -1025,6 +1262,14 @@ function MemberActions({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuGroup>
+          {onEdit && (
+            <DropdownMenuItem
+              disabled={isUpdating}
+              onClick={() => onEdit(member)}
+            >
+              编辑
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             disabled={isUpdating || member.status === "enabled"}
             onClick={() => onStatusChange(member, "enabled")}
@@ -1049,7 +1294,13 @@ function MemberActions({
   )
 }
 
-function MemberIdentity({ member }: { member: Member }) {
+function MemberIdentity({
+  member,
+  leaderLabel,
+}: {
+  member: Member
+  leaderLabel?: string
+}) {
   const displayName =
     member.name.trim() ||
     member.nickname.trim() ||
@@ -1064,10 +1315,13 @@ function MemberIdentity({ member }: { member: Member }) {
         ) : null}
         <AvatarFallback>{getMemberAvatarFallback(member)}</AvatarFallback>
       </Avatar>
-      <div className="min-w-0">
+      <div className="flex min-w-0 items-center gap-2">
         <div className="truncate font-medium text-foreground">
           {displayName}
         </div>
+        {leaderLabel && (
+          <Badge className="bg-primary/10 text-primary">{leaderLabel}</Badge>
+        )}
       </div>
     </div>
   )
@@ -1120,7 +1374,7 @@ export function getMemberColumnClassName(columnId: string) {
 }
 
 export function getMembersTableContainerClassName() {
-  return "overflow-hidden rounded-lg border bg-background"
+  return "overflow-x-auto rounded-lg border bg-background"
 }
 
 export function getMembersTableClassName() {
@@ -1181,6 +1435,8 @@ function isMemberOnlineFilter(
 
 function toMember(user: AdminUser): Member {
   return {
+    organization: user.organization,
+    jobTitle: user.jobTitle,
     avatar: user.avatar,
     email: user.email,
     id: user.id,

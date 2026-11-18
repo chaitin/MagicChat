@@ -114,6 +114,18 @@ export class ContactManager {
     return this.database.getContacts()
   }
 
+  async getOrganization() {
+    return this.client.get("/api/client/organization")
+  }
+
+  async getOrganizationMembers(departmentId: string, page: number) {
+    return this.client.get(`/api/client/organization/departments/${encodeURIComponent(departmentId)}/members?page=${page}&page_size=100`)
+  }
+
+  async getOrganizationAssignments(userId: string) {
+    return this.client.get(`/api/client/organization/users/${encodeURIComponent(userId)}/assignments`)
+  }
+
   // 通知等即时展示用的发送者名字，按本地通讯录现查。
   resolveDisplayName(type: string, entityId: string): string | undefined {
     return this.database.resolveContactName(type, entityId)

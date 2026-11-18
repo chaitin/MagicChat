@@ -88,6 +88,7 @@ describe("admin users", () => {
       total: 12,
       users: [
         {
+          jobTitle: "",
           createdAt: "2026-07-01T12:34:56Z",
           avatar: "/assets/avatars/builtin/01.webp",
           email: "alice@example.com",
@@ -182,6 +183,7 @@ describe("admin users", () => {
     expect(created).toEqual({
       initialPassword: "initial-secret",
       user: {
+        jobTitle: "",
         createdAt: "2026-07-01T12:34:56Z",
         avatar: "/assets/avatars/builtin/02.webp",
         email: "new@example.com",
@@ -313,6 +315,7 @@ describe("admin users", () => {
     const user = await updateAdminUserStatus("user-1", "active", fetcher)
 
     expect(user).toEqual({
+      jobTitle: "",
       createdAt: "2026-07-01T12:34:56Z",
       avatar: "/assets/avatars/builtin/01.webp",
       email: "alice@example.com",
@@ -398,6 +401,7 @@ describe("admin users", () => {
     expect(result).toEqual({
       newPassword: "new-secret",
       user: {
+        jobTitle: "",
         createdAt: "2026-07-01T12:34:56Z",
         avatar: "/assets/avatars/builtin/01.webp",
         email: "alice@example.com",

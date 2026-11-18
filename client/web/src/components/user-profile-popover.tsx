@@ -1,11 +1,29 @@
 import * as React from "react"
 import { SendNamecardButton } from "@/components/send-namecard-button"
+import {
+  buildOrganizationMemberships,
+  formatOrganizationMembership,
+} from "../../../shared/organization-memberships"
 import { useNavigate } from "react-router"
-import { Loader2Icon, Mail, Phone, UserPen, UserRound } from "lucide-react"
+import {
+  Loader2Icon,
+  Mail,
+  Phone,
+  UserPen,
+  UserRound,
+  UsersRound,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { formatContactPhone } from "@/lib/contact-format"
-import { useClientData } from "@/lib/client-data-context"
+import { useClientData, useOptionalClientData } from "@/lib/client-data-context"
+import {
+  getClientOrganization,
+  getClientOrganizationAssignments,
+  type ClientOrganizationAssignment,
+  type ClientOrganizationReporting,
+  type ClientOrganizationSnapshot,
+} from "@/lib/client-api/organization"
 import {
   type ClientProfileContextValue,
   useClientCurrentUserId,
@@ -183,12 +201,70 @@ function UserProfilePopoverContent({
   const [avatarPreviewOpen, setAvatarPreviewOpen] = React.useState(false)
   const [openingConversation, setOpeningConversation] = React.useState(false)
   const [friendRequestPending, setFriendRequestPending] = React.useState(false)
+  const clientData = useOptionalClientData()
+  const organizationMode = clientData?.contactDirectoryMode === "organization"
+  const profileID = profile?.id
+  const [organizationInfo, setOrganizationInfo] = React.useState<{
+    userID: string
+    snapshot: ClientOrganizationSnapshot
+    assignments: ClientOrganizationAssignment[]
+    reporting: ClientOrganizationReporting
+  } | null>(null)
+
+  React.useEffect(() => {
+    if (!open || !organizationMode || !profileID) return
+    let active = true
+    void Promise.all([
+      getClientOrganization(),
+      getClientOrganizationAssignments(profileID),
+    ])
+      .then(([snapshot, { assignments, reporting }]) => {
+        if (active)
+          setOrganizationInfo({
+            userID: profileID,
+            snapshot,
+            assignments,
+            reporting,
+          })
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [open, organizationMode, profileID])
 
   if (!profile) {
     return <>{children}</>
   }
 
   const currentProfile = profile
+  const activeOrganization =
+    organizationMode && organizationInfo?.userID === currentProfile.id
+      ? organizationInfo
+      : null
+  const primaryAssignment =
+    activeOrganization?.assignments.find((item) => item.is_primary) ??
+    activeOrganization?.assignments[0]
+  const memberships =
+    activeOrganization && primaryAssignment
+      ? buildOrganizationMemberships(
+          activeOrganization.snapshot,
+          activeOrganization.assignments
+        )
+      : []
+  const manager =
+    clientData?.contacts.find(
+      (contact) =>
+        contact.id === activeOrganization?.reporting.direct_manager_user_id
+    )?.name ?? ""
+  const dottedManagers =
+    activeOrganization?.reporting.dotted_manager_user_ids
+      .map(
+        (id) =>
+          clientData?.contacts.find((contact) => contact.id === id)?.name ?? ""
+      )
+      .filter(Boolean)
+      .join("、") ?? ""
   const displayName = getUserDisplayName(currentProfile)
   const currentRelationship = relationship
   const canStartConversation =
@@ -293,7 +369,7 @@ function UserProfilePopoverContent({
         </PopoverTrigger>
         <PopoverContent
           align="start"
-          className="w-72 max-w-[calc(100vw-2rem)] overflow-hidden"
+          className="w-96 max-w-[calc(100vw-2rem)] overflow-hidden"
           side="right"
           sideOffset={8}
         >
@@ -357,6 +433,43 @@ function UserProfilePopoverContent({
                     : ""
                 }
               />
+              {primaryAssignment && (
+                <>
+                  {memberships.map((membership, index) => (
+                    <UserProfileRow
+                      key={membership.departmentID}
+                      icon={
+                        <UsersRound className="size-4 text-muted-foreground" />
+                      }
+                      label={index === 0 ? "组织" : ""}
+                      value={formatOrganizationMembership(membership)}
+                    />
+                  ))}
+                  <UserProfileRow
+                    icon={
+                      <UserRound className="size-4 text-muted-foreground" />
+                    }
+                    label="职务"
+                    value={primaryAssignment.title}
+                  />
+                  <UserProfileRow
+                    icon={
+                      <UserRound className="size-4 text-muted-foreground" />
+                    }
+                    label="直属上级"
+                    value={manager}
+                  />
+                  {dottedManagers && (
+                    <UserProfileRow
+                      icon={
+                        <UserRound className="size-4 text-muted-foreground" />
+                      }
+                      label="虚线上级"
+                      value={dottedManagers}
+                    />
+                  )}
+                </>
+              )}
             </div>
 
             <div className="grid gap-2">
@@ -443,7 +556,7 @@ function UserProfileRow({
   return (
     <div className="flex min-w-0 items-start gap-3 border-b py-2 last:border-b-0">
       <span className="mt-0.5 shrink-0">{icon}</span>
-      <span className="w-12 shrink-0 text-muted-foreground">{label}</span>
+      <span className="w-16 shrink-0 whitespace-nowrap text-muted-foreground">{label}</span>
       <span
         className={cn(
           "min-w-0 flex-1 [overflow-wrap:anywhere]",

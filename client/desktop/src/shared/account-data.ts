@@ -62,6 +62,9 @@ export const ACCOUNT_DATA_CHANNELS = {
   sendConversationStatus: "desktop-next:v1:conversation-status-send",
   conversationPresenceChanged: "desktop-next:v1:conversation-presence-changed",
   getContacts: "desktop-next:v1:contacts-get",
+  getOrganization: "desktop-next:v1:organization-get",
+  getOrganizationMembers: "desktop-next:v1:organization-members-get",
+  getOrganizationAssignments: "desktop-next:v1:organization-assignments-get",
   refreshContacts: "desktop-next:v1:contacts-refresh",
   searchContactUsers: "desktop-next:v1:contacts-users-search",
   listFriendRequests: "desktop-next:v1:contacts-friend-requests-list",
@@ -84,7 +87,7 @@ export const ACCOUNT_DATA_CHANNELS = {
   changed: "desktop-next:v1:account-data-changed",
 } as const
 
-export type AccountDataDomain = "conversations" | "messages" | "contacts"
+export type AccountDataDomain = "conversations" | "messages" | "contacts" | "organization"
 export type AccountDataSyncEvent = {
   targetId: string
   state: "loading" | "ready"
@@ -476,6 +479,32 @@ export type DesktopContactDirectory = {
   users: DesktopContactUser[]
   groups: DesktopContactGroup[]
   apps: DesktopContactApp[]
+}
+
+export type DesktopOrganizationSnapshot = {
+  units: { id: string; parent_id: string | null; name: string; kind: string; member_count?: number }[]
+  departments: { id: string; unit_id: string; parent_id: string | null; name: string; is_root: boolean; member_count?: number }[]
+}
+
+export type DesktopOrganizationMemberPage = {
+  members: { id: string; name: string; nickname: string; avatar: string; title: string; is_primary: boolean }[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export type DesktopOrganizationAssignment = {
+  id: string
+  user_id: string
+  unit_id: string
+  department_id: string
+  title: string
+  is_primary: boolean
+}
+
+export type DesktopOrganizationReporting = {
+  direct_manager_user_id: string | null
+  dotted_manager_user_ids: string[]
 }
 
 export type DesktopFriendRequest = {
@@ -901,6 +930,9 @@ export interface AccountDataBridge {
   ): Promise<AuthResult<DesktopMessageReactionUser[]>>
   resolveUserNames(input: ResolveUserNamesInput): Promise<AuthResult<DesktopMessageReactionUser[]>>
   getContacts(targetId: string): Promise<AuthResult<DesktopContactDirectory>>
+  getOrganization(targetId: string): Promise<AuthResult<DesktopOrganizationSnapshot>>
+  getOrganizationMembers(input: { targetId: string; departmentId: string; page: number }): Promise<AuthResult<DesktopOrganizationMemberPage>>
+  getOrganizationAssignments(input: { targetId: string; userId: string }): Promise<AuthResult<{ assignments: DesktopOrganizationAssignment[]; reporting: DesktopOrganizationReporting }>>
   refreshContacts(targetId: string): Promise<AuthResult<DesktopContactDirectory>>
   searchContactUsers(input: {
     targetId: string

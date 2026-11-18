@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   CirclePlusIcon,
   FolderClosedIcon,
@@ -6,6 +6,7 @@ import {
   Search01Icon,
   UserMultiple02Icon,
 } from "@hugeicons/core-free-icons"
+import { Input } from "@/components/ui/input"
 import { GlobalSearchDialog } from "@/components/global-search-dialog"
 import { HugeiconsIcon } from "@/components/icons/hugeicons-icon"
 import { Button as BeButton } from "@/components/motion/button/base"
@@ -21,6 +22,7 @@ import {
 
 export function SidebarSearchHeader({
   searchLabel,
+  memberSearch,
   targetId,
   theme,
   mentionLabelResolver,
@@ -32,6 +34,7 @@ export function SidebarSearchHeader({
   onRefresh,
 }: {
   searchLabel: string
+  memberSearch?: { value: string; onChange: (value: string) => void }
   targetId: string
   theme: "light" | "dark"
   mentionLabelResolver: MentionLabelResolver
@@ -44,6 +47,8 @@ export function SidebarSearchHeader({
 }) {
   const [searchOpen, setSearchOpen] = useState(false)
   const shortcuts = useAppShortcuts()
+  const searchInput = useRef<HTMLInputElement>(null)
+  const inlineSearch = Boolean(memberSearch)
 
   useEffect(() => {
     function openSearch(event: KeyboardEvent) {
@@ -57,27 +62,40 @@ export function SidebarSearchHeader({
         return
       }
       event.preventDefault()
-      setSearchOpen(true)
+      if (inlineSearch) searchInput.current?.focus()
+      else setSearchOpen(true)
     }
     document.addEventListener("keydown", openSearch)
     return () => document.removeEventListener("keydown", openSearch)
-  }, [shortcuts.search])
+  }, [shortcuts.search, inlineSearch])
 
   return (
     <>
       <header className="flex h-14 shrink-0 items-center gap-2 bg-xgui-background-0 pr-2 pl-3">
-        <BeButton
-          type="button"
-          variant="ghost"
-          pressScale={1}
-          whileHover={{ scale: 1 }}
-          className="h-8 min-w-0 flex-1 justify-start gap-2 rounded-full bg-background px-3 text-sm font-normal text-muted-foreground hover:bg-background/80 hover:text-muted-foreground [&_svg]:size-4"
-          aria-label={searchLabel}
-          onClick={() => setSearchOpen(true)}
-        >
-          <HugeiconsIcon icon={Search01Icon} className="shrink-0" aria-hidden />
-          <span className="truncate">搜索</span>
-        </BeButton>
+        {memberSearch ? (
+          <Input
+            ref={searchInput}
+            type="search"
+            aria-label={searchLabel}
+            placeholder="搜索成员"
+            value={memberSearch.value}
+            onChange={(event) => memberSearch.onChange(event.target.value)}
+            className="h-8 rounded-full bg-background text-sm"
+          />
+        ) : (
+          <BeButton
+            type="button"
+            variant="ghost"
+            pressScale={1}
+            whileHover={{ scale: 1 }}
+            className="h-8 min-w-0 flex-1 justify-start gap-2 rounded-full bg-background px-3 text-sm font-normal text-muted-foreground hover:bg-background/80 hover:text-muted-foreground [&_svg]:size-4"
+            aria-label={searchLabel}
+            onClick={() => setSearchOpen(true)}
+          >
+            <HugeiconsIcon icon={Search01Icon} className="shrink-0" aria-hidden />
+            <span className="truncate">搜索</span>
+          </BeButton>
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <BeButton

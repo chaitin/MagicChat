@@ -10,7 +10,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
+	"app/internal/application/organization"
 	projectapp "app/internal/application/project"
 	"app/internal/auth"
 	"app/internal/store"
@@ -31,6 +33,7 @@ type Dependencies struct {
 	Presence                PresencePort
 	AppConnections          AppConnectionPort
 	ProfileNotifications    ProfileNotifications
+	OrganizationChanged     func()
 	NicknamePolicy          UserNicknamePolicy
 	Now                     func() time.Time
 	NewID                   func() string
@@ -44,6 +47,7 @@ type Service struct {
 	presence                PresencePort
 	appConnections          AppConnectionPort
 	profileNotifications    ProfileNotifications
+	organizationChanged     func()
 	nicknamePolicy          UserNicknamePolicy
 	now                     func() time.Time
 	newID                   func() string
@@ -76,7 +80,7 @@ func NewService(deps Dependencies) *Service {
 	return &Service{
 		db: deps.DB, presence: deps.Presence, appConnections: deps.AppConnections, profileNotifications: deps.ProfileNotifications, nicknamePolicy: deps.NicknamePolicy, now: now, newID: newID,
 		generateInitialPassword: generateInitialPassword, hashPassword: hashPassword,
-		generateAvatar: generateAvatar,
+		generateAvatar: generateAvatar, organizationChanged: deps.OrganizationChanged,
 	}
 }
 
@@ -94,6 +98,33 @@ func (s *Service) List(ctx context.Context, cmd ListCommand) (ListResult, error)
 		return ListResult{}, err
 	}
 	query := s.db.WithContext(ctx).Model(&store.User{})
+	if cmd.UserIDs != "" {
+		ids := strings.Split(cmd.UserIDs, ",")
+		if len(ids) > 500 {
+			return ListResult{}, newError(CodeInvalidRequest, "用户筛选最多支持500人", nil)
+		}
+		for i, id := range ids {
+			parsed, err := uuid.Parse(strings.TrimSpace(id))
+			if err != nil {
+				return ListResult{}, newError(CodeInvalidRequest, "用户筛选参数无效", err)
+			}
+			ids[i] = parsed.String()
+		}
+		query = query.Where("id IN ?", ids)
+	}
+	if raw := strings.TrimSpace(cmd.DepartmentIDs); raw != "" {
+		ids := strings.Split(raw, ",")
+		for i, id := range ids {
+			parsed, err := uuid.Parse(strings.TrimSpace(id))
+			if err != nil {
+				return ListResult{}, newError(CodeInvalidRequest, "部门筛选参数无效", err)
+			}
+			ids[i] = parsed.String()
+		}
+		assignments := s.db.WithContext(ctx).Model(&store.OrganizationAssignment{}).
+			Select("user_id").Where("department_id IN ?", ids)
+		query = query.Where("id IN (?)", assignments)
+	}
 	keyword := strings.ToLower(strings.TrimSpace(cmd.Keyword))
 	if keyword != "" {
 		like := "%" + keyword + "%"
@@ -156,6 +187,15 @@ func (s *Service) List(ctx context.Context, cmd ListCommand) (ListResult, error)
 	for _, user := range storedUsers {
 		users = append(users, newUser(user, onlineStatus[user.ID]))
 	}
+	if cmd.IncludeOrganization && len(users) > 0 {
+		organizations, err := s.primaryOrganizations(ctx, userIDs)
+		if err != nil {
+			return ListResult{}, internalError(err)
+		}
+		for i := range users {
+			users[i].Organization = organizations[users[i].ID]
+		}
+	}
 	return ListResult{
 		Users: users, Total: total, Page: page, PageSize: pageSize, Sort: sortField, Order: order,
 	}, nil
@@ -177,6 +217,9 @@ func parseListOnline(rawOnline string) (*bool, error) {
 }
 
 func (s *Service) Create(ctx context.Context, cmd CreateCommand) (CreateResult, error) {
+	if cmd.Assignments != nil && cmd.DepartmentID != "" {
+		return CreateResult{}, newError(CodeInvalidRequest, "不能同时指定部门和组织归属列表", nil)
+	}
 	email, err := normalizeEmail(cmd.Email)
 	if err != nil {
 		return CreateResult{}, newError(CodeInvalidRequest, "邮箱格式错误", err)
@@ -184,6 +227,10 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (CreateResult, 
 	name := strings.TrimSpace(cmd.Name)
 	if name == "" {
 		return CreateResult{}, newError(CodeInvalidRequest, "名称不能为空", nil)
+	}
+	jobTitle := strings.TrimSpace(cmd.JobTitle)
+	if utf8.RuneCountInString(jobTitle) > 160 {
+		return CreateResult{}, newError(CodeInvalidRequest, "职务不能超过 160 个字符", nil)
 	}
 	phone, err := normalizePhone(cmd.Phone)
 	if err != nil {
@@ -221,7 +268,7 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (CreateResult, 
 	}
 	storedUser := store.User{
 		ID: s.newID(), Avatar: s.generateAvatar(), Email: email, Name: name, Nickname: "",
-		Phone: phone, PasswordHash: passwordHash, Status: store.UserStatusActive,
+		Phone: phone, PasswordHash: passwordHash, Status: store.UserStatusActive, JobTitle: jobTitle,
 	}
 	var userInsertErr error
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -229,12 +276,36 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (CreateResult, 
 			userInsertErr = err
 			return err
 		}
-		return projectapp.ProvisionPersonalWorkspace(tx, storedUser.ID, s.now().UTC())
+		if err := projectapp.ProvisionPersonalWorkspace(tx, storedUser.ID, s.now().UTC()); err != nil {
+			return err
+		}
+		if cmd.Assignments != nil {
+			_, err := organization.NewService(tx).SetAssignments(ctx, cmd.Actor, storedUser.ID, *cmd.Assignments)
+			return err
+		}
+		if cmd.DepartmentID != "" {
+			_, err := organization.NewService(tx).SetAssignments(ctx, cmd.Actor, storedUser.ID, []organization.AssignmentInput{
+				{DepartmentID: cmd.DepartmentID, IsPrimary: true},
+			})
+			return err
+		}
+		return nil
 	}); err != nil {
 		if userInsertErr != nil && isUniqueConstraintError(userInsertErr) {
 			return CreateResult{}, newError(CodeConflict, "邮箱或手机号已存在", userInsertErr)
 		}
+		switch {
+		case errors.Is(err, organization.ErrInvalid):
+			return CreateResult{}, newError(CodeInvalidRequest, "所属部门参数无效", err)
+		case errors.Is(err, organization.ErrNotFound):
+			return CreateResult{}, newError(CodeNotFound, "所选部门不存在，请刷新后重试", err)
+		case errors.Is(err, organization.ErrConflict):
+			return CreateResult{}, newError(CodeConflict, "所选单位已停用，请选择其他单位", err)
+		}
 		return CreateResult{}, internalError(err)
+	}
+	if (cmd.DepartmentID != "" || cmd.Assignments != nil) && s.organizationChanged != nil {
+		s.organizationChanged()
 	}
 	if !allowUserNicknameEditing {
 		storedUser.Nickname = storedUser.Name
@@ -249,9 +320,10 @@ func (s *Service) SetStatus(ctx context.Context, cmd SetStatusCommand) (User, er
 	if err != nil {
 		return User{}, err
 	}
+	statusChanged := storedUser.Status != cmd.Status
 	ownedAppIDs := []string{}
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if storedUser.Status != cmd.Status {
+		if statusChanged {
 			if err := tx.Model(&storedUser).Update("status", cmd.Status).Error; err != nil {
 				return err
 			}
@@ -286,6 +358,9 @@ func (s *Service) SetStatus(ctx context.Context, cmd SetStatusCommand) (User, er
 		for _, appID := range ownedAppIDs {
 			s.appConnections.CloseApp(appID)
 		}
+	}
+	if statusChanged && s.organizationChanged != nil {
+		s.organizationChanged()
 	}
 	return newUser(storedUser, s.isOnline(storedUser.ID)), nil
 }
@@ -350,7 +425,7 @@ func newUser(storedUser store.User, online bool) User {
 		avatar = store.DefaultUserAvatar
 	}
 	return User{
-		ID: storedUser.ID, Avatar: avatar, Email: storedUser.Email,
+		ID: storedUser.ID, Avatar: avatar, Email: storedUser.Email, JobTitle: storedUser.JobTitle,
 		LastOnlineAt: storedUser.LastOnlineAt, Name: storedUser.Name, Nickname: storedUser.Nickname,
 		Online: online, Phone: phone, Status: storedUser.Status, CreatedAt: storedUser.CreatedAt,
 	}

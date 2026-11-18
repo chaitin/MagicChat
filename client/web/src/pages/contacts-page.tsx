@@ -1,4 +1,6 @@
 import * as React from "react"
+import { buildOrganizationMemberships } from "../../../shared/organization-memberships"
+import { directoryUpdatedEvent } from "../../../shared/directory-sync"
 import { useLocation, useNavigate, useParams } from "react-router"
 import { toast } from "sonner"
 
@@ -34,14 +36,24 @@ import {
   type ClientOwnedApp,
 } from "@/lib/client-api/apps"
 import { useContactProfile } from "@/components/contacts/use-contact-profile"
+import {
+  getClientOrganization,
+  getClientOrganizationAssignments,
+  type ClientOrganizationAssignment,
+  type ClientOrganizationReporting,
+  type ClientOrganizationSnapshot,
+} from "@/lib/client-api/organization"
 import { useAppInfo } from "@/lib/app-info-context"
 import { useClientData, useClientUser } from "@/lib/client-data-context"
+import { useRealtime } from "@/lib/realtime-context"
 import { formatContactPhone } from "@/lib/contact-format"
 import { sortContactsByDisplayName } from "@/lib/contact-sort"
 import { cn } from "@/lib/utils"
 
 export function ContactsPage() {
   const { organizationName } = useAppInfo()
+  const { ready: realtimeReady, subscribeRealtimeEvent } = useRealtime()
+  const [organizationRevision, setOrganizationRevision] = React.useState(0)
   const {
     acceptFriendRequest,
     cancelFriendRequest,
@@ -101,6 +113,18 @@ export function ContactsPage() {
   )
   const [loadingAccessInfoAppId, setLoadingAccessInfoAppId] = React.useState("")
   const [loadingProfileAppId, setLoadingProfileAppId] = React.useState("")
+  const [organizationSnapshot, setOrganizationSnapshot] =
+    React.useState<ClientOrganizationSnapshot | null>(null)
+  const [selectedDepartmentId, setSelectedDepartmentId] = React.useState<
+    string | null
+  >(null)
+  const [organizationTreeVersion, setOrganizationTreeVersion] =
+    React.useState(0)
+  const [assignmentResult, setAssignmentResult] = React.useState<{
+    userID: string
+    assignments: ClientOrganizationAssignment[]
+    reporting: ClientOrganizationReporting
+  } | null>(null)
   const [activeTabsByLocation, setActiveTabsByLocation] = React.useState<
     Record<string, DirectoryTab>
   >({})
@@ -115,6 +139,116 @@ export function ContactsPage() {
   const normalizedAppKeyword = keywords.app.trim().toLowerCase()
   const normalizedContactKeyword = keywords.user.trim().toLowerCase()
   const normalizedGroupKeyword = keywords.group.trim().toLowerCase()
+  React.useEffect(() => {
+    const unsubscribeOrganization = subscribeRealtimeEvent(
+      "organization.updated",
+      () => {
+        setOrganizationRevision((value) => value + 1)
+      }
+    )
+    const unsubscribeDirectory = subscribeRealtimeEvent(
+      directoryUpdatedEvent,
+      (payload) => {
+        if (!payload || typeof payload !== "object" || Array.isArray(payload))
+          return
+        const change = payload as Record<string, unknown>
+        if (
+          change.scope !== "users" ||
+          typeof change.revision !== "number" ||
+          !Number.isSafeInteger(change.revision) ||
+          change.revision < 1
+        )
+          return
+        setOrganizationRevision((value) => value + 1)
+      }
+    )
+    return () => {
+      unsubscribeOrganization()
+      unsubscribeDirectory()
+    }
+  }, [subscribeRealtimeEvent])
+  React.useEffect(() => {
+    if (contactDirectoryMode !== "organization") {
+      return
+    }
+    let active = true
+    const refreshOrganization = () => {
+      void getClientOrganization()
+        .then((value) => {
+          if (!active) return
+          setSelectedDepartmentId((current) =>
+            current &&
+            value.departments.some((department) => department.id === current)
+              ? current
+              : (value.departments.find(
+                  (department) =>
+                    department.is_root &&
+                    value.units.some(
+                      (unit) =>
+                        unit.id === department.unit_id && unit.kind === "group"
+                    )
+                )?.id ?? null)
+          )
+          setOrganizationTreeVersion((value) => value + 1)
+          setAssignmentResult(null)
+          setOrganizationSnapshot(value)
+        })
+        .catch(() => undefined)
+    }
+    refreshOrganization()
+    const interval = window.setInterval(refreshOrganization, 15 * 60_000)
+    return () => {
+      active = false
+      window.clearInterval(interval)
+    }
+  }, [contactDirectoryMode, organizationRevision, realtimeReady])
+  React.useEffect(() => {
+    if (
+      contactDirectoryMode !== "organization" ||
+      activeSelection?.type !== "user"
+    ) {
+      return
+    }
+    let active = true
+    void getClientOrganizationAssignments(activeSelection.id)
+      .then((value) => {
+        if (active)
+          setAssignmentResult({
+            userID: activeSelection.id,
+            assignments: value.assignments,
+            reporting: value.reporting,
+          })
+      })
+      .catch(() => {
+        if (active)
+          setAssignmentResult({
+            userID: activeSelection.id,
+            assignments: [],
+            reporting: {
+              direct_manager_user_id: null,
+              dotted_manager_user_ids: [],
+            },
+          })
+      })
+    return () => {
+      active = false
+    }
+  }, [
+    activeSelection?.id,
+    activeSelection?.type,
+    contactDirectoryMode,
+    organizationSnapshot,
+  ])
+  const activeAssignments =
+    contactDirectoryMode === "organization" &&
+    activeSelection?.type === "user" &&
+    assignmentResult?.userID === activeSelection.id
+      ? assignmentResult.assignments
+      : []
+  const visibleOrganization =
+    contactDirectoryMode === "organization" ? organizationSnapshot : null
+  const visibleDepartmentID =
+    contactDirectoryMode === "organization" ? selectedDepartmentId : null
   const appGrantUsers = React.useMemo(
     () => sortContactsByDisplayName(contacts),
     [contacts]
@@ -131,12 +265,13 @@ export function ContactsPage() {
     )
   }, [contactApps, normalizedAppKeyword])
   const filteredContacts = React.useMemo(() => {
+    const scopedContacts = contacts
     if (!normalizedContactKeyword) {
-      return sortContactsByDisplayName(contacts)
+      return sortContactsByDisplayName(scopedContacts)
     }
 
     return sortContactsByDisplayName(
-      contacts.filter((contact) =>
+      scopedContacts.filter((contact) =>
         [
           contact.email,
           contact.name,
@@ -149,6 +284,32 @@ export function ContactsPage() {
       )
     )
   }, [contacts, normalizedContactKeyword])
+  const primaryAssignment =
+    activeAssignments.find((item) => item.is_primary) ?? activeAssignments[0]
+  const organizationDetails =
+    primaryAssignment && visibleOrganization
+      ? {
+          memberships: buildOrganizationMemberships(
+            visibleOrganization,
+            activeAssignments
+          ),
+          title: primaryAssignment.title,
+          manager:
+            contacts.find(
+              (contact) =>
+                contact.id ===
+                assignmentResult?.reporting.direct_manager_user_id
+            )?.name ?? "",
+          dottedManagers: (
+            assignmentResult?.reporting.dotted_manager_user_ids ?? []
+          )
+            .map(
+              (id) => contacts.find((contact) => contact.id === id)?.name ?? ""
+            )
+            .filter(Boolean)
+            .join("、"),
+        }
+      : undefined
   const filteredGroups = React.useMemo(() => {
     if (!normalizedGroupKeyword) {
       return contactGroups
@@ -312,8 +473,21 @@ export function ContactsPage() {
           ).length
         }
         organizationName={
-          contactDirectoryMode === "friends" ? "我的好友" : organizationName
+          contactDirectoryMode === "friends"
+            ? "我的好友"
+            : visibleOrganization?.units[0]?.name || organizationName
         }
+        organizationSnapshot={visibleOrganization}
+        selectedDepartmentId={visibleDepartmentID}
+        onSelectDepartment={
+          contactDirectoryMode === "organization"
+            ? (id) => {
+                if (id === selectedDepartmentId) return
+                setSelectedDepartmentId(id)
+              }
+            : undefined
+        }
+        organizationTreeVersion={organizationTreeVersion}
         onActiveTabChange={updateActiveTab}
         onKeywordChange={updateActiveKeyword}
         onManageFriends={
@@ -350,8 +524,8 @@ export function ContactsPage() {
       <SidebarInset className="min-w-0 overflow-hidden">
         <div
           className={cn(
-            "flex min-h-0 min-w-0 flex-1 items-start justify-center overflow-hidden px-6",
-            activeItem ? "bg-background" : "bg-muted"
+            "flex min-h-0 min-w-0 flex-1 items-start justify-center overflow-x-hidden overflow-y-auto px-6 sm:px-10",
+            activeItem ? "bg-background" : "bg-muted/20"
           )}
           data-testid="contact-detail-shell"
         >
@@ -418,6 +592,7 @@ export function ContactsPage() {
               }
               addingFriend={updatingFriendUserId === activeItem.contact.id}
               contact={activeItem.contact}
+              organizationDetails={organizationDetails}
               canStartConversation={
                 activeItem.contact.id !== me.id &&
                 (contactDirectoryMode !== "friends" || activeUserIsFriend)

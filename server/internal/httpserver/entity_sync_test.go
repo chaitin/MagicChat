@@ -10,7 +10,88 @@ import (
 	"app/internal/appregistry"
 	"app/internal/realtime"
 	"app/internal/store"
+
+	"github.com/google/uuid"
 )
+
+func TestEntitySyncRedactsUsersOutsideOrganizationVisibility(t *testing.T) {
+	server, db := newTestRouter(t)
+	defer server.Close()
+	now := time.Now().UTC()
+	viewer := insertTestUser(t, db, "viewer@entity-visibility.test", "Viewer", store.UserStatusActive, now)
+	colleague := insertTestUser(t, db, "colleague@entity-visibility.test", "Colleague", store.UserStatusActive, now)
+	outsider := insertTestUser(t, db, "outsider@entity-visibility.test", "Outsider", store.UserStatusActive, now)
+	phones := map[string]string{viewer.ID: "15550000001", colleague.ID: "15550000002", outsider.ID: "15550000003"}
+	for id, phone := range phones {
+		if err := db.Model(&store.User{}).Where("id = ?", id).Update("phone", phone).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.AutoMigrate(&store.OrganizationUnit{}, &store.OrganizationDepartment{}, &store.OrganizationAssignment{}, &store.OrganizationPolicy{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&store.OrganizationPolicy{ID: 1, VisibilityScope: "same_department", UpdatedAt: now}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&store.OrganizationUnit{ID: store.RootOrganizationUnitID, Name: "Company", Kind: "group", CreatedAt: now, UpdatedAt: now}).Error; err != nil {
+		t.Fatal(err)
+	}
+	rootID := store.RootDepartmentID
+	colleagueDepartmentID, outsiderDepartmentID := uuid.NewString(), uuid.NewString()
+	departments := []store.OrganizationDepartment{
+		{ID: rootID, UnitID: store.RootOrganizationUnitID, IsRoot: true, CreatedAt: now, UpdatedAt: now},
+		{ID: colleagueDepartmentID, UnitID: store.RootOrganizationUnitID, ParentID: &rootID, Name: "Engineering", CreatedAt: now, UpdatedAt: now},
+		{ID: outsiderDepartmentID, UnitID: store.RootOrganizationUnitID, ParentID: &rootID, Name: "Sales", CreatedAt: now, UpdatedAt: now},
+	}
+	if err := db.Create(&departments).Error; err != nil {
+		t.Fatal(err)
+	}
+	assignments := []store.OrganizationAssignment{
+		{ID: uuid.NewString(), UserID: viewer.ID, DepartmentID: colleagueDepartmentID, IsPrimary: true, CreatedAt: now, UpdatedAt: now},
+		{ID: uuid.NewString(), UserID: colleague.ID, DepartmentID: colleagueDepartmentID, IsPrimary: true, CreatedAt: now, UpdatedAt: now},
+		{ID: uuid.NewString(), UserID: outsider.ID, DepartmentID: outsiderDepartmentID, IsPrimary: true, CreatedAt: now, UpdatedAt: now},
+	}
+	if err := db.Create(&assignments).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	requested := []string{viewer.ID, colleague.ID, outsider.ID}
+	viewerCookie := loginAsUser(t, server, viewer.Email)
+	for _, endpoint := range []struct {
+		name string
+		path string
+		body map[string]any
+	}{
+		{"users", "/api/client/users/resolve", map[string]any{"user_ids": requested}},
+		{"entities", "/api/client/entities/resolve", map[string]any{"entities": []map[string]string{
+			{"type": "user", "id": viewer.ID}, {"type": "user", "id": colleague.ID}, {"type": "user", "id": outsider.ID},
+		}}},
+	} {
+		t.Run(endpoint.name, func(t *testing.T) {
+			response, body := postJSON(t, server, endpoint.path, endpoint.body, viewerCookie)
+			if response.StatusCode != http.StatusOK {
+				t.Fatalf("resolve status=%d body=%v", response.StatusCode, body)
+			}
+			users := body["data"].(map[string]any)["users"].([]any)
+			if len(users) != len(requested) {
+				t.Fatalf("resolved users=%v", users)
+			}
+			byID := map[string]map[string]any{}
+			for _, raw := range users {
+				user := raw.(map[string]any)
+				byID[user["id"].(string)] = user
+			}
+			for _, user := range []store.User{viewer, colleague} {
+				if got := byID[user.ID]; got["email"] != user.Email || got["phone"] != phones[user.ID] {
+					t.Fatalf("visible user %s lost contact details: %v", user.ID, got)
+				}
+			}
+			if got := byID[outsider.ID]; got["email"] != "" || got["phone"] != "" || got["name"] != outsider.Name {
+				t.Fatalf("outside department details not redacted: %v", got)
+			}
+		})
+	}
+}
 
 func TestEntitySyncResolvesLiveUserAndAppPresence(t *testing.T) {
 	server, db := newTestRouter(t)

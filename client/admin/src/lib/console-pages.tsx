@@ -27,9 +27,9 @@ export const consolePages: ConsolePage[] = [
     icon: <LayoutDashboardIcon />,
   },
   {
-    label: "成员",
+    label: "成员与部门",
     path: "/members",
-    title: "成员管理",
+    title: "成员与部门",
     icon: <UsersRoundIcon />,
   },
   {

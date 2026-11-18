@@ -43,11 +43,20 @@ func (a *AuthAPI) RequireSession(next echo.HandlerFunc) echo.HandlerFunc {
 		if err != nil || cookie.Value == "" {
 			return writeFailure(c, http.StatusUnauthorized, string(adminauth.CodeUnauthorized), "未登录")
 		}
-		if _, err := a.sessions.AuthenticateSession(c.Request().Context(), cookie.Value); err != nil {
+		session, err := a.sessions.AuthenticateSession(c.Request().Context(), cookie.Value)
+		if err != nil {
 			return writeAdminAuthError(c, err)
 		}
+		c.Set("admin_session_id", session.ID)
 		return next(c)
 	}
+}
+
+func adminActor(c echo.Context) string {
+	if id, ok := c.Get("admin_session_id").(string); ok && id != "" {
+		return "admin:" + id
+	}
+	return "admin"
 }
 
 // loginAdmin godoc

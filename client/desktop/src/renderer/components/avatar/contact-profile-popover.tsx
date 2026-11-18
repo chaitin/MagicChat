@@ -13,7 +13,16 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { cn } from "@/lib/utils"
-import type { DesktopContactDirectory } from "../../../shared/account-data"
+import {
+  buildOrganizationMemberships,
+  formatOrganizationMembership,
+} from "../../../../../shared/organization-memberships"
+import type {
+  DesktopContactDirectory,
+  DesktopOrganizationAssignment,
+  DesktopOrganizationReporting,
+  DesktopOrganizationSnapshot,
+} from "../../../shared/account-data"
 
 type ProfileType = "user" | "app" | "group"
 
@@ -91,12 +100,19 @@ function ActiveContactProfilePopover({
 }) {
   const { showToast } = useAnimatedToast()
   const [open, setOpen] = useState(false)
+  const [dataRevision, setDataRevision] = useState(0)
   const navigatedToConversationRef = useRef(false)
   const [busy, setBusy] = useState(false)
   const [openingAvatar, setOpeningAvatar] = useState(false)
   const [snapshot, setSnapshot] = useState<{
     targetId: string
     data: DesktopContactDirectory
+  } | null>(null)
+  const [organizationInfo, setOrganizationInfo] = useState<{
+    key: string
+    snapshot: DesktopOrganizationSnapshot
+    assignments: DesktopOrganizationAssignment[]
+    reporting: DesktopOrganizationReporting
   } | null>(null)
   const [friendState, setFriendState] = useState<{
     key: string
@@ -120,6 +136,17 @@ function ActiveContactProfilePopover({
 
   useEffect(() => {
     if (!open || !window.desktop) return
+    return window.desktop.accountData.onChanged((event) => {
+      if (event.targetId !== targetId) return
+      if (event.domains.includes("organization") || event.domains.includes("contacts")) {
+        setOrganizationInfo(null)
+        setDataRevision((value) => value + 1)
+      }
+    })
+  }, [open, targetId])
+
+  useEffect(() => {
+    if (!open || !window.desktop) return
     let cancelled = false
     void window.desktop.accountData
       .getContacts(targetId)
@@ -134,7 +161,36 @@ function ActiveContactProfilePopover({
     return () => {
       cancelled = true
     }
-  }, [open, targetId, showToast])
+  }, [open, targetId, showToast, dataRevision])
+
+  useEffect(() => {
+    setOrganizationInfo(null)
+    if (!open || directory?.mode !== "organization" || type !== "user" || !window.desktop) return
+    let cancelled = false
+    void Promise.all([
+      window.desktop.accountData.getOrganization(targetId),
+      window.desktop.accountData.getOrganizationAssignments({ targetId, userId: id }),
+    ])
+      .then(([organization, assignment]) => {
+        if (cancelled) return
+        if (!organization.ok || !assignment.ok) {
+          showToast({ title: "组织资料加载失败或已不可访问，请重新打开重试", status: "error" })
+          return
+        }
+        setOrganizationInfo({
+          key,
+          snapshot: organization.data,
+          assignments: assignment.data.assignments,
+          reporting: assignment.data.reporting,
+        })
+      })
+      .catch(() => {
+        if (!cancelled) showToast({ title: "组织资料加载失败，请重新打开重试", status: "error" })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, directory?.mode, type, targetId, id, key, dataRevision, showToast])
 
   useEffect(() => {
     if (!open || !directory || directory.mode !== "friends" || type !== "user" || user || isSelf)
@@ -176,7 +232,13 @@ function ActiveContactProfilePopover({
     if (openingAvatar) return
     setOpeningAvatar(true)
     try {
-      const avatar = await window.desktop!.accountData.getAvatar({ targetId, type, id, theme, refresh: true })
+      const avatar = await window.desktop!.accountData.getAvatar({
+        targetId,
+        type,
+        id,
+        theme,
+        refresh: true,
+      })
       if (!avatar.ok) throw new Error(avatar.error.message)
       if (avatar.data.status !== "ready") {
         showToast({ title: "暂无可预览的头像", status: "info" })
@@ -246,6 +308,21 @@ function ActiveContactProfilePopover({
             ? "加好友"
             : "正在查询好友状态…"
     : "发消息"
+  const organizationDetails =
+    directory?.mode === "organization" && organizationInfo?.key === key ? organizationInfo : null
+  const memberships = organizationDetails
+    ? buildOrganizationMemberships(organizationDetails.snapshot, organizationDetails.assignments)
+    : []
+  const primaryAssignment =
+    organizationDetails?.assignments.find((item) => item.is_primary) ??
+    organizationDetails?.assignments[0]
+  const manager = directory?.users.find(
+    (item) => item.id === organizationDetails?.reporting.direct_manager_user_id,
+  )
+  const dottedManagers = organizationDetails?.reporting.dotted_manager_user_ids
+    .map((managerId) => directory?.users.find((item) => item.id === managerId)?.name ?? "")
+    .filter(Boolean)
+    .join("、")
   const details: Array<{ label: string; value: string | undefined }> =
     type === "user"
       ? [
@@ -253,6 +330,17 @@ function ActiveContactProfilePopover({
           { label: "昵称", value: user?.nickname },
           { label: "邮箱", value: user?.email || (isSelf ? currentUserEmail : "") },
           { label: "电话", value: user?.phone },
+          ...(organizationDetails && primaryAssignment
+            ? [
+                ...memberships.map((membership, index) => ({
+                  label: index === 0 ? "组织" : "",
+                  value: formatOrganizationMembership(membership),
+                })),
+                { label: "职务", value: primaryAssignment?.title || "未设置" },
+                { label: "直属上级", value: manager?.name || "未设置" },
+                ...(dottedManagers ? [{ label: "虚线上级", value: dottedManagers }] : []),
+              ]
+            : []),
           { label: "状态", value: user ? (user.online ? "在线" : "离线") : undefined },
         ]
       : type === "app"
@@ -320,7 +408,7 @@ function ActiveContactProfilePopover({
         align="start"
         side="right"
         sideOffset={8}
-        className="w-72 max-w-[calc(100vw-2rem)]"
+        className="w-96 max-w-[calc(100vw-2rem)]"
       >
         <div className="flex flex-col gap-4">
           <div className="flex min-w-0 items-center gap-3">
@@ -356,9 +444,9 @@ function ActiveContactProfilePopover({
           </div>
           {visibleDetails.length > 0 && (
             <div className="divide-y divide-border rounded-lg border border-border px-3 py-1 text-sm">
-              {visibleDetails.map((detail) => (
+              {visibleDetails.map((detail, index) => (
                 <ProfileDetail
-                  key={detail.label}
+                  key={`${detail.label}:${index}`}
                   label={detail.label}
                   value={detail.value}
                   onCopy={() => void copyDetail(detail.value)}
@@ -367,17 +455,17 @@ function ActiveContactProfilePopover({
             </div>
           )}
           <div className="grid gap-2">
-          {(canMessage || canRequest || isSelf) && (
-            <BeButton
-              type="button"
-              className="w-full bg-xgui-brand text-background hover:bg-xgui-brand-4 hover:text-background active:bg-xgui-brand-5"
-              disabled={busy || !canAct}
-              onClick={() => void handleAction()}
-            >
-              {busy ? "处理中…" : actionLabel}
-            </BeButton>
-          )}
-          <SendNamecardButton targetId={targetId} target={{ type, id }} />
+            {(canMessage || canRequest || isSelf) && (
+              <BeButton
+                type="button"
+                className="w-full bg-xgui-brand text-background hover:bg-xgui-brand-4 hover:text-background active:bg-xgui-brand-5"
+                disabled={busy || !canAct}
+                onClick={() => void handleAction()}
+              >
+                {busy ? "处理中…" : actionLabel}
+              </BeButton>
+            )}
+            <SendNamecardButton targetId={targetId} target={{ type, id }} />
           </div>
         </div>
       </PopoverContent>
@@ -410,7 +498,7 @@ function ProfileDetail({
             selection.addRange(range)
           }}
         >
-          <span className="w-16 shrink-0 text-muted-foreground">{label}</span>
+          <span className="w-16 shrink-0 whitespace-nowrap text-muted-foreground">{label}</span>
           <span ref={valueRef} className="ml-auto min-w-0 break-words text-right select-text">
             {value}
           </span>
